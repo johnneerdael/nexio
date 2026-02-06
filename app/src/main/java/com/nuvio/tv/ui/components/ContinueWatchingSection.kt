@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -185,28 +184,6 @@ private fun ContinueWatchingCard(
                         .fillMaxSize()
                         .background(overlayBrush)
                 )
-
-                // Play icon overlay — always composed, alpha-controlled to avoid layout churn
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = if (isFocused) 1f else 0f }
-                        .background(Color.Black.copy(alpha = 0.3f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(NuvioColors.Primary)
-                            .padding(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play",
-                            tint = NuvioColors.OnPrimary
-                        )
-                    }
-                }
 
                 // Content info at bottom
                 Column(
