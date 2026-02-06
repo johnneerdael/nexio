@@ -69,8 +69,11 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Timer
 
 // Preset colors for subtitle customization
 private val SUBTITLE_COLORS = listOf(
@@ -152,6 +155,7 @@ fun PlaybackSettingsContent(
     viewModel: PlaybackSettingsViewModel = hiltViewModel()
 ) {
     val playerSettings by viewModel.playerSettings.collectAsState(initial = PlayerSettings())
+    val trailerSettings by viewModel.trailerSettings.collectAsState(initial = TrailerSettings())
     val coroutineScope = rememberCoroutineScope()
 
     // Dialog states
@@ -183,8 +187,52 @@ fun PlaybackSettingsContent(
             contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Trailer Section Header
+            item {
+                Text(
+                    text = "Trailer",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.PlayCircle,
+                    title = "Auto-play Trailers",
+                    subtitle = "Automatically play trailers on the detail screen after a period of inactivity",
+                    isChecked = trailerSettings.enabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setTrailerEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
+            if (trailerSettings.enabled) {
+                item {
+                    SliderSettingsItem(
+                        icon = Icons.Default.Timer,
+                        title = "Trailer Delay",
+                        value = trailerSettings.delaySeconds,
+                        valueText = "${trailerSettings.delaySeconds}s",
+                        minValue = 3,
+                        maxValue = 15,
+                        step = 1,
+                        onValueChange = { newDelay ->
+                            coroutineScope.launch {
+                                viewModel.setTrailerDelaySeconds(newDelay)
+                            }
+                        }
+                    )
+                }
+            }
+
             // Subtitle Style Settings Section Header
             item {
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Subtitles",
                     style = MaterialTheme.typography.titleMedium,

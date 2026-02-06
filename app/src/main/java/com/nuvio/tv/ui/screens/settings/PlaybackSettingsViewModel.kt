@@ -4,19 +4,28 @@ import androidx.lifecycle.ViewModel
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.TrailerSettings
+import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
-    private val playerSettingsDataStore: PlayerSettingsDataStore
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore
 ) : ViewModel() {
 
-    /**
-     * Flow of current player settings
-     */
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
+    val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
+
+    suspend fun setTrailerEnabled(enabled: Boolean) {
+        trailerSettingsDataStore.setEnabled(enabled)
+    }
+
+    suspend fun setTrailerDelaySeconds(seconds: Int) {
+        trailerSettingsDataStore.setDelaySeconds(seconds)
+    }
 
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
