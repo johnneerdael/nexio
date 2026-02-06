@@ -8,13 +8,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -73,6 +76,12 @@ fun MetaDetailsScreen(
             .fillMaxSize()
             .background(NuvioColors.Background)
             .onPreviewKeyEvent { keyEvent ->
+                if (uiState.isTrailerPlaying) {
+                    // During trailer, consume all keys except back/ESC so content doesn't scroll
+                    val keyCode = keyEvent.nativeKeyEvent.keyCode
+                    return@onPreviewKeyEvent keyCode != KeyEvent.KEYCODE_BACK &&
+                            keyCode != KeyEvent.KEYCODE_ESCAPE
+                }
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     viewModel.onEvent(MetaDetailsEvent.OnUserInteraction)
                 }
@@ -187,6 +196,7 @@ private fun MetaDetailsContent(
         byId ?: bySeasonEpisode ?: nextEpisode
     }
     val listState = rememberTvLazyListState()
+    val initialFocusRequester = remember { FocusRequester() }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
 
     // Track if scrolled past hero (first item)
@@ -313,6 +323,18 @@ private fun MetaDetailsContent(
             modifier = Modifier.fillMaxSize(),
             state = listState
         ) {
+            // Invisible focus anchor — captures initial focus so no button is highlighted on entry
+            item(key = "focus_anchor") {
+                Box(
+                    modifier = Modifier
+                        .focusRequester(initialFocusRequester)
+                        .focusable()
+                )
+                LaunchedEffect(Unit) {
+                    initialFocusRequester.requestFocus()
+                }
+            }
+
             // Hero as first item in the lazy column
             item(key = "hero") {
                 HeroContentSection(

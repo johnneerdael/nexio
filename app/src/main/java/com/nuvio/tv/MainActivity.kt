@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -89,13 +90,15 @@ class MainActivity : ComponentActivity() {
                     val currentRoute = navBackStackEntry?.destination?.route
                     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-                    val rootRoutes = setOf(
-                        Screen.Home.route,
-                        Screen.Search.route,
-                        Screen.Library.route,
-                        Screen.Settings.route,
-                        Screen.AddonManager.route
-                    )
+                    val rootRoutes = remember {
+                        setOf(
+                            Screen.Home.route,
+                            Screen.Search.route,
+                            Screen.Library.route,
+                            Screen.Settings.route,
+                            Screen.AddonManager.route
+                        )
+                    }
 
                     LaunchedEffect(currentRoute) {
                         drawerState.setValue(DrawerValue.Closed)
@@ -105,13 +108,15 @@ class MainActivity : ComponentActivity() {
                         drawerState.setValue(DrawerValue.Open)
                     }
 
-                    val drawerItems = listOf(
-                        Screen.Home.route to ("Home" to Icons.Filled.Home),
-                        Screen.Search.route to ("Search" to Icons.Filled.Search),
-                        Screen.Library.route to ("Library" to Icons.Filled.Bookmark),
-                        Screen.AddonManager.route to ("Addons" to Icons.Filled.Extension),
-                        Screen.Settings.route to ("Settings" to Icons.Filled.Settings)
-                    )
+                    val drawerItems = remember {
+                        listOf(
+                            Screen.Home.route to ("Home" to Icons.Filled.Home),
+                            Screen.Search.route to ("Search" to Icons.Filled.Search),
+                            Screen.Library.route to ("Library" to Icons.Filled.Bookmark),
+                            Screen.AddonManager.route to ("Addons" to Icons.Filled.Extension),
+                            Screen.Settings.route to ("Settings" to Icons.Filled.Settings)
+                        )
+                    }
 
                     val showSidebar = currentRoute in rootRoutes
 
@@ -126,16 +131,16 @@ class MainActivity : ComponentActivity() {
                                         .width(drawerWidth)
                                         .background(NuvioColors.Background)
                                         .padding(12.dp)
-                                        .selectableGroup(),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        .selectableGroup()
                                 ) {
                                     if (drawerValue == DrawerValue.Open) {
                                         Image(
                                             painter = painterResource(id = R.drawable.nuviotv_logo),
-                                            contentDescription = "Nuvio",
+                                            contentDescription = "NuvioTV",
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(48.dp),
+                                                .height(48.dp)
+                                                .padding(top = 12.dp),
                                             contentScale = ContentScale.Fit
                                         )
                                     } else {
@@ -144,43 +149,53 @@ class MainActivity : ComponentActivity() {
                                             contentDescription = "Nuvio",
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(48.dp),
+                                                .height(48.dp)
+                                                .padding(top = 12.dp),
                                             contentScale = ContentScale.Fit
                                         )
                                     }
-                                    drawerItems.forEach { (route, item) ->
-                                        val (label, icon) = item
-                                        NavigationDrawerItem(
-                                            selected = currentRoute == route,
-                                            onClick = {
-                                                if (currentRoute != route) {
-                                                    navController.navigate(route) {
-                                                        popUpTo(navController.graph.startDestinationId) {
-                                                            saveState = true
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    val itemColors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = NuvioColors.BackgroundCard,
+                                        focusedContainerColor = NuvioColors.FocusBackground,
+                                        pressedContainerColor = NuvioColors.FocusBackground,
+                                        selectedContentColor = NuvioColors.TextPrimary,
+                                        focusedContentColor = NuvioColors.FocusRing,
+                                        pressedContentColor = NuvioColors.FocusRing
+                                    )
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        drawerItems.forEach { (route, item) ->
+                                            val (label, icon) = item
+                                            NavigationDrawerItem(
+                                                selected = currentRoute == route,
+                                                onClick = {
+                                                    if (currentRoute != route) {
+                                                        navController.navigate(route) {
+                                                            popUpTo(navController.graph.startDestinationId) {
+                                                                saveState = true
+                                                            }
+                                                            launchSingleTop = true
+                                                            restoreState = true
                                                         }
-                                                        launchSingleTop = true
-                                                        restoreState = true
                                                     }
+                                                    drawerState.setValue(DrawerValue.Closed)
+                                                },
+                                                colors = itemColors,
+                                                leadingContent = {
+                                                    Icon(imageVector = icon, contentDescription = null)
                                                 }
-                                                drawerState.setValue(DrawerValue.Closed)
-                                            },
-                                            colors = NavigationDrawerItemDefaults.colors(
-                                                selectedContainerColor = NuvioColors.BackgroundCard,
-                                                focusedContainerColor = NuvioColors.FocusBackground,
-                                                pressedContainerColor = NuvioColors.FocusBackground,
-                                                selectedContentColor = NuvioColors.FocusRing,
-                                                focusedContentColor = NuvioColors.FocusRing,
-                                                pressedContentColor = NuvioColors.FocusRing
-                                            ),
-                                            leadingContent = {
-                                                Icon(imageVector = icon, contentDescription = null)
-                                            }
-                                        ) {
-                                            if (drawerValue == DrawerValue.Open) {
-                                                Text(label)
+                                            ) {
+                                                if (drawerValue == DrawerValue.Open) {
+                                                    Text(label)
+                                                }
                                             }
                                         }
                                     }
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
