@@ -28,6 +28,14 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 
+private val GridCardShape = RoundedCornerShape(8.dp)
+private val TitleScrimGradient = Brush.verticalGradient(
+    colors = listOf(
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.8f)
+    )
+)
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun GridContentCard(
@@ -46,7 +54,7 @@ fun GridContentCard(
                 else Modifier
             ),
         shape = CardDefaults.shape(
-            shape = RoundedCornerShape(8.dp)
+            shape = GridCardShape
         ),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
@@ -55,7 +63,7 @@ fun GridContentCard(
         border = CardDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(8.dp)
+                shape = GridCardShape
             )
         ),
         scale = CardDefaults.scale(
@@ -65,7 +73,7 @@ fun GridContentCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(8.dp))
+                .clip(GridCardShape)
         ) {
             FadeInAsyncImage(
                 model = item.poster,
@@ -79,14 +87,7 @@ fun GridContentCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.8f)
-                            )
-                        )
-                    )
+                    .background(TitleScrimGradient)
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
                 Text(

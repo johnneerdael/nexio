@@ -42,7 +42,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.graphicsLayer
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -169,12 +169,14 @@ private fun ContinueWatchingCard(
                     .height(180.dp)
                     .clip(CwClipShape)
             ) {
-                // Background image
-                AsyncImage(
+                // Background image with size hints for efficient decoding
+                FadeInAsyncImage(
                     model = progress.backdrop ?: progress.poster,
                     contentDescription = progress.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    requestedWidthDp = 320.dp,
+                    requestedHeightDp = 180.dp
                 )
 
                 // Gradient overlay for text readability
@@ -184,26 +186,25 @@ private fun ContinueWatchingCard(
                         .background(overlayBrush)
                 )
 
-                // Play icon overlay when focused
-                if (isFocused) {
+                // Play icon overlay — always composed, alpha-controlled to avoid layout churn
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = if (isFocused) 1f else 0f }
+                        .background(Color.Black.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.3f)),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(50))
+                            .background(NuvioColors.Primary)
+                            .padding(16.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(NuvioColors.Primary)
-                                .padding(16.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play",
-                                tint = NuvioColors.OnPrimary
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play",
+                            tint = NuvioColors.OnPrimary
+                        )
                     }
                 }
 

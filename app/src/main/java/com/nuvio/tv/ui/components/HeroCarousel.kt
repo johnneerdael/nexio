@@ -111,6 +111,29 @@ private fun HeroCarouselSlide(
     item: MetaPreview,
     onClick: () -> Unit
 ) {
+    val bgColor = NuvioColors.Background
+    val bottomGradient = remember(bgColor) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.0f to Color.Transparent,
+                0.3f to Color.Transparent,
+                0.6f to bgColor.copy(alpha = 0.5f),
+                0.8f to bgColor.copy(alpha = 0.85f),
+                1.0f to bgColor
+            )
+        )
+    }
+    val leftGradient = remember(bgColor) {
+        Brush.horizontalGradient(
+            colorStops = arrayOf(
+                0.0f to bgColor.copy(alpha = 0.7f),
+                0.3f to bgColor.copy(alpha = 0.3f),
+                0.5f to Color.Transparent,
+                1.0f to Color.Transparent
+            )
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -139,33 +162,14 @@ private fun HeroCarouselSlide(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color.Transparent,
-                            0.3f to Color.Transparent,
-                            0.6f to NuvioColors.Background.copy(alpha = 0.5f),
-                            0.8f to NuvioColors.Background.copy(alpha = 0.85f),
-                            1.0f to NuvioColors.Background
-                        )
-                    )
-                )
+                .background(bottomGradient)
         )
 
         // Left gradient for extra text readability
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.0f to NuvioColors.Background.copy(alpha = 0.7f),
-                            0.3f to NuvioColors.Background.copy(alpha = 0.3f),
-                            0.5f to Color.Transparent,
-                            1.0f to Color.Transparent
-                        )
-                    )
-                )
+                .background(leftGradient)
         )
 
         // Content overlay

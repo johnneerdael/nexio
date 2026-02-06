@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.focusable
@@ -15,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.list.TvLazyColumn
@@ -71,12 +72,14 @@ fun MetaDetailsScreen(
         }
     }
 
+    val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioColors.Background)
             .onPreviewKeyEvent { keyEvent ->
-                if (uiState.isTrailerPlaying) {
+                if (currentIsTrailerPlaying) {
                     // During trailer, consume all keys except back/ESC so content doesn't scroll
                     val keyCode = keyEvent.nativeKeyEvent.keyCode
                     return@onPreviewKeyEvent keyCode != KeyEvent.KEYCODE_BACK &&
@@ -264,9 +267,28 @@ private fun MetaDetailsContent(
         }
     }
 
+    // Pre-compute screen dimensions to avoid BoxWithConstraints subcomposition overhead
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = remember(configuration) { configuration.screenWidthDp.dp }
+    val screenHeightDp = remember(configuration) { configuration.screenHeightDp.dp }
+
+    // Animated gradient alpha (moved outside subcomposition scope)
+    val gradientAlpha by animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "gradientFade"
+    )
+
+    // Always-composed bottom gradient alpha (avoids add/remove during scroll)
+    val bottomGradientAlpha by animateFloatAsState(
+        targetValue = if (isScrolledPastHero) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "bottomGradientFade"
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Sticky background — backdrop or trailer
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             // Backdrop image (fades out when trailer plays)
             FadeInAsyncImage(
                 model = meta.background ?: meta.poster,
@@ -276,8 +298,8 @@ private fun MetaDetailsContent(
                     .graphicsLayer { alpha = backdropAlpha },
                 contentScale = ContentScale.Crop,
                 fadeDurationMs = 600,
-                requestedWidthDp = maxWidth,
-                requestedHeightDp = maxHeight
+                requestedWidthDp = screenWidthDp,
+                requestedHeightDp = screenHeightDp
             )
 
             // Trailer video (fades in when trailer plays)
@@ -296,11 +318,6 @@ private fun MetaDetailsContent(
             )
 
             // Left side gradient fade for text readability (fades out during trailer)
-            val gradientAlpha by animateFloatAsState(
-                targetValue = if (isTrailerPlaying) 0f else 1f,
-                animationSpec = tween(durationMillis = 800),
-                label = "gradientFade"
-            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -308,14 +325,13 @@ private fun MetaDetailsContent(
                     .background(leftGradient)
             )
 
-            // Bottom gradient when scrolled past hero
-            if (isScrolledPastHero) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(bottomGradient)
-                )
-            }
+            // Bottom gradient — always composed, alpha-controlled to avoid layout churn
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = bottomGradientAlpha }
+                    .background(bottomGradient)
+            )
         }
 
         // Single scrollable column with hero + content
@@ -324,7 +340,7 @@ private fun MetaDetailsContent(
             state = listState
         ) {
             // Invisible focus anchor — captures initial focus so no button is highlighted on entry
-            item(key = "focus_anchor") {
+            item(key = "focus_anchor", contentType = "focus_anchor") {
                 Box(
                     modifier = Modifier
                         .focusRequester(initialFocusRequester)
@@ -336,7 +352,7 @@ private fun MetaDetailsContent(
             }
 
             // Hero as first item in the lazy column
-            item(key = "hero") {
+            item(key = "hero", contentType = "hero") {
                 HeroContentSection(
                     meta = meta,
                     nextEpisode = nextEpisode,
@@ -350,7 +366,7 @@ private fun MetaDetailsContent(
 
             // Season tabs and episodes for series
             if (isSeries && seasons.isNotEmpty()) {
-                item(key = "season_tabs") {
+                item(key = "season_tabs", contentType = "season_tabs") {
                     SeasonTabs(
                         seasons = seasons,
                         selectedSeason = selectedSeason,
@@ -358,7 +374,7 @@ private fun MetaDetailsContent(
                         selectedTabFocusRequester = selectedSeasonFocusRequester
                     )
                 }
-                item(key = "episodes_$selectedSeason") {
+                item(key = "episodes_$selectedSeason", contentType = "episodes") {
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
@@ -370,13 +386,13 @@ private fun MetaDetailsContent(
 
             // Cast section below episodes
             if (castMembersToShow.isNotEmpty()) {
-                item(key = "cast") {
+                item(key = "cast", contentType = "horizontal_row") {
                     CastSection(cast = castMembersToShow)
                 }
             }
 
             if (meta.productionCompanies.isNotEmpty()) {
-                item(key = "production") {
+                item(key = "production", contentType = "horizontal_row") {
                     CompanyLogosSection(
                         title = "Production",
                         companies = meta.productionCompanies
@@ -385,7 +401,7 @@ private fun MetaDetailsContent(
             }
 
             if (meta.networks.isNotEmpty()) {
-                item(key = "networks") {
+                item(key = "networks", contentType = "horizontal_row") {
                     CompanyLogosSection(
                         title = "Network",
                         companies = meta.networks
