@@ -165,7 +165,7 @@ fun GridHomeContent(
 
                     is GridItem.SectionDivider -> {
                         item(
-                            key = "divider_${gridItem.catalogId}_${gridItem.addonId}",
+                            key = "divider_${index}_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
                             span = { TvGridItemSpan(maxLineSpan) }
                         ) {
                             SectionDivider(

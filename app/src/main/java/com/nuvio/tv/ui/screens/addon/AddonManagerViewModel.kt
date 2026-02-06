@@ -224,7 +224,16 @@ class AddonManagerViewModel @Inject constructor(
             addonRepository.setAddonOrder(validUrls)
             server?.confirmChange(pending.changeId)
 
-            _uiState.update { it.copy(pendingChange = null) }
+            // Close QR mode and stop server after changes are applied
+            stopServerInternal()
+            _uiState.update {
+                it.copy(
+                    pendingChange = null,
+                    isQrModeActive = false,
+                    qrCodeBitmap = null,
+                    serverUrl = null
+                )
+            }
         }
     }
 
