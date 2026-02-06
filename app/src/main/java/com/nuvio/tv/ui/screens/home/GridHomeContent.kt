@@ -94,10 +94,14 @@ fun GridHomeContent(
             }
     }
 
+    // Pre-compute whether hero exists to avoid repeated list scan in derivedStateOf
+    val hasHero = remember(uiState.gridItems) {
+        uiState.gridItems.firstOrNull() is GridItem.Hero
+    }
+
     // Determine if hero is scrolled past
-    val isScrolledPastHero by remember {
+    val isScrolledPastHero by remember(hasHero) {
         derivedStateOf {
-            val hasHero = uiState.gridItems.firstOrNull() is GridItem.Hero
             if (hasHero) {
                 gridState.firstVisibleItemIndex > 0
             } else {
@@ -106,15 +110,18 @@ fun GridHomeContent(
         }
     }
 
+    // Pre-compute section bounds once when gridItems changes (not on every scroll)
+    val sectionBounds = remember(uiState.gridItems) {
+        buildSectionBounds(uiState.gridItems)
+    }
+
     // Per-section load-more detection
-    LaunchedEffect(gridState, uiState.gridItems) {
+    LaunchedEffect(gridState, sectionBounds, uiState.catalogRows) {
         snapshotFlow {
             gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
         }
             .distinctUntilChanged()
             .collect { lastVisibleIndex ->
-                // Find which sections are near their end
-                val sectionBounds = buildSectionBounds(uiState.gridItems)
                 for (bound in sectionBounds) {
                     // If the last visible item is within 5 items of this section's end
                     if (lastVisibleIndex >= bound.lastContentIndex - 5 && lastVisibleIndex <= bound.lastContentIndex) {
@@ -148,7 +155,8 @@ fun GridHomeContent(
                     is GridItem.Hero -> {
                         item(
                             key = "hero",
-                            span = { TvGridItemSpan(maxLineSpan) }
+                            span = { TvGridItemSpan(maxLineSpan) },
+                            contentType = "hero"
                         ) {
                             HeroCarousel(
                                 items = gridItem.items,
@@ -166,7 +174,8 @@ fun GridHomeContent(
                     is GridItem.SectionDivider -> {
                         item(
                             key = "divider_${index}_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
-                            span = { TvGridItemSpan(maxLineSpan) }
+                            span = { TvGridItemSpan(maxLineSpan) },
+                            contentType = "divider"
                         ) {
                             SectionDivider(
                                 catalogName = gridItem.catalogName
@@ -177,7 +186,8 @@ fun GridHomeContent(
                     is GridItem.Content -> {
                         item(
                             key = "content_${index}_${gridItem.catalogId}_${gridItem.item.id}",
-                            span = { TvGridItemSpan(1) }
+                            span = { TvGridItemSpan(1) },
+                            contentType = "content"
                         ) {
                             GridContentCard(
                                 item = gridItem.item,
@@ -195,7 +205,8 @@ fun GridHomeContent(
                     is GridItem.SeeAll -> {
                         item(
                             key = "see_all_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
-                            span = { TvGridItemSpan(1) }
+                            span = { TvGridItemSpan(1) },
+                            contentType = "see_all"
                         ) {
                             SeeAllGridCard(
                                 onClick = {
@@ -248,18 +259,21 @@ private fun StickyCategoryHeader(
     sectionName: String,
     modifier: Modifier = Modifier
 ) {
+    val bgColor = NuvioColors.Background
+    val headerGradient = remember(bgColor) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.0f to bgColor,
+                0.7f to bgColor.copy(alpha = 0.95f),
+                1.0f to Color.Transparent
+            )
+        )
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0.0f to NuvioColors.Background,
-                        0.7f to NuvioColors.Background.copy(alpha = 0.95f),
-                        1.0f to Color.Transparent
-                    )
-                )
-            )
+            .background(headerGradient)
             .padding(horizontal = 48.dp, vertical = 12.dp)
     ) {
         Crossfade(

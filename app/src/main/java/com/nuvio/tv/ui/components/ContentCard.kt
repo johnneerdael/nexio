@@ -24,7 +24,6 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -81,11 +80,13 @@ fun ContentCard(
                     .height(cardHeight)
                     .clip(CardShape)
             ) {
-                AsyncImage(
+                FadeInAsyncImage(
                     model = item.poster,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    requestedWidthDp = cardWidth,
+                    requestedHeightDp = cardHeight
                 )
             }
         }

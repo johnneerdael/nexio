@@ -70,7 +70,7 @@ fun ClassicHomeContent(
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
         if (uiState.heroItems.isNotEmpty()) {
-            item(key = "hero_carousel") {
+            item(key = "hero_carousel", contentType = "hero") {
                 HeroCarousel(
                     items = uiState.heroItems,
                     onItemClick = { item ->
@@ -85,7 +85,7 @@ fun ClassicHomeContent(
         }
 
         if (uiState.continueWatchingItems.isNotEmpty()) {
-            item(key = "continue_watching") {
+            item(key = "continue_watching", contentType = "continue_watching") {
                 ContinueWatchingSection(
                     items = uiState.continueWatchingItems,
                     onItemClick = { progress ->
@@ -101,7 +101,8 @@ fun ClassicHomeContent(
 
         itemsIndexed(
             items = uiState.catalogRows,
-            key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}" }
+            key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}" },
+            contentType = { _, _ -> "catalog_row" }
         ) { index, catalogRow ->
             val catalogKey = "${catalogRow.addonId}_${catalogRow.type.toApiString()}_${catalogRow.catalogId}"
             val shouldRestoreFocus = index == focusState.focusedRowIndex

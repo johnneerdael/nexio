@@ -33,7 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.Icon
-import androidx.tv.material3.NavigationDrawer
+import androidx.tv.material3.ModalNavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
@@ -120,11 +120,14 @@ class MainActivity : ComponentActivity() {
 
                     val showSidebar = currentRoute in rootRoutes
 
-                    NavigationDrawer(
+                    val closedDrawerWidth = 72.dp
+                    val openDrawerWidth = 260.dp
+
+                    ModalNavigationDrawer(
                         drawerState = drawerState,
                         drawerContent = { drawerValue ->
                             if (showSidebar) {
-                                val drawerWidth = if (drawerValue == DrawerValue.Open) 260.dp else 72.dp
+                                val drawerWidth = if (drawerValue == DrawerValue.Open) openDrawerWidth else closedDrawerWidth
                                 Column(
                                     modifier = Modifier
                                         .fillMaxHeight()
@@ -200,7 +203,8 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     ) {
-                        Box(modifier = Modifier.fillMaxSize()) {
+                        val contentStartPadding = if (showSidebar) closedDrawerWidth else 0.dp
+                        Box(modifier = Modifier.fillMaxSize().padding(start = contentStartPadding)) {
                             NuvioNavHost(navController = navController, startDestination = startDestination)
                         }
                     }
