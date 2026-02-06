@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.grid.TvGridCells
 import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
-import androidx.tv.foundation.lazy.grid.items
+import androidx.tv.foundation.lazy.grid.itemsIndexed
 import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -112,10 +112,10 @@ fun CatalogSeeAllScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(
+                itemsIndexed(
                     items = catalogRow.items,
-                    key = { "${catalogRow.catalogId}_${it.id}" }
-                ) { item ->
+                    key = { index, item -> "${catalogRow.catalogId}_${item.id}_$index" }
+                ) { _, item ->
                     GridContentCard(
                         item = item,
                         onClick = {

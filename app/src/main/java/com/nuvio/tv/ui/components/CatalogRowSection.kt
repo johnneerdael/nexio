@@ -133,7 +133,7 @@ fun CatalogRowSection(
         ) {
             itemsIndexed(
                 items = catalogRow.items,
-                key = { _, item -> "${catalogRow.type}_${catalogRow.catalogId}_${item.id}" }
+                key = { index, item -> "${catalogRow.type}_${catalogRow.catalogId}_${item.id}_$index" }
             ) { index, item ->
                 ContentCard(
                     item = item,
