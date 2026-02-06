@@ -51,8 +51,6 @@ fun ThemeSettingsScreen(
     viewModel: ThemeSettingsViewModel = hiltViewModel(),
     onBackPress: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
     BackHandler { onBackPress() }
 
     Column(
@@ -76,6 +74,33 @@ fun ThemeSettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(32.dp))
+
+        ThemeSettingsContent(viewModel = viewModel)
+    }
+}
+
+@Composable
+fun ThemeSettingsContent(
+    viewModel: ThemeSettingsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Appearance",
+            style = MaterialTheme.typography.headlineMedium,
+            color = NuvioColors.Secondary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Choose your color theme",
+            style = MaterialTheme.typography.bodyMedium,
+            color = NuvioColors.TextSecondary
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         TvLazyVerticalGrid(
             columns = TvGridCells.Fixed(3),
@@ -115,14 +140,14 @@ private fun ThemeCard(
         border = CardDefaults.border(
             border = if (isSelected) Border(
                 border = BorderStroke(2.dp, palette.focusRing),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(12.dp)
             ) else Border.None,
             focusedBorder = Border(
                 border = BorderStroke(2.dp, palette.focusRing),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(12.dp)
             )
         ),
-        shape = CardDefaults.shape(RoundedCornerShape(16.dp)),
+        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
         scale = CardDefaults.scale(focusedScale = 1.02f)
     ) {
         Column(

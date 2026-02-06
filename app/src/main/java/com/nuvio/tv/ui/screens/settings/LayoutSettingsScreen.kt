@@ -52,8 +52,6 @@ fun LayoutSettingsScreen(
     viewModel: LayoutSettingsViewModel = hiltViewModel(),
     onBackPress: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
     BackHandler { onBackPress() }
 
     Column(
@@ -78,6 +76,17 @@ fun LayoutSettingsScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        LayoutSettingsContent(viewModel = viewModel)
+    }
+}
+
+@Composable
+fun LayoutSettingsContent(
+    viewModel: LayoutSettingsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    Column {
         // Layout cards
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -104,15 +113,15 @@ fun LayoutSettingsScreen(
 
         // Hero catalog selector
         if (uiState.availableCatalogs.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "Hero Catalog",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = NuvioColors.TextPrimary
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             Text(
                 text = "Choose which catalog powers the hero carousel",
@@ -120,7 +129,7 @@ fun LayoutSettingsScreen(
                 color = NuvioColors.TextSecondary
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             TvLazyRow(
                 contentPadding = PaddingValues(end = 16.dp),
@@ -173,14 +182,14 @@ private fun LayoutCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Animated preview
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
+                    .height(110.dp)
             ) {
                 when (layout) {
                     HomeLayout.CLASSIC -> ClassicLayoutPreview(
@@ -192,7 +201,7 @@ private fun LayoutCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -214,12 +223,12 @@ private fun LayoutCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             Text(
                 text = when (layout) {
                     HomeLayout.CLASSIC -> "Horizontal rows per category"
-                    HomeLayout.GRID -> "Hero + vertical grid with sticky headers"
+                    HomeLayout.GRID -> "Vertical grid with sticky headers"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextTertiary

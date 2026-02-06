@@ -20,14 +20,11 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -46,7 +43,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import coil.compose.AsyncImage
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.domain.model.AppTheme
@@ -128,22 +124,14 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .width(drawerWidth)
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                colors = listOf(
-                                                    Color.Black.copy(alpha = 0.7f),
-                                                    Color.Black.copy(alpha = 0.35f),
-                                                    Color.Transparent
-                                                )
-                                            )
-                                        )
+                                        .background(NuvioColors.Background)
                                         .padding(12.dp)
                                         .selectableGroup(),
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     if (drawerValue == DrawerValue.Open) {
                                         Image(
-                                            painter = painterResource(id = R.drawable.nuvio_text),
+                                            painter = painterResource(id = R.drawable.nuviotv_logo),
                                             contentDescription = "Nuvio",
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -177,7 +165,7 @@ class MainActivity : ComponentActivity() {
                                                 drawerState.setValue(DrawerValue.Closed)
                                             },
                                             colors = NavigationDrawerItemDefaults.colors(
-                                                selectedContainerColor = NuvioColors.FocusBackground,
+                                                selectedContainerColor = NuvioColors.BackgroundCard,
                                                 focusedContainerColor = NuvioColors.FocusBackground,
                                                 pressedContainerColor = NuvioColors.FocusBackground,
                                                 selectedContentColor = NuvioColors.FocusRing,

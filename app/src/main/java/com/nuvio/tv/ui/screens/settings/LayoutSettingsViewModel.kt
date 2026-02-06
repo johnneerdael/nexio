@@ -3,16 +3,13 @@ package com.nuvio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
-import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.repository.AddonRepository
-import com.nuvio.tv.domain.repository.CatalogRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -84,8 +81,7 @@ class LayoutSettingsViewModel @Inject constructor(
 
     private fun loadAvailableCatalogs() {
         viewModelScope.launch {
-            try {
-                val addons = addonRepository.getInstalledAddons().first()
+            addonRepository.getInstalledAddons().collectLatest { addons ->
                 val catalogs = addons.flatMap { addon ->
                     addon.catalogs
                         .filter { catalog ->
@@ -100,8 +96,6 @@ class LayoutSettingsViewModel @Inject constructor(
                         }
                 }
                 _uiState.update { it.copy(availableCatalogs = catalogs) }
-            } catch (_: Exception) {
-                // Silently handle - catalogs will be empty
             }
         }
     }
