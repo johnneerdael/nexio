@@ -13,6 +13,7 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         poster = poster,
         posterShape = PosterShape.fromString(posterShape),
         background = background,
+        logo = logo,
         description = description,
         releaseInfo = releaseInfo,
         imdbRating = imdbRating?.toFloatOrNull(),

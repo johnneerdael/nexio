@@ -21,6 +21,7 @@ data class SavedLibraryItem(
             poster = poster,
             posterShape = posterShape,
             background = background,
+            logo = null,
             description = description,
             releaseInfo = releaseInfo,
             imdbRating = imdbRating,

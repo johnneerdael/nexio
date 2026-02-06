@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Carousel
@@ -39,6 +41,9 @@ import androidx.tv.material3.CarouselState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 
@@ -170,28 +175,60 @@ private fun HeroCarouselSlide(
                 .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
                 .fillMaxWidth(0.5f)
         ) {
-            // Title
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Title logo or text title
+            if (item.logo != null) {
+                FadeInAsyncImage(
+                    model = item.logo,
+                    contentDescription = item.name,
+                    modifier = Modifier
+                        .height(80.dp)
+                        .fillMaxWidth(),
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.CenterStart,
+                    fadeDurationMs = 500
+                )
+            } else {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Meta info row: rating + year + genres
+            // Meta info row: IMDB rating + year + genres
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 item.imdbRating?.let { rating ->
-                    Text(
-                        text = "★ $rating",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Color(0xFFFFD700)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val context = LocalContext.current
+                        val imdbModel = remember {
+                            ImageRequest.Builder(context)
+                                .data(com.nuvio.tv.R.raw.imdb_logo_2016)
+                                .decoderFactory(SvgDecoder.Factory())
+                                .build()
+                        }
+                        AsyncImage(
+                            model = imdbModel,
+                            contentDescription = "IMDB",
+                            modifier = Modifier.size(30.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        val ratingText = remember(rating) { String.format("%.1f", rating) }
+                        Text(
+                            text = ratingText,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
                 }
 
                 item.releaseInfo?.let { year ->
