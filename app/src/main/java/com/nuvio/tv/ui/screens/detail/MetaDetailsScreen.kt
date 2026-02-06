@@ -2,18 +2,13 @@ package com.nuvio.tv.ui.screens.detail
 
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -25,14 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -45,6 +34,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
+import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -216,59 +206,6 @@ private fun MetaDetailsContent(
         }
     }
 
-    // --- Trailer ExoPlayer (deferred: only create when we have a URL) ---
-    val context = LocalContext.current
-    val trailerPlayer = remember(trailerUrl) {
-        if (trailerUrl != null) {
-            ExoPlayer.Builder(context)
-                .build()
-                .apply {
-                    repeatMode = Player.REPEAT_MODE_OFF
-                    volume = 1f
-                }
-        } else {
-            null
-        }
-    }
-
-    // Full cleanup: stop, clear media, release
-    DisposableEffect(trailerPlayer) {
-        onDispose {
-            trailerPlayer?.stop()
-            trailerPlayer?.clearMediaItems()
-            trailerPlayer?.release()
-        }
-    }
-
-    // Load and play/stop trailer based on state
-    LaunchedEffect(isTrailerPlaying, trailerUrl) {
-        val player = trailerPlayer ?: return@LaunchedEffect
-        if (isTrailerPlaying && trailerUrl != null) {
-            player.setMediaItem(MediaItem.fromUri(trailerUrl))
-            player.prepare()
-            player.playWhenReady = true
-        } else {
-            player.stop()
-            player.clearMediaItems()
-        }
-    }
-
-    // Listen for trailer ending
-    DisposableEffect(trailerPlayer) {
-        val player = trailerPlayer ?: return@DisposableEffect onDispose {}
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
-                    onTrailerEnded()
-                }
-            }
-        }
-        player.addListener(listener)
-        onDispose {
-            player.removeListener(listener)
-        }
-    }
-
     // Backdrop alpha for crossfade
     val backdropAlpha by animateFloatAsState(
         targetValue = if (isTrailerPlaying) 0f else 1f,
@@ -334,25 +271,12 @@ private fun MetaDetailsContent(
             )
 
             // Trailer video (fades in when trailer plays)
-            if (trailerPlayer != null) {
-                AnimatedVisibility(
-                    visible = isTrailerPlaying,
-                    enter = fadeIn(animationSpec = tween(800)),
-                    exit = fadeOut(animationSpec = tween(500))
-                ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                player = trailerPlayer
-                                useController = false
-                                keepScreenOn = true
-                                setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
+            TrailerPlayer(
+                trailerUrl = trailerUrl,
+                isPlaying = isTrailerPlaying,
+                onEnded = onTrailerEnded,
+                modifier = Modifier.fillMaxSize()
+            )
 
             // Light global dim so text remains readable
             Box(
