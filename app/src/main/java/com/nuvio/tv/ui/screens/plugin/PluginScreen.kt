@@ -11,10 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,11 +19,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -49,8 +45,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -87,43 +82,17 @@ fun PluginScreen(
     onBackPress: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
     var repoUrl by remember { mutableStateOf("") }
     
-    BackHandler { onBackPress() }
-    
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NuvioColors.Background)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 48.dp, vertical = 24.dp)
-        ) {
-            PluginScreenContent(
-                uiState = uiState,
-                repoUrl = repoUrl,
-                onRepoUrlChange = { repoUrl = it },
-                viewModel = viewModel
-            )
+    BackHandler {
+        if (showAddDialog) {
+            showAddDialog = false
+        } else {
+            onBackPress()
         }
-        
-        // Success/Error Messages
-        MessageOverlay(
-            successMessage = uiState.successMessage,
-            errorMessage = uiState.errorMessage
-        )
     }
-}
-
-@Composable
-fun PluginScreenContent(
-    uiState: PluginUiState = PluginUiState(),
-    repoUrl: String = "",
-    onRepoUrlChange: (String) -> Unit = {},
-    viewModel: PluginViewModel = hiltViewModel()
-) {
+    
     // Clear messages after delay
     LaunchedEffect(uiState.successMessage) {
         if (uiState.successMessage != null) {
@@ -138,96 +107,119 @@ fun PluginScreenContent(
             viewModel.onEvent(PluginUiEvent.ClearError)
         }
     }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Header
-        PluginHeader(
-            pluginsEnabled = uiState.pluginsEnabled,
-            onPluginsEnabledChange = { viewModel.onEvent(PluginUiEvent.SetPluginsEnabled(it)) }
-        )
-        
-        Spacer(modifier = Modifier.height(24.dp))
-
-        AddRepositoryInline(
-            url = repoUrl,
-            onUrlChange = onRepoUrlChange,
-            onConfirm = {
-                if (repoUrl.isNotBlank()) {
-                    viewModel.onEvent(PluginUiEvent.AddRepository(repoUrl))
-                    onRepoUrlChange("")
-                }
-            },
-            isLoading = uiState.isAddingRepo
-        )
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // Content
-        TvLazyColumn(
-            contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.weight(1f)
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioColors.Background)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 48.dp, vertical = 24.dp)
         ) {
-            // Repositories section
-            item {
-                Text(
-                    text = "Repositories (${uiState.repositories.size})",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            // Header
+            PluginHeader(
+                pluginsEnabled = uiState.pluginsEnabled,
+                onPluginsEnabledChange = { viewModel.onEvent(PluginUiEvent.SetPluginsEnabled(it)) },
+                onAddRepository = { showAddDialog = true }
+            )
             
-            if (uiState.repositories.isEmpty()) {
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Content
+            TvLazyColumn(
+                contentPadding = PaddingValues(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                // Repositories section
                 item {
-                    EmptyState(
-                        message = "No repositories added yet.\nAdd a repository to get started.",
-                        modifier = Modifier.padding(vertical = 24.dp)
-                    )
-                }
-            }
-            
-            items(uiState.repositories, key = { it.id }) { repo ->
-                RepositoryCard(
-                    repository = repo,
-                    onRefresh = { viewModel.onEvent(PluginUiEvent.RefreshRepository(repo.id)) },
-                    onRemove = { viewModel.onEvent(PluginUiEvent.RemoveRepository(repo.id)) },
-                    isLoading = uiState.isLoading
-                )
-            }
-            
-            // Scrapers section
-            if (uiState.scrapers.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Providers (${uiState.scrapers.size})",
+                        text = "Repositories (${uiState.repositories.size})",
                         style = MaterialTheme.typography.titleLarge,
                         color = NuvioColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 
-                items(uiState.scrapers, key = { it.id }) { scraper ->
-                    ScraperCard(
-                        scraper = scraper,
-                        onToggle = { enabled -> 
-                            viewModel.onEvent(PluginUiEvent.ToggleScraper(scraper.id, enabled)) 
-                        },
-                        onTest = { viewModel.onEvent(PluginUiEvent.TestScraper(scraper.id)) },
-                        isTesting = uiState.isTesting && uiState.testScraperId == scraper.id,
-                        testResults = if (uiState.testScraperId == scraper.id) uiState.testResults else null
+                if (uiState.repositories.isEmpty()) {
+                    item {
+                        EmptyState(
+                            message = "No repositories added yet.\nAdd a repository to get started.",
+                            modifier = Modifier.padding(vertical = 24.dp)
+                        )
+                    }
+                }
+                
+                items(uiState.repositories, key = { it.id }) { repo ->
+                    RepositoryCard(
+                        repository = repo,
+                        onRefresh = { viewModel.onEvent(PluginUiEvent.RefreshRepository(repo.id)) },
+                        onRemove = { viewModel.onEvent(PluginUiEvent.RemoveRepository(repo.id)) },
+                        isLoading = uiState.isLoading
                     )
+                }
+                
+                // Scrapers section
+                if (uiState.scrapers.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Providers (${uiState.scrapers.size})",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = NuvioColors.TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    
+                    items(uiState.scrapers, key = { it.id }) { scraper ->
+                        ScraperCard(
+                            scraper = scraper,
+                            onToggle = { enabled -> 
+                                viewModel.onEvent(PluginUiEvent.ToggleScraper(scraper.id, enabled)) 
+                            },
+                            onTest = { viewModel.onEvent(PluginUiEvent.TestScraper(scraper.id)) },
+                            isTesting = uiState.isTesting && uiState.testScraperId == scraper.id,
+                            testResults = if (uiState.testScraperId == scraper.id) uiState.testResults else null
+                        )
+                    }
                 }
             }
         }
+        
+        // Add Repository Dialog
+        AnimatedVisibility(
+            visible = showAddDialog,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            AddRepositoryDialog(
+                url = repoUrl,
+                onUrlChange = { repoUrl = it },
+                onConfirm = {
+                    viewModel.onEvent(PluginUiEvent.AddRepository(repoUrl))
+                    repoUrl = ""
+                    showAddDialog = false
+                },
+                onDismiss = { showAddDialog = false },
+                isLoading = uiState.isAddingRepo
+            )
+        }
+        
+        // Success/Error Messages
+        MessageOverlay(
+            successMessage = uiState.successMessage,
+            errorMessage = uiState.errorMessage
+        )
     }
 }
 
 @Composable
 private fun PluginHeader(
     pluginsEnabled: Boolean,
-    onPluginsEnabledChange: (Boolean) -> Unit
+    onPluginsEnabledChange: (Boolean) -> Unit,
+    onAddRepository: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -270,127 +262,30 @@ private fun PluginHeader(
                     )
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun AddRepositoryInline(
-    url: String,
-    onUrlChange: (String) -> Unit,
-    onConfirm: () -> Unit,
-    isLoading: Boolean
-) {
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusManager = LocalFocusManager.current
-    val focusRequester = remember { FocusRequester() }
-    var isFocused by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = "Add repository",
-                style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            
+            // Add button
+            Button(
+                onClick = onAddRepository,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.Secondary,
+                    focusedContainerColor = NuvioColors.SecondaryVariant,
+                    contentColor = Color.White,
+                    focusedContentColor = Color.White
+                ),
+                border = ButtonDefaults.border(
+                    focusedBorder = Border(
+                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        shape = RoundedCornerShape(50)
+                    )
+                )
             ) {
-                // TV-friendly text input using BasicTextField
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(
-                            color = NuvioColors.BackgroundElevated,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .border(
-                            width = if (isFocused) 2.dp else 1.dp,
-                            color = if (isFocused) NuvioColors.FocusRing else NuvioColors.Border,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(12.dp)
-                ) {
-                    BasicTextField(
-                        value = url,
-                        onValueChange = onUrlChange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester)
-                            .onFocusChanged {
-                                isFocused = it.isFocused
-                                if (it.isFocused) {
-                                    keyboardController?.show()
-                                }
-                            },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Uri,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                onConfirm()
-                                keyboardController?.hide()
-                                focusManager.clearFocus(force = true)
-                            }
-                        ),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = NuvioColors.TextPrimary
-                        ),
-                        cursorBrush = SolidColor(NuvioColors.Primary),
-                        decorationBox = { innerTextField ->
-                            if (url.isEmpty()) {
-                                Text(
-                                    text = "https://example.com/manifest.json",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = NuvioColors.TextTertiary
-                                )
-                            }
-                            innerTextField()
-                        }
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        onConfirm()
-                        keyboardController?.hide()
-                        focusManager.clearFocus(force = true)
-                    },
-                    enabled = !isLoading && url.isNotBlank(),
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Secondary,
-                        focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.White
-                    ),
-                    border = ButtonDefaults.border(
-                        focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                            shape = RoundedCornerShape(50)
-                        )
-                    )
-                ) {
-                    if (isLoading) {
-                        LoadingIndicator(modifier = Modifier.size(18.dp))
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add")
-                }
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add",
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Repository")
             }
         }
     }
@@ -677,6 +572,144 @@ private fun TestResultItem(result: LocalScraperResult) {
     }
 }
 
+@Composable
+private fun AddRepositoryDialog(
+    url: String,
+    onUrlChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    isLoading: Boolean
+) {
+    val focusRequester = remember { FocusRequester() }
+    
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.8f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            onClick = { },
+            modifier = Modifier
+                .width(500.dp)
+                .focusRequester(focusRequester),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard
+            ),
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Add Repository",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = "Enter the URL to a manifest.json file",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Custom text field using BasicTextField
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = NuvioColors.Surface,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = NuvioColors.Border,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(16.dp)
+                ) {
+                    if (url.isEmpty()) {
+                        Text(
+                            text = "https://example.com/manifest.json",
+                            style = TextStyle(
+                                color = NuvioColors.TextTertiary,
+                                fontSize = 14.sp
+                            )
+                        )
+                    }
+                    BasicTextField(
+                        value = url,
+                        onValueChange = onUrlChange,
+                        textStyle = TextStyle(
+                            color = NuvioColors.TextPrimary,
+                            fontSize = 14.sp
+                        ),
+                        cursorBrush = SolidColor(NuvioColors.Primary),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Uri,
+                            imeAction = ImeAction.Done
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.Surface,
+                            contentColor = NuvioColors.TextPrimary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cancel")
+                    }
+                    
+                    Button(
+                        onClick = onConfirm,
+                        enabled = !isLoading && url.isNotBlank(),
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.Primary,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        if (isLoading) {
+                            LoadingIndicator(modifier = Modifier.size(18.dp))
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add")
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun EmptyState(

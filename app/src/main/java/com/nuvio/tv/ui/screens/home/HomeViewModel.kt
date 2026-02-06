@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
@@ -24,7 +25,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
-    private val watchProgressRepository: WatchProgressRepository
+    private val watchProgressRepository: WatchProgressRepository,
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -33,13 +35,37 @@ class HomeViewModel @Inject constructor(
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
     val focusState: StateFlow<HomeScreenFocusState> = _focusState.asStateFlow()
 
+    private val _gridFocusState = MutableStateFlow(HomeScreenFocusState())
+    val gridFocusState: StateFlow<HomeScreenFocusState> = _gridFocusState.asStateFlow()
+
     private val catalogsMap = linkedMapOf<String, CatalogRow>()
     private val catalogOrder = mutableListOf<String>()
     private var addonsCache: List<Addon> = emptyList()
+    private var currentHeroCatalogKey: String? = null
 
     init {
+        loadLayoutPreference()
+        loadHeroCatalogPreference()
         loadContinueWatching()
         observeInstalledAddons()
+    }
+
+    private fun loadLayoutPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.selectedLayout.collectLatest { layout ->
+                _uiState.update { it.copy(homeLayout = layout) }
+            }
+        }
+    }
+
+    private fun loadHeroCatalogPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.heroCatalogSelection.collectLatest { key ->
+                currentHeroCatalogKey = key
+                _uiState.update { it.copy(heroCatalogKey = key) }
+                updateCatalogRows()
+            }
+        }
     }
 
     fun onEvent(event: HomeEvent) {
@@ -188,8 +214,61 @@ class HomeViewModel @Inject constructor(
         _uiState.update { state ->
             // Preserve addon manifest order
             val orderedRows = catalogOrder.mapNotNull { key -> catalogsMap[key] }
+
+            // Derive hero items from selected catalog or first catalog with backgrounds
+            val heroSourceRow = if (currentHeroCatalogKey != null) {
+                catalogsMap[currentHeroCatalogKey]
+            } else {
+                orderedRows.firstOrNull { row -> row.items.any { it.background != null } }
+            }
+            val heroItems = heroSourceRow?.items
+                ?.filter { it.background != null || it.poster != null }
+                ?.take(7)
+                ?: orderedRows.flatMap { it.items }.take(7)
+
+            // Build flattened grid items
+            val gridItems = buildList {
+                if (heroItems.isNotEmpty()) {
+                    add(GridItem.Hero(heroItems))
+                }
+                orderedRows.forEach { row ->
+                    add(
+                        GridItem.SectionDivider(
+                            catalogName = row.catalogName,
+                            catalogId = row.catalogId,
+                            addonBaseUrl = row.addonBaseUrl,
+                            addonId = row.addonId,
+                            type = row.type.toApiString()
+                        )
+                    )
+                    val hasEnoughForSeeAll = row.items.size >= 15
+                    val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
+                    displayItems.forEach { item ->
+                        add(
+                            GridItem.Content(
+                                item = item,
+                                addonBaseUrl = row.addonBaseUrl,
+                                catalogId = row.catalogId,
+                                catalogName = row.catalogName
+                            )
+                        )
+                    }
+                    if (hasEnoughForSeeAll) {
+                        add(
+                            GridItem.SeeAll(
+                                catalogId = row.catalogId,
+                                addonId = row.addonId,
+                                type = row.type.toApiString()
+                            )
+                        )
+                    }
+                }
+            }
+
             state.copy(
                 catalogRows = orderedRows,
+                heroItems = heroItems,
+                gridItems = gridItems,
                 isLoading = false
             )
         }
@@ -232,5 +311,22 @@ class HomeViewModel @Inject constructor(
      */
     fun clearFocusState() {
         _focusState.value = HomeScreenFocusState()
+    }
+
+    /**
+     * Saves the grid layout focus and scroll state.
+     */
+    fun saveGridFocusState(
+        verticalScrollIndex: Int,
+        verticalScrollOffset: Int,
+        focusedRowIndex: Int = 0,
+        focusedItemIndex: Int = 0
+    ) {
+        _gridFocusState.value = HomeScreenFocusState(
+            verticalScrollIndex = verticalScrollIndex,
+            verticalScrollOffset = verticalScrollOffset,
+            focusedRowIndex = focusedRowIndex,
+            focusedItemIndex = focusedItemIndex
+        )
     }
 }

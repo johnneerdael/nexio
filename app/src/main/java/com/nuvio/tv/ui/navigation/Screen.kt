@@ -14,9 +14,9 @@ sealed class Screen(val route: String) {
         }
     }
     data object Stream : Screen("stream/{videoId}/{contentType}/{title}?poster={poster}&backdrop={backdrop}&logo={logo}&season={season}&episode={episode}&episodeName={episodeName}&genres={genres}&year={year}&contentId={contentId}&contentName={contentName}&runtime={runtime}") {
-        private fun encode(value: String): String = 
+        private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-        
+
         fun createRoute(
             videoId: String,
             contentType: String,
@@ -46,9 +46,9 @@ sealed class Screen(val route: String) {
         }
     }
     data object Player : Screen("player/{streamUrl}/{title}?streamName={streamName}&year={year}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&season={season}&episode={episode}&episodeTitle={episodeTitle}") {
-        private fun encode(value: String): String = 
+        private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-        
+
         fun createRoute(
             streamUrl: String,
             title: String,
@@ -93,4 +93,14 @@ sealed class Screen(val route: String) {
     data object About : Screen("about")
     data object AddonManager : Screen("addon_manager")
     data object Plugins : Screen("plugins")
+    data object LayoutSelection : Screen("layout_selection")
+    data object LayoutSettings : Screen("layout_settings")
+    data object CatalogSeeAll : Screen("catalog_see_all/{catalogId}/{addonId}/{type}") {
+        private fun encode(value: String): String =
+            URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+        fun createRoute(catalogId: String, addonId: String, type: String): String {
+            return "catalog_see_all/${encode(catalogId)}/${encode(addonId)}/${encode(type)}"
+        }
+    }
 }

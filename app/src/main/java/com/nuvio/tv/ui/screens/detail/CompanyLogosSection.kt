@@ -53,8 +53,8 @@ fun CompanyLogosSection(
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(companies.size, key = { index -> "$title-${companies[index].name}-$index" }) { index ->
-                CompanyLogoCard(company = companies[index])
+            items(companies, key = { it.name }) { company ->
+                CompanyLogoCard(company = company)
             }
         }
     }
@@ -77,9 +77,7 @@ private fun CompanyLogoCard(company: MetaCompany) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
-                contentScale = ContentScale.Fit,
-                requestedWidthDp = 140.dp,
-                requestedHeightDp = 56.dp
+                contentScale = ContentScale.Fit
             )
         } else {
             Text(

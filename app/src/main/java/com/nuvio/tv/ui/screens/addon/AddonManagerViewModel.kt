@@ -1,10 +1,15 @@
 package com.nuvio.tv.ui.screens.addon
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.qr.QrCodeGenerator
+import com.nuvio.tv.core.server.AddonConfigServer
+import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,11 +20,14 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AddonManagerViewModel @Inject constructor(
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddonManagerUiState())
     val uiState: StateFlow<AddonManagerUiState> = _uiState.asStateFlow()
+
+    private var server: AddonConfigServer? = null
 
     init {
         observeInstalledAddons()
@@ -86,6 +94,8 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
+    // --- Reorder ---
+
     fun moveAddonUp(baseUrl: String) {
         reorderAddon(baseUrl, -1)
     }
@@ -112,6 +122,118 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
+    // --- QR Mode ---
+
+    fun startQrMode() {
+        val ip = DeviceIpAddress.get(context)
+        if (ip == null) {
+            _uiState.update { it.copy(error = "Connect to Wi-Fi or Ethernet to use this feature") }
+            return
+        }
+
+        stopServerInternal()
+
+        server = AddonConfigServer.startOnAvailablePort(
+            currentAddonsProvider = {
+                _uiState.value.installedAddons.map { addon ->
+                    AddonConfigServer.AddonInfo(
+                        url = addon.baseUrl,
+                        name = addon.name,
+                        description = addon.description
+                    )
+                }
+            },
+            onChangeProposed = { change -> handleChangeProposed(change) }
+        )
+
+        val activeServer = server
+        if (activeServer == null) {
+            _uiState.update { it.copy(error = "Could not start server. All ports in use.") }
+            return
+        }
+
+        val url = "http://$ip:${activeServer.listeningPort}"
+        val qrBitmap = QrCodeGenerator.generate(url, 512)
+
+        _uiState.update {
+            it.copy(
+                isQrModeActive = true,
+                qrCodeBitmap = qrBitmap,
+                serverUrl = url,
+                error = null
+            )
+        }
+    }
+
+    fun stopQrMode() {
+        stopServerInternal()
+        _uiState.update {
+            it.copy(
+                isQrModeActive = false,
+                qrCodeBitmap = null,
+                serverUrl = null,
+                pendingChange = null
+            )
+        }
+    }
+
+    private fun stopServerInternal() {
+        server?.stop()
+        server = null
+    }
+
+    private fun handleChangeProposed(change: AddonConfigServer.PendingAddonChange) {
+        val currentUrls = _uiState.value.installedAddons.map { it.baseUrl }.toSet()
+        val proposedUrls = change.proposedUrls.toSet()
+
+        val added = change.proposedUrls.filter { it !in currentUrls }
+        val removed = currentUrls.filter { it !in proposedUrls }
+
+        _uiState.update {
+            it.copy(
+                pendingChange = PendingChangeInfo(
+                    changeId = change.id,
+                    proposedUrls = change.proposedUrls,
+                    addedUrls = added,
+                    removedUrls = removed.toList()
+                )
+            )
+        }
+    }
+
+    fun confirmPendingChange() {
+        val pending = _uiState.value.pendingChange ?: return
+
+        _uiState.update { it.copy(pendingChange = pending.copy(isApplying = true)) }
+
+        viewModelScope.launch {
+            val validUrls = mutableListOf<String>()
+            val currentUrls = _uiState.value.installedAddons.map { it.baseUrl }.toSet()
+
+            for (url in pending.proposedUrls) {
+                if (url in currentUrls) {
+                    validUrls.add(url)
+                } else {
+                    when (addonRepository.fetchAddon(url)) {
+                        is NetworkResult.Success -> validUrls.add(url)
+                        else -> { /* Skip invalid URLs */ }
+                    }
+                }
+            }
+
+            addonRepository.setAddonOrder(validUrls)
+            server?.confirmChange(pending.changeId)
+
+            _uiState.update { it.copy(pendingChange = null) }
+        }
+    }
+
+    fun rejectPendingChange() {
+        val pending = _uiState.value.pendingChange ?: return
+        server?.rejectChange(pending.changeId)
+        _uiState.update { it.copy(pendingChange = null) }
+    }
+
     private fun observeInstalledAddons() {
         viewModelScope.launch {
             if (_uiState.value.installedAddons.isEmpty()) {
@@ -131,5 +253,10 @@ class AddonManagerViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopServerInternal()
     }
 }

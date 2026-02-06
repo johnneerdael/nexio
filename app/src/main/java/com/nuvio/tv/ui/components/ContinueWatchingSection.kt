@@ -6,15 +6,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +39,7 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -114,6 +122,8 @@ private fun ContinueWatchingCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+
     val episodeStr = progress.episodeDisplayString
     val remainingText = remember(progress.position, progress.duration) {
         formatRemainingTime(progress.remainingTime)
@@ -135,7 +145,9 @@ private fun ContinueWatchingCard(
 
     Card(
         onClick = onClick,
-        modifier = modifier.width(320.dp),
+        modifier = modifier
+            .width(320.dp)
+            .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = CwCardShape),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
@@ -171,6 +183,29 @@ private fun ContinueWatchingCard(
                         .fillMaxSize()
                         .background(overlayBrush)
                 )
+
+                // Play icon overlay when focused
+                if (isFocused) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(NuvioColors.Primary)
+                                .padding(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Play",
+                                tint = NuvioColors.OnPrimary
+                            )
+                        }
+                    }
+                }
 
                 // Content info at bottom
                 Column(

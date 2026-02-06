@@ -148,6 +148,12 @@ dependencies {
 
     // Bundle real crypto-js (JS) for QuickJS plugins
     implementation(libs.crypto.js)
+    // QR code + local server for addon management
+    implementation(libs.nanohttpd)
+    implementation(libs.zxing.core)
+
+    // Bundle real crypto-js (JS) for QuickJS plugins
+    implementation("org.webjars.npm:crypto-js:4.2.0")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
