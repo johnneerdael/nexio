@@ -73,7 +73,7 @@ class CatalogRepositoryImpl @Inject constructor(
         allArgs.putAll(extraArgs)
 
         // For Stremio catalogs, pagination is controlled by `skip` inside extraArgs.
-        if (!allArgs.containsKey("skip") && (skip > 0 || allArgs.containsKey("search"))) {
+        if (!allArgs.containsKey("skip") && skip > 0) {
             allArgs["skip"] = skip.toString()
         }
 
