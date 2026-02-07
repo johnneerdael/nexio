@@ -56,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.itemsIndexed
@@ -225,32 +227,28 @@ fun AddonManagerScreen(
             }
         }
 
-        // QR Code overlay
-        AnimatedVisibility(
-            visible = uiState.isQrModeActive,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            QrCodeOverlay(
-                qrBitmap = uiState.qrCodeBitmap,
-                serverUrl = uiState.serverUrl,
-                onClose = viewModel::stopQrMode,
-                hasPendingChange = uiState.pendingChange != null
-            )
+        // QR Code overlay — Popup renders above the entire screen
+        if (uiState.isQrModeActive) {
+            Popup(properties = PopupProperties(focusable = true)) {
+                QrCodeOverlay(
+                    qrBitmap = uiState.qrCodeBitmap,
+                    serverUrl = uiState.serverUrl,
+                    onClose = viewModel::stopQrMode,
+                    hasPendingChange = uiState.pendingChange != null
+                )
+            }
         }
 
         // Confirmation dialog overlay
-        AnimatedVisibility(
-            visible = uiState.pendingChange != null,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            uiState.pendingChange?.let { pending ->
-                ConfirmAddonChangesDialog(
-                    pendingChange = pending,
-                    onConfirm = viewModel::confirmPendingChange,
-                    onReject = viewModel::rejectPendingChange
-                )
+        if (uiState.pendingChange != null) {
+            Popup(properties = PopupProperties(focusable = true)) {
+                uiState.pendingChange?.let { pending ->
+                    ConfirmAddonChangesDialog(
+                        pendingChange = pending,
+                        onConfirm = viewModel::confirmPendingChange,
+                        onReject = viewModel::rejectPendingChange
+                    )
+                }
             }
         }
     }
@@ -338,93 +336,74 @@ private fun QrCodeOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.8f)),
+            .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            onClick = { },
-            modifier = Modifier
-                .width(460.dp),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard
-            ),
-            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Scan to manage addons",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
+            Text(
+                text = "Scan with your phone to manage addons",
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioColors.TextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (qrBitmap != null) {
+                Image(
+                    bitmap = qrBitmap.asImageBitmap(),
+                    contentDescription = "QR Code",
+                    modifier = Modifier.size(220.dp),
+                    contentScale = ContentScale.Fit
                 )
+            }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
+            if (serverUrl != null) {
                 Text(
-                    text = "Scan this QR code with your phone to add, remove, or reorder addons",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary,
+                    text = serverUrl,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextTertiary,
                     textAlign = TextAlign.Center
                 )
+            }
 
-                Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-                if (qrBitmap != null) {
-                    Image(
-                        bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = "QR Code",
-                        modifier = Modifier.size(256.dp),
-                        contentScale = ContentScale.Fit
+            Surface(
+                onClick = onClose,
+                modifier = Modifier.focusRequester(focusRequester),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = NuvioColors.Surface,
+                    focusedContainerColor = NuvioColors.FocusBackground
+                ),
+                border = ClickableSurfaceDefaults.border(
+                    focusedBorder = Border(
+                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        shape = RoundedCornerShape(50)
                     )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (serverUrl != null) {
-                    Text(
-                        text = serverUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextTertiary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Surface(
-                    onClick = onClose,
-                    modifier = Modifier.focusRequester(focusRequester),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = NuvioColors.Surface,
-                        focusedContainerColor = NuvioColors.FocusBackground
-                    ),
-                    border = ClickableSurfaceDefaults.border(
-                        focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                            shape = RoundedCornerShape(50)
-                        )
-                    ),
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+                ),
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = NuvioColors.TextPrimary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Close",
-                            color = NuvioColors.TextPrimary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = NuvioColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Close",
+                        color = NuvioColors.TextPrimary
+                    )
                 }
             }
         }

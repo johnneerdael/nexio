@@ -86,7 +86,6 @@ fun SettingsScreen(
     var previousIndex by remember { mutableIntStateOf(0) }
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
-    var repoUrl by remember { mutableStateOf("") }
 
     val accentColor = NuvioColors.Secondary
 
@@ -219,8 +218,6 @@ fun SettingsScreen(
                     SettingsCategory.ABOUT -> AboutSettingsContent()
                     SettingsCategory.PLUGINS -> PluginScreenContent(
                         uiState = pluginUiState,
-                        repoUrl = repoUrl,
-                        onRepoUrlChange = { repoUrl = it },
                         viewModel = pluginViewModel
                     )
                 }
