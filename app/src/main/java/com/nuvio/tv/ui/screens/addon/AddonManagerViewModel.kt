@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.addon
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.R
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.server.AddonConfigServer
@@ -10,6 +11,7 @@ import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,9 +30,20 @@ class AddonManagerViewModel @Inject constructor(
     val uiState: StateFlow<AddonManagerUiState> = _uiState.asStateFlow()
 
     private var server: AddonConfigServer? = null
+    private var logoBytes: ByteArray? = null
 
     init {
         observeInstalledAddons()
+        loadLogoBytes()
+    }
+
+    private fun loadLogoBytes() {
+        try {
+            val inputStream = context.resources.openRawResource(R.drawable.nuviotv_logo)
+            logoBytes = inputStream.use { it.readBytes() }
+        } catch (_: Exception) {
+            // Logo is optional, page will fall back to text
+        }
     }
 
     fun onInstallUrlChange(url: String) {
@@ -143,7 +156,8 @@ class AddonManagerViewModel @Inject constructor(
                     )
                 }
             },
-            onChangeProposed = { change -> handleChangeProposed(change) }
+            onChangeProposed = { change -> handleChangeProposed(change) },
+            logoProvider = { logoBytes }
         )
 
         val activeServer = server
@@ -224,7 +238,8 @@ class AddonManagerViewModel @Inject constructor(
             addonRepository.setAddonOrder(validUrls)
             server?.confirmChange(pending.changeId)
 
-            // Close QR mode and stop server after changes are applied
+            // Delay before stopping server so the web client can poll the confirmed status
+            delay(5000)
             stopServerInternal()
             _uiState.update {
                 it.copy(
