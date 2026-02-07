@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -32,8 +34,9 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +86,16 @@ fun AddonManagerScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val installButtonFocusRequester = remember { FocusRequester() }
+    val textFieldFocusRequester = remember { FocusRequester() }
+    var isEditing by remember { mutableStateOf(false) }
+
+    // When isEditing changes to true, focus the text field and show keyboard
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            textFieldFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.stopQrMode() }
@@ -126,34 +139,78 @@ fun AddonManagerScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TextField(
-                                value = uiState.installUrl,
-                                onValueChange = viewModel::onInstallUrlChange,
-                                placeholder = { Text(text = "https://example.com", color = NuvioColors.TextTertiary) },
+                            // Surface always stays in the tree for stable D-pad focus
+                            Surface(
+                                onClick = { isEditing = true },
                                 modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(
-                                    onDone = {
-                                        viewModel.installAddon()
-                                        keyboardController?.hide()
-                                        focusManager.clearFocus(force = true)
-                                        installButtonFocusRequester.requestFocus()
-                                    }
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = NuvioColors.BackgroundElevated,
+                                    focusedContainerColor = NuvioColors.BackgroundElevated
                                 ),
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = NuvioColors.BackgroundElevated,
-                                    unfocusedContainerColor = NuvioColors.BackgroundElevated,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    focusedTextColor = NuvioColors.TextPrimary,
-                                    unfocusedTextColor = NuvioColors.TextPrimary,
-                                    cursorColor = NuvioColors.Primary
-                                )
-                            )
+                                border = ClickableSurfaceDefaults.border(
+                                    border = Border(
+                                        border = BorderStroke(1.dp, NuvioColors.Border),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ),
+                                    focusedBorder = Border(
+                                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                ),
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+                            ) {
+                                Box(modifier = Modifier.padding(12.dp)) {
+                                    BasicTextField(
+                                        value = uiState.installUrl,
+                                        onValueChange = viewModel::onInstallUrlChange,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .focusRequester(textFieldFocusRequester)
+                                            .onFocusChanged {
+                                                if (!it.isFocused && isEditing) {
+                                                    isEditing = false
+                                                    keyboardController?.hide()
+                                                }
+                                            },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Uri,
+                                            imeAction = ImeAction.Done
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onDone = {
+                                                viewModel.installAddon()
+                                                isEditing = false
+                                                keyboardController?.hide()
+                                                focusManager.clearFocus(force = true)
+                                            }
+                                        ),
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            color = NuvioColors.TextPrimary
+                                        ),
+                                        cursorBrush = SolidColor(if (isEditing) NuvioColors.Primary else Color.Transparent),
+                                        decorationBox = { innerTextField ->
+                                            if (uiState.installUrl.isEmpty()) {
+                                                Text(
+                                                    text = "https://example.com",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = NuvioColors.TextTertiary
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    )
+                                }
+                            }
+
                             Button(
-                                onClick = viewModel::installAddon,
+                                onClick = {
+                                    viewModel.installAddon()
+                                    isEditing = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus(force = true)
+                                },
                                 enabled = !uiState.isInstalling,
                                 modifier = Modifier.focusRequester(installButtonFocusRequester),
                                 colors = ButtonDefaults.colors(

@@ -325,8 +325,16 @@ private fun AddRepositoryInline(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val focusRequester = remember { FocusRequester() }
-    var isFocused by remember { mutableStateOf(false) }
+    val textFieldFocusRequester = remember { FocusRequester() }
+    var isEditing by remember { mutableStateOf(false) }
+
+    // When isEditing changes to true, focus the text field and show keyboard
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            textFieldFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -345,65 +353,75 @@ private fun AddRepositoryInline(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // TV-friendly text input using BasicTextField
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(
-                            color = NuvioColors.BackgroundElevated,
+                // Surface always stays in the tree for stable D-pad focus
+                Surface(
+                    onClick = { isEditing = true },
+                    modifier = Modifier.weight(1f),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = NuvioColors.BackgroundElevated,
+                        focusedContainerColor = NuvioColors.BackgroundElevated
+                    ),
+                    border = ClickableSurfaceDefaults.border(
+                        border = Border(
+                            border = BorderStroke(1.dp, NuvioColors.Border),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                        focusedBorder = Border(
+                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
                             shape = RoundedCornerShape(12.dp)
                         )
-                        .border(
-                            width = if (isFocused) 2.dp else 1.dp,
-                            color = if (isFocused) NuvioColors.FocusRing else NuvioColors.Border,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(12.dp)
+                    ),
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
                 ) {
-                    BasicTextField(
-                        value = url,
-                        onValueChange = onUrlChange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester)
-                            .onFocusChanged {
-                                isFocused = it.isFocused
-                                if (it.isFocused) {
-                                    keyboardController?.show()
+                    Box(modifier = Modifier.padding(12.dp)) {
+                        BasicTextField(
+                            value = url,
+                            onValueChange = onUrlChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(textFieldFocusRequester)
+                                .onFocusChanged {
+                                    if (!it.isFocused && isEditing) {
+                                        isEditing = false
+                                        keyboardController?.hide()
+                                    }
+                                },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Uri,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    onConfirm()
+                                    isEditing = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus(force = true)
                                 }
-                            },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Uri,
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                onConfirm()
-                                keyboardController?.hide()
-                                focusManager.clearFocus(force = true)
+                            ),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = NuvioColors.TextPrimary
+                            ),
+                            cursorBrush = SolidColor(if (isEditing) NuvioColors.Primary else Color.Transparent),
+                            decorationBox = { innerTextField ->
+                                if (url.isEmpty()) {
+                                    Text(
+                                        text = "https://example.com/manifest.json",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = NuvioColors.TextTertiary
+                                    )
+                                }
+                                innerTextField()
                             }
-                        ),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = NuvioColors.TextPrimary
-                        ),
-                        cursorBrush = SolidColor(NuvioColors.Primary),
-                        decorationBox = { innerTextField ->
-                            if (url.isEmpty()) {
-                                Text(
-                                    text = "https://example.com/manifest.json",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = NuvioColors.TextTertiary
-                                )
-                            }
-                            innerTextField()
-                        }
-                    )
+                        )
+                    }
                 }
 
                 Button(
                     onClick = {
                         onConfirm()
+                        isEditing = false
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
                     },
