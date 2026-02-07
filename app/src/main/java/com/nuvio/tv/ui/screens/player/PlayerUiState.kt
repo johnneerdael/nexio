@@ -78,6 +78,8 @@ data class TrackInfo(
     val index: Int,
     val name: String,
     val language: String?,
+    val codec: String? = null,
+    val channelCount: Int? = null,
     val isSelected: Boolean = false
 )
 

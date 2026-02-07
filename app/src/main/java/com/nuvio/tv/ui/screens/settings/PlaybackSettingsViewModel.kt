@@ -27,6 +27,24 @@ class PlaybackSettingsViewModel @Inject constructor(
         trailerSettingsDataStore.setDelaySeconds(seconds)
     }
 
+    // Audio settings
+
+    suspend fun setDecoderPriority(priority: Int) {
+        playerSettingsDataStore.setDecoderPriority(priority)
+    }
+
+    suspend fun setTunnelingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setTunnelingEnabled(enabled)
+    }
+
+    suspend fun setSkipSilence(enabled: Boolean) {
+        playerSettingsDataStore.setSkipSilence(enabled)
+    }
+
+    suspend fun setPreferredAudioLanguage(language: String) {
+        playerSettingsDataStore.setPreferredAudioLanguage(language)
+    }
+
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
      */

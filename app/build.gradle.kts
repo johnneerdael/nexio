@@ -131,6 +131,7 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
     implementation(libs.media3.common)
+    implementation(libs.media3.extractor)
     
     // Media3 FFmpeg Decoder Extension (locally built AAR)
     implementation(files("libs/media3-decoder-ffmpeg.aar"))

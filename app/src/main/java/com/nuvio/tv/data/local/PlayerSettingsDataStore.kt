@@ -89,12 +89,25 @@ data class SubtitleStyleSettings(
 )
 
 /**
+ * Available audio language options
+ */
+object AudioLanguageOption {
+    const val DEFAULT = "default"  // Use media file default
+    const val DEVICE = "device"    // Use device locale
+}
+
+/**
  * Data class representing player settings
  */
 data class PlayerSettings(
     val useLibass: Boolean = false,
     val libassRenderType: LibassRenderType = LibassRenderType.OVERLAY_OPEN_GL,
-    val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings()
+    val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
+    // Audio settings
+    val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
+    val tunnelingEnabled: Boolean = false,
+    val skipSilence: Boolean = false,
+    val preferredAudioLanguage: String = AudioLanguageOption.DEVICE
 )
 
 /**
@@ -119,6 +132,12 @@ class PlayerSettingsDataStore @Inject constructor(
     private val useLibassKey = booleanPreferencesKey("use_libass")
     private val libassRenderTypeKey = stringPreferencesKey("libass_render_type")
     
+    // Audio settings keys
+    private val decoderPriorityKey = intPreferencesKey("decoder_priority")
+    private val tunnelingEnabledKey = booleanPreferencesKey("tunneling_enabled")
+    private val skipSilenceKey = booleanPreferencesKey("skip_silence")
+    private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
+
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
     private val subtitleSecondaryLanguageKey = stringPreferencesKey("subtitle_secondary_language")
@@ -140,6 +159,10 @@ class PlayerSettingsDataStore @Inject constructor(
             libassRenderType = prefs[libassRenderTypeKey]?.let { 
                 try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
             } ?: LibassRenderType.OVERLAY_OPEN_GL,
+            decoderPriority = prefs[decoderPriorityKey] ?: 1,
+            tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
+            skipSilence = prefs[skipSilenceKey] ?: false,
+            preferredAudioLanguage = prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE,
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
                 secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
@@ -169,6 +192,32 @@ class PlayerSettingsDataStore @Inject constructor(
         prefs[libassRenderTypeKey]?.let { 
             try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
         } ?: LibassRenderType.OVERLAY_OPEN_GL
+    }
+
+    // Audio settings setters
+
+    suspend fun setDecoderPriority(priority: Int) {
+        dataStore.edit { prefs ->
+            prefs[decoderPriorityKey] = priority.coerceIn(0, 2)
+        }
+    }
+
+    suspend fun setTunnelingEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[tunnelingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSkipSilence(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[skipSilenceKey] = enabled
+        }
+    }
+
+    suspend fun setPreferredAudioLanguage(language: String) {
+        dataStore.edit { prefs ->
+            prefs[preferredAudioLanguageKey] = language
+        }
     }
 
     /**

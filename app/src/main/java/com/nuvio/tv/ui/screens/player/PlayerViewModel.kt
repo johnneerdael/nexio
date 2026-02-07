@@ -1,9 +1,13 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.content.Context
+import android.content.Intent
+import android.media.audiofx.AudioEffect
+import android.media.audiofx.LoudnessEnhancer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -17,9 +21,14 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.common.MimeTypes
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.domain.model.Stream
@@ -46,6 +55,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -145,6 +155,10 @@ class PlayerViewModel @Inject constructor(
     private var lastActiveSkipType: String? = null
     private var autoSubtitleSelected: Boolean = false
     private var pendingAddonSubtitleLanguage: String? = null
+
+    // Audio enhancement
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var trackSelector: DefaultTrackSelector? = null
 
     init {
         initializePlayer(currentStreamUrl, currentHeaders)
@@ -347,13 +361,53 @@ class PlayerViewModel @Inject constructor(
                 val useLibass = playerSettings.useLibass
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
 
+                // Track selector with tunneling and audio language support
+                trackSelector = DefaultTrackSelector(context).apply {
+                    setParameters(
+                        buildUponParameters()
+                            .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
+                    )
+                    if (playerSettings.tunnelingEnabled) {
+                        setParameters(
+                            buildUponParameters().setTunnelingEnabled(true)
+                        )
+                    }
+                    // Apply preferred audio language
+                    when (playerSettings.preferredAudioLanguage) {
+                        AudioLanguageOption.DEFAULT -> { /* use media default */ }
+                        AudioLanguageOption.DEVICE -> {
+                            setParameters(
+                                buildUponParameters().setPreferredAudioLanguages(
+                                    Locale.getDefault().isO3Language,
+                                    Locale.getDefault().language
+                                )
+                            )
+                        }
+                        else -> {
+                            setParameters(
+                                buildUponParameters().setPreferredAudioLanguages(
+                                    playerSettings.preferredAudioLanguage
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Extractors with HDMV DTS support (for Blu-ray TS containers)
+                val extractorsFactory = DefaultExtractorsFactory()
+                    .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
+                    .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+
+                // Renderers with decoder priority from settings
                 val renderersFactory = DefaultRenderersFactory(context)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                    .setExtensionRendererMode(playerSettings.decoderPriority)
                     .setEnableDecoderFallback(true)
 
                 _exoPlayer = if (useLibass) {
                     // Build ExoPlayer with libass support for ASS/SSA subtitles
                     ExoPlayer.Builder(context)
+                        .setTrackSelector(trackSelector!!)
+                        .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
                         .buildWithAssSupport(
                             context = context,
                             renderType = libassRenderType,
@@ -362,11 +416,36 @@ class PlayerViewModel @Inject constructor(
                 } else {
                     // Standard ExoPlayer without libass
                     ExoPlayer.Builder(context)
+                        .setTrackSelector(trackSelector!!)
+                        .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
                         .setRenderersFactory(renderersFactory)
                         .build()
                 }
 
                 _exoPlayer?.apply {
+                    // Audio attributes — critical for proper HDMI passthrough routing
+                    val audioAttributes = AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .build()
+                    setAudioAttributes(audioAttributes, true)
+
+                    // Skip silence
+                    if (playerSettings.skipSilence) {
+                        skipSilenceEnabled = true
+                    }
+
+                    // Loudness enhancer for volume boost beyond system max
+                    try {
+                        loudnessEnhancer?.release()
+                        loudnessEnhancer = LoudnessEnhancer(audioSessionId)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+
+                    // Notify audio session for 3rd-party equalizer apps
+                    notifyAudioSessionUpdate(true)
+
                     val preferred = playerSettings.subtitleStyle.preferredLanguage
                     val secondary = playerSettings.subtitleStyle.secondaryPreferredLanguage
                     applySubtitlePreferences(preferred, secondary)
@@ -909,6 +988,7 @@ class PlayerViewModel @Inject constructor(
         loadSavedProgressFor(currentSeason, currentEpisode)
     }
 
+    @OptIn(UnstableApi::class)
     private fun updateAvailableTracks(tracks: Tracks) {
         val audioTracks = mutableListOf<TrackInfo>()
         val subtitleTracks = mutableListOf<TrackInfo>()
@@ -924,12 +1004,23 @@ class PlayerViewModel @Inject constructor(
                         val format = trackGroup.getTrackFormat(i)
                         val isSelected = trackGroup.isTrackSelected(i)
                         if (isSelected) selectedAudioIndex = audioTracks.size
-                        
+
+                        // Build a rich track name with codec and channel info
+                        val codecName = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
+                        val channelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
+                            format.channelCount
+                        )
+                        val baseName = format.label ?: format.language ?: "Audio ${audioTracks.size + 1}"
+                        val suffix = listOfNotNull(codecName, channelLayout).joinToString(" ")
+                        val displayName = if (suffix.isNotEmpty()) "$baseName ($suffix)" else baseName
+
                         audioTracks.add(
                             TrackInfo(
                                 index = audioTracks.size,
-                                name = format.label ?: "Audio ${audioTracks.size + 1}",
+                                name = displayName,
                                 language = format.language,
+                                codec = codecName,
+                                channelCount = format.channelCount.takeIf { it > 0 },
                                 isSelected = isSelected
                             )
                         )
@@ -1449,12 +1540,46 @@ class PlayerViewModel @Inject constructor(
     private fun releasePlayer() {
         // Save progress before releasing
         saveWatchProgress()
+
+        // Notify audio session closing
+        notifyAudioSessionUpdate(false)
+
+        // Release loudness enhancer
+        try {
+            loudnessEnhancer?.release()
+            loudnessEnhancer = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         
         progressJob?.cancel()
         hideControlsJob?.cancel()
         watchProgressSaveJob?.cancel()
         _exoPlayer?.release()
         _exoPlayer = null
+    }
+
+    /**
+     * Broadcast audio session updates for 3rd-party equalizer apps (e.g., Wavelet).
+     * Matches Just (Video) Player's implementation.
+     */
+    private fun notifyAudioSessionUpdate(active: Boolean) {
+        _exoPlayer?.let { player ->
+            try {
+                val intent = Intent(
+                    if (active) AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION
+                    else AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION
+                )
+                intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
+                intent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                if (active) {
+                    intent.putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MOVIE)
+                }
+                context.sendBroadcast(intent)
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+            }
+        }
     }
 
     override fun onCleared() {
