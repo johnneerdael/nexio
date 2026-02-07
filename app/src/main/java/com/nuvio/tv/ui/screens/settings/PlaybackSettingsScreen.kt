@@ -78,7 +78,7 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Image
 
 // Preset colors for subtitle customization
 private val SUBTITLE_COLORS = listOf(
@@ -196,7 +196,7 @@ fun PlaybackSettingsContent(
         ) {
             item {
                 ToggleSettingsItem(
-                    icon = Icons.Default.Warning,
+                    icon = Icons.Default.Image,
                     title = "Loading Overlay",
                     subtitle = "Show a loading screen until the first video frame appears",
                     isChecked = playerSettings.loadingOverlayEnabled,

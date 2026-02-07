@@ -265,12 +265,15 @@ private fun PluginHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Plugins",
-                style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary
+                style = MaterialTheme.typography.headlineMedium,
+                color = NuvioColors.Secondary
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Text(
                 text = "Manage local scrapers and providers",
                 style = MaterialTheme.typography.bodyMedium,

@@ -60,7 +60,7 @@ fun SearchScreen(
                     shape = RoundedCornerShape(12.dp),
                     placeholder = {
                         Text(
-                            text = "Search movies & series (installed addons)",
+                            text = "Search movies & series",
                             color = NuvioColors.TextTertiary
                         )
                     },
