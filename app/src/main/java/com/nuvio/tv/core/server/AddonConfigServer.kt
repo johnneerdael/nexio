@@ -3,12 +3,14 @@ package com.nuvio.tv.core.server
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import fi.iki.elonen.NanoHTTPD
+import java.io.ByteArrayInputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class AddonConfigServer(
     private val currentAddonsProvider: () -> List<AddonInfo>,
     private val onChangeProposed: (PendingAddonChange) -> Unit,
+    private val logoProvider: (() -> ByteArray?)? = null,
     port: Int = 8080
 ) : NanoHTTPD(port) {
 
@@ -43,6 +45,7 @@ class AddonConfigServer(
 
         return when {
             method == Method.GET && uri == "/" -> serveWebPage()
+            method == Method.GET && uri == "/logo.png" -> serveLogo()
             method == Method.GET && uri == "/api/addons" -> serveAddonList()
             method == Method.POST && uri == "/api/addons" -> handleAddonUpdate(session)
             method == Method.GET && uri.startsWith("/api/status/") -> serveChangeStatus(uri)
@@ -52,6 +55,20 @@ class AddonConfigServer(
 
     private fun serveWebPage(): Response {
         return newFixedLengthResponse(Response.Status.OK, "text/html", AddonWebPage.getHtml())
+    }
+
+    private fun serveLogo(): Response {
+        val bytes = logoProvider?.invoke()
+        return if (bytes != null) {
+            newFixedLengthResponse(
+                Response.Status.OK,
+                "image/png",
+                ByteArrayInputStream(bytes),
+                bytes.size.toLong()
+            )
+        } else {
+            newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+        }
     }
 
     private fun serveAddonList(): Response {
@@ -110,12 +127,13 @@ class AddonConfigServer(
         fun startOnAvailablePort(
             currentAddonsProvider: () -> List<AddonInfo>,
             onChangeProposed: (PendingAddonChange) -> Unit,
+            logoProvider: (() -> ByteArray?)? = null,
             startPort: Int = 8080,
             maxAttempts: Int = 10
         ): AddonConfigServer? {
             for (port in startPort until startPort + maxAttempts) {
                 try {
-                    val server = AddonConfigServer(currentAddonsProvider, onChangeProposed, port)
+                    val server = AddonConfigServer(currentAddonsProvider, onChangeProposed, logoProvider, port)
                     server.start(SOCKET_READ_TIMEOUT, false)
                     return server
                 } catch (e: Exception) {
