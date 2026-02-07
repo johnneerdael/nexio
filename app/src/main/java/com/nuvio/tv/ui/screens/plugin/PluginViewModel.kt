@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.plugin
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.R
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.server.DeviceIpAddress
@@ -27,9 +28,20 @@ class PluginViewModel @Inject constructor(
     val uiState: StateFlow<PluginUiState> = _uiState.asStateFlow()
 
     private var repoServer: RepositoryConfigServer? = null
+    private var logoBytes: ByteArray? = null
 
     init {
+        loadLogoBytes()
         observePluginData()
+    }
+
+    private fun loadLogoBytes() {
+        try {
+            val inputStream = context.resources.openRawResource(R.drawable.nuviotv_logo)
+            logoBytes = inputStream.use { it.readBytes() }
+        } catch (_: Exception) {
+            // Logo is optional, page will fall back to text
+        }
     }
 
     private fun observePluginData() {
@@ -194,7 +206,8 @@ class PluginViewModel @Inject constructor(
                     )
                 }
             },
-            onChangeProposed = { change -> handleRepoChangeProposed(change) }
+            onChangeProposed = { change -> handleRepoChangeProposed(change) },
+            logoProvider = { logoBytes }
         )
 
         val activeServer = repoServer

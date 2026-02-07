@@ -3,12 +3,14 @@ package com.nuvio.tv.core.server
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import fi.iki.elonen.NanoHTTPD
+import java.io.ByteArrayInputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class RepositoryConfigServer(
     private val currentRepositoriesProvider: () -> List<RepositoryInfo>,
     private val onChangeProposed: (PendingRepoChange) -> Unit,
+    private val logoProvider: (() -> ByteArray?)? = null,
     port: Int = 8090
 ) : NanoHTTPD(port) {
 
@@ -43,6 +45,7 @@ class RepositoryConfigServer(
 
         return when {
             method == Method.GET && uri == "/" -> serveWebPage()
+            method == Method.GET && uri == "/logo.png" -> serveLogo()
             method == Method.GET && uri == "/api/repositories" -> serveRepositoryList()
             method == Method.POST && uri == "/api/repositories" -> handleRepositoryUpdate(session)
             method == Method.GET && uri.startsWith("/api/status/") -> serveChangeStatus(uri)
@@ -52,6 +55,20 @@ class RepositoryConfigServer(
 
     private fun serveWebPage(): Response {
         return newFixedLengthResponse(Response.Status.OK, "text/html", RepositoryWebPage.getHtml())
+    }
+
+    private fun serveLogo(): Response {
+        val bytes = logoProvider?.invoke()
+        return if (bytes != null) {
+            newFixedLengthResponse(
+                Response.Status.OK,
+                "image/png",
+                ByteArrayInputStream(bytes),
+                bytes.size.toLong()
+            )
+        } else {
+            newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+        }
     }
 
     private fun serveRepositoryList(): Response {
@@ -108,12 +125,13 @@ class RepositoryConfigServer(
         fun startOnAvailablePort(
             currentRepositoriesProvider: () -> List<RepositoryInfo>,
             onChangeProposed: (PendingRepoChange) -> Unit,
+            logoProvider: (() -> ByteArray?)? = null,
             startPort: Int = 8090,
             maxAttempts: Int = 10
         ): RepositoryConfigServer? {
             for (port in startPort until startPort + maxAttempts) {
                 try {
-                    val server = RepositoryConfigServer(currentRepositoriesProvider, onChangeProposed, port)
+                    val server = RepositoryConfigServer(currentRepositoriesProvider, onChangeProposed, logoProvider, port)
                     server.start(SOCKET_READ_TIMEOUT, false)
                     return server
                 } catch (e: Exception) {
