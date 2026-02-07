@@ -101,6 +101,8 @@ data class BufferSettings(
     val retainBackBufferFromKeyframe: Boolean = false,
     val useParallelConnections: Boolean = true
 )
+
+/**
  * Available audio language options
  */
 object AudioLanguageOption {
@@ -115,7 +117,7 @@ data class PlayerSettings(
     val useLibass: Boolean = false,
     val libassRenderType: LibassRenderType = LibassRenderType.OVERLAY_OPEN_GL,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
-    val bufferSettings: BufferSettings = BufferSettings()
+    val bufferSettings: BufferSettings = BufferSettings(),
     // Audio settings
     val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
     val tunnelingEnabled: Boolean = false,
