@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.itemsIndexed
@@ -116,10 +117,12 @@ fun ContinueWatchingSection(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ContinueWatchingCard(
+internal fun ContinueWatchingCard(
     progress: WatchProgress,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cardWidth: Dp = 320.dp,
+    imageHeight: Dp = 180.dp
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -145,7 +148,7 @@ private fun ContinueWatchingCard(
     Card(
         onClick = onClick,
         modifier = modifier
-            .width(320.dp)
+            .width(cardWidth)
             .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = CwCardShape),
         colors = CardDefaults.colors(
@@ -165,7 +168,7 @@ private fun ContinueWatchingCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(imageHeight)
                     .clip(CwClipShape)
             ) {
                 // Background image with size hints for efficient decoding
@@ -174,8 +177,8 @@ private fun ContinueWatchingCard(
                     contentDescription = progress.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    requestedWidthDp = 320.dp,
-                    requestedHeightDp = 180.dp
+                    requestedWidthDp = cardWidth,
+                    requestedHeightDp = imageHeight
                 )
 
                 // Gradient overlay for text readability
@@ -255,7 +258,7 @@ private fun ContinueWatchingCard(
     }
 }
 
-private fun formatRemainingTime(remainingMs: Long): String {
+internal fun formatRemainingTime(remainingMs: Long): String {
     val totalMinutes = TimeUnit.MILLISECONDS.toMinutes(remainingMs)
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60

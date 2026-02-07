@@ -46,6 +46,7 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import com.nuvio.tv.ui.components.GridContentCard
+import com.nuvio.tv.ui.components.GridContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -77,9 +78,12 @@ fun GridHomeContent(
         }
     }
 
+    // Offset for section indices when continue watching is present
+    val continueWatchingOffset = if (uiState.continueWatchingItems.isNotEmpty()) 1 else 0
+
     // Build index-to-section mapping for sticky header
-    val sectionMapping = remember(uiState.gridItems) {
-        buildSectionMapping(uiState.gridItems)
+    val sectionMapping = remember(uiState.gridItems, continueWatchingOffset) {
+        buildSectionMapping(uiState.gridItems, continueWatchingOffset)
     }
 
     // Track current section for sticky header
@@ -111,8 +115,8 @@ fun GridHomeContent(
     }
 
     // Pre-compute section bounds once when gridItems changes (not on every scroll)
-    val sectionBounds = remember(uiState.gridItems) {
-        buildSectionBounds(uiState.gridItems)
+    val sectionBounds = remember(uiState.gridItems, continueWatchingOffset) {
+        buildSectionBounds(uiState.gridItems, continueWatchingOffset)
     }
 
     // Per-section load-more detection
@@ -150,6 +154,8 @@ fun GridHomeContent(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            var continueWatchingInserted = false
+
             uiState.gridItems.forEachIndexed { index, gridItem ->
                 when (gridItem) {
                     is GridItem.Hero -> {
@@ -172,6 +178,27 @@ fun GridHomeContent(
                     }
 
                     is GridItem.SectionDivider -> {
+                        // Insert continue watching before the first section divider
+                        if (!continueWatchingInserted && uiState.continueWatchingItems.isNotEmpty()) {
+                            continueWatchingInserted = true
+                            item(
+                                key = "continue_watching",
+                                span = { TvGridItemSpan(maxLineSpan) },
+                                contentType = "continue_watching"
+                            ) {
+                                GridContinueWatchingSection(
+                                    items = uiState.continueWatchingItems,
+                                    onItemClick = { progress ->
+                                        onNavigateToDetail(
+                                            progress.contentId,
+                                            progress.contentType,
+                                            ""
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
                         item(
                             key = "divider_${index}_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
                             span = { TvGridItemSpan(maxLineSpan) },
@@ -364,11 +391,11 @@ private class SectionMapping(
     }
 }
 
-private fun buildSectionMapping(gridItems: List<GridItem>): SectionMapping {
+private fun buildSectionMapping(gridItems: List<GridItem>, indexOffset: Int = 0): SectionMapping {
     val mapping = mutableMapOf<Int, SectionInfo>()
     gridItems.forEachIndexed { index, item ->
         if (item is GridItem.SectionDivider) {
-            mapping[index] = SectionInfo(
+            mapping[index + indexOffset] = SectionInfo(
                 catalogName = item.catalogName,
                 catalogId = item.catalogId,
                 addonId = item.addonId,
@@ -385,7 +412,7 @@ private data class SectionBound(
     val lastContentIndex: Int
 )
 
-private fun buildSectionBounds(gridItems: List<GridItem>): List<SectionBound> {
+private fun buildSectionBounds(gridItems: List<GridItem>, indexOffset: Int = 0): List<SectionBound> {
     val bounds = mutableListOf<SectionBound>()
     var currentCatalogId: String? = null
     var currentAddonId: String? = null
@@ -405,7 +432,7 @@ private fun buildSectionBounds(gridItems: List<GridItem>): List<SectionBound> {
                 currentAddonId = item.addonId
             }
             is GridItem.Content -> {
-                lastContentIndex = index
+                lastContentIndex = index + indexOffset
             }
             is GridItem.Hero -> { /* skip */ }
             is GridItem.SeeAll -> { /* skip */ }
