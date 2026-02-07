@@ -49,6 +49,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setLoadingOverlayEnabled(enabled)
     }
 
+    suspend fun setPauseOverlayEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setPauseOverlayEnabled(enabled)
+    }
+
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
      */

@@ -108,7 +108,8 @@ data class PlayerSettings(
     val tunnelingEnabled: Boolean = false,
     val skipSilence: Boolean = false,
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
-    val loadingOverlayEnabled: Boolean = true
+    val loadingOverlayEnabled: Boolean = true,
+    val pauseOverlayEnabled: Boolean = true
 )
 
 /**
@@ -139,6 +140,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val skipSilenceKey = booleanPreferencesKey("skip_silence")
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val loadingOverlayEnabledKey = booleanPreferencesKey("loading_overlay_enabled")
+    private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -166,6 +168,7 @@ class PlayerSettingsDataStore @Inject constructor(
             skipSilence = prefs[skipSilenceKey] ?: false,
             preferredAudioLanguage = prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE,
             loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
+            pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
                 secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
@@ -220,6 +223,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPreferredAudioLanguage(language: String) {
         dataStore.edit { prefs ->
             prefs[preferredAudioLanguageKey] = language
+        }
+    }
+
+    suspend fun setPauseOverlayEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[pauseOverlayEnabledKey] = enabled
         }
     }
 

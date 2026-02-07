@@ -178,6 +178,9 @@ fun PlayerScreen(
                 if (panelOrDialogOpen) return@onKeyEvent false
 
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (uiState.showPauseOverlay) {
+                        viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+                    }
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                             if (!uiState.showControls) {
@@ -322,6 +325,22 @@ fun PlayerScreen(
                 .zIndex(2f)
         )
 
+        PauseOverlay(
+            visible = uiState.showPauseOverlay && uiState.error == null && !uiState.showLoadingOverlay,
+            onClose = { viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay) },
+            title = uiState.title,
+            episodeTitle = uiState.currentEpisodeTitle,
+            season = uiState.currentSeason,
+            episode = uiState.currentEpisode,
+            year = uiState.releaseYear,
+            type = uiState.contentType,
+            description = uiState.description,
+            cast = uiState.castMembers,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2.5f)
+        )
+
         // Buffering indicator
         if (uiState.isBuffering && !uiState.showLoadingOverlay) {
             Box(
@@ -366,7 +385,7 @@ fun PlayerScreen(
 
         // Controls overlay
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.error == null,
+            visible = uiState.showControls && uiState.error == null && !uiState.showLoadingOverlay && !uiState.showPauseOverlay,
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(200))
         ) {

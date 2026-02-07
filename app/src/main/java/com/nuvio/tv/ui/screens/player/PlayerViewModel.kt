@@ -37,6 +37,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.data.repository.ParentalGuideRepository
 import com.nuvio.tv.data.repository.SkipIntroRepository
 import com.nuvio.tv.data.repository.SkipInterval
+import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
@@ -128,6 +129,7 @@ class PlayerViewModel @Inject constructor(
             contentName = contentName,
             currentStreamName = streamName,
             releaseYear = year,
+            contentType = contentType,
             backdrop = backdrop,
             logo = logo,
             showLoadingOverlay = true,
@@ -153,6 +155,8 @@ class PlayerViewModel @Inject constructor(
     // Track whether playback has started (for parental guide trigger)
     private var playbackStartedForParentalGuide = false
     private var hasRenderedFirstFrame = false
+    private var metaVideos: List<Video> = emptyList()
+    private var userPausedManually = false
 
     // Skip intro
     private var skipIntervals: List<SkipInterval> = emptyList()
@@ -163,6 +167,8 @@ class PlayerViewModel @Inject constructor(
     // Audio enhancement
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var trackSelector: DefaultTrackSelector? = null
+    private var pauseOverlayJob: Job? = null
+    private val pauseOverlayDelayMs = 5000L
 
     init {
         initializePlayer(currentStreamUrl, currentHeaders)
@@ -171,6 +177,7 @@ class PlayerViewModel @Inject constructor(
         fetchSkipIntervals(contentId, currentSeason, currentEpisode)
         observeSubtitleSettings()
         fetchAddonSubtitles()
+        fetchMetaDetails(contentId, contentType)
     }
     
     private fun fetchAddonSubtitles() {
@@ -226,9 +233,20 @@ class PlayerViewModel @Inject constructor(
                     state.copy(
                         subtitleStyle = settings.subtitleStyle,
                         loadingOverlayEnabled = settings.loadingOverlayEnabled,
-                        showLoadingOverlay = shouldShowOverlay
+                        showLoadingOverlay = shouldShowOverlay,
+                        pauseOverlayEnabled = settings.pauseOverlayEnabled
                     )
                 }
+
+                if (!settings.pauseOverlayEnabled) {
+                    cancelPauseOverlay()
+                } else if (!_uiState.value.isPlaying &&
+                    !_uiState.value.showPauseOverlay && pauseOverlayJob == null &&
+                    userPausedManually && hasRenderedFirstFrame
+                ) {
+                    schedulePauseOverlay()
+                }
+
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
                     settings.subtitleStyle.secondaryPreferredLanguage
@@ -272,6 +290,61 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
             skipIntervals = intervals
+        }
+    }
+
+    private fun fetchMetaDetails(id: String?, type: String?) {
+        if (id.isNullOrBlank() || type.isNullOrBlank()) return
+
+        viewModelScope.launch {
+            when (
+                val result = metaRepository.getMetaFromAllAddons(type = type, id = id)
+                    .first { it !is NetworkResult.Loading }
+            ) {
+                is NetworkResult.Success -> {
+                    applyMetaDetails(result.data)
+                }
+                is NetworkResult.Error -> {
+                    // Keep existing metadata if fetch fails
+                }
+                NetworkResult.Loading -> {
+                    // filtered above
+                }
+            }
+        }
+    }
+
+    private fun applyMetaDetails(meta: Meta) {
+        metaVideos = meta.videos
+        val description = resolveDescription(meta)
+
+        _uiState.update { state ->
+            state.copy(
+                description = description ?: state.description,
+                castMembers = if (meta.castMembers.isNotEmpty()) meta.castMembers else state.castMembers
+            )
+        }
+    }
+
+    private fun resolveDescription(meta: Meta): String? {
+        val type = contentType
+        if (type in listOf("series", "tv") && currentSeason != null && currentEpisode != null) {
+            val episodeOverview = meta.videos.firstOrNull { video ->
+                video.season == currentSeason && video.episode == currentEpisode
+            }?.overview
+            if (!episodeOverview.isNullOrBlank()) return episodeOverview
+        }
+
+        return meta.description
+    }
+
+    private fun updateEpisodeDescription() {
+        val overview = metaVideos.firstOrNull { video ->
+            video.season == currentSeason && video.episode == currentEpisode
+        }?.overview
+
+        if (!overview.isNullOrBlank()) {
+            _uiState.update { it.copy(description = overview) }
         }
     }
 
@@ -486,7 +559,7 @@ class PlayerViewModel @Inject constructor(
                             if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
                                 _uiState.update { state ->
                                     if (state.loadingOverlayEnabled && !state.showLoadingOverlay) {
-                                        state.copy(showLoadingOverlay = true)
+                                        state.copy(showLoadingOverlay = true, showControls = false)
                                     } else {
                                         state
                                     }
@@ -510,11 +583,18 @@ class PlayerViewModel @Inject constructor(
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             _uiState.update { it.copy(isPlaying = isPlaying) }
                             if (isPlaying) {
+                                userPausedManually = false
+                                cancelPauseOverlay()
                                 startProgressUpdates()
                                 startWatchProgressSaving()
                                 scheduleHideControls()
                                 tryShowParentalGuide()
                             } else {
+                                if (userPausedManually) {
+                                    schedulePauseOverlay()
+                                } else {
+                                    cancelPauseOverlay()
+                                }
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
                                 // Save progress when paused
@@ -535,7 +615,8 @@ class PlayerViewModel @Inject constructor(
                             _uiState.update { 
                                 it.copy(
                                     error = error.message ?: "Playback error occurred",
-                                    showLoadingOverlay = false
+                                    showLoadingOverlay = false,
+                                    showPauseOverlay = false
                                 )
                             }
                         }
@@ -554,8 +635,12 @@ class PlayerViewModel @Inject constructor(
 
     private fun resetLoadingOverlayForNewStream() {
         hasRenderedFirstFrame = false
+        userPausedManually = false
         _uiState.update { state ->
-            state.copy(showLoadingOverlay = state.loadingOverlayEnabled)
+            state.copy(
+                showLoadingOverlay = state.loadingOverlayEnabled,
+                showControls = false
+            )
         }
     }
 
@@ -859,6 +944,8 @@ class PlayerViewModel @Inject constructor(
                                 .thenBy { it.title }
                         )
 
+                    applyMetaDetails(result.data)
+
                     val seasons = allEpisodes
                         .mapNotNull { it.season }
                         .distinct()
@@ -1014,6 +1101,8 @@ class PlayerViewModel @Inject constructor(
                 skipIntervalDismissed = false
             )
         }
+
+        updateEpisodeDescription()
 
         playbackStartedForParentalGuide = false
         skipIntervals = emptyList()
@@ -1248,18 +1337,52 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    private fun schedulePauseOverlay() {
+        pauseOverlayJob?.cancel()
+
+        if (!_uiState.value.pauseOverlayEnabled || !hasRenderedFirstFrame || !userPausedManually) {
+            _uiState.update { it.copy(showPauseOverlay = false) }
+            return
+        }
+
+        _uiState.update { it.copy(showPauseOverlay = false) }
+        pauseOverlayJob = viewModelScope.launch {
+            delay(pauseOverlayDelayMs)
+            if (!_uiState.value.isPlaying && _uiState.value.pauseOverlayEnabled && _uiState.value.error == null) {
+                _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
+            }
+        }
+    }
+
+    private fun cancelPauseOverlay() {
+        pauseOverlayJob?.cancel()
+        pauseOverlayJob = null
+        _uiState.update { it.copy(showPauseOverlay = false) }
+    }
+
+    fun onUserInteraction() {
+        if (!_uiState.value.isPlaying && userPausedManually) {
+            schedulePauseOverlay()
+        }
+    }
+
     fun hideControls() {
         hideControlsJob?.cancel()
         _uiState.update { it.copy(showControls = false) }
     }
 
     fun onEvent(event: PlayerEvent) {
+        onUserInteraction()
         when (event) {
             PlayerEvent.OnPlayPause -> {
                 _exoPlayer?.let { player ->
                     if (player.isPlaying) {
+                        userPausedManually = true
                         player.pause()
+                        schedulePauseOverlay()
                     } else {
+                        userPausedManually = false
+                        cancelPauseOverlay()
                         player.play()
                     }
                 }
@@ -1405,6 +1528,12 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnParentalGuideHide -> {
                 _uiState.update { it.copy(showParentalGuide = false) }
+            }
+            PlayerEvent.OnDismissPauseOverlay -> {
+                _uiState.update { it.copy(showPauseOverlay = false) }
+                if (!_uiState.value.isPlaying) {
+                    schedulePauseOverlay()
+                }
             }
             PlayerEvent.OnSkipIntro -> {
                 _uiState.value.activeSkipInterval?.let { interval ->

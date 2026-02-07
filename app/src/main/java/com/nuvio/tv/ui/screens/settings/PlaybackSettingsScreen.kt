@@ -74,6 +74,7 @@ import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Speed
@@ -203,6 +204,20 @@ fun PlaybackSettingsContent(
                     onCheckedChange = { enabled ->
                         coroutineScope.launch {
                             viewModel.setLoadingOverlayEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.PauseCircle,
+                    title = "Pause Overlay",
+                    subtitle = "Show a details overlay after 5 seconds of no input while paused",
+                    isChecked = playerSettings.pauseOverlayEnabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setPauseOverlayEnabled(enabled)
                         }
                     }
                 )
