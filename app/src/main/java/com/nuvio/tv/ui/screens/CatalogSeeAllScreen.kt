@@ -29,7 +29,12 @@ import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.foundation.layout.Box
 import com.nuvio.tv.ui.components.GridContentCard
+import com.nuvio.tv.ui.components.EmptyScreenState
+import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.screens.home.HomeEvent
 import com.nuvio.tv.ui.screens.home.HomeViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -128,11 +133,18 @@ fun CatalogSeeAllScreen(
                     )
                 }
             }
+        } else if (catalogRow?.isLoading == true || (catalogRow == null && uiState.isLoading)) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
+            }
         } else {
-            Text(
-                text = "No items available",
-                style = MaterialTheme.typography.bodyLarge,
-                color = NuvioColors.TextSecondary
+            EmptyScreenState(
+                title = "No items available",
+                subtitle = "Try a different catalog or check back later",
+                icon = Icons.Default.GridView
             )
         }
     }
