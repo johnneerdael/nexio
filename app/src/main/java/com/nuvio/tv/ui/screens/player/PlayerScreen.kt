@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -177,6 +178,9 @@ fun PlayerScreen(
                 if (panelOrDialogOpen) return@onKeyEvent false
 
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                    if (uiState.showPauseOverlay) {
+                        viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+                    }
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                             if (!uiState.showControls) {
@@ -312,8 +316,33 @@ fun PlayerScreen(
             )
         }
 
+        LoadingOverlay(
+            visible = uiState.showLoadingOverlay && uiState.error == null,
+            backdropUrl = uiState.backdrop,
+            logoUrl = uiState.logo,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2f)
+        )
+
+        PauseOverlay(
+            visible = uiState.showPauseOverlay && uiState.error == null && !uiState.showLoadingOverlay,
+            onClose = { viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay) },
+            title = uiState.title,
+            episodeTitle = uiState.currentEpisodeTitle,
+            season = uiState.currentSeason,
+            episode = uiState.currentEpisode,
+            year = uiState.releaseYear,
+            type = uiState.contentType,
+            description = uiState.description,
+            cast = uiState.castMembers,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2.5f)
+        )
+
         // Buffering indicator
-        if (uiState.isBuffering) {
+        if (uiState.isBuffering && !uiState.showLoadingOverlay) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -356,7 +385,7 @@ fun PlayerScreen(
 
         // Controls overlay
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.error == null,
+            visible = uiState.showControls && uiState.error == null && !uiState.showLoadingOverlay && !uiState.showPauseOverlay,
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
@@ -778,7 +807,8 @@ private fun ErrorOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.9f)),
+            .background(Color.Black.copy(alpha = 0.9f))
+            .zIndex(3f),
         contentAlignment = Alignment.Center
     ) {
         Column(

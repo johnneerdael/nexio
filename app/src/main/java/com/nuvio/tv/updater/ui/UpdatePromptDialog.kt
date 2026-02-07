@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownColor
+import com.mikepenz.markdown.m3.markdownTypography
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.updater.UpdateUiState
 
@@ -87,14 +90,34 @@ fun UpdatePromptDialog(
                     )
                 }
 
-                if (state.update?.notes?.isNotBlank() == true && state.isUpdateAvailable) {
+                val rawNotes = state.update?.notes
+                val displayNotes = remember(rawNotes) {
+                    if (rawNotes.isNullOrBlank()) {
+                        null
+                    } else {
+                        val lines = rawNotes.lines()
+                        val limited = lines.take(10).joinToString("\n")
+                        if (lines.size > 10) "$limited\n\n…" else limited
+                    }
+                }
+
+                if (displayNotes != null && state.isUpdateAvailable) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(max = 220.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
                         Markdown(
-                            content = state.update.notes
+                            content = displayNotes,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = markdownColor(text = NuvioColors.TextSecondary),
+                            typography = markdownTypography(
+                                paragraph = MaterialTheme.typography.bodySmall,
+                                h1 = MaterialTheme.typography.titleMedium,
+                                h2 = MaterialTheme.typography.titleSmall,
+                                h3 = MaterialTheme.typography.bodyLarge
+                            )
                         )
                     }
                 }

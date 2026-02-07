@@ -6,15 +6,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +31,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.itemsIndexed
@@ -32,9 +39,10 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.graphicsLayer
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -109,11 +117,15 @@ fun ContinueWatchingSection(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ContinueWatchingCard(
+internal fun ContinueWatchingCard(
     progress: WatchProgress,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cardWidth: Dp = 320.dp,
+    imageHeight: Dp = 180.dp
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+
     val episodeStr = progress.episodeDisplayString
     val remainingText = remember(progress.position, progress.duration) {
         formatRemainingTime(progress.remainingTime)
@@ -135,7 +147,9 @@ private fun ContinueWatchingCard(
 
     Card(
         onClick = onClick,
-        modifier = modifier.width(320.dp),
+        modifier = modifier
+            .width(cardWidth)
+            .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = CwCardShape),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
@@ -154,15 +168,17 @@ private fun ContinueWatchingCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(imageHeight)
                     .clip(CwClipShape)
             ) {
-                // Background image
-                AsyncImage(
+                // Background image with size hints for efficient decoding
+                FadeInAsyncImage(
                     model = progress.backdrop ?: progress.poster,
                     contentDescription = progress.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    requestedWidthDp = cardWidth,
+                    requestedHeightDp = imageHeight
                 )
 
                 // Gradient overlay for text readability
@@ -242,7 +258,7 @@ private fun ContinueWatchingCard(
     }
 }
 
-private fun formatRemainingTime(remainingMs: Long): String {
+internal fun formatRemainingTime(remainingMs: Long): String {
     val totalMinutes = TimeUnit.MILLISECONDS.toMinutes(remainingMs)
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60

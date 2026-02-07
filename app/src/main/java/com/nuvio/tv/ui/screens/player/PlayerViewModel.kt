@@ -2,9 +2,13 @@ package com.nuvio.tv.ui.screens.player
 
 import android.content.Context
 import android.util.Log
+import android.content.Intent
+import android.media.audiofx.AudioEffect
+import android.media.audiofx.LoudnessEnhancer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -21,12 +25,18 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.common.MimeTypes
-import com.nuvio.tv.core.network.NetworkResult
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import java.util.concurrent.TimeUnit
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.extractor.ts.TsExtractor
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.common.MimeTypes
+import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.domain.model.Stream
@@ -35,6 +45,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.data.repository.ParentalGuideRepository
 import com.nuvio.tv.data.repository.SkipIntroRepository
 import com.nuvio.tv.data.repository.SkipInterval
+import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
@@ -53,6 +64,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -129,6 +141,10 @@ class PlayerViewModel @Inject constructor(
             contentName = contentName,
             currentStreamName = streamName,
             releaseYear = year,
+            contentType = contentType,
+            backdrop = backdrop,
+            logo = logo,
+            showLoadingOverlay = true,
             currentSeason = currentSeason,
             currentEpisode = currentEpisode,
             currentEpisodeTitle = currentEpisodeTitle
@@ -150,6 +166,9 @@ class PlayerViewModel @Inject constructor(
 
     // Track whether playback has started (for parental guide trigger)
     private var playbackStartedForParentalGuide = false
+    private var hasRenderedFirstFrame = false
+    private var metaVideos: List<Video> = emptyList()
+    private var userPausedManually = false
 
     // Skip intro
     private var skipIntervals: List<SkipInterval> = emptyList()
@@ -161,6 +180,11 @@ class PlayerViewModel @Inject constructor(
     private var okHttpClient: OkHttpClient? = null
     private var currentUseParallelConnections: Boolean = true
     private var lastBufferLogTimeMs: Long = 0L
+    // Audio enhancement
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var trackSelector: DefaultTrackSelector? = null
+    private var pauseOverlayJob: Job? = null
+    private val pauseOverlayDelayMs = 5000L
 
     init {
         initializePlayer(currentStreamUrl, currentHeaders)
@@ -169,6 +193,7 @@ class PlayerViewModel @Inject constructor(
         fetchSkipIntervals(contentId, currentSeason, currentEpisode)
         observeSubtitleSettings()
         fetchAddonSubtitles()
+        fetchMetaDetails(contentId, contentType)
     }
     
     private fun fetchAddonSubtitles() {
@@ -212,7 +237,32 @@ class PlayerViewModel @Inject constructor(
     private fun observeSubtitleSettings() {
         viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collect { settings ->
-                _uiState.update { it.copy(subtitleStyle = settings.subtitleStyle) }
+                _uiState.update { state ->
+                    val shouldShowOverlay = if (settings.loadingOverlayEnabled && !hasRenderedFirstFrame) {
+                        true
+                    } else if (!settings.loadingOverlayEnabled) {
+                        false
+                    } else {
+                        state.showLoadingOverlay
+                    }
+
+                    state.copy(
+                        subtitleStyle = settings.subtitleStyle,
+                        loadingOverlayEnabled = settings.loadingOverlayEnabled,
+                        showLoadingOverlay = shouldShowOverlay,
+                        pauseOverlayEnabled = settings.pauseOverlayEnabled
+                    )
+                }
+
+                if (!settings.pauseOverlayEnabled) {
+                    cancelPauseOverlay()
+                } else if (!_uiState.value.isPlaying &&
+                    !_uiState.value.showPauseOverlay && pauseOverlayJob == null &&
+                    userPausedManually && hasRenderedFirstFrame
+                ) {
+                    schedulePauseOverlay()
+                }
+
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
                     settings.subtitleStyle.secondaryPreferredLanguage
@@ -256,6 +306,61 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
             skipIntervals = intervals
+        }
+    }
+
+    private fun fetchMetaDetails(id: String?, type: String?) {
+        if (id.isNullOrBlank() || type.isNullOrBlank()) return
+
+        viewModelScope.launch {
+            when (
+                val result = metaRepository.getMetaFromAllAddons(type = type, id = id)
+                    .first { it !is NetworkResult.Loading }
+            ) {
+                is NetworkResult.Success -> {
+                    applyMetaDetails(result.data)
+                }
+                is NetworkResult.Error -> {
+                    // Keep existing metadata if fetch fails
+                }
+                NetworkResult.Loading -> {
+                    // filtered above
+                }
+            }
+        }
+    }
+
+    private fun applyMetaDetails(meta: Meta) {
+        metaVideos = meta.videos
+        val description = resolveDescription(meta)
+
+        _uiState.update { state ->
+            state.copy(
+                description = description ?: state.description,
+                castMembers = if (meta.castMembers.isNotEmpty()) meta.castMembers else state.castMembers
+            )
+        }
+    }
+
+    private fun resolveDescription(meta: Meta): String? {
+        val type = contentType
+        if (type in listOf("series", "tv") && currentSeason != null && currentEpisode != null) {
+            val episodeOverview = meta.videos.firstOrNull { video ->
+                video.season == currentSeason && video.episode == currentEpisode
+            }?.overview
+            if (!episodeOverview.isNullOrBlank()) return episodeOverview
+        }
+
+        return meta.description
+    }
+
+    private fun updateEpisodeDescription() {
+        val overview = metaVideos.firstOrNull { video ->
+            video.season == currentSeason && video.episode == currentEpisode
+        }?.overview
+
+        if (!overview.isNullOrBlank()) {
+            _uiState.update { it.copy(description = overview) }
         }
     }
 
@@ -353,13 +458,14 @@ class PlayerViewModel @Inject constructor(
     @OptIn(UnstableApi::class)
     private fun initializePlayer(url: String, headers: Map<String, String>) {
         if (url.isEmpty()) {
-            _uiState.update { it.copy(error = "No stream URL provided") }
+            _uiState.update { it.copy(error = "No stream URL provided", showLoadingOverlay = false) }
             return
         }
 
         viewModelScope.launch {
             try {
                 autoSubtitleSelected = false
+                resetLoadingOverlayForNewStream()
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val useLibass = playerSettings.useLibass
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
@@ -391,13 +497,54 @@ class PlayerViewModel @Inject constructor(
                     )
                     .build()
 
+                // Track selector with tunneling and audio language support
+                trackSelector = DefaultTrackSelector(context).apply {
+                    setParameters(
+                        buildUponParameters()
+                            .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
+                    )
+                    if (playerSettings.tunnelingEnabled) {
+                        setParameters(
+                            buildUponParameters().setTunnelingEnabled(true)
+                        )
+                    }
+                    // Apply preferred audio language
+                    when (playerSettings.preferredAudioLanguage) {
+                        AudioLanguageOption.DEFAULT -> { /* use media default */ }
+                        AudioLanguageOption.DEVICE -> {
+                            setParameters(
+                                buildUponParameters().setPreferredAudioLanguages(
+                                    Locale.getDefault().isO3Language,
+                                    Locale.getDefault().language
+                                )
+                            )
+                        }
+                        else -> {
+                            setParameters(
+                                buildUponParameters().setPreferredAudioLanguages(
+                                    playerSettings.preferredAudioLanguage
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Extractors with HDMV DTS support (for Blu-ray TS containers)
+                val extractorsFactory = DefaultExtractorsFactory()
+                    .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
+                    .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+
+                // Renderers with decoder priority from settings
                 val renderersFactory = DefaultRenderersFactory(context)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                    .setExtensionRendererMode(playerSettings.decoderPriority)
+                    .setEnableDecoderFallback(true)
 
                 _exoPlayer = if (useLibass) {
                     // Build ExoPlayer with libass support for ASS/SSA subtitles
                     ExoPlayer.Builder(context)
                         .setLoadControl(loadControl)
+                        .setTrackSelector(trackSelector!!)
+                        .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
                         .buildWithAssSupport(
                             context = context,
                             renderType = libassRenderType,
@@ -406,12 +553,37 @@ class PlayerViewModel @Inject constructor(
                 } else {
                     // Standard ExoPlayer without libass
                     ExoPlayer.Builder(context)
+                        .setTrackSelector(trackSelector!!)
+                        .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
                         .setRenderersFactory(renderersFactory)
                         .setLoadControl(loadControl)
                         .build()
                 }
 
                 _exoPlayer?.apply {
+                    // Audio attributes — critical for proper HDMI passthrough routing
+                    val audioAttributes = AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .build()
+                    setAudioAttributes(audioAttributes, true)
+
+                    // Skip silence
+                    if (playerSettings.skipSilence) {
+                        skipSilenceEnabled = true
+                    }
+
+                    // Loudness enhancer for volume boost beyond system max
+                    try {
+                        loudnessEnhancer?.release()
+                        loudnessEnhancer = LoudnessEnhancer(audioSessionId)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+
+                    // Notify audio session for 3rd-party equalizer apps
+                    notifyAudioSessionUpdate(true)
+
                     val preferred = playerSettings.subtitleStyle.preferredLanguage
                     val secondary = playerSettings.subtitleStyle.secondaryPreferredLanguage
                     applySubtitlePreferences(preferred, secondary)
@@ -428,6 +600,16 @@ class PlayerViewModel @Inject constructor(
                                     isBuffering = isBuffering,
                                     duration = duration.coerceAtLeast(0L)
                                 )
+                            }
+
+                            if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
+                                _uiState.update { state ->
+                                    if (state.loadingOverlayEnabled && !state.showLoadingOverlay) {
+                                        state.copy(showLoadingOverlay = true, showControls = false)
+                                    } else {
+                                        state
+                                    }
+                                }
                             }
                         
                             // Handle pending seek position when player is ready
@@ -447,11 +629,18 @@ class PlayerViewModel @Inject constructor(
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             _uiState.update { it.copy(isPlaying = isPlaying) }
                             if (isPlaying) {
+                                userPausedManually = false
+                                cancelPauseOverlay()
                                 startProgressUpdates()
                                 startWatchProgressSaving()
                                 scheduleHideControls()
                                 tryShowParentalGuide()
                             } else {
+                                if (userPausedManually) {
+                                    schedulePauseOverlay()
+                                } else {
+                                    cancelPauseOverlay()
+                                }
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
                                 // Save progress when paused
@@ -463,16 +652,41 @@ class PlayerViewModel @Inject constructor(
                             updateAvailableTracks(tracks)
                         }
 
+                        override fun onRenderedFirstFrame() {
+                            hasRenderedFirstFrame = true
+                            _uiState.update { it.copy(showLoadingOverlay = false) }
+                        }
+
                         override fun onPlayerError(error: PlaybackException) {
                             _uiState.update { 
-                                it.copy(error = error.message ?: "Playback error occurred")
+                                it.copy(
+                                    error = error.message ?: "Playback error occurred",
+                                    showLoadingOverlay = false,
+                                    showPauseOverlay = false
+                                )
                             }
                         }
                     })
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to initialize player") }
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Failed to initialize player",
+                        showLoadingOverlay = false
+                    )
+                }
             }
+        }
+    }
+
+    private fun resetLoadingOverlayForNewStream() {
+        hasRenderedFirstFrame = false
+        userPausedManually = false
+        _uiState.update { state ->
+            state.copy(
+                showLoadingOverlay = state.loadingOverlayEnabled,
+                showControls = false
+            )
         }
     }
 
@@ -706,6 +920,7 @@ class PlayerViewModel @Inject constructor(
         currentStreamUrl = url
         currentHeaders = newHeaders
         lastSavedPosition = 0L
+        resetLoadingOverlayForNewStream()
 
         _uiState.update {
             it.copy(
@@ -798,6 +1013,8 @@ class PlayerViewModel @Inject constructor(
                                 .thenBy { it.episode ?: Int.MAX_VALUE }
                                 .thenBy { it.title }
                         )
+
+                    applyMetaDetails(result.data)
 
                     val seasons = allEpisodes
                         .mapNotNull { it.season }
@@ -923,6 +1140,7 @@ class PlayerViewModel @Inject constructor(
         currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
 
         lastSavedPosition = 0L
+        resetLoadingOverlayForNewStream()
 
         _uiState.update {
             it.copy(
@@ -954,6 +1172,8 @@ class PlayerViewModel @Inject constructor(
             )
         }
 
+        updateEpisodeDescription()
+
         playbackStartedForParentalGuide = false
         skipIntervals = emptyList()
         lastActiveSkipType = null
@@ -978,6 +1198,7 @@ class PlayerViewModel @Inject constructor(
         loadSavedProgressFor(currentSeason, currentEpisode)
     }
 
+    @OptIn(UnstableApi::class)
     private fun updateAvailableTracks(tracks: Tracks) {
         val audioTracks = mutableListOf<TrackInfo>()
         val subtitleTracks = mutableListOf<TrackInfo>()
@@ -993,12 +1214,23 @@ class PlayerViewModel @Inject constructor(
                         val format = trackGroup.getTrackFormat(i)
                         val isSelected = trackGroup.isTrackSelected(i)
                         if (isSelected) selectedAudioIndex = audioTracks.size
-                        
+
+                        // Build a rich track name with codec and channel info
+                        val codecName = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
+                        val channelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
+                            format.channelCount
+                        )
+                        val baseName = format.label ?: format.language ?: "Audio ${audioTracks.size + 1}"
+                        val suffix = listOfNotNull(codecName, channelLayout).joinToString(" ")
+                        val displayName = if (suffix.isNotEmpty()) "$baseName ($suffix)" else baseName
+
                         audioTracks.add(
                             TrackInfo(
                                 index = audioTracks.size,
-                                name = format.label ?: "Audio ${audioTracks.size + 1}",
+                                name = displayName,
                                 language = format.language,
+                                codec = codecName,
+                                channelCount = format.channelCount.takeIf { it > 0 },
                                 isSelected = isSelected
                             )
                         )
@@ -1189,18 +1421,52 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    private fun schedulePauseOverlay() {
+        pauseOverlayJob?.cancel()
+
+        if (!_uiState.value.pauseOverlayEnabled || !hasRenderedFirstFrame || !userPausedManually) {
+            _uiState.update { it.copy(showPauseOverlay = false) }
+            return
+        }
+
+        _uiState.update { it.copy(showPauseOverlay = false) }
+        pauseOverlayJob = viewModelScope.launch {
+            delay(pauseOverlayDelayMs)
+            if (!_uiState.value.isPlaying && _uiState.value.pauseOverlayEnabled && _uiState.value.error == null) {
+                _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
+            }
+        }
+    }
+
+    private fun cancelPauseOverlay() {
+        pauseOverlayJob?.cancel()
+        pauseOverlayJob = null
+        _uiState.update { it.copy(showPauseOverlay = false) }
+    }
+
+    fun onUserInteraction() {
+        if (!_uiState.value.isPlaying && userPausedManually) {
+            schedulePauseOverlay()
+        }
+    }
+
     fun hideControls() {
         hideControlsJob?.cancel()
         _uiState.update { it.copy(showControls = false) }
     }
 
     fun onEvent(event: PlayerEvent) {
+        onUserInteraction()
         when (event) {
             PlayerEvent.OnPlayPause -> {
                 _exoPlayer?.let { player ->
                     if (player.isPlaying) {
+                        userPausedManually = true
                         player.pause()
+                        schedulePauseOverlay()
                     } else {
+                        userPausedManually = false
+                        cancelPauseOverlay()
                         player.play()
                     }
                 }
@@ -1334,12 +1600,24 @@ class PlayerViewModel @Inject constructor(
                 scheduleHideControls()
             }
             PlayerEvent.OnRetry -> {
-                _uiState.update { it.copy(error = null) }
+                hasRenderedFirstFrame = false
+                _uiState.update { state ->
+                    state.copy(
+                        error = null,
+                        showLoadingOverlay = state.loadingOverlayEnabled
+                    )
+                }
                 releasePlayer()
                 initializePlayer(currentStreamUrl, currentHeaders)
             }
             PlayerEvent.OnParentalGuideHide -> {
                 _uiState.update { it.copy(showParentalGuide = false) }
+            }
+            PlayerEvent.OnDismissPauseOverlay -> {
+                _uiState.update { it.copy(showPauseOverlay = false) }
+                if (!_uiState.value.isPlaying) {
+                    schedulePauseOverlay()
+                }
             }
             PlayerEvent.OnSkipIntro -> {
                 _uiState.value.activeSkipInterval?.let { interval ->
@@ -1532,12 +1810,46 @@ class PlayerViewModel @Inject constructor(
     private fun releasePlayer() {
         // Save progress before releasing
         saveWatchProgress()
+
+        // Notify audio session closing
+        notifyAudioSessionUpdate(false)
+
+        // Release loudness enhancer
+        try {
+            loudnessEnhancer?.release()
+            loudnessEnhancer = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         
         progressJob?.cancel()
         hideControlsJob?.cancel()
         watchProgressSaveJob?.cancel()
         _exoPlayer?.release()
         _exoPlayer = null
+    }
+
+    /**
+     * Broadcast audio session updates for 3rd-party equalizer apps (e.g., Wavelet).
+     * Matches Just (Video) Player's implementation.
+     */
+    private fun notifyAudioSessionUpdate(active: Boolean) {
+        _exoPlayer?.let { player ->
+            try {
+                val intent = Intent(
+                    if (active) AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION
+                    else AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION
+                )
+                intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
+                intent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                if (active) {
+                    intent.putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MOVIE)
+                }
+                context.sendBroadcast(intent)
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+            }
+        }
     }
 
     override fun onCleared() {

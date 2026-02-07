@@ -7,8 +7,11 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,63 +22,74 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class AddonPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val addonUrlsKey = stringSetPreferencesKey("installed_addon_urls")
-    private val addonUrlsOrderedKey = stringPreferencesKey("installed_addon_urls_ordered")
+    private val gson = Gson()
+    private val orderedUrlsKey = stringPreferencesKey("installed_addon_urls_ordered")
+    private val legacyUrlsKey = stringSetPreferencesKey("installed_addon_urls")
 
     val installedAddonUrls: Flow<List<String>> = context.dataStore.data
         .map { preferences ->
-            val ordered = preferences[addonUrlsOrderedKey]
-            when {
-                !ordered.isNullOrBlank() -> parseOrderedUrls(ordered)
-                preferences[addonUrlsKey] != null -> preferences[addonUrlsKey]!!.toList()
-                else -> getDefaultAddons()
+            val json = preferences[orderedUrlsKey]
+            if (json != null) {
+                parseUrlList(json)
+            } else {
+                val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
+                legacySet.toList()
             }
         }
 
+    suspend fun ensureMigrated() {
+        val prefs = context.dataStore.data.first()
+        if (prefs[orderedUrlsKey] == null) {
+            val legacySet = prefs[legacyUrlsKey] ?: getDefaultAddons()
+            context.dataStore.edit { preferences ->
+                preferences[orderedUrlsKey] = gson.toJson(legacySet.toList())
+                preferences.remove(legacyUrlsKey)
+            }
+        }
+    }
+
     suspend fun addAddon(url: String) {
         context.dataStore.edit { preferences ->
-            val currentUrls = getCurrentOrderedUrls(preferences)
-            if (!currentUrls.contains(url)) {
-                val updated = currentUrls + url
-                preferences[addonUrlsOrderedKey] = serializeOrderedUrls(updated)
-                preferences[addonUrlsKey] = updated.toSet()
+            val current = getCurrentList(preferences)
+            if (url !in current) {
+                preferences[orderedUrlsKey] = gson.toJson(current + url)
             }
         }
     }
 
     suspend fun removeAddon(url: String) {
         context.dataStore.edit { preferences ->
-            val currentUrls = getCurrentOrderedUrls(preferences)
-            val updated = currentUrls.filterNot { it == url }
-            preferences[addonUrlsOrderedKey] = serializeOrderedUrls(updated)
-            preferences[addonUrlsKey] = updated.toSet()
+            val current = getCurrentList(preferences)
+            preferences[orderedUrlsKey] = gson.toJson(current - url)
         }
     }
 
     suspend fun setAddonOrder(urls: List<String>) {
         context.dataStore.edit { preferences ->
-            val cleaned = urls.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-            preferences[addonUrlsOrderedKey] = serializeOrderedUrls(cleaned)
-            preferences[addonUrlsKey] = cleaned.toSet()
+            preferences[orderedUrlsKey] = gson.toJson(urls)
         }
     }
 
-    private fun getCurrentOrderedUrls(preferences: Preferences): List<String> {
-        val ordered = preferences[addonUrlsOrderedKey]
-        return when {
-            !ordered.isNullOrBlank() -> parseOrderedUrls(ordered)
-            preferences[addonUrlsKey] != null -> preferences[addonUrlsKey]!!.toList()
-            else -> getDefaultAddons()
+    private fun getCurrentList(preferences: Preferences): List<String> {
+        val json = preferences[orderedUrlsKey]
+        return if (json != null) {
+            parseUrlList(json)
+        } else {
+            val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
+            legacySet.toList()
         }
     }
 
-    private fun parseOrderedUrls(value: String): List<String> =
-        value.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+    private fun parseUrlList(json: String): List<String> {
+        return try {
+            val type = object : TypeToken<List<String>>() {}.type
+            gson.fromJson(json, type) ?: getDefaultAddons().toList()
+        } catch (e: Exception) {
+            getDefaultAddons().toList()
+        }
+    }
 
-    private fun serializeOrderedUrls(urls: List<String>): String =
-        urls.joinToString("\n")
-
-    private fun getDefaultAddons(): List<String> = listOf(
+    private fun getDefaultAddons(): Set<String> = setOf(
         "https://v3-cinemeta.strem.io"
     )
 }

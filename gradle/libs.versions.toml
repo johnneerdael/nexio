@@ -6,7 +6,7 @@ coreKtx = "1.10.1"
 appcompat = "1.6.1"
 composeBom = "2024.09.00"
 tvFoundation = "1.0.0-alpha11"
-tvMaterial = "1.0.0-alpha10"
+tvMaterial = "1.0.1"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 
@@ -27,6 +27,8 @@ quickjsKt = "1.0.1"
 jsoup = "1.17.2"
 gson = "2.10.1"
 markdownRenderer = "0.33.0"
+nanohttpd = "2.3.1"
+zxing = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -82,11 +84,14 @@ media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasourc
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+media3-extractor = { group = "androidx.media3", name = "media3-extractor", version.ref = "media3" }
 
 # Local Plugin System
 quickjs-kt = { group = "io.github.dokar3", name = "quickjs-kt-android", version.ref = "quickjsKt" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 # Markdown rendering
 markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }

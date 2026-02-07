@@ -1,0 +1,280 @@
+package com.nuvio.tv.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Carousel
+import androidx.tv.material3.CarouselDefaults
+import androidx.tv.material3.CarouselState
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
+import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.ui.theme.NuvioColors
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun HeroCarousel(
+    items: List<MetaPreview>,
+    onItemClick: (MetaPreview) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (items.isEmpty()) return
+
+    val carouselState = remember { CarouselState() }
+    var isFocused by remember { mutableStateOf(false) }
+
+    Carousel(
+        itemCount = items.size,
+        carouselState = carouselState,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(400.dp)
+            .onFocusChanged { isFocused = it.hasFocus },
+        carouselIndicator = {
+            CarouselDefaults.IndicatorRow(
+                itemCount = items.size,
+                activeItemIndex = carouselState.activeItemIndex,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp)
+            ) { isActive ->
+                val dotWidth = when {
+                    isFocused && isActive -> 32.dp
+                    isActive -> 24.dp
+                    else -> 12.dp
+                }
+                val dotHeight = if (isFocused && isActive) 6.dp else 4.dp
+                Box(
+                    modifier = Modifier
+                        .width(dotWidth)
+                        .height(dotHeight)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(
+                            when {
+                                isFocused && isActive -> NuvioColors.FocusRing
+                                isFocused -> NuvioColors.FocusRing.copy(alpha = 0.4f)
+                                isActive -> NuvioColors.Primary
+                                else -> Color.White.copy(alpha = 0.3f)
+                            }
+                        )
+                )
+            }
+        }
+    ) { index ->
+        val item = items[index]
+        HeroCarouselSlide(
+            item = item,
+            onClick = { onItemClick(item) }
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun HeroCarouselSlide(
+    item: MetaPreview,
+    onClick: () -> Unit
+) {
+    val bgColor = NuvioColors.Background
+    val bottomGradient = remember(bgColor) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.0f to Color.Transparent,
+                0.3f to Color.Transparent,
+                0.6f to bgColor.copy(alpha = 0.5f),
+                0.8f to bgColor.copy(alpha = 0.85f),
+                1.0f to bgColor
+            )
+        )
+    }
+    val leftGradient = remember(bgColor) {
+        Brush.horizontalGradient(
+            colorStops = arrayOf(
+                0.0f to bgColor.copy(alpha = 0.7f),
+                0.3f to bgColor.copy(alpha = 0.3f),
+                0.5f to Color.Transparent,
+                1.0f to Color.Transparent
+            )
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyUp &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter)
+                ) {
+                    onClick()
+                    true
+                } else {
+                    false
+                }
+            }
+    ) {
+        // Background image
+        FadeInAsyncImage(
+            model = item.background ?: item.poster,
+            contentDescription = item.name,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            enableFadeIn = true,
+            fadeDurationMs = 600
+        )
+
+        // Bottom gradient for text readability
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(bottomGradient)
+        )
+
+        // Left gradient for extra text readability
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(leftGradient)
+        )
+
+        // Content overlay
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
+                .fillMaxWidth(0.5f)
+        ) {
+            // Title logo or text title
+            if (item.logo != null) {
+                FadeInAsyncImage(
+                    model = item.logo,
+                    contentDescription = item.name,
+                    modifier = Modifier
+                        .height(80.dp)
+                        .fillMaxWidth(),
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.CenterStart,
+                    enableFadeIn = true,
+                    fadeDurationMs = 500
+                )
+            } else {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Meta info row: IMDB rating + year + genres
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                item.imdbRating?.let { rating ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val context = LocalContext.current
+                        val imdbModel = remember {
+                            ImageRequest.Builder(context)
+                                .data(com.nuvio.tv.R.raw.imdb_logo_2016)
+                                .decoderFactory(SvgDecoder.Factory())
+                                .build()
+                        }
+                        AsyncImage(
+                            model = imdbModel,
+                            contentDescription = "IMDB",
+                            modifier = Modifier.size(30.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        val ratingText = remember(rating) { String.format("%.1f", rating) }
+                        Text(
+                            text = ratingText,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+
+                item.releaseInfo?.let { year ->
+                    Text(
+                        text = year,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+
+            if (item.genres.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item.genres.take(3).forEach { genre ->
+                        Text(
+                            text = genre,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.1f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            item.description?.let { desc ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}

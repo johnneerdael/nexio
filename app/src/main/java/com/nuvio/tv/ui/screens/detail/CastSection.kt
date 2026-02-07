@@ -56,7 +56,7 @@ fun CastSection(
         TvLazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(
                 items = cast,
@@ -76,13 +76,13 @@ private fun CastMemberItem(
     member: MetaCastMember
 ) {
     Column(
-        modifier = Modifier.width(120.dp),
+        modifier = Modifier.width(150.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Card(
             onClick = { /* no-op (for focus + row scrolling) */ },
             modifier = Modifier
-                .size(72.dp),
+                .size(100.dp),
             shape = CardDefaults.shape(
                 shape = CircleShape
             ),
@@ -110,8 +110,8 @@ private fun CastMemberItem(
                         contentDescription = member.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        requestedWidthDp = 72.dp,
-                        requestedHeightDp = 72.dp
+                        requestedWidthDp = 100.dp,
+                        requestedHeightDp = 100.dp
                     )
                 } else {
                     Text(

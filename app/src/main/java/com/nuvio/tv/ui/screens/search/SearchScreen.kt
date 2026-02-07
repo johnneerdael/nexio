@@ -16,6 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -23,6 +25,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.ui.components.CatalogRowSection
+import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -57,7 +60,7 @@ fun SearchScreen(
                     shape = RoundedCornerShape(12.dp),
                     placeholder = {
                         Text(
-                            text = "Search movies & series (installed addons)",
+                            text = "Search movies & series",
                             color = NuvioColors.TextTertiary
                         )
                     },
@@ -76,18 +79,11 @@ fun SearchScreen(
             when {
                 uiState.query.trim().length < 2 -> {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 48.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = "Type at least 2 characters to search.",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = NuvioColors.TextTertiary
-                            )
-                        }
+                        EmptyScreenState(
+                            title = "Start Searching",
+                            subtitle = "Type at least 2 characters to search",
+                            icon = Icons.Default.Search
+                        )
                     }
                 }
 
@@ -115,18 +111,11 @@ fun SearchScreen(
 
                 uiState.catalogRows.isEmpty() -> {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 48.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = "No results.",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = NuvioColors.TextTertiary
-                            )
-                        }
+                        EmptyScreenState(
+                            title = "No Results",
+                            subtitle = "Try searching with different keywords",
+                            icon = Icons.Default.Search
+                        )
                     }
                 }
 

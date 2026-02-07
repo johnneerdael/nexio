@@ -1,0 +1,625 @@
+package com.nuvio.tv.core.server
+
+object RepositoryWebPage {
+
+    fun getHtml(): String = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>NuvioTV - Manage Repositories</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  *:focus, *:active { outline: none !important; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #000;
+    color: #fff;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .page {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 0 1.5rem 6rem;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 3rem 0 2.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    margin-bottom: 2.5rem;
+  }
+  .header-logo {
+    height: 40px;
+    width: auto;
+    margin-bottom: 0.5rem;
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+  }
+  .header p {
+    font-size: 0.875rem;
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 0.02em;
+  }
+
+  /* Add Section */
+  .add-section {
+    margin-bottom: 2.5rem;
+  }
+  .add-section label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  .add-row {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .add-row input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 100px;
+    padding: 0.875rem 1.25rem;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 400;
+    transition: border-color 0.3s ease;
+  }
+  .add-row input:focus {
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+  .add-row input::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+  }
+  .add-error {
+    color: rgba(207, 102, 121, 0.9);
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+    display: none;
+    padding-left: 1.25rem;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 100px;
+    padding: 0.875rem 1.5rem;
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:hover {
+    background: #fff;
+    color: #000;
+    border-color: #fff;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-save {
+    width: 100%;
+    padding: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-top: 2rem;
+  }
+  .btn-save:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .btn-remove {
+    border-color: rgba(207, 102, 121, 0.3);
+    color: rgba(207, 102, 121, 0.8);
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+  .btn-remove:hover {
+    background: rgba(207, 102, 121, 0.15);
+    border-color: rgba(207, 102, 121, 0.5);
+    color: #CF6679;
+  }
+
+  /* Section Title */
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  /* Repo List */
+  .repo-list {
+    list-style: none;
+  }
+  .repo-item {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .repo-item:last-child {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .repo-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .repo-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .repo-url {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.25);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.15rem;
+  }
+  .repo-desc {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .repo-actions {
+    flex-shrink: 0;
+  }
+  .badge-new {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #000;
+    background: #fff;
+    padding: 0.15rem 0.4rem;
+    border-radius: 100px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+  .empty-state {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.2);
+    padding: 3rem 0;
+    font-size: 0.875rem;
+    font-weight: 300;
+    display: none;
+  }
+
+  /* Status Overlay */
+  .status-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
+  .status-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+  .status-content {
+    text-align: center;
+    max-width: 340px;
+    padding: 2rem;
+  }
+  .status-icon {
+    margin-bottom: 1.5rem;
+  }
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+  .status-message {
+    font-size: 0.875rem;
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.4);
+    line-height: 1.6;
+  }
+  .status-success .status-title { color: #fff; }
+  .status-rejected .status-title { color: rgba(207, 102, 121, 0.9); }
+  .status-error .status-title { color: rgba(207, 102, 121, 0.9); }
+  .status-dismiss {
+    margin-top: 1.5rem;
+  }
+  .status-svg {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto;
+  }
+  .status-svg svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Connection lost bar */
+  .connection-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(207, 102, 121, 0.15);
+    border-bottom: 1px solid rgba(207, 102, 121, 0.3);
+    padding: 0.75rem 1.5rem;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: rgba(207, 102, 121, 0.9);
+    z-index: 600;
+    display: none;
+  }
+  .connection-bar.visible {
+    display: block;
+  }
+
+  /* Mobile */
+  @media (max-width: 480px) {
+    .page { padding: 0 1rem 5rem; }
+    .header { padding: 2rem 0 2rem; }
+    .header-logo { height: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="/logo.png" alt="NuvioTV" class="header-logo">
+    <p>Manage your repositories</p>
+  </div>
+
+  <div class="add-section">
+    <label>Add repository by URL</label>
+    <div class="add-row">
+      <input type="url" id="repoUrl" placeholder="https://example.com/manifest.json" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn" id="addBtn" onclick="addRepo()">Add</button>
+    </div>
+    <div class="add-error" id="addError"></div>
+  </div>
+
+  <div class="section-label">Installed</div>
+  <ul class="repo-list" id="repoList"></ul>
+  <div class="empty-state" id="emptyState">No repositories installed</div>
+
+  <button class="btn btn-save" id="saveBtn" onclick="saveChanges()">Save Changes</button>
+</div>
+
+<div class="status-overlay" id="statusOverlay">
+  <div class="status-content" id="statusContent"></div>
+</div>
+
+<div class="connection-bar" id="connectionBar">Connection to TV lost</div>
+
+<script>
+var repos = [];
+var originalRepos = [];
+var pollTimer = null;
+var pollStartTime = 0;
+var POLL_TIMEOUT = 120000;
+var POLL_INTERVAL = 1500;
+var connectionLost = false;
+var consecutiveErrors = 0;
+
+async function loadRepos() {
+  try {
+    var res = await fetch('/api/repositories');
+    repos = await res.json();
+    originalRepos = JSON.parse(JSON.stringify(repos));
+    setConnectionLost(false);
+    renderList();
+  } catch (e) {
+    setConnectionLost(true);
+  }
+}
+
+function setConnectionLost(lost) {
+  connectionLost = lost;
+  document.getElementById('connectionBar').className = 'connection-bar' + (lost ? ' visible' : '');
+}
+
+function renderList() {
+  var list = document.getElementById('repoList');
+  var empty = document.getElementById('emptyState');
+  list.innerHTML = '';
+  if (repos.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  repos.forEach(function(repo, i) {
+    var li = document.createElement('li');
+    li.className = 'repo-item';
+
+    li.innerHTML =
+      '<div class="repo-info">' +
+        '<div class="repo-name">' + escapeHtml(repo.name || repo.url) +
+          (repo.isNew ? '<span class="badge-new">New</span>' : '') +
+        '</div>' +
+        (repo.description ? '<div class="repo-desc">' + escapeHtml(repo.description) + '</div>' : '') +
+        '<div class="repo-url">' + escapeHtml(repo.url) + '</div>' +
+      '</div>' +
+      '<div class="repo-actions">' +
+        '<button class="btn btn-remove" onclick="removeRepo(' + i + ')">Remove</button>' +
+      '</div>';
+
+    list.appendChild(li);
+  });
+}
+
+async function addRepo() {
+  const input = document.getElementById('repoUrl');
+  const addBtn = document.getElementById('addBtn');
+  const errorEl = document.getElementById('addError');
+  let url = input.value.trim();
+  if (!url) return;
+
+  if (url.startsWith('stremio://')) {
+    url = url.replace(/^stremio:\/\//, 'https://');
+  }
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  url = url.replace(/\/+$/, '');
+
+  if (repos.some(function(r) { return r.url === url; })) {
+    errorEl.textContent = 'This repository is already in the list';
+    errorEl.style.display = 'block';
+    setTimeout(function() { errorEl.style.display = 'none'; }, 3000);
+    return;
+  }
+
+  // Validate and fetch repo info from the TV
+  addBtn.disabled = true;
+  addBtn.textContent = '...';
+  errorEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url })
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      errorEl.textContent = data.error;
+      errorEl.style.display = 'block';
+      setTimeout(() => { errorEl.style.display = 'none'; }, 4000);
+    } else {
+      repos.push({ url: data.url, name: data.name || url, description: data.description, isNew: true });
+      input.value = '';
+      renderList();
+    }
+  } catch (e) {
+    errorEl.textContent = 'Failed to validate repository';
+    errorEl.style.display = 'block';
+    setTimeout(() => { errorEl.style.display = 'none'; }, 4000);
+  }
+
+  addBtn.disabled = false;
+  addBtn.textContent = 'Add';
+}
+
+function removeRepo(index) {
+  repos.splice(index, 1);
+  renderList();
+}
+
+async function saveChanges() {
+  var saveBtn = document.getElementById('saveBtn');
+  saveBtn.disabled = true;
+
+  var urls = repos.map(function(r) { return r.url; });
+  try {
+    var res = await fetch('/api/repositories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls: urls })
+    });
+    var data = await res.json();
+
+    if (data.status === 'pending_confirmation') {
+      showPendingStatus();
+      pollStatus(data.id);
+    } else if (data.error) {
+      showErrorStatus(data.error);
+      saveBtn.disabled = false;
+    }
+  } catch (e) {
+    showErrorStatus('Failed to save. Check your connection to the TV.');
+    saveBtn.disabled = false;
+  }
+}
+
+function showPendingStatus() {
+  var overlay = document.getElementById('statusOverlay');
+  var content = document.getElementById('statusContent');
+  content.innerHTML =
+    '<div class="status-icon"><div class="spinner"></div></div>' +
+    '<div class="status-title">Waiting for TV</div>' +
+    '<div class="status-message">Please confirm the changes on your TV to apply them.</div>';
+  content.className = 'status-content';
+  overlay.classList.add('visible');
+}
+
+function showSuccessStatus() {
+  var content = document.getElementById('statusContent');
+  content.innerHTML =
+    '<div class="status-icon"><div class="status-svg"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div></div>' +
+    '<div class="status-title">Changes Applied</div>' +
+    '<div class="status-message">Your repository configuration has been updated on the TV.</div>';
+  content.className = 'status-content status-success';
+  setTimeout(dismissStatus, 2500);
+}
+
+function showRejectedStatus() {
+  var content = document.getElementById('statusContent');
+  content.innerHTML =
+    '<div class="status-icon"><div class="status-svg"><svg viewBox="0 0 24 24" fill="none" stroke="rgba(207,102,121,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></div></div>' +
+    '<div class="status-title">Changes Rejected</div>' +
+    '<div class="status-message">The changes were declined on the TV. Your list has been reverted.</div>';
+  content.className = 'status-content status-rejected';
+  setTimeout(function() {
+    repos = JSON.parse(JSON.stringify(originalRepos));
+    renderList();
+    dismissStatus();
+  }, 2500);
+}
+
+function showErrorStatus(msg) {
+  var overlay = document.getElementById('statusOverlay');
+  var content = document.getElementById('statusContent');
+  content.innerHTML =
+    '<div class="status-icon"><div class="status-svg"><svg viewBox="0 0 24 24" fill="none" stroke="rgba(207,102,121,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div></div>' +
+    '<div class="status-title">Something Went Wrong</div>' +
+    '<div class="status-message">' + escapeHtml(msg) + '</div>' +
+    '<div class="status-dismiss"><button class="btn" onclick="dismissStatus()">Dismiss</button></div>';
+  content.className = 'status-content status-error';
+  overlay.classList.add('visible');
+}
+
+function showTimeoutStatus() {
+  var content = document.getElementById('statusContent');
+  content.innerHTML =
+    '<div class="status-icon"><div class="status-svg"><svg viewBox="0 0 24 24" fill="none" stroke="rgba(207,102,121,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div></div>' +
+    '<div class="status-title">Timed Out</div>' +
+    '<div class="status-message">No response from the TV. Please try again.</div>' +
+    '<div class="status-dismiss"><button class="btn" onclick="dismissStatus()">Dismiss</button></div>';
+  content.className = 'status-content status-error';
+}
+
+function showDisconnectedStatus() {
+  var content = document.getElementById('statusContent');
+  content.innerHTML =
+    '<div class="status-icon"><div class="status-svg"><svg viewBox="0 0 24 24" fill="none" stroke="rgba(207,102,121,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></div></div>' +
+    '<div class="status-title">Connection Lost</div>' +
+    '<div class="status-message">The TV server is no longer reachable. The changes may have been applied.</div>' +
+    '<div class="status-dismiss"><button class="btn" onclick="dismissStatus()">Dismiss</button></div>';
+  content.className = 'status-content status-error';
+}
+
+function dismissStatus() {
+  var overlay = document.getElementById('statusOverlay');
+  overlay.classList.remove('visible');
+  document.getElementById('saveBtn').disabled = false;
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+async function pollStatus(changeId) {
+  pollStartTime = Date.now();
+  consecutiveErrors = 0;
+
+  var poll = async function() {
+    if (Date.now() - pollStartTime > POLL_TIMEOUT) {
+      showTimeoutStatus();
+      document.getElementById('saveBtn').disabled = false;
+      return;
+    }
+
+    try {
+      var res = await fetch('/api/status/' + changeId);
+      var data = await res.json();
+      consecutiveErrors = 0;
+
+      if (data.status === 'confirmed') {
+        showSuccessStatus();
+        setTimeout(function() {
+          loadRepos();
+          document.getElementById('saveBtn').disabled = false;
+        }, 2000);
+      } else if (data.status === 'rejected') {
+        showRejectedStatus();
+      } else if (data.status === 'not_found') {
+        showDisconnectedStatus();
+        document.getElementById('saveBtn').disabled = false;
+      } else {
+        pollTimer = setTimeout(poll, POLL_INTERVAL);
+      }
+    } catch (e) {
+      consecutiveErrors++;
+      if (consecutiveErrors >= 3) {
+        showDisconnectedStatus();
+        document.getElementById('saveBtn').disabled = false;
+      } else {
+        pollTimer = setTimeout(poll, 2000);
+      }
+    }
+  };
+  poll();
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('repoUrl').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') addRepo();
+});
+
+loadRepos();
+</script>
+</body>
+</html>
+""".trimIndent()
+}

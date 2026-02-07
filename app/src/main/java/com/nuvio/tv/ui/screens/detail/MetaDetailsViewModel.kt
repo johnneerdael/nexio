@@ -15,7 +15,11 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
+import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.data.trailer.TrailerService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +37,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbMetadataService: TmdbMetadataService,
     private val libraryPreferences: LibraryPreferences,
     private val watchProgressRepository: WatchProgressRepository,
+    private val trailerService: TrailerService,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -42,6 +48,11 @@ class MetaDetailsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MetaDetailsUiState())
     val uiState: StateFlow<MetaDetailsUiState> = _uiState.asStateFlow()
+
+    private var idleTimerJob: Job? = null
+    private var trailerFetchJob: Job? = null
+
+    private var trailerDelayMs = 7000L
 
     init {
         observeLibraryState()
@@ -57,6 +68,8 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
             MetaDetailsEvent.OnRetry -> loadMeta()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
+            MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
+            MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
         }
     }
 
@@ -137,6 +150,9 @@ class MetaDetailsViewModel @Inject constructor(
         
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
+
+        // Start fetching trailer after meta is loaded
+        fetchTrailerUrl()
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
@@ -413,5 +429,80 @@ class MetaDetailsViewModel @Inject constructor(
     fun getNextEpisodeInfo(): String? {
         val nextToWatch = _uiState.value.nextToWatch
         return nextToWatch?.displayText
+    }
+
+    // --- Trailer ---
+
+    private fun fetchTrailerUrl() {
+        val meta = _uiState.value.meta ?: return
+
+        trailerFetchJob?.cancel()
+        trailerFetchJob = viewModelScope.launch {
+            // Check if trailers are enabled in settings
+            val settings = trailerSettingsDataStore.settings.first()
+            if (!settings.enabled) return@launch
+
+            trailerDelayMs = settings.delaySeconds * 1000L
+
+            _uiState.update { it.copy(isTrailerLoading = true) }
+
+            val year = meta.releaseInfo?.split("-")?.firstOrNull()
+
+            val tmdbId = try {
+                tmdbService.ensureTmdbId(meta.id, meta.type.toApiString())
+            } catch (_: Exception) {
+                null
+            }
+
+            val type = when (meta.type) {
+                com.nuvio.tv.domain.model.ContentType.MOVIE -> "movie"
+                com.nuvio.tv.domain.model.ContentType.SERIES,
+                com.nuvio.tv.domain.model.ContentType.TV -> "tv"
+                else -> null
+            }
+
+            val url = trailerService.getTrailerUrl(
+                title = meta.name,
+                year = year,
+                tmdbId = tmdbId,
+                type = type
+            )
+
+            _uiState.update { it.copy(trailerUrl = url, isTrailerLoading = false) }
+
+            if (url != null) {
+                startIdleTimer()
+            }
+        }
+    }
+
+    private fun startIdleTimer() {
+        idleTimerJob?.cancel()
+
+        val state = _uiState.value
+        if (state.trailerUrl == null || state.isTrailerPlaying) return
+
+        idleTimerJob = viewModelScope.launch {
+            delay(trailerDelayMs)
+            _uiState.update { it.copy(isTrailerPlaying = true) }
+        }
+    }
+
+    private fun handleUserInteraction() {
+        idleTimerJob?.cancel()
+
+        if (_uiState.value.isTrailerPlaying) {
+            _uiState.update { it.copy(isTrailerPlaying = false) }
+        }
+    }
+
+    private fun handleTrailerEnded() {
+        _uiState.update { it.copy(isTrailerPlaying = false) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        idleTimerJob?.cancel()
+        trailerFetchJob?.cancel()
     }
 }

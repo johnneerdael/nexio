@@ -1,27 +1,29 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.list.TvLazyColumn
@@ -36,6 +38,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
+import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -62,13 +65,31 @@ fun MetaDetailsScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     BackHandler {
-        onBackPress()
+        if (uiState.isTrailerPlaying) {
+            viewModel.onEvent(MetaDetailsEvent.OnUserInteraction)
+        } else {
+            onBackPress()
+        }
     }
+
+    val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioColors.Background)
+            .onPreviewKeyEvent { keyEvent ->
+                if (currentIsTrailerPlaying) {
+                    // During trailer, consume all keys except back/ESC so content doesn't scroll
+                    val keyCode = keyEvent.nativeKeyEvent.keyCode
+                    return@onPreviewKeyEvent keyCode != KeyEvent.KEYCODE_BACK &&
+                            keyCode != KeyEvent.KEYCODE_ESCAPE
+                }
+                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                    viewModel.onEvent(MetaDetailsEvent.OnUserInteraction)
+                }
+                false
+            }
     ) {
         when {
             uiState.isLoading -> {
@@ -82,8 +103,12 @@ fun MetaDetailsScreen(
             }
             uiState.meta != null -> {
                 val meta = uiState.meta!!
-                val genresString = meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
-                val yearString = meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+                val genresString = remember(meta.genres) {
+                    meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+                }
+                val yearString = remember(meta.releaseInfo) {
+                    meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+                }
 
                 MetaDetailsContent(
                     meta = meta,
@@ -95,7 +120,6 @@ fun MetaDetailsScreen(
                     episodeProgressMap = uiState.episodeProgressMap,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                     onEpisodeClick = { video ->
-                        // Navigate to stream screen for episode
                         onPlayClick(
                             video.id,
                             meta.type.toApiString(),
@@ -113,7 +137,6 @@ fun MetaDetailsScreen(
                         )
                     },
                     onPlayClick = { videoId ->
-                        // Navigate to stream screen for movie
                         onPlayClick(
                             videoId,
                             meta.type.toApiString(),
@@ -130,13 +153,17 @@ fun MetaDetailsScreen(
                             null
                         )
                     },
-                    onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) }
+                    onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
+                    trailerUrl = uiState.trailerUrl,
+                    isTrailerPlaying = uiState.isTrailerPlaying,
+                    onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) }
                 )
             }
         }
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun MetaDetailsContent(
@@ -150,10 +177,15 @@ private fun MetaDetailsContent(
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
-    onToggleLibrary: () -> Unit
+    onToggleLibrary: () -> Unit,
+    trailerUrl: String?,
+    isTrailerPlaying: Boolean,
+    onTrailerEnded: () -> Unit
 ) {
-    val isSeries = meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
-    val nextEpisode = episodesForSeason.firstOrNull()
+    val isSeries = remember(meta.type, meta.videos) {
+        meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
+    }
+    val nextEpisode = remember(episodesForSeason) { episodesForSeason.firstOrNull() }
     val heroVideo = remember(meta.videos, nextToWatch, nextEpisode, isSeries) {
         if (!isSeries) return@remember null
         val byId = nextToWatch?.nextVideoId?.let { id ->
@@ -167,6 +199,7 @@ private fun MetaDetailsContent(
         byId ?: bySeasonEpisode ?: nextEpisode
     }
     val listState = rememberTvLazyListState()
+    val initialFocusRequester = remember { FocusRequester() }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
 
     // Track if scrolled past hero (first item)
@@ -177,64 +210,128 @@ private fun MetaDetailsContent(
         }
     }
 
+    // Pre-compute cast members to avoid recomputation in lazy scope
+    val castMembersToShow = remember(meta.castMembers, meta.cast) {
+        if (meta.castMembers.isNotEmpty()) {
+            meta.castMembers
+        } else {
+            meta.cast.map { name -> MetaCastMember(name = name) }
+        }
+    }
+
+    // Backdrop alpha for crossfade
+    val backdropAlpha by animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "backdropFade"
+    )
+
+    val backgroundColor = NuvioColors.Background
+
+    // Pre-compute gradient brushes once
+    val leftGradient = remember(backgroundColor) {
+        Brush.horizontalGradient(
+            colorStops = arrayOf(
+                0.0f to backgroundColor,
+                0.20f to backgroundColor.copy(alpha = 0.95f),
+                0.35f to backgroundColor.copy(alpha = 0.8f),
+                0.45f to backgroundColor.copy(alpha = 0.6f),
+                0.55f to backgroundColor.copy(alpha = 0.4f),
+                0.65f to backgroundColor.copy(alpha = 0.2f),
+                0.75f to Color.Transparent,
+                1.0f to Color.Transparent
+            )
+        )
+    }
+    val bottomGradient = remember(backgroundColor) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.0f to Color.Transparent,
+                0.5f to Color.Transparent,
+                0.7f to backgroundColor.copy(alpha = 0.5f),
+                0.85f to backgroundColor.copy(alpha = 0.8f),
+                1.0f to backgroundColor
+            )
+        )
+    }
+    val dimColor = remember(backgroundColor) { backgroundColor.copy(alpha = 0.08f) }
+
+    // Stable hero play callback
+    val heroPlayClick = remember(heroVideo, meta.id) {
+        {
+            if (heroVideo != null) {
+                onEpisodeClick(heroVideo)
+            } else {
+                onPlayClick(meta.id)
+            }
+        }
+    }
+
+    // Pre-compute screen dimensions to avoid BoxWithConstraints subcomposition overhead
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = remember(configuration) { configuration.screenWidthDp.dp }
+    val screenHeightDp = remember(configuration) { configuration.screenHeightDp.dp }
+
+    // Animated gradient alpha (moved outside subcomposition scope)
+    val gradientAlpha by animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "gradientFade"
+    )
+
+    // Always-composed bottom gradient alpha (avoids add/remove during scroll)
+    val bottomGradientAlpha by animateFloatAsState(
+        targetValue = if (isScrolledPastHero) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "bottomGradientFade"
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
-        // Sticky background image - stays fixed in place while content scrolls
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // Sticky background — backdrop or trailer
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Backdrop image (fades out when trailer plays)
             FadeInAsyncImage(
                 model = meta.background ?: meta.poster,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = backdropAlpha },
                 contentScale = ContentScale.Crop,
                 fadeDurationMs = 600,
-                requestedWidthDp = maxWidth,
-                requestedHeightDp = maxHeight
+                requestedWidthDp = screenWidthDp,
+                requestedHeightDp = screenHeightDp
+            )
+
+            // Trailer video (fades in when trailer plays)
+            TrailerPlayer(
+                trailerUrl = trailerUrl,
+                isPlaying = isTrailerPlaying,
+                onEnded = onTrailerEnded,
+                modifier = Modifier.fillMaxSize()
             )
 
             // Light global dim so text remains readable
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(NuvioColors.Background.copy(alpha = 0.08f))
+                    .background(dimColor)
             )
 
-            // Left side gradient fade for text readability
+            // Left side gradient fade for text readability (fades out during trailer)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colorStops = arrayOf(
-                                0.0f to NuvioColors.Background,
-                                0.20f to NuvioColors.Background.copy(alpha = 0.95f),
-                                0.35f to NuvioColors.Background.copy(alpha = 0.8f),
-                                0.45f to NuvioColors.Background.copy(alpha = 0.6f),
-                                0.55f to NuvioColors.Background.copy(alpha = 0.4f),
-                                0.65f to NuvioColors.Background.copy(alpha = 0.2f),
-                                0.75f to Color.Transparent,
-                                1.0f to Color.Transparent
-                            )
-                        )
-                    )
+                    .graphicsLayer { alpha = gradientAlpha }
+                    .background(leftGradient)
             )
 
-            // Bottom gradient when scrolled past hero
-            if (isScrolledPastHero) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colorStops = arrayOf(
-                                    0.0f to Color.Transparent,
-                                    0.5f to Color.Transparent,
-                                    0.7f to NuvioColors.Background.copy(alpha = 0.5f),
-                                    0.85f to NuvioColors.Background.copy(alpha = 0.8f),
-                                    1.0f to NuvioColors.Background
-                                )
-                            )
-                        )
-                )
-            }
+            // Bottom gradient — always composed, alpha-controlled to avoid layout churn
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = bottomGradientAlpha }
+                    .background(bottomGradient)
+            )
         }
 
         // Single scrollable column with hero + content
@@ -242,27 +339,34 @@ private fun MetaDetailsContent(
             modifier = Modifier.fillMaxSize(),
             state = listState
         ) {
+            // Invisible focus anchor — captures initial focus so no button is highlighted on entry
+            item(key = "focus_anchor", contentType = "focus_anchor") {
+                Box(
+                    modifier = Modifier
+                        .focusRequester(initialFocusRequester)
+                        .focusable()
+                )
+                LaunchedEffect(Unit) {
+                    initialFocusRequester.requestFocus()
+                }
+            }
+
             // Hero as first item in the lazy column
-            item {
+            item(key = "hero", contentType = "hero") {
                 HeroContentSection(
                     meta = meta,
                     nextEpisode = nextEpisode,
                     nextToWatch = nextToWatch,
-                    onPlayClick = {
-                        if (heroVideo != null) {
-                            onEpisodeClick(heroVideo)
-                        } else {
-                            onPlayClick(meta.id)
-                        }
-                    },
+                    onPlayClick = heroPlayClick,
                     isInLibrary = isInLibrary,
-                    onToggleLibrary = onToggleLibrary
+                    onToggleLibrary = onToggleLibrary,
+                    isTrailerPlaying = isTrailerPlaying
                 )
             }
 
             // Season tabs and episodes for series
             if (isSeries && seasons.isNotEmpty()) {
-                item {
+                item(key = "season_tabs", contentType = "season_tabs") {
                     SeasonTabs(
                         seasons = seasons,
                         selectedSeason = selectedSeason,
@@ -270,7 +374,7 @@ private fun MetaDetailsContent(
                         selectedTabFocusRequester = selectedSeasonFocusRequester
                     )
                 }
-                item {
+                item(key = "episodes_$selectedSeason", contentType = "episodes") {
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
@@ -281,35 +385,29 @@ private fun MetaDetailsContent(
             }
 
             // Cast section below episodes
-                val castMembersToShow = if (meta.castMembers.isNotEmpty()) {
-                    meta.castMembers
-                } else {
-                    meta.cast.map { name -> MetaCastMember(name = name) }
-                }
-
-                if (castMembersToShow.isNotEmpty()) {
-                item {
-                        CastSection(cast = castMembersToShow)
+            if (castMembersToShow.isNotEmpty()) {
+                item(key = "cast", contentType = "horizontal_row") {
+                    CastSection(cast = castMembersToShow)
                 }
             }
 
-                if (meta.productionCompanies.isNotEmpty()) {
-                    item {
-                        CompanyLogosSection(
-                            title = "Production",
-                            companies = meta.productionCompanies
-                        )
-                    }
+            if (meta.productionCompanies.isNotEmpty()) {
+                item(key = "production", contentType = "horizontal_row") {
+                    CompanyLogosSection(
+                        title = "Production",
+                        companies = meta.productionCompanies
+                    )
                 }
+            }
 
-                if (meta.networks.isNotEmpty()) {
-                    item {
-                        CompanyLogosSection(
-                            title = "Network",
-                            companies = meta.networks
-                        )
-                    }
+            if (meta.networks.isNotEmpty()) {
+                item(key = "networks", contentType = "horizontal_row") {
+                    CompanyLogosSection(
+                        title = "Network",
+                        companies = meta.networks
+                    )
                 }
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.SkipInterval
+import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.model.Video
@@ -16,9 +17,18 @@ data class PlayerUiState(
     val title: String = "",
     val contentName: String? = null, // Series/show name (for series content)
     val releaseYear: String? = null, // Release year for movies
+    val contentType: String? = null,
     val currentStreamName: String? = null, // Name of the current stream source
+    val backdrop: String? = null,
+    val logo: String? = null,
+    val description: String? = null,
+    val castMembers: List<MetaCastMember> = emptyList(),
     val showControls: Boolean = true,
     val playbackSpeed: Float = 1f,
+    val loadingOverlayEnabled: Boolean = true,
+    val showLoadingOverlay: Boolean = true,
+    val pauseOverlayEnabled: Boolean = true,
+    val showPauseOverlay: Boolean = false,
     val audioTracks: List<TrackInfo> = emptyList(),
     val subtitleTracks: List<TrackInfo> = emptyList(),
     val selectedAudioTrackIndex: Int = -1,
@@ -78,6 +88,8 @@ data class TrackInfo(
     val index: Int,
     val name: String,
     val language: String?,
+    val codec: String? = null,
+    val channelCount: Int? = null,
     val isSelected: Boolean = false
 )
 
@@ -109,6 +121,7 @@ sealed class PlayerEvent {
     data object OnDismissDialog : PlayerEvent()
     data object OnRetry : PlayerEvent()
     data object OnParentalGuideHide : PlayerEvent()
+    data object OnDismissPauseOverlay : PlayerEvent()
     data object OnSkipIntro : PlayerEvent()
     data object OnDismissSkipIntro : PlayerEvent()
 }

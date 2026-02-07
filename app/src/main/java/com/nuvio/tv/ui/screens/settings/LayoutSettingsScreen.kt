@@ -1,0 +1,285 @@
+@file:OptIn(ExperimentalTvMaterial3Api::class)
+
+package com.nuvio.tv.ui.screens.settings
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.tv.foundation.lazy.list.TvLazyRow
+import androidx.tv.foundation.lazy.list.items
+import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.ui.components.ClassicLayoutPreview
+import com.nuvio.tv.ui.components.GridLayoutPreview
+import com.nuvio.tv.ui.theme.NuvioColors
+
+@Composable
+fun LayoutSettingsScreen(
+    viewModel: LayoutSettingsViewModel = hiltViewModel(),
+    onBackPress: () -> Unit
+) {
+    BackHandler { onBackPress() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioColors.Background)
+            .padding(horizontal = 48.dp, vertical = 24.dp)
+    ) {
+        Text(
+            text = "Home Layout",
+            style = MaterialTheme.typography.headlineLarge,
+            color = NuvioColors.TextPrimary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Choose your preferred home screen style",
+            style = MaterialTheme.typography.bodyMedium,
+            color = NuvioColors.TextSecondary
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        LayoutSettingsContent(viewModel = viewModel)
+    }
+}
+
+@Composable
+fun LayoutSettingsContent(
+    viewModel: LayoutSettingsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    Column {
+        // Layout cards
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            LayoutCard(
+                layout = HomeLayout.CLASSIC,
+                isSelected = uiState.selectedLayout == HomeLayout.CLASSIC,
+                onClick = {
+                    viewModel.onEvent(LayoutSettingsEvent.SelectLayout(HomeLayout.CLASSIC))
+                },
+                modifier = Modifier.weight(1f)
+            )
+
+            LayoutCard(
+                layout = HomeLayout.GRID,
+                isSelected = uiState.selectedLayout == HomeLayout.GRID,
+                onClick = {
+                    viewModel.onEvent(LayoutSettingsEvent.SelectLayout(HomeLayout.GRID))
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Hero catalog selector
+        if (uiState.availableCatalogs.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Hero Catalog",
+                style = MaterialTheme.typography.titleMedium,
+                color = NuvioColors.TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = "Choose which catalog powers the hero carousel",
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioColors.TextSecondary
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            TvLazyRow(
+                contentPadding = PaddingValues(end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(uiState.availableCatalogs) { catalog ->
+                    CatalogChip(
+                        catalogInfo = catalog,
+                        isSelected = catalog.key == uiState.heroCatalogKey,
+                        onClick = {
+                            viewModel.onEvent(LayoutSettingsEvent.SelectHeroCatalog(catalog.key))
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayoutCard(
+    layout: HomeLayout,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .onFocusChanged { isFocused = it.isFocused },
+        colors = CardDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            border = if (isSelected) Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(16.dp)
+            ) else Border.None,
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(16.dp)
+            )
+        ),
+        shape = CardDefaults.shape(RoundedCornerShape(16.dp)),
+        scale = CardDefaults.scale(focusedScale = 1.02f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Animated preview
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp)
+            ) {
+                when (layout) {
+                    HomeLayout.CLASSIC -> ClassicLayoutPreview(
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    HomeLayout.GRID -> GridLayoutPreview(
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = NuvioColors.FocusRing,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+
+                Text(
+                    text = layout.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = when (layout) {
+                    HomeLayout.CLASSIC -> "Horizontal rows per category"
+                    HomeLayout.GRID -> "Vertical grid with sticky headers"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = NuvioColors.TextTertiary
+            )
+        }
+    }
+}
+
+@Composable
+private fun CatalogChip(
+    catalogInfo: CatalogInfo,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ButtonDefaults.shape(
+            shape = RoundedCornerShape(20.dp)
+        ),
+        colors = ButtonDefaults.colors(
+            containerColor = if (isSelected) NuvioColors.FocusRing.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = ButtonDefaults.border(
+            border = if (isSelected) Border(
+                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(20.dp)
+            ) else Border.None,
+            focusedBorder = Border(
+                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(20.dp)
+            )
+        )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = catalogInfo.name,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+            )
+            Text(
+                text = catalogInfo.addonName,
+                style = MaterialTheme.typography.labelSmall,
+                color = NuvioColors.TextTertiary
+            )
+        }
+    }
+}

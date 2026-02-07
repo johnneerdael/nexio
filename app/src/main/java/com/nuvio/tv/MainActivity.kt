@@ -33,7 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.Icon
-import androidx.tv.material3.NavigationDrawer
+import androidx.tv.material3.ModalNavigationDrawer
 import androidx.tv.material3.NavigationDrawerItem
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.ui.navigation.NuvioNavHost
@@ -62,20 +63,28 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var themeDataStore: ThemeDataStore
 
+    @Inject
+    lateinit var layoutPreferenceDataStore: LayoutPreferenceDataStore
+
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.OCEAN)
+            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = null as Boolean?)
 
             NuvioTheme(appTheme = currentTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
+                    // Wait for DataStore to emit before rendering to avoid flickering
+                    val layoutChosen = hasChosenLayout ?: return@Surface
+
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
                     val updateState by updateViewModel.uiState.collectAsState()
 
+                    val startDestination = if (layoutChosen) Screen.Home.route else Screen.LayoutSelection.route
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
@@ -86,16 +95,13 @@ class MainActivity : ComponentActivity() {
                             Screen.Home.route,
                             Screen.Search.route,
                             Screen.Library.route,
+                            Screen.Settings.route,
                             Screen.AddonManager.route
                         )
                     }
 
                     LaunchedEffect(currentRoute) {
-                        if (currentRoute in rootRoutes) {
-                            drawerState.setValue(DrawerValue.Closed)
-                        } else {
-                            drawerState.setValue(DrawerValue.Closed)
-                        }
+                        drawerState.setValue(DrawerValue.Closed)
                     }
 
                     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
@@ -114,11 +120,14 @@ class MainActivity : ComponentActivity() {
 
                     val showSidebar = currentRoute in rootRoutes
 
-                    if (showSidebar) {
-                        NavigationDrawer(
-                            drawerState = drawerState,
-                            drawerContent = { drawerValue ->
-                                val drawerWidth = if (drawerValue == DrawerValue.Open) 260.dp else 72.dp
+                    val closedDrawerWidth = 72.dp
+                    val openDrawerWidth = 260.dp
+
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = { drawerValue ->
+                            if (showSidebar) {
+                                val drawerWidth = if (drawerValue == DrawerValue.Open) openDrawerWidth else closedDrawerWidth
                                 Column(
                                     modifier = Modifier
                                         .fillMaxHeight()
@@ -129,8 +138,8 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     if (drawerValue == DrawerValue.Open) {
                                         Image(
-                                            painter = painterResource(id = R.drawable.nuvio_text),
-                                            contentDescription = "Nuvio",
+                                            painter = painterResource(id = R.drawable.nuviotv_logo),
+                                            contentDescription = "NuvioTV",
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .height(48.dp)
@@ -192,14 +201,11 @@ class MainActivity : ComponentActivity() {
                                     Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                NuvioNavHost(navController = navController)
-                            }
                         }
-                    } else {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            NuvioNavHost(navController = navController)
+                    ) {
+                        val contentStartPadding = if (showSidebar) closedDrawerWidth else 0.dp
+                        Box(modifier = Modifier.fillMaxSize().padding(start = contentStartPadding)) {
+                            NuvioNavHost(navController = navController, startDestination = startDestination)
                         }
                     }
 

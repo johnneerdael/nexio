@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyRow
@@ -32,6 +34,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.ui.components.ContentCard
+import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -69,11 +72,10 @@ fun LibraryScreen(
 
         item {
             if (filteredItems.isEmpty()) {
-                Text(
-                    text = "No ${selectedTab.label.lowercase()} saved yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioTheme.extendedColors.textSecondary,
-                    modifier = Modifier.padding(start = 48.dp)
+                EmptyScreenState(
+                    title = "No ${selectedTab.label.lowercase()} yet",
+                    subtitle = "Start saving your favorite ${selectedTab.label.lowercase()} to see them here",
+                    icon = Icons.Default.BookmarkBorder
                 )
             }
         }

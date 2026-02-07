@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.TrailerSettings
+import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -14,13 +16,46 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val playerSettingsDataStore: PlayerSettingsDataStore
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore
 ) : ViewModel() {
 
-    /**
-     * Flow of current player settings
-     */
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
+    val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
+
+    suspend fun setTrailerEnabled(enabled: Boolean) {
+        trailerSettingsDataStore.setEnabled(enabled)
+    }
+
+    suspend fun setTrailerDelaySeconds(seconds: Int) {
+        trailerSettingsDataStore.setDelaySeconds(seconds)
+    }
+
+    // Audio settings
+
+    suspend fun setDecoderPriority(priority: Int) {
+        playerSettingsDataStore.setDecoderPriority(priority)
+    }
+
+    suspend fun setTunnelingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setTunnelingEnabled(enabled)
+    }
+
+    suspend fun setSkipSilence(enabled: Boolean) {
+        playerSettingsDataStore.setSkipSilence(enabled)
+    }
+
+    suspend fun setPreferredAudioLanguage(language: String) {
+        playerSettingsDataStore.setPreferredAudioLanguage(language)
+    }
+
+    suspend fun setLoadingOverlayEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setLoadingOverlayEnabled(enabled)
+    }
+
+    suspend fun setPauseOverlayEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setPauseOverlayEnabled(enabled)
+    }
 
     /**
      * Calculate maximum safe buffer size based on device's available heap memory.

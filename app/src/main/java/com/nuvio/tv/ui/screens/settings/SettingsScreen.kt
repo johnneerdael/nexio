@@ -2,40 +2,62 @@
 
 package com.nuvio.tv.ui.screens.settings
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.tv.foundation.lazy.list.TvLazyRow
+import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -49,8 +71,9 @@ import com.nuvio.tv.ui.theme.NuvioColors
 
 private enum class SettingsCategory(val displayName: String, val icon: ImageVector) {
     APPEARANCE("Appearance", Icons.Default.Palette),
+    LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
-    TMDB("TMDB Enrichment", Icons.Default.Tune),
+    TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
     ABOUT("About", Icons.Default.Info)
 }
@@ -60,58 +83,143 @@ fun SettingsScreen(
     onNavigateToPlugins: () -> Unit = {},
 ) {
     var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
+    var previousIndex by remember { mutableIntStateOf(0) }
+    val pluginViewModel: PluginViewModel = hiltViewModel()
+    val pluginUiState by pluginViewModel.uiState.collectAsState()
 
-    Row(
+    val accentColor = NuvioColors.Secondary
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioColors.Background)
     ) {
-        // Left sidebar
-        Column(
+        // ── Top header area with gradient accent line ──
+        Box(
             modifier = Modifier
-                .width(300.dp)
-                .fillMaxHeight()
-                .padding(start = 40.dp, top = 32.dp, bottom = 24.dp, end = 16.dp)
+                .fillMaxWidth()
+                .drawBehind {
+                    // Subtle gradient glow at the very top
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                accentColor.copy(alpha = 0.08f),
+                                Color.Transparent
+                            ),
+                            startY = 0f,
+                            endY = size.height
+                        )
+                    )
+                }
+                .padding(start = 48.dp, end = 48.dp, top = 28.dp, bottom = 8.dp)
         ) {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            SettingsCategory.entries.forEach { category ->
-                SidebarCategoryItem(
-                    category = category,
-                    isSelected = selectedCategory == category,
-                    onClick = {
-                        selectedCategory = category
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = NuvioColors.TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+
+                // Current category label on the right
+                Text(
+                    text = selectedCategory.displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = NuvioColors.TextTertiary,
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
 
-        // Right content panel
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // ── Horizontal category tabs ──
+        TvLazyRow(
+            contentPadding = PaddingValues(horizontal = 48.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(SettingsCategory.entries.toList()) { index, category ->
+                CategoryTab(
+                    category = category,
+                    isSelected = selectedCategory == category,
+                    accentColor = accentColor,
+                    onClick = {
+                        previousIndex = selectedCategory.ordinal
+                        selectedCategory = category
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Thin accent divider ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 48.dp)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            NuvioColors.Border.copy(alpha = 0.6f),
+                            NuvioColors.Border.copy(alpha = 0.6f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // ── Content area with animated transitions ──
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 16.dp, end = 32.dp, bottom = 16.dp)
+                .padding(horizontal = 36.dp, vertical = 8.dp)
                 .background(
-                    color = NuvioColors.BackgroundCard,
-                    shape = RoundedCornerShape(16.dp)
+                    color = NuvioColors.BackgroundElevated.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(20.dp)
                 )
-                .padding(32.dp)
+                .padding(24.dp)
         ) {
-            Crossfade(targetState = selectedCategory, label = "settings_content") { category ->
+            val currentIndex = selectedCategory.ordinal
+
+            AnimatedContent(
+                targetState = selectedCategory,
+                transitionSpec = {
+                    val direction = if (currentIndex >= previousIndex) 1 else -1
+                    (slideInHorizontally(
+                        initialOffsetX = { fullWidth -> direction * (fullWidth / 5) },
+                        animationSpec = tween(300)
+                    ) + fadeIn(animationSpec = tween(300)))
+                        .togetherWith(
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> -direction * (fullWidth / 5) },
+                                animationSpec = tween(300)
+                            ) + fadeOut(animationSpec = tween(200))
+                        )
+                },
+                label = "settings_content"
+            ) { category ->
                 when (category) {
                     SettingsCategory.APPEARANCE -> ThemeSettingsContent()
+                    SettingsCategory.LAYOUT -> LayoutSettingsContent()
                     SettingsCategory.PLAYBACK -> PlaybackSettingsContent()
                     SettingsCategory.TMDB -> TmdbSettingsContent()
                     SettingsCategory.ABOUT -> AboutSettingsContent()
-                    SettingsCategory.PLUGINS -> PluginScreenContent()
+                    SettingsCategory.PLUGINS -> PluginScreenContent(
+                        uiState = pluginUiState,
+                        viewModel = pluginViewModel
+                    )
                 }
             }
         }
@@ -119,51 +227,86 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SidebarCategoryItem(
+private fun CategoryTab(
     category: SettingsCategory,
     isSelected: Boolean,
+    accentColor: Color,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.FocusBackground else Color.Transparent,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(12.dp)
-            )
-        ),
-        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.0f)
-    ) {
-        Row(
+    val bottomBarWidth by animateDpAsState(
+        targetValue = if (isSelected) 24.dp else 0.dp,
+        animationSpec = tween(durationMillis = 300),
+        label = "tab_indicator"
+    )
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Card(
+            onClick = onClick,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .onFocusChanged { isFocused = it.isFocused },
+            colors = CardDefaults.colors(
+                containerColor = when {
+                    isSelected -> accentColor.copy(alpha = 0.12f)
+                    else -> Color.Transparent
+                },
+                focusedContainerColor = accentColor.copy(alpha = 0.18f)
+            ),
+            border = CardDefaults.border(
+                border = if (isSelected) Border(
+                    border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(14.dp)
+                ) else Border.None,
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, accentColor.copy(alpha = 0.7f)),
+                    shape = RoundedCornerShape(14.dp)
+                )
+            ),
+            shape = CardDefaults.shape(RoundedCornerShape(14.dp)),
+            scale = CardDefaults.scale(focusedScale = 1.05f)
         ) {
-            Icon(
-                imageVector = category.icon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = if (isSelected || isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
-            )
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = category.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = when {
+                        isSelected -> accentColor
+                        isFocused -> accentColor.copy(alpha = 0.8f)
+                        else -> NuvioColors.TextTertiary
+                    }
+                )
 
-            Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-            Text(
-                text = category.displayName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
-            )
+                Text(
+                    text = category.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = when {
+                        isSelected -> NuvioColors.TextPrimary
+                        isFocused -> NuvioColors.TextPrimary
+                        else -> NuvioColors.TextSecondary
+                    }
+                )
+            }
         }
+
+        // Animated accent underline indicator
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .width(bottomBarWidth)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(
+                    if (isSelected) accentColor else Color.Transparent
+                )
+        )
     }
 }

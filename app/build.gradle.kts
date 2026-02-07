@@ -28,6 +28,7 @@ android {
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
+        buildConfigField("String", "TRAILER_API_URL", "\"${localProperties.getProperty("TRAILER_API_URL", "")}\"")
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
@@ -44,8 +45,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            isDebuggable = false
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -131,6 +140,7 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.session)
     implementation(libs.media3.common)
+    implementation(libs.media3.extractor)
     
     // Media3 FFmpeg Decoder Extension (locally built AAR)
     implementation(files("libs/media3-decoder-ffmpeg.aar"))
@@ -148,6 +158,12 @@ dependencies {
 
     // Bundle real crypto-js (JS) for QuickJS plugins
     implementation(libs.crypto.js)
+    // QR code + local server for addon management
+    implementation(libs.nanohttpd)
+    implementation(libs.zxing.core)
+
+    // Bundle real crypto-js (JS) for QuickJS plugins
+    implementation("org.webjars.npm:crypto-js:4.2.0")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

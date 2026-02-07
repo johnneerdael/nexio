@@ -1,9 +1,12 @@
 package com.nuvio.tv.ui.screens.home
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Stores focus and scroll state for the HomeScreen to enable proper state restoration
  * when navigating back from detail screens.
  */
+@Immutable
 data class HomeScreenFocusState(
     /**
      * The index of the first visible item in the main vertical LazyColumn.

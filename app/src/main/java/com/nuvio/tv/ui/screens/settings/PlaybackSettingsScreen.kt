@@ -74,10 +74,19 @@ import androidx.tv.material3.Switch
 import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
+import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Image
 
 // Preset colors for subtitle customization
 private val SUBTITLE_COLORS = listOf(
@@ -159,6 +168,7 @@ fun PlaybackSettingsContent(
     viewModel: PlaybackSettingsViewModel = hiltViewModel()
 ) {
     val playerSettings by viewModel.playerSettings.collectAsState(initial = PlayerSettings())
+    val trailerSettings by viewModel.trailerSettings.collectAsState(initial = TrailerSettings())
     val coroutineScope = rememberCoroutineScope()
 
     // Dialog states
@@ -167,6 +177,8 @@ fun PlaybackSettingsContent(
     var showTextColorDialog by remember { mutableStateOf(false) }
     var showBackgroundColorDialog by remember { mutableStateOf(false) }
     var showOutlineColorDialog by remember { mutableStateOf(false) }
+    var showAudioLanguageDialog by remember { mutableStateOf(false) }
+    var showDecoderPriorityDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -190,8 +202,185 @@ fun PlaybackSettingsContent(
             contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Image,
+                    title = "Loading Overlay",
+                    subtitle = "Show a loading screen until the first video frame appears",
+                    isChecked = playerSettings.loadingOverlayEnabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setLoadingOverlayEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.PauseCircle,
+                    title = "Pause Overlay",
+                    subtitle = "Show a details overlay after 5 seconds of no input while paused",
+                    isChecked = playerSettings.pauseOverlayEnabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setPauseOverlayEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
+            // Trailer Section Header
+            item {
+                Text(
+                    text = "Trailer",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.PlayCircle,
+                    title = "Auto-play Trailers",
+                    subtitle = "Automatically play trailers on the detail screen after a period of inactivity",
+                    isChecked = trailerSettings.enabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setTrailerEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
+            if (trailerSettings.enabled) {
+                item {
+                    SliderSettingsItem(
+                        icon = Icons.Default.Timer,
+                        title = "Trailer Delay",
+                        value = trailerSettings.delaySeconds,
+                        valueText = "${trailerSettings.delaySeconds}s",
+                        minValue = 3,
+                        maxValue = 15,
+                        step = 1,
+                        onValueChange = { newDelay ->
+                            coroutineScope.launch {
+                                viewModel.setTrailerDelaySeconds(newDelay)
+                            }
+                        }
+                    )
+                }
+            }
+
+            // Audio Section Header
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Audio",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+
+            item {
+                Text(
+                    text = "Audio passthrough (TrueHD, DTS, AC-3, etc.) is automatic. When connected to a compatible AV receiver or soundbar via HDMI, lossless audio is sent as-is without decoding.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
+            // Preferred Audio Language
+            item {
+                val audioLangName = when (playerSettings.preferredAudioLanguage) {
+                    AudioLanguageOption.DEFAULT -> "Default (media file)"
+                    AudioLanguageOption.DEVICE -> "Device language"
+                    else -> AVAILABLE_SUBTITLE_LANGUAGES.find {
+                        it.code == playerSettings.preferredAudioLanguage
+                    }?.name ?: playerSettings.preferredAudioLanguage
+                }
+
+                NavigationSettingsItem(
+                    icon = Icons.Default.Language,
+                    title = "Preferred Audio Language",
+                    subtitle = audioLangName,
+                    onClick = { showAudioLanguageDialog = true }
+                )
+            }
+
+            // Skip Silence
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Speed,
+                    title = "Skip Silence",
+                    subtitle = "Skip silent portions of audio during playback",
+                    isChecked = playerSettings.skipSilence,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setSkipSilence(enabled)
+                        }
+                    }
+                )
+            }
+
+            // Advanced Audio Section
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Advanced Audio",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+
+            item {
+                Text(
+                    text = "These settings may cause issues on some devices. Change only if you know what you're doing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFF9800),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
+            // Decoder Priority
+            item {
+                val decoderName = when (playerSettings.decoderPriority) {
+                    0 -> "Device decoders only"
+                    1 -> "Prefer device decoders"
+                    2 -> "Prefer app decoders (FFmpeg)"
+                    else -> "Prefer device decoders"
+                }
+
+                NavigationSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = "Decoder Priority",
+                    subtitle = decoderName,
+                    onClick = { showDecoderPriorityDialog = true }
+                )
+            }
+
+            // Tunneled Playback
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.VolumeUp,
+                    title = "Tunneled Playback",
+                    subtitle = "Hardware-level audio/video sync. May improve playback on some Android TV devices",
+                    isChecked = playerSettings.tunnelingEnabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setTunnelingEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
             // Subtitle Style Settings Section Header
             item {
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Subtitles",
                     style = MaterialTheme.typography.titleMedium,
@@ -675,6 +864,34 @@ fun PlaybackSettingsContent(
                 showOutlineColorDialog = false
             },
             onDismiss = { showOutlineColorDialog = false }
+        )
+    }
+
+    // Audio Language Selection Dialog
+    if (showAudioLanguageDialog) {
+        AudioLanguageSelectionDialog(
+            selectedLanguage = playerSettings.preferredAudioLanguage,
+            onLanguageSelected = { language ->
+                coroutineScope.launch {
+                    viewModel.setPreferredAudioLanguage(language)
+                }
+                showAudioLanguageDialog = false
+            },
+            onDismiss = { showAudioLanguageDialog = false }
+        )
+    }
+
+    // Decoder Priority Selection Dialog
+    if (showDecoderPriorityDialog) {
+        DecoderPriorityDialog(
+            selectedPriority = playerSettings.decoderPriority,
+            onPrioritySelected = { priority ->
+                coroutineScope.launch {
+                    viewModel.setDecoderPriority(priority)
+                }
+                showDecoderPriorityDialog = false
+            },
+            onDismiss = { showDecoderPriorityDialog = false }
         )
     }
 }
@@ -1428,6 +1645,209 @@ private fun ColorOption(
                     tint = if (color == Color.White || color == Color.Yellow) Color.Black else Color.White,
                     modifier = Modifier.size(20.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioLanguageSelectionDialog(
+    selectedLanguage: String,
+    onLanguageSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val specialOptions = listOf(
+        AudioLanguageOption.DEFAULT to "Default (media file)",
+        AudioLanguageOption.DEVICE to "Device language"
+    )
+    val allOptions = specialOptions + AVAILABLE_SUBTITLE_LANGUAGES.map { it.code to it.name }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard
+            ),
+            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(400.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Preferred Audio Language",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TvLazyColumn(
+                    modifier = Modifier.height(400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(allOptions.size) { index ->
+                        val (code, name) = allOptions[index]
+                        val isSelected = code == selectedLanguage
+                        var isFocused by remember { mutableStateOf(false) }
+
+                        Card(
+                            onClick = { onLanguageSelected(code) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
+                                .onFocusChanged { isFocused = it.isFocused },
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DecoderPriorityDialog(
+    selectedPriority: Int,
+    onPrioritySelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = listOf(
+        Triple(0, "Device decoders only", "Only use built-in hardware decoders. Most compatible but may not support all formats."),
+        Triple(1, "Prefer device decoders", "Use hardware decoders when available, fall back to FFmpeg. Recommended for most devices."),
+        Triple(2, "Prefer app decoders (FFmpeg)", "Use FFmpeg decoders when available. Better format support but higher CPU usage.")
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard
+            ),
+            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(420.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Decoder Priority",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Controls whether hardware or software (FFmpeg) decoders are used for audio and video",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextSecondary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TvLazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(options.size) { index ->
+                        val (priority, title, description) = options[index]
+                        val isSelected = priority == selectedPriority
+                        var isFocused by remember { mutableStateOf(false) }
+
+                        Card(
+                            onClick = { onPrioritySelected(priority) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
+                                .onFocusChanged { isFocused = it.isFocused },
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = description,
+                                        color = NuvioColors.TextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

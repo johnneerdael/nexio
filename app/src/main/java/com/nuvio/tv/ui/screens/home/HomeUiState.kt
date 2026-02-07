@@ -1,16 +1,51 @@
 package com.nuvio.tv.ui.screens.home
 
+import androidx.compose.runtime.Immutable
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.WatchProgress
 
+@Immutable
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<WatchProgress> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedItemId: String? = null,
-    val installedAddonsCount: Int = 0
+    val installedAddonsCount: Int = 0,
+    val homeLayout: HomeLayout = HomeLayout.CLASSIC,
+    val heroItems: List<MetaPreview> = emptyList(),
+    val heroCatalogKey: String? = null,
+    val gridItems: List<GridItem> = emptyList()
 )
+
+@Immutable
+sealed class GridItem {
+    @Immutable
+    data class Hero(val items: List<MetaPreview>) : GridItem()
+    @Immutable
+    data class SectionDivider(
+        val catalogName: String,
+        val catalogId: String,
+        val addonBaseUrl: String,
+        val addonId: String,
+        val type: String
+    ) : GridItem()
+    @Immutable
+    data class Content(
+        val item: MetaPreview,
+        val addonBaseUrl: String,
+        val catalogId: String,
+        val catalogName: String
+    ) : GridItem()
+    @Immutable
+    data class SeeAll(
+        val catalogId: String,
+        val addonId: String,
+        val type: String
+    ) : GridItem()
+}
 
 sealed class HomeEvent {
     data class OnItemClick(val itemId: String, val itemType: String) : HomeEvent()

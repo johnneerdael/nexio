@@ -1,5 +1,12 @@
 package com.nuvio.tv.ui.screens.detail
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,8 +63,26 @@ fun HeroContentSection(
     nextToWatch: NextToWatch?,
     onPlayClick: () -> Unit,
     isInLibrary: Boolean,
-    onToggleLibrary: () -> Unit
+    onToggleLibrary: () -> Unit,
+    isTrailerPlaying: Boolean = false
 ) {
+    // Animate logo properties for trailer mode
+    val logoHeight by animateDpAsState(
+        targetValue = if (isTrailerPlaying) 60.dp else 100.dp,
+        animationSpec = tween(600),
+        label = "logoHeight"
+    )
+    val logoBottomPadding by animateDpAsState(
+        targetValue = if (isTrailerPlaying) 24.dp else 16.dp,
+        animationSpec = tween(600),
+        label = "logoPadding"
+    )
+    val logoMaxWidth by animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0.25f else 0.4f,
+        animationSpec = tween(600),
+        label = "logoWidth"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -67,89 +92,121 @@ fun HeroContentSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .animateContentSize(animationSpec = tween(600))
                 .padding(start = 48.dp, end = 48.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.Bottom
         ) {
+            // Logo/Title — always visible during trailer, animates size
             if (meta.logo != null) {
                 FadeInAsyncImage(
                     model = meta.logo,
                     contentDescription = meta.name,
                     modifier = Modifier
-                        .height(100.dp)
-                        .fillMaxWidth(0.4f)
-                        .padding(bottom = 16.dp),
+                        .height(logoHeight)
+                        .fillMaxWidth(logoMaxWidth)
+                        .padding(bottom = logoBottomPadding),
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.CenterStart,
                     fadeDurationMs = 500
                 )
             } else {
+                // Text title hides entirely during trailer
+                AnimatedVisibility(
+                    visible = !isTrailerPlaying,
+                    enter = fadeIn(tween(400)),
+                    exit = fadeOut(tween(400))
+                ) {
+                    Text(
+                        text = meta.name,
+                        style = MaterialTheme.typography.displayMedium,
+                        color = NuvioColors.TextPrimary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+            }
+
+            // "Press back to exit" hint during trailer
+            AnimatedVisibility(
+                visible = isTrailerPlaying,
+                enter = fadeIn(tween(600)),
+                exit = fadeOut(tween(300))
+            ) {
                 Text(
-                    text = meta.name,
-                    style = MaterialTheme.typography.displayMedium,
-                    color = NuvioColors.TextPrimary,
+                    text = "Press back to exit trailer",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NuvioColors.TextTertiary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Everything below the logo fades out during trailer
+            AnimatedVisibility(
+                visible = !isTrailerPlaying,
+                enter = fadeIn(tween(400)),
+                exit = fadeOut(tween(400))
             ) {
-                PlayButton(
-                    text = nextToWatch?.displayText ?: when {
-                        nextEpisode != null -> "Play S${nextEpisode.season}, E${nextEpisode.episode}"
-                        else -> "Play"
-                    },
-                    onClick = onPlayClick
-                )
+                Column {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PlayButton(
+                            text = nextToWatch?.displayText ?: when {
+                                nextEpisode != null -> "Play S${nextEpisode.season}, E${nextEpisode.episode}"
+                                else -> "Play"
+                            },
+                            onClick = onPlayClick
+                        )
 
-                ActionIconButton(
-                    icon = if (isInLibrary) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = if (isInLibrary) "Remove from library" else "Add to library",
-                    onClick = onToggleLibrary
-                )
+                        ActionIconButton(
+                            icon = if (isInLibrary) Icons.Default.Check else Icons.Default.Add,
+                            contentDescription = if (isInLibrary) "Remove from library" else "Add to library",
+                            onClick = onToggleLibrary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Director/Writer line above description
+                    val directorLine = meta.director.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    val writerLine = meta.writer.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    val creditLine = if (!directorLine.isNullOrBlank()) {
+                        "Director: $directorLine"
+                    } else if (!writerLine.isNullOrBlank()) {
+                        "Writer: $writerLine"
+                    } else {
+                        null
+                    }
+
+                    if (!creditLine.isNullOrBlank()) {
+                        Text(
+                            text = creditLine,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = NuvioTheme.extendedColors.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Always show series/movie description, not episode description
+                    if (meta.description != null) {
+                        Text(
+                            text = meta.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = NuvioColors.TextPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth(0.6f)
+                                .padding(bottom = 12.dp)
+                        )
+                    }
+
+                    MetaInfoRow(meta = meta)
+                }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Director/Writer line above description
-            val directorLine = meta.director.takeIf { it.isNotEmpty() }?.joinToString(", ")
-            val writerLine = meta.writer.takeIf { it.isNotEmpty() }?.joinToString(", ")
-            val creditLine = if (!directorLine.isNullOrBlank()) {
-                "Director: $directorLine"
-            } else if (!writerLine.isNullOrBlank()) {
-                "Writer: $writerLine"
-            } else {
-                null
-            }
-
-            if (!creditLine.isNullOrBlank()) {
-                Text(
-                    text = creditLine,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = NuvioTheme.extendedColors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(0.6f)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // Always show series/movie description, not episode description
-            if (meta.description != null) {
-                Text(
-                    text = meta.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .padding(bottom = 12.dp)
-                )
-            }
-
-            MetaInfoRow(meta = meta)
         }
     }
 }
@@ -241,6 +298,12 @@ private fun ActionIconButton(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun MetaInfoRow(meta: Meta) {
+    val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
+    val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
+    val yearText = remember(meta.releaseInfo) {
+        meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Primary row: Genres, Runtime, Release, Ratings
         Row(
@@ -250,7 +313,7 @@ private fun MetaInfoRow(meta: Meta) {
             // Show all genres
             if (meta.genres.isNotEmpty()) {
                 Text(
-                    text = meta.genres.joinToString(" • "),
+                    text = genresText,
                     style = MaterialTheme.typography.labelLarge,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
@@ -258,18 +321,16 @@ private fun MetaInfoRow(meta: Meta) {
             }
 
             // Runtime
-            meta.runtime?.let { runtime ->
+            runtimeText?.let { text ->
                 Text(
-                    text = formatRuntime(runtime),
+                    text = text,
                     style = MaterialTheme.typography.labelLarge,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
                 MetaInfoDivider()
             }
 
-            meta.releaseInfo?.let { releaseInfo ->
-                // Extract year from release info (format: YYYY-MM-DD or just YYYY)
-                val year = releaseInfo.split("-").firstOrNull() ?: releaseInfo
+            yearText?.let { year ->
                 Text(
                     text = year,
                     style = MaterialTheme.typography.labelLarge,
@@ -284,17 +345,21 @@ private fun MetaInfoRow(meta: Meta) {
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val context = LocalContext.current
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
+                    val imdbModel = remember {
+                        ImageRequest.Builder(context)
                             .data(com.nuvio.tv.R.raw.imdb_logo_2016)
                             .decoderFactory(SvgDecoder.Factory())
-                            .build(),
+                            .build()
+                    }
+                    AsyncImage(
+                        model = imdbModel,
                         contentDescription = "Rating",
                         modifier = Modifier.size(30.dp),
                         contentScale = ContentScale.Fit
                     )
+                    val ratingText = remember(rating) { String.format("%.1f", rating) }
                     Text(
-                        text = String.format("%.1f", rating),
+                        text = ratingText,
                         style = MaterialTheme.typography.labelLarge,
                         color = NuvioTheme.extendedColors.textSecondary
                     )

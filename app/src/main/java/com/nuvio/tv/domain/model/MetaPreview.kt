@@ -10,6 +10,7 @@ data class MetaPreview(
     val poster: String?,
     val posterShape: PosterShape,
     val background: String?,
+    val logo: String?,
     val description: String?,
     val releaseInfo: String?,
     val imdbRating: Float?,
