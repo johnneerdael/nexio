@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -312,8 +313,17 @@ fun PlayerScreen(
             )
         }
 
+        LoadingOverlay(
+            visible = uiState.showLoadingOverlay && uiState.error == null,
+            backdropUrl = uiState.backdrop,
+            logoUrl = uiState.logo,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2f)
+        )
+
         // Buffering indicator
-        if (uiState.isBuffering) {
+        if (uiState.isBuffering && !uiState.showLoadingOverlay) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -778,7 +788,8 @@ private fun ErrorOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.9f)),
+            .background(Color.Black.copy(alpha = 0.9f))
+            .zIndex(3f),
         contentAlignment = Alignment.Center
     ) {
         Column(

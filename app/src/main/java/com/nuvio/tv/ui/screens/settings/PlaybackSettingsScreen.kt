@@ -194,6 +194,20 @@ fun PlaybackSettingsContent(
             contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Warning,
+                    title = "Loading Overlay",
+                    subtitle = "Show a loading screen until the first video frame appears",
+                    isChecked = playerSettings.loadingOverlayEnabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setLoadingOverlayEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
             // Trailer Section Header
             item {
                 Text(

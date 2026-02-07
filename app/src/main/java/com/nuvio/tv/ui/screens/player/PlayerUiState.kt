@@ -17,8 +17,12 @@ data class PlayerUiState(
     val contentName: String? = null, // Series/show name (for series content)
     val releaseYear: String? = null, // Release year for movies
     val currentStreamName: String? = null, // Name of the current stream source
+    val backdrop: String? = null,
+    val logo: String? = null,
     val showControls: Boolean = true,
     val playbackSpeed: Float = 1f,
+    val loadingOverlayEnabled: Boolean = true,
+    val showLoadingOverlay: Boolean = true,
     val audioTracks: List<TrackInfo> = emptyList(),
     val subtitleTracks: List<TrackInfo> = emptyList(),
     val selectedAudioTrackIndex: Int = -1,

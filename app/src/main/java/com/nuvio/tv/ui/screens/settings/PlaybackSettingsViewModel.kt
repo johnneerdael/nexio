@@ -45,6 +45,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPreferredAudioLanguage(language)
     }
 
+    suspend fun setLoadingOverlayEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setLoadingOverlayEnabled(enabled)
+    }
+
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
      */

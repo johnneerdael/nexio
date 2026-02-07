@@ -128,6 +128,9 @@ class PlayerViewModel @Inject constructor(
             contentName = contentName,
             currentStreamName = streamName,
             releaseYear = year,
+            backdrop = backdrop,
+            logo = logo,
+            showLoadingOverlay = true,
             currentSeason = currentSeason,
             currentEpisode = currentEpisode,
             currentEpisodeTitle = currentEpisodeTitle
@@ -149,6 +152,7 @@ class PlayerViewModel @Inject constructor(
 
     // Track whether playback has started (for parental guide trigger)
     private var playbackStartedForParentalGuide = false
+    private var hasRenderedFirstFrame = false
 
     // Skip intro
     private var skipIntervals: List<SkipInterval> = emptyList()
@@ -210,7 +214,21 @@ class PlayerViewModel @Inject constructor(
     private fun observeSubtitleSettings() {
         viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collect { settings ->
-                _uiState.update { it.copy(subtitleStyle = settings.subtitleStyle) }
+                _uiState.update { state ->
+                    val shouldShowOverlay = if (settings.loadingOverlayEnabled && !hasRenderedFirstFrame) {
+                        true
+                    } else if (!settings.loadingOverlayEnabled) {
+                        false
+                    } else {
+                        state.showLoadingOverlay
+                    }
+
+                    state.copy(
+                        subtitleStyle = settings.subtitleStyle,
+                        loadingOverlayEnabled = settings.loadingOverlayEnabled,
+                        showLoadingOverlay = shouldShowOverlay
+                    )
+                }
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
                     settings.subtitleStyle.secondaryPreferredLanguage
@@ -350,13 +368,14 @@ class PlayerViewModel @Inject constructor(
     @OptIn(UnstableApi::class)
     private fun initializePlayer(url: String, headers: Map<String, String>) {
         if (url.isEmpty()) {
-            _uiState.update { it.copy(error = "No stream URL provided") }
+            _uiState.update { it.copy(error = "No stream URL provided", showLoadingOverlay = false) }
             return
         }
 
         viewModelScope.launch {
             try {
                 autoSubtitleSelected = false
+                resetLoadingOverlayForNewStream()
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val useLibass = playerSettings.useLibass
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
@@ -463,6 +482,16 @@ class PlayerViewModel @Inject constructor(
                                     duration = duration.coerceAtLeast(0L)
                                 )
                             }
+
+                            if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
+                                _uiState.update { state ->
+                                    if (state.loadingOverlayEnabled && !state.showLoadingOverlay) {
+                                        state.copy(showLoadingOverlay = true)
+                                    } else {
+                                        state
+                                    }
+                                }
+                            }
                         
                             // Handle pending seek position when player is ready
                             if (playbackState == Player.STATE_READY) {
@@ -497,16 +526,36 @@ class PlayerViewModel @Inject constructor(
                             updateAvailableTracks(tracks)
                         }
 
+                        override fun onRenderedFirstFrame() {
+                            hasRenderedFirstFrame = true
+                            _uiState.update { it.copy(showLoadingOverlay = false) }
+                        }
+
                         override fun onPlayerError(error: PlaybackException) {
                             _uiState.update { 
-                                it.copy(error = error.message ?: "Playback error occurred")
+                                it.copy(
+                                    error = error.message ?: "Playback error occurred",
+                                    showLoadingOverlay = false
+                                )
                             }
                         }
                     })
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to initialize player") }
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Failed to initialize player",
+                        showLoadingOverlay = false
+                    )
+                }
             }
+        }
+    }
+
+    private fun resetLoadingOverlayForNewStream() {
+        hasRenderedFirstFrame = false
+        _uiState.update { state ->
+            state.copy(showLoadingOverlay = state.loadingOverlayEnabled)
         }
     }
 
@@ -716,6 +765,7 @@ class PlayerViewModel @Inject constructor(
         currentStreamUrl = url
         currentHeaders = newHeaders
         lastSavedPosition = 0L
+        resetLoadingOverlayForNewStream()
 
         _uiState.update {
             it.copy(
@@ -933,6 +983,7 @@ class PlayerViewModel @Inject constructor(
         currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
 
         lastSavedPosition = 0L
+        resetLoadingOverlayForNewStream()
 
         _uiState.update {
             it.copy(
@@ -1342,7 +1393,13 @@ class PlayerViewModel @Inject constructor(
                 scheduleHideControls()
             }
             PlayerEvent.OnRetry -> {
-                _uiState.update { it.copy(error = null) }
+                hasRenderedFirstFrame = false
+                _uiState.update { state ->
+                    state.copy(
+                        error = null,
+                        showLoadingOverlay = state.loadingOverlayEnabled
+                    )
+                }
                 releasePlayer()
                 initializePlayer(currentStreamUrl, currentHeaders)
             }
