@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltViewModel
@@ -87,7 +89,10 @@ class AddonManagerViewModel @Inject constructor(
     }
 
     private fun normalizeAddonUrl(input: String): String? {
-        val trimmed = input.trim()
+        var trimmed = input.trim()
+        if (trimmed.startsWith("stremio://")) {
+            trimmed = trimmed.replaceFirst("stremio://", "https://")
+        }
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             return null
         }
@@ -99,6 +104,10 @@ class AddonManagerViewModel @Inject constructor(
         }
 
         return withoutManifest.trimEnd('/')
+    }
+
+    private fun normalizeUrlForComparison(url: String): String {
+        return url.trim().trimEnd('/').lowercase()
     }
 
     fun removeAddon(baseUrl: String) {
@@ -151,13 +160,13 @@ class AddonManagerViewModel @Inject constructor(
                 _uiState.value.installedAddons.map { addon ->
                     AddonConfigServer.AddonInfo(
                         url = addon.baseUrl,
-                        name = addon.name,
+                        name = addon.name.ifBlank { addon.baseUrl },
                         description = addon.description
                     )
                 }
             },
             onChangeProposed = { change -> handleChangeProposed(change) },
-            logoProvider = { logoBytes }
+            manifestFetcher = { url -> fetchAddonInfo(url) }
         )
 
         val activeServer = server
@@ -191,17 +200,36 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
+    private fun fetchAddonInfo(url: String): AddonConfigServer.AddonInfo? {
+        return try {
+            runBlocking {
+                when (val result = addonRepository.fetchAddon(url)) {
+                    is NetworkResult.Success -> AddonConfigServer.AddonInfo(
+                        url = result.data.baseUrl,
+                        name = result.data.name.ifBlank { url },
+                        description = result.data.description
+                    )
+                    else -> null
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun stopServerInternal() {
         server?.stop()
         server = null
     }
 
     private fun handleChangeProposed(change: AddonConfigServer.PendingAddonChange) {
-        val currentUrls = _uiState.value.installedAddons.map { it.baseUrl }.toSet()
-        val proposedUrls = change.proposedUrls.toSet()
+        val currentUrls = _uiState.value.installedAddons.map { normalizeUrlForComparison(it.baseUrl) }.toSet()
+        val proposedNormalized = change.proposedUrls.map { normalizeUrlForComparison(it) }.toSet()
 
-        val added = change.proposedUrls.filter { it !in currentUrls }
-        val removed = currentUrls.filter { it !in proposedUrls }
+        val added = change.proposedUrls.filter { normalizeUrlForComparison(it) !in currentUrls }
+        val removed = _uiState.value.installedAddons
+            .map { it.baseUrl }
+            .filter { normalizeUrlForComparison(it) !in proposedNormalized }
 
         _uiState.update {
             it.copy(
@@ -209,7 +237,7 @@ class AddonManagerViewModel @Inject constructor(
                     changeId = change.id,
                     proposedUrls = change.proposedUrls,
                     addedUrls = added,
-                    removedUrls = removed.toList()
+                    removedUrls = removed
                 )
             )
         }
@@ -222,10 +250,10 @@ class AddonManagerViewModel @Inject constructor(
 
         viewModelScope.launch {
             val validUrls = mutableListOf<String>()
-            val currentUrls = _uiState.value.installedAddons.map { it.baseUrl }.toSet()
+            val currentUrls = _uiState.value.installedAddons.map { normalizeUrlForComparison(it.baseUrl) }.toSet()
 
             for (url in pending.proposedUrls) {
-                if (url in currentUrls) {
+                if (normalizeUrlForComparison(url) in currentUrls) {
                     validUrls.add(url)
                 } else {
                     when (addonRepository.fetchAddon(url)) {
@@ -238,12 +266,16 @@ class AddonManagerViewModel @Inject constructor(
             addonRepository.setAddonOrder(validUrls)
             server?.confirmChange(pending.changeId)
 
-            // Delay before stopping server so the web client can poll the confirmed status
-            delay(5000)
+            // Dismiss confirmation dialog first so focus returns to QR overlay
+            _uiState.update { it.copy(pendingChange = null) }
+
+            // Allow recomposition frame for focus to settle before dismissing QR overlay
+            delay(100)
+
+            // Now close QR mode and stop server
             stopServerInternal()
             _uiState.update {
                 it.copy(
-                    pendingChange = null,
                     isQrModeActive = false,
                     qrCodeBitmap = null,
                     serverUrl = null

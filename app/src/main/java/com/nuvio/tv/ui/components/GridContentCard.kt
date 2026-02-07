@@ -53,9 +53,7 @@ fun GridContentCard(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester)
                 else Modifier
             ),
-        shape = CardDefaults.shape(
-            shape = GridCardShape
-        ),
+        shape = CardDefaults.shape(shape = GridCardShape),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.BackgroundCard
@@ -66,9 +64,7 @@ fun GridContentCard(
                 shape = GridCardShape
             )
         ),
-        scale = CardDefaults.scale(
-            focusedScale = 1.02f
-        )
+        scale = CardDefaults.scale(focusedScale = 1.02f)
     ) {
         Box(
             modifier = Modifier
@@ -79,7 +75,9 @@ fun GridContentCard(
                 model = item.poster,
                 contentDescription = item.name,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                requestedWidthDp = 200.dp,
+                requestedHeightDp = 300.dp
             )
 
             // Title overlay at bottom with gradient scrim

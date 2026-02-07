@@ -305,7 +305,7 @@ private fun StickyCategoryHeader(
     ) {
         Crossfade(
             targetState = sectionName,
-            animationSpec = tween(300),
+            animationSpec = tween(150),
             label = "sectionNameCrossfade"
         ) { name ->
             Text(

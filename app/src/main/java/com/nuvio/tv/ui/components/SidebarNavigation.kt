@@ -41,6 +41,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.ui.theme.NuvioColors
 
+private val NavItemShape = RoundedCornerShape(14.dp)
+private val NavItemIconShape = RoundedCornerShape(10.dp)
+
 data class SidebarItem(
     val route: String,
     val label: String,
@@ -105,7 +108,6 @@ private fun SidebarNavItem(
     onNavigate: (String) -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(14.dp)
     val backgroundColor by animateColorAsState(
         targetValue = if (isFocused || isSelected) NuvioColors.FocusBackground else Color.Transparent,
         label = "navItemBackground"
@@ -119,9 +121,9 @@ private fun SidebarNavItem(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .clip(shape)
+            .clip(NavItemShape)
             .background(backgroundColor)
-            .border(width = 2.dp, color = borderColor, shape = shape)
+            .border(width = 2.dp, color = borderColor, shape = NavItemShape)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { state ->
                 isFocused = state.isFocused
@@ -134,7 +136,7 @@ private fun SidebarNavItem(
         Box(
             modifier = Modifier
                 .size(32.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(NavItemIconShape)
                 .background(NuvioColors.SurfaceVariant),
             contentAlignment = Alignment.Center
         ) {

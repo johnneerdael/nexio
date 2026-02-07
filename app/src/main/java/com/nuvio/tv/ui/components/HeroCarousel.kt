@@ -155,6 +155,7 @@ private fun HeroCarouselSlide(
             contentDescription = item.name,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
+            enableFadeIn = true,
             fadeDurationMs = 600
         )
 
@@ -189,6 +190,7 @@ private fun HeroCarouselSlide(
                         .fillMaxWidth(),
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.CenterStart,
+                    enableFadeIn = true,
                     fadeDurationMs = 500
                 )
             } else {

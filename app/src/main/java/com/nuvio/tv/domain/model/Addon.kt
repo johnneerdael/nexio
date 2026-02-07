@@ -1,5 +1,8 @@
 package com.nuvio.tv.domain.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class Addon(
     val id: String,
     val name: String,
@@ -12,6 +15,7 @@ data class Addon(
     val resources: List<AddonResource>
 )
 
+@Immutable
 data class CatalogDescriptor(
     val type: ContentType,
     val id: String,
@@ -19,12 +23,14 @@ data class CatalogDescriptor(
     val extra: List<CatalogExtra> = emptyList()
 )
 
+@Immutable
 data class CatalogExtra(
     val name: String,
     val isRequired: Boolean = false,
     val options: List<String>? = null
 )
 
+@Immutable
 data class AddonResource(
     val name: String,
     val types: List<String>,

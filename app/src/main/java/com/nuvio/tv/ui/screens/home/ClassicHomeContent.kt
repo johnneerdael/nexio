@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.tv.foundation.lazy.list.itemsIndexed
+import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,15 +28,14 @@ import com.nuvio.tv.ui.components.HeroCarousel
 fun ClassicHomeContent(
     uiState: HomeUiState,
     focusState: HomeScreenFocusState,
+    loadingCatalogs: Set<String> = emptySet(),
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onLoadMore: (catalogId: String, addonId: String, type: String) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
-    val columnListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = focusState.verticalScrollIndex,
-        initialFirstVisibleItemScrollOffset = focusState.verticalScrollOffset
-    )
+
+    val columnListState = rememberTvLazyListState()
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
         if (focusState.verticalScrollIndex > 0 || focusState.verticalScrollOffset > 0) {
@@ -63,7 +62,7 @@ fun ClassicHomeContent(
         }
     }
 
-    LazyColumn(
+    TvLazyColumn(
         state = columnListState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -108,8 +107,11 @@ fun ClassicHomeContent(
             val shouldRestoreFocus = index == focusState.focusedRowIndex
             val focusedItemIndex = if (shouldRestoreFocus) focusState.focusedItemIndex else -1
 
+            val loadMoreKey = "${catalogRow.addonId}_${catalogRow.type.toApiString()}_${catalogRow.catalogId}"
+
             CatalogRowSection(
                 catalogRow = catalogRow,
+                isLoadingMore = loadMoreKey in loadingCatalogs,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },

@@ -1,6 +1,5 @@
 package com.nuvio.tv.ui.screens.home
 
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +27,7 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val focusState by viewModel.focusState.collectAsState()
     val gridFocusState by viewModel.gridFocusState.collectAsState()
+    val loadingCatalogs by viewModel.loadingCatalogs.collectAsState()
 
     Box(
         modifier = Modifier
@@ -74,36 +74,32 @@ fun HomeScreen(
                 )
             }
             else -> {
-                Crossfade(
-                    targetState = uiState.homeLayout,
-                    label = "layoutTransition"
-                ) { layout ->
-                    when (layout) {
-                        HomeLayout.CLASSIC -> ClassicHomeContent(
-                            uiState = uiState,
-                            focusState = focusState,
-                            onNavigateToDetail = onNavigateToDetail,
-                            onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                            onLoadMore = { cid, aid, t ->
-                                viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
-                            },
-                            onSaveFocusState = { vi, vo, ri, ii, m ->
-                                viewModel.saveFocusState(vi, vo, ri, ii, m)
-                            }
-                        )
-                        HomeLayout.GRID -> GridHomeContent(
-                            uiState = uiState,
-                            gridFocusState = gridFocusState,
-                            onNavigateToDetail = onNavigateToDetail,
-                            onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                            onLoadMore = { cid, aid, t ->
-                                viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
-                            },
-                            onSaveGridFocusState = { vi, vo ->
-                                viewModel.saveGridFocusState(vi, vo)
-                            }
-                        )
-                    }
+                when (uiState.homeLayout) {
+                    HomeLayout.CLASSIC -> ClassicHomeContent(
+                        uiState = uiState,
+                        focusState = focusState,
+                        loadingCatalogs = loadingCatalogs,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
+                        onLoadMore = { cid, aid, t ->
+                            viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
+                        },
+                        onSaveFocusState = { vi, vo, ri, ii, m ->
+                            viewModel.saveFocusState(vi, vo, ri, ii, m)
+                        }
+                    )
+                    HomeLayout.GRID -> GridHomeContent(
+                        uiState = uiState,
+                        gridFocusState = gridFocusState,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
+                        onLoadMore = { cid, aid, t ->
+                            viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
+                        },
+                        onSaveGridFocusState = { vi, vo ->
+                            viewModel.saveGridFocusState(vi, vo)
+                        }
+                    )
                 }
             }
         }

@@ -32,8 +32,8 @@ fun FadeInAsyncImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit,
     alignment: Alignment = Alignment.Center,
-    fadeDurationMs: Int = 400,
-    enableFadeIn: Boolean = true,
+    fadeDurationMs: Int = 200,
+    enableFadeIn: Boolean = false,
     requestedWidthDp: Dp? = null,
     requestedHeightDp: Dp? = null
 ) {
@@ -55,8 +55,21 @@ fun FadeInAsyncImage(
         builder.build()
     }
 
-    var shouldAnimate by remember(model, enableFadeIn) { mutableStateOf(enableFadeIn) }
-    var loaded by remember(model, enableFadeIn) { mutableStateOf(!enableFadeIn) }
+    // Fast path: no animation state allocated when fade-in is disabled
+    if (!enableFadeIn) {
+        AsyncImage(
+            model = request,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale,
+            alignment = alignment
+        )
+        return
+    }
+
+    // Animation state only created for the few images that need fade-in (e.g. HeroCarousel)
+    var shouldAnimate by remember(model) { mutableStateOf(true) }
+    var loaded by remember(model) { mutableStateOf(false) }
     val alpha by animateFloatAsState(
         targetValue = if (loaded) 1f else 0f,
         animationSpec = tween(durationMillis = if (shouldAnimate) fadeDurationMs else 0),
@@ -66,16 +79,11 @@ fun FadeInAsyncImage(
     AsyncImage(
         model = request,
         contentDescription = contentDescription,
-        modifier = if (enableFadeIn) {
-            modifier.graphicsLayer { this.alpha = alpha }
-        } else {
-            modifier
-        },
+        modifier = modifier.graphicsLayer { this.alpha = alpha },
         contentScale = contentScale,
         alignment = alignment,
         onState = { state ->
-            if (enableFadeIn && state is AsyncImagePainter.State.Success) {
-                // Avoid re-animating cached images while scrolling.
+            if (state is AsyncImagePainter.State.Success) {
                 shouldAnimate = state.result.dataSource != DataSource.MEMORY_CACHE
                 loaded = true
             }
