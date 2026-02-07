@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.Dispatchers
 
 @HiltAndroidApp
 class NuvioApplication : Application(), ImageLoaderFactory {
@@ -14,16 +15,20 @@ class NuvioApplication : Application(), ImageLoaderFactory {
         return ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.30) // Use 30% of app memory for image cache
+                    .maxSizePercent(0.25)
                     .build()
             }
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(200L * 1024 * 1024) // 200 MB disk cache for posters
+                    .maxSizeBytes(200L * 1024 * 1024)
                     .build()
             }
-            .crossfade(true)
+            .decoderDispatcher(Dispatchers.IO.limitedParallelism(2))
+            .fetcherDispatcher(Dispatchers.IO.limitedParallelism(4))
+            .bitmapFactoryMaxParallelism(2)
+            .allowRgb565(true)
+            .crossfade(false)
             .build()
     }
 }

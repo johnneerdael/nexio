@@ -1,8 +1,11 @@
 package com.nuvio.tv.domain.model
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Represents a subtitle from a Stremio addon
  */
+@Immutable
 data class Subtitle(
     val id: String,
     val url: String,

@@ -1,5 +1,8 @@
 package com.nuvio.tv.domain.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class Meta(
     val id: String,
     val type: ContentType,
@@ -26,17 +29,20 @@ data class Meta(
     val links: List<MetaLink>
 )
 
+@Immutable
 data class MetaCastMember(
     val name: String,
     val character: String? = null,
     val photo: String? = null
 )
 
+@Immutable
 data class MetaCompany(
     val name: String,
     val logo: String? = null
 )
 
+@Immutable
 data class Video(
     val id: String,
     val title: String,
@@ -48,6 +54,7 @@ data class Video(
     val runtime: Int? = null // episode runtime in minutes
 )
 
+@Immutable
 data class MetaLink(
     val name: String,
     val category: String,

@@ -7,11 +7,15 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.CatalogRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +23,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -38,10 +45,15 @@ class HomeViewModel @Inject constructor(
     private val _gridFocusState = MutableStateFlow(HomeScreenFocusState())
     val gridFocusState: StateFlow<HomeScreenFocusState> = _gridFocusState.asStateFlow()
 
+    private val _loadingCatalogs = MutableStateFlow<Set<String>>(emptySet())
+    val loadingCatalogs: StateFlow<Set<String>> = _loadingCatalogs.asStateFlow()
+
     private val catalogsMap = linkedMapOf<String, CatalogRow>()
     private val catalogOrder = mutableListOf<String>()
     private var addonsCache: List<Addon> = emptyList()
     private var currentHeroCatalogKey: String? = null
+    private var catalogUpdateJob: Job? = null
+    private val catalogLoadSemaphore = Semaphore(6)
 
     init {
         loadLayoutPreference()
@@ -63,7 +75,7 @@ class HomeViewModel @Inject constructor(
             layoutPreferenceDataStore.heroCatalogSelection.collectLatest { key ->
                 currentHeroCatalogKey = key
                 _uiState.update { it.copy(heroCatalogKey = key) }
-                updateCatalogRows()
+                scheduleUpdateCatalogRows()
             }
         }
     }
@@ -144,29 +156,31 @@ class HomeViewModel @Inject constructor(
 
     private fun loadCatalog(addon: Addon, catalog: CatalogDescriptor) {
         viewModelScope.launch {
-            catalogRepository.getCatalog(
-                addonBaseUrl = addon.baseUrl,
-                addonId = addon.id,
-                addonName = addon.name,
-                catalogId = catalog.id,
-                catalogName = catalog.name,
-                type = catalog.type.toApiString(),
-                skip = 0
-            ).collect { result ->
-                when (result) {
-                    is NetworkResult.Success -> {
-                        val key = catalogKey(
-                            addonId = addon.id,
-                            type = catalog.type.toApiString(),
-                            catalogId = catalog.id
-                        )
-                        catalogsMap[key] = result.data
-                        updateCatalogRows()
+            catalogLoadSemaphore.withPermit {
+                catalogRepository.getCatalog(
+                    addonBaseUrl = addon.baseUrl,
+                    addonId = addon.id,
+                    addonName = addon.name,
+                    catalogId = catalog.id,
+                    catalogName = catalog.name,
+                    type = catalog.type.toApiString(),
+                    skip = 0
+                ).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            val key = catalogKey(
+                                addonId = addon.id,
+                                type = catalog.type.toApiString(),
+                                catalogId = catalog.id
+                            )
+                            catalogsMap[key] = result.data
+                            scheduleUpdateCatalogRows()
+                        }
+                        is NetworkResult.Error -> {
+                            // Log error but don't fail entire screen
+                        }
+                        NetworkResult.Loading -> { /* Handled by individual row */ }
                     }
-                    is NetworkResult.Error -> {
-                        // Log error but don't fail entire screen
-                    }
-                    NetworkResult.Loading -> { /* Handled by individual row */ }
                 }
             }
         }
@@ -177,9 +191,11 @@ class HomeViewModel @Inject constructor(
         val currentRow = catalogsMap[key] ?: return
 
         if (currentRow.isLoading || !currentRow.hasMore) return
+        if (key in _loadingCatalogs.value) return
 
+        // Mark loading via lightweight separate flow — avoids full state cascade
         catalogsMap[key] = currentRow.copy(isLoading = true)
-        updateCatalogRows()
+        _loadingCatalogs.update { it + key }
 
         viewModelScope.launch {
             val addon = addonsCache.find { it.id == addonId } ?: return@launch
@@ -198,10 +214,12 @@ class HomeViewModel @Inject constructor(
                     is NetworkResult.Success -> {
                         val mergedItems = currentRow.items + result.data.items
                         catalogsMap[key] = result.data.copy(items = mergedItems)
+                        _loadingCatalogs.update { it - key }
                         updateCatalogRows()
                     }
                     is NetworkResult.Error -> {
                         catalogsMap[key] = currentRow.copy(isLoading = false)
+                        _loadingCatalogs.update { it - key }
                         updateCatalogRows()
                     }
                     NetworkResult.Loading -> { }
@@ -210,68 +228,90 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun updateCatalogRows() {
-        _uiState.update { state ->
-            // Preserve addon manifest order
-            val orderedRows = catalogOrder.mapNotNull { key -> catalogsMap[key] }
+    private fun scheduleUpdateCatalogRows() {
+        catalogUpdateJob?.cancel()
+        catalogUpdateJob = viewModelScope.launch {
+            delay(150)
+            updateCatalogRows()
+        }
+    }
 
-            // Derive hero items from selected catalog or first catalog with backgrounds
-            val heroSourceRow = if (currentHeroCatalogKey != null) {
-                catalogsMap[currentHeroCatalogKey]
+    private suspend fun updateCatalogRows() {
+        // Snapshot mutable state before entering background context
+        val orderedKeys = catalogOrder.toList()
+        val catalogSnapshot = catalogsMap.toMap()
+        val heroCatalogKey = currentHeroCatalogKey
+        val currentLayout = _uiState.value.homeLayout
+        val currentGridItems = _uiState.value.gridItems
+
+        val (displayRows, heroItems, gridItems) = withContext(Dispatchers.Default) {
+            val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+
+            val heroSourceRow = if (heroCatalogKey != null) {
+                catalogSnapshot[heroCatalogKey]
             } else {
                 orderedRows.firstOrNull { row -> row.items.any { it.background != null } }
             }
-            val heroItems = heroSourceRow?.items
+            val computedHeroItems = heroSourceRow?.items
                 ?.filter { it.background != null || it.poster != null }
                 ?.take(7)
                 ?: orderedRows.flatMap { it.items }.take(7)
 
-            // Build flattened grid items
-            val gridItems = buildList {
-                if (heroItems.isNotEmpty()) {
-                    add(GridItem.Hero(heroItems))
-                }
-                orderedRows.forEach { row ->
-                    add(
-                        GridItem.SectionDivider(
-                            catalogName = row.catalogName,
-                            catalogId = row.catalogId,
-                            addonBaseUrl = row.addonBaseUrl,
-                            addonId = row.addonId,
-                            type = row.type.toApiString()
-                        )
-                    )
-                    val hasEnoughForSeeAll = row.items.size >= 15
-                    val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
-                    displayItems.forEach { item ->
-                        add(
-                            GridItem.Content(
-                                item = item,
-                                addonBaseUrl = row.addonBaseUrl,
-                                catalogId = row.catalogId,
-                                catalogName = row.catalogName
-                            )
-                        )
+            val computedDisplayRows = orderedRows.map { row ->
+                if (row.items.size > 25) row.copy(items = row.items.take(25)) else row
+            }
+
+            val computedGridItems = if (currentLayout == HomeLayout.GRID) {
+                buildList {
+                    if (computedHeroItems.isNotEmpty()) {
+                        add(GridItem.Hero(computedHeroItems))
                     }
-                    if (hasEnoughForSeeAll) {
+                    computedDisplayRows.forEach { row ->
                         add(
-                            GridItem.SeeAll(
+                            GridItem.SectionDivider(
+                                catalogName = row.catalogName,
                                 catalogId = row.catalogId,
+                                addonBaseUrl = row.addonBaseUrl,
                                 addonId = row.addonId,
                                 type = row.type.toApiString()
                             )
                         )
+                        val hasEnoughForSeeAll = row.items.size >= 15
+                        val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
+                        displayItems.forEach { item ->
+                            add(
+                                GridItem.Content(
+                                    item = item,
+                                    addonBaseUrl = row.addonBaseUrl,
+                                    catalogId = row.catalogId,
+                                    catalogName = row.catalogName
+                                )
+                            )
+                        }
+                        if (hasEnoughForSeeAll) {
+                            add(
+                                GridItem.SeeAll(
+                                    catalogId = row.catalogId,
+                                    addonId = row.addonId,
+                                    type = row.type.toApiString()
+                                )
+                            )
+                        }
                     }
                 }
+            } else {
+                currentGridItems
             }
 
-            state.copy(
-                catalogRows = orderedRows,
-                heroItems = heroItems,
-                gridItems = gridItems,
-                isLoading = false
-            )
+            Triple(computedDisplayRows, computedHeroItems, computedGridItems)
         }
+
+        _uiState.value = _uiState.value.copy(
+            catalogRows = displayRows,
+            heroItems = heroItems,
+            gridItems = gridItems,
+            isLoading = false
+        )
     }
 
     private fun navigateToDetail(itemId: String, itemType: String) {
