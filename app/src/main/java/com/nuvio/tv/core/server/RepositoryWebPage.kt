@@ -257,10 +257,14 @@ function renderList() {
 
 async function addRepo() {
   const input = document.getElementById('repoUrl');
+  const addBtn = document.getElementById('addBtn');
   const errorEl = document.getElementById('addError');
   let url = input.value.trim();
   if (!url) return;
 
+  if (url.startsWith('stremio://')) {
+    url = url.replace(/^stremio:\/\//, 'https://');
+  }
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
@@ -273,10 +277,36 @@ async function addRepo() {
     return;
   }
 
-  repos.push({ url: url, name: url.split('//')[1] || url, description: null, isNew: true });
-  input.value = '';
+  // Validate and fetch repo info from the TV
+  addBtn.disabled = true;
+  addBtn.textContent = '...';
   errorEl.style.display = 'none';
-  renderList();
+
+  try {
+    const res = await fetch('/api/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url })
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      errorEl.textContent = data.error;
+      errorEl.style.display = 'block';
+      setTimeout(() => { errorEl.style.display = 'none'; }, 4000);
+    } else {
+      repos.push({ url: data.url, name: data.name || url, description: data.description, isNew: true });
+      input.value = '';
+      renderList();
+    }
+  } catch (e) {
+    errorEl.textContent = 'Failed to validate repository';
+    errorEl.style.display = 'block';
+    setTimeout(() => { errorEl.style.display = 'none'; }, 4000);
+  }
+
+  addBtn.disabled = false;
+  addBtn.textContent = 'Add';
 }
 
 function removeRepo(index) {

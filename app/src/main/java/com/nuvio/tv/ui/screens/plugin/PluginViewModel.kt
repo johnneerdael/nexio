@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltViewModel
@@ -173,6 +175,10 @@ class PluginViewModel @Inject constructor(
         }
     }
 
+    private fun normalizeUrlForComparison(url: String): String {
+        return url.trim().trimEnd('/').lowercase()
+    }
+
     // --- QR Mode ---
 
     private fun startQrMode() {
@@ -189,12 +195,13 @@ class PluginViewModel @Inject constructor(
                 _uiState.value.repositories.map { repo ->
                     RepositoryConfigServer.RepositoryInfo(
                         url = repo.url,
-                        name = repo.name,
+                        name = repo.name.ifBlank { repo.url },
                         description = repo.description
                     )
                 }
             },
-            onChangeProposed = { change -> handleRepoChangeProposed(change) }
+            onChangeProposed = { change -> handleRepoChangeProposed(change) },
+            manifestFetcher = { url -> fetchRepoInfo(url) }
         )
 
         val activeServer = repoServer
@@ -228,17 +235,36 @@ class PluginViewModel @Inject constructor(
         }
     }
 
+    private fun fetchRepoInfo(url: String): RepositoryConfigServer.RepositoryInfo? {
+        return try {
+            val result = runBlocking { pluginManager.addRepository(url) }
+            result.getOrNull()?.let { repo ->
+                // Remove the repo we just added for validation
+                runBlocking { pluginManager.removeRepository(repo.id) }
+                RepositoryConfigServer.RepositoryInfo(
+                    url = url,
+                    name = repo.name.ifBlank { url },
+                    description = repo.description
+                )
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun stopRepoServerInternal() {
         repoServer?.stop()
         repoServer = null
     }
 
     private fun handleRepoChangeProposed(change: RepositoryConfigServer.PendingRepoChange) {
-        val currentUrls = _uiState.value.repositories.map { it.url }.toSet()
-        val proposedUrls = change.proposedUrls.toSet()
+        val currentUrls = _uiState.value.repositories.map { normalizeUrlForComparison(it.url) }.toSet()
+        val proposedNormalized = change.proposedUrls.map { normalizeUrlForComparison(it) }.toSet()
 
-        val added = change.proposedUrls.filter { it !in currentUrls }
-        val removed = currentUrls.filter { it !in proposedUrls }
+        val added = change.proposedUrls.filter { normalizeUrlForComparison(it) !in currentUrls }
+        val removed = _uiState.value.repositories
+            .map { it.url }
+            .filter { normalizeUrlForComparison(it) !in proposedNormalized }
 
         _uiState.update {
             it.copy(
@@ -246,7 +272,7 @@ class PluginViewModel @Inject constructor(
                     changeId = change.id,
                     proposedUrls = change.proposedUrls,
                     addedUrls = added,
-                    removedUrls = removed.toList()
+                    removedUrls = removed
                 )
             )
         }
@@ -266,7 +292,7 @@ class PluginViewModel @Inject constructor(
             // Remove repositories
             val currentRepos = _uiState.value.repositories
             for (url in pending.removedUrls) {
-                val repo = currentRepos.find { it.url == url }
+                val repo = currentRepos.find { normalizeUrlForComparison(it.url) == normalizeUrlForComparison(url) }
                 if (repo != null) {
                     pluginManager.removeRepository(repo.id)
                 }
@@ -274,10 +300,16 @@ class PluginViewModel @Inject constructor(
 
             repoServer?.confirmChange(pending.changeId)
 
+            // Dismiss confirmation dialog first so focus returns to QR overlay
+            _uiState.update { it.copy(pendingRepoChange = null) }
+
+            // Allow recomposition frame for focus to settle before dismissing QR overlay
+            delay(100)
+
+            // Now close QR mode and stop server
             stopRepoServerInternal()
             _uiState.update {
                 it.copy(
-                    pendingRepoChange = null,
                     isQrModeActive = false,
                     qrCodeBitmap = null,
                     serverUrl = null

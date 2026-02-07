@@ -50,8 +50,10 @@
 
 # ── NanoHTTPD (used by local server) ───────────────────────────────────────────
 -keep class fi.iki.elonen.** { *; }
+# Keep server classes and their inner data classes (serialized with Gson)
+-keep class com.nuvio.tv.core.server.** { *; }
 
-# ── QuickJS ────────────────────────────────────────────────────────────────────
+#── QuickJS ────────────────────────────────────────────────────────────────────
 -keep class app.nicegram.quickjs_kt.** { *; }
 
 # ── ExoPlayer / Media3 ────────────────────────────────────────────────────────

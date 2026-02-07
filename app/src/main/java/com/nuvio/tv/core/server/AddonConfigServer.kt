@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 class AddonConfigServer(
     private val currentAddonsProvider: () -> List<AddonInfo>,
     private val onChangeProposed: (PendingAddonChange) -> Unit,
+    private val manifestFetcher: (String) -> AddonInfo?,
     port: Int = 8080
 ) : NanoHTTPD(port) {
 
@@ -45,6 +46,7 @@ class AddonConfigServer(
             method == Method.GET && uri == "/" -> serveWebPage()
             method == Method.GET && uri == "/api/addons" -> serveAddonList()
             method == Method.POST && uri == "/api/addons" -> handleAddonUpdate(session)
+            method == Method.POST && uri == "/api/validate" -> handleValidateAddon(session)
             method == Method.GET && uri.startsWith("/api/status/") -> serveChangeStatus(uri)
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
         }
@@ -61,16 +63,10 @@ class AddonConfigServer(
     }
 
     private fun handleAddonUpdate(session: IHTTPSession): Response {
-        // Check if there's already a pending change
-        val hasPending = pendingChanges.values.any { it.status == ChangeStatus.PENDING }
-        if (hasPending) {
-            val error = mapOf("error" to "A change is already pending confirmation on the TV")
-            return newFixedLengthResponse(
-                Response.Status.CONFLICT,
-                "application/json",
-                gson.toJson(error)
-            )
-        }
+        // Auto-reject any stale pending changes so a new request can proceed
+        pendingChanges.values
+            .filter { it.status == ChangeStatus.PENDING }
+            .forEach { it.status = ChangeStatus.REJECTED }
 
         // Parse request body
         val bodyMap = HashMap<String, String>()
@@ -98,6 +94,32 @@ class AddonConfigServer(
         return newFixedLengthResponse(Response.Status.OK, "application/json", gson.toJson(response))
     }
 
+    private fun handleValidateAddon(session: IHTTPSession): Response {
+        val bodyMap = HashMap<String, String>()
+        session.parseBody(bodyMap)
+        val body = bodyMap["postData"] ?: ""
+
+        val url: String = try {
+            val parsed = gson.fromJson<Map<String, Any>>(body, object : TypeToken<Map<String, Any>>() {}.type)
+            (parsed["url"] as? String) ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+
+        if (url.isBlank()) {
+            val error = mapOf("error" to "Missing URL")
+            return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", gson.toJson(error))
+        }
+
+        val addonInfo = manifestFetcher(url)
+        return if (addonInfo != null) {
+            newFixedLengthResponse(Response.Status.OK, "application/json", gson.toJson(addonInfo))
+        } else {
+            val error = mapOf("error" to "Could not fetch addon manifest")
+            newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", gson.toJson(error))
+        }
+    }
+
     private fun serveChangeStatus(uri: String): Response {
         val id = uri.removePrefix("/api/status/")
         val change = pendingChanges[id]
@@ -110,12 +132,13 @@ class AddonConfigServer(
         fun startOnAvailablePort(
             currentAddonsProvider: () -> List<AddonInfo>,
             onChangeProposed: (PendingAddonChange) -> Unit,
+            manifestFetcher: (String) -> AddonInfo?,
             startPort: Int = 8080,
             maxAttempts: Int = 10
         ): AddonConfigServer? {
             for (port in startPort until startPort + maxAttempts) {
                 try {
-                    val server = AddonConfigServer(currentAddonsProvider, onChangeProposed, port)
+                    val server = AddonConfigServer(currentAddonsProvider, onChangeProposed, manifestFetcher, port)
                     server.start(SOCKET_READ_TIMEOUT, false)
                     return server
                 } catch (e: Exception) {
