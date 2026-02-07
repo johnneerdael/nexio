@@ -348,7 +348,8 @@ class PlayerViewModel @Inject constructor(
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
 
                 val renderersFactory = DefaultRenderersFactory(context)
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                    .setEnableDecoderFallback(true)
 
                 _exoPlayer = if (useLibass) {
                     // Build ExoPlayer with libass support for ASS/SSA subtitles
