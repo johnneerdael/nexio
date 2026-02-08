@@ -11,6 +11,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.text.BasicTextField
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -620,6 +623,7 @@ private fun ConfirmRepoChangesDialog(
     onReject: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -636,9 +640,10 @@ private fun ConfirmRepoChangesDialog(
         Surface(
             onClick = { },
             modifier = Modifier
-                .width(500.dp),
+                .width(560.dp)
+                .heightIn(max = 640.dp),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard
+                containerColor = NuvioColors.SurfaceVariant
             ),
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
         ) {
@@ -662,57 +667,73 @@ private fun ConfirmRepoChangesDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (pendingChange.addedUrls.isNotEmpty()) {
-                    Text(
-                        text = "Added:",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = NuvioColors.Success,
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .background(
+                            color = NuvioColors.Surface,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 4.dp)
-                    )
-                    pendingChange.addedUrls.forEach { url ->
-                        Text(
-                            text = "+ $url",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.Success,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 8.dp, bottom = 2.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                            .padding(12.dp)
+                            .verticalScroll(scrollState)
+                    ) {
+                        if (pendingChange.addedUrls.isNotEmpty()) {
+                            Text(
+                                text = "Added:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioColors.Success,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 4.dp)
+                            )
+                            pendingChange.addedUrls.forEach { url ->
+                                Text(
+                                    text = "+ $url",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioColors.Success,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-                if (pendingChange.removedUrls.isNotEmpty()) {
-                    Text(
-                        text = "Removed:",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = NuvioColors.Error,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 4.dp)
-                    )
-                    pendingChange.removedUrls.forEach { url ->
-                        Text(
-                            text = "- $url",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.Error,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 8.dp, bottom = 2.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                        if (pendingChange.removedUrls.isNotEmpty()) {
+                            Text(
+                                text = "Removed:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioColors.Error,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 4.dp)
+                            )
+                            pendingChange.removedUrls.forEach { url ->
+                                Text(
+                                    text = "- $url",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioColors.Error,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-                if (pendingChange.addedUrls.isEmpty() && pendingChange.removedUrls.isEmpty()) {
-                    Text(
-                        text = "No changes detected",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                        if (pendingChange.addedUrls.isEmpty() && pendingChange.removedUrls.isEmpty()) {
+                            Text(
+                                text = "No changes detected",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioColors.TextSecondary
+                            )
+                        }
+                    }
                 }
 
                 Text(

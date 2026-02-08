@@ -22,5 +22,7 @@ data class PendingChangeInfo(
     val proposedUrls: List<String>,
     val addedUrls: List<String>,
     val removedUrls: List<String>,
+    val addedNames: Map<String, String> = emptyMap(),
+    val removedNames: Map<String, String> = emptyMap(),
     val isApplying: Boolean = false
 )

@@ -231,15 +231,40 @@ class AddonManagerViewModel @Inject constructor(
             .map { it.baseUrl }
             .filter { normalizeUrlForComparison(it) !in proposedNormalized }
 
+        val removedNameMap = _uiState.value.installedAddons
+            .associateBy({ normalizeUrlForComparison(it.baseUrl) }, { it.name })
+        val removedNames = removed.associateWith { url ->
+            removedNameMap[normalizeUrlForComparison(url)] ?: url
+        }
+
         _uiState.update {
             it.copy(
                 pendingChange = PendingChangeInfo(
                     changeId = change.id,
                     proposedUrls = change.proposedUrls,
                     addedUrls = added,
-                    removedUrls = removed
+                    removedUrls = removed,
+                    removedNames = removedNames
                 )
             )
+        }
+
+        if (added.isNotEmpty()) {
+            viewModelScope.launch {
+                val addedNames = added.associateWith { url ->
+                    fetchAddonInfo(url)?.name ?: url
+                }
+                _uiState.update { state ->
+                    val pending = state.pendingChange
+                    if (pending == null || pending.changeId != change.id) {
+                        state
+                    } else {
+                        state.copy(
+                            pendingChange = pending.copy(addedNames = addedNames)
+                        )
+                    }
+                }
+            }
         }
     }
 
