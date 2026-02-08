@@ -124,7 +124,9 @@ data class PlayerSettings(
     val skipSilence: Boolean = false,
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
     val loadingOverlayEnabled: Boolean = true,
-    val pauseOverlayEnabled: Boolean = true
+    val pauseOverlayEnabled: Boolean = true,
+    // Display settings
+    val frameRateMatching: Boolean = false
 )
 
 /**
@@ -156,6 +158,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val loadingOverlayEnabledKey = booleanPreferencesKey("loading_overlay_enabled")
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
+    private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -194,6 +197,7 @@ class PlayerSettingsDataStore @Inject constructor(
             preferredAudioLanguage = prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE,
             loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
             pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
+            frameRateMatching = prefs[frameRateMatchingKey] ?: false,
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
                 secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
@@ -270,6 +274,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setLoadingOverlayEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[loadingOverlayEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setFrameRateMatching(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[frameRateMatchingKey] = enabled
         }
     }
 

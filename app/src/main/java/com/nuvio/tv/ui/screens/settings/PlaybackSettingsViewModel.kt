@@ -57,6 +57,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(enabled)
     }
 
+    suspend fun setFrameRateMatching(enabled: Boolean) {
+        playerSettingsDataStore.setFrameRateMatching(enabled)
+    }
+
     /**
      * Calculate maximum safe buffer size based on device's available heap memory.
      * Reserves ~60% of heap for video decoders, app UI, and other allocations.
