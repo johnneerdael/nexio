@@ -327,7 +327,7 @@ private fun SeeAllGridCard(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(210.dp),
+            .aspectRatio(2f / 3f),
         shape = CardDefaults.shape(
             shape = RoundedCornerShape(8.dp)
         ),

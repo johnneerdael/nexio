@@ -109,7 +109,10 @@ fun CatalogSeeAllScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        if (catalogRow != null && catalogRow.items.isNotEmpty()) {
+        val hasItems = catalogRow?.items?.isNotEmpty() == true
+        val isCatalogLoading = catalogRow == null || catalogRow.isLoading
+
+        if (hasItems) {
             TvLazyVerticalGrid(
                 state = gridState,
                 columns = TvGridCells.Fixed(5),
@@ -133,7 +136,7 @@ fun CatalogSeeAllScreen(
                     )
                 }
             }
-        } else if (catalogRow?.isLoading == true || (catalogRow == null && uiState.isLoading)) {
+        } else if (isCatalogLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
