@@ -54,7 +54,12 @@
 -keep class com.nuvio.tv.core.server.** { *; }
 
 #── QuickJS ────────────────────────────────────────────────────────────────────
--keep class app.nicegram.quickjs_kt.** { *; }
+# Keep quickjs-kt library classes for proper type conversion
+-keep class com.dokar.quickjs.** { *; }
+-keepclassmembers class com.dokar.quickjs.** { *; }
+# Keep PluginRuntime and related classes for JS bindings
+-keep class com.nuvio.tv.core.plugin.** { *; }
+-keepclassmembers class com.nuvio.tv.core.plugin.** { *; }
 
 # ── ExoPlayer / Media3 ────────────────────────────────────────────────────────
 -dontwarn androidx.media3.**
