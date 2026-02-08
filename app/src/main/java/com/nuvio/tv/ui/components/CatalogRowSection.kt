@@ -30,7 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,7 +57,8 @@ fun CatalogRowSection(
     isLoadingMore: Boolean = false,
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
-    onItemFocused: (itemIndex: Int) -> Unit = {}
+    onItemFocused: (itemIndex: Int) -> Unit = {},
+    upFocusRequester: FocusRequester? = null
 ) {
 
     val listState = rememberTvLazyListState()
@@ -130,8 +131,7 @@ fun CatalogRowSection(
         TvLazyRow(
             state = listState,
             modifier = Modifier
-                .fillMaxWidth()
-                .focusRestorer(),
+                .fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -143,11 +143,19 @@ fun CatalogRowSection(
                 ContentCard(
                     item = item,
                     onClick = { onItemClick(item.id, item.type.toApiString(), catalogRow.addonBaseUrl) },
-                    modifier = Modifier.onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            currentOnItemFocused(index)
+                    modifier = Modifier
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                currentOnItemFocused(index)
+                            }
                         }
-                    },
+                        .then(
+                            if (upFocusRequester != null) {
+                                Modifier.focusProperties { up = upFocusRequester }
+                            } else {
+                                Modifier
+                            }
+                        ),
                     focusRequester = if (index == focusedItemIndex) itemFocusRequester else null
                 )
             }
@@ -172,7 +180,14 @@ fun CatalogRowSection(
                         onClick = onSeeAll,
                         modifier = Modifier
                             .width(140.dp)
-                            .height(210.dp),
+                            .height(210.dp)
+                            .then(
+                                if (upFocusRequester != null) {
+                                    Modifier.focusProperties { up = upFocusRequester }
+                                } else {
+                                    Modifier
+                                }
+                            ),
                         shape = CardDefaults.shape(shape = SeeAllCardShape),
                         colors = CardDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,

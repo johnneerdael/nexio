@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.search
 
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,10 +12,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -37,6 +45,15 @@ fun SearchScreen(
     onNavigateToDetail: (String, String, String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val searchFocusRequester = remember { FocusRequester() }
+    var focusResults by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.query) {
+        focusResults = false
+    }
+
+    val canMoveToResults = uiState.query.trim().length >= 2 &&
+        uiState.catalogRows.any { it.items.isNotEmpty() }
 
     Box(
         modifier = Modifier
@@ -55,7 +72,22 @@ fun SearchScreen(
                     onValueChange = { viewModel.onEvent(SearchEvent.QueryChanged(it)) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 48.dp),
+                        .padding(horizontal = 48.dp)
+                        .focusRequester(searchFocusRequester)
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                when (keyEvent.nativeKeyEvent.keyCode) {
+                                    KeyEvent.KEYCODE_DPAD_DOWN,
+                                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                        if (canMoveToResults) {
+                                            focusResults = true
+                                            return@onPreviewKeyEvent true
+                                        }
+                                    }
+                                }
+                            }
+                            false
+                        },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     placeholder = {
@@ -128,6 +160,13 @@ fun SearchScreen(
                     ) { index, catalogRow ->
                         CatalogRowSection(
                             catalogRow = catalogRow,
+                            focusedItemIndex = if (focusResults && index == 0) 0 else -1,
+                            onItemFocused = {
+                                if (focusResults) {
+                                    focusResults = false
+                                }
+                            },
+                            upFocusRequester = if (index == 0) searchFocusRequester else null,
                             onItemClick = { id, type, addonBaseUrl ->
                                 onNavigateToDetail(id, type, addonBaseUrl)
                             },
