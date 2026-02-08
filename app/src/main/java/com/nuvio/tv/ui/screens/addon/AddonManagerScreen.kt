@@ -88,6 +88,7 @@ fun AddonManagerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val surfaceFocusRequester = remember { FocusRequester() }
     val installButtonFocusRequester = remember { FocusRequester() }
     val textFieldFocusRequester = remember { FocusRequester() }
     var isEditing by remember { mutableStateOf(false) }
@@ -145,7 +146,9 @@ fun AddonManagerScreen(
                             // Surface always stays in the tree for stable D-pad focus
                             Surface(
                                 onClick = { isEditing = true },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .focusRequester(surfaceFocusRequester),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = NuvioColors.BackgroundElevated,
                                     focusedContainerColor = NuvioColors.BackgroundElevated
@@ -186,7 +189,7 @@ fun AddonManagerScreen(
                                                 viewModel.installAddon()
                                                 isEditing = false
                                                 keyboardController?.hide()
-                                                focusManager.clearFocus(force = true)
+                                                installButtonFocusRequester.requestFocus()
                                             }
                                         ),
                                         textStyle = MaterialTheme.typography.bodyMedium.copy(
@@ -212,7 +215,7 @@ fun AddonManagerScreen(
                                     viewModel.installAddon()
                                     isEditing = false
                                     keyboardController?.hide()
-                                    focusManager.clearFocus(force = true)
+                                    installButtonFocusRequester.requestFocus()
                                 },
                                 enabled = !uiState.isInstalling,
                                 modifier = Modifier.focusRequester(installButtonFocusRequester),

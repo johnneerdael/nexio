@@ -8,6 +8,9 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.repository.AddonRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -19,16 +22,30 @@ class AddonRepositoryImpl @Inject constructor(
     private val preferences: AddonPreferences
 ) : AddonRepository {
 
+    private val manifestCache = mutableMapOf<String, Addon>()
+
     override fun getInstalledAddons(): Flow<List<Addon>> =
         preferences.installedAddonUrls.flatMapLatest { urls ->
             flow {
-                val addons = urls.mapNotNull { url ->
-                    when (val result = fetchAddon(url)) {
-                        is NetworkResult.Success -> result.data
-                        else -> null // Skip failed addons
-                    }
+                val cached = urls.mapNotNull { manifestCache[it.trimEnd('/')] }
+                if (cached.isNotEmpty()) {
+                    emit(cached)
                 }
-                emit(addons)
+
+                val fresh = coroutineScope {
+                    urls.map { url ->
+                        async {
+                            when (val result = fetchAddon(url)) {
+                                is NetworkResult.Success -> result.data
+                                else -> manifestCache[url.trimEnd('/')]
+                            }
+                        }
+                    }.awaitAll().filterNotNull()
+                }
+
+                if (fresh != cached) {
+                    emit(fresh)
+                }
             }.flowOn(Dispatchers.IO)
         }
 
@@ -38,7 +55,9 @@ class AddonRepositoryImpl @Inject constructor(
 
         return when (val result = safeApiCall { api.getManifest(manifestUrl) }) {
             is NetworkResult.Success -> {
-                NetworkResult.Success(result.data.toDomain(cleanBaseUrl))
+                val addon = result.data.toDomain(cleanBaseUrl)
+                manifestCache[cleanBaseUrl] = addon
+                NetworkResult.Success(addon)
             }
             is NetworkResult.Error -> result
             NetworkResult.Loading -> NetworkResult.Loading
@@ -50,6 +69,8 @@ class AddonRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeAddon(url: String) {
+        val cleanUrl = url.trimEnd('/')
+        manifestCache.remove(cleanUrl)
         preferences.removeAddon(url)
     }
 
