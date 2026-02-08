@@ -17,7 +17,7 @@
         android:name=".NuvioApplication"
         android:allowBackup="true"
         android:banner="@drawable/tv_banner"
-        android:icon="@drawable/nuvio_n"
+        android:icon="@drawable/tv_banner"
         android:label="Nuvio"
         android:largeHeap="true"
         android:supportsRtl="true"

@@ -13,11 +13,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -164,7 +169,7 @@ fun MetaDetailsScreen(
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun MetaDetailsContent(
     meta: Meta,
@@ -201,6 +206,8 @@ private fun MetaDetailsContent(
     val listState = rememberTvLazyListState()
     val initialFocusRequester = remember { FocusRequester() }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
+    var anchorCanFocus by remember { mutableStateOf(true) }
+    var anchorHadFocus by remember { mutableStateOf(false) }
 
     // Track if scrolled past hero (first item)
     val isScrolledPastHero by remember {
@@ -340,11 +347,24 @@ private fun MetaDetailsContent(
             state = listState
         ) {
             // Invisible focus anchor — captures initial focus so no button is highlighted on entry
+            // It disables itself after losing focus, so UP won't land here later.
             item(key = "focus_anchor", contentType = "focus_anchor") {
                 Box(
                     modifier = Modifier
                         .focusRequester(initialFocusRequester)
-                        .focusable()
+                        .onFocusChanged { state ->
+                            if (state.isFocused) {
+                                anchorHadFocus = true
+                            } else if (anchorHadFocus) {
+                                anchorCanFocus = false
+                            }
+                        }
+                        .focusProperties {
+                            // Prevent UP from taking focus into the anchor.
+                            up = FocusRequester.Cancel
+                            canFocus = anchorCanFocus
+                        }
+                        .focusable(enabled = anchorCanFocus)
                 )
                 LaunchedEffect(Unit) {
                     initialFocusRequester.requestFocus()
