@@ -98,8 +98,10 @@ fun ClassicHomeContent(
             }
         }
 
+        val visibleCatalogRows = uiState.catalogRows.filter { it.items.isNotEmpty() }
+
         itemsIndexed(
-            items = uiState.catalogRows,
+            items = visibleCatalogRows,
             key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}" },
             contentType = { _, _ -> "catalog_row" }
         ) { index, catalogRow ->

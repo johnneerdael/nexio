@@ -266,7 +266,7 @@ class HomeViewModel @Inject constructor(
                     if (computedHeroItems.isNotEmpty()) {
                         add(GridItem.Hero(computedHeroItems))
                     }
-                    computedDisplayRows.forEach { row ->
+                    computedDisplayRows.filter { it.items.isNotEmpty() }.forEach { row ->
                         add(
                             GridItem.SectionDivider(
                                 catalogName = row.catalogName,

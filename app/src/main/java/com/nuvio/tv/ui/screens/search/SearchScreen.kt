@@ -109,7 +109,7 @@ fun SearchScreen(
                     }
                 }
 
-                uiState.catalogRows.isEmpty() -> {
+                uiState.catalogRows.isEmpty() || uiState.catalogRows.none { it.items.isNotEmpty() } -> {
                     item {
                         EmptyScreenState(
                             title = "No Results",
@@ -120,8 +120,10 @@ fun SearchScreen(
                 }
 
                 else -> {
+                    val visibleCatalogRows = uiState.catalogRows.filter { it.items.isNotEmpty() }
+
                     itemsIndexed(
-                        items = uiState.catalogRows,
+                        items = visibleCatalogRows,
                         key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}_${uiState.query.trim()}" }
                     ) { index, catalogRow ->
                         CatalogRowSection(
