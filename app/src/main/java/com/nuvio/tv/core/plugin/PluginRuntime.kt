@@ -49,6 +49,7 @@ class PluginRuntime @Inject constructor() {
         .writeTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .proxy(java.net.Proxy.NO_PROXY)
         .build()
 
     // Store parsed documents for cheerio
@@ -148,22 +149,27 @@ class PluginRuntime @Inject constructor() {
 
         try {
             quickJs(Dispatchers.IO) {
-                // Define console object
+                // Define console object - must return null to avoid quickjs conversion issues
                 define("console") {
                     function("log") { args ->
                         Log.d("Plugin:$scraperId", args.joinToString(" ") { it?.toString() ?: "null" })
+                        null
                     }
                     function("error") { args ->
                         Log.e("Plugin:$scraperId", args.joinToString(" ") { it?.toString() ?: "null" })
+                        null
                     }
                     function("warn") { args ->
                         Log.w("Plugin:$scraperId", args.joinToString(" ") { it?.toString() ?: "null" })
+                        null
                     }
                     function("info") { args ->
                         Log.i("Plugin:$scraperId", args.joinToString(" ") { it?.toString() ?: "null" })
+                        null
                     }
                     function("debug") { args ->
                         Log.d("Plugin:$scraperId", args.joinToString(" ") { it?.toString() ?: "null" })
+                        null
                     }
                 }
 
@@ -297,9 +303,10 @@ class PluginRuntime @Inject constructor() {
 
                 // Note: crypto-js is now loaded as a real library (WebJars) before plugin execution.
 
-                // Function to capture results
+                // Function to capture results - must return null to avoid quickjs conversion issues
                 function("__capture_result") { args ->
                     resultJson = args.getOrNull(0)?.toString() ?: "[]"
+                    null
                 }
 
                 // Inject JavaScript polyfills
@@ -312,11 +319,16 @@ class PluginRuntime @Inject constructor() {
                     evaluate<Any?>(cryptoJsSource)
                 }
 
-                // Execute plugin code with module wrapper
+                // Execute plugin code with module wrapper - wrapped in IIFE to avoid
+                // redeclaration conflicts with polyfill vars (e.g. cheerio, URL, fetch).
+                // Must NOT pass polyfill names as parameters, because plugins use
+                // 'const cheerio = require(...)' which would conflict with a parameter named 'cheerio'.
                 val wrappedCode = """
                     var module = { exports: {} };
                     var exports = module.exports;
-                    $code
+                    (function() {
+                        $code
+                    })();
                 """.trimIndent()
                 evaluate<Any?>(wrappedCode)
 
@@ -329,13 +341,16 @@ class PluginRuntime @Inject constructor() {
                         try {
                             var getStreams = module.exports.getStreams || globalThis.getStreams;
                             if (!getStreams) {
+                                console.error("getStreams function not found on module.exports or globalThis");
                                 __capture_result(JSON.stringify([]));
                                 return;
                             }
+                            console.log("Calling getStreams with tmdbId=$tmdbId type=$mediaType s=$seasonArg e=$episodeArg");
                             var result = await getStreams("$tmdbId", "$mediaType", $seasonArg, $episodeArg);
+                            console.log("getStreams returned: " + (result ? result.length : 0) + " streams");
                             __capture_result(JSON.stringify(result || []));
                         } catch (e) {
-                            console.error("getStreams error:", e.message || e);
+                            console.error("getStreams error:", e.message || e, e.stack || "");
                             __capture_result(JSON.stringify([]));
                         }
                     })();
@@ -357,6 +372,7 @@ class PluginRuntime @Inject constructor() {
     }
 
     private fun performNativeFetch(url: String, method: String, headersJson: String, body: String): String {
+        Log.d(TAG, "Fetch: $method $url body=${body.take(200)}")
         return try {
             val headers = mutableMapOf<String, String>()
             try {
@@ -387,18 +403,34 @@ class PluginRuntime @Inject constructor() {
             when (method.uppercase()) {
                 "POST" -> {
                     val contentType = headers["Content-Type"] ?: "application/x-www-form-urlencoded"
-                    requestBuilder.post(body.toRequestBody(contentType.toMediaType()))
+                    // Use ByteArray.toRequestBody to prevent OkHttp from appending '; charset=utf-8'
+                    // to Content-Type, which would break HMAC signature verification on servers
+                    // that include Content-Type in their canonical string (e.g. MovieBox).
+                    requestBuilder.post(body.toByteArray(Charsets.UTF_8).toRequestBody(contentType.toMediaType()))
                 }
                 "PUT" -> {
                     val contentType = headers["Content-Type"] ?: "application/json"
-                    requestBuilder.put(body.toRequestBody(contentType.toMediaType()))
+                    requestBuilder.put(body.toByteArray(Charsets.UTF_8).toRequestBody(contentType.toMediaType()))
                 }
                 "DELETE" -> requestBuilder.delete()
                 else -> requestBuilder.get()
             }
 
             val request = requestBuilder.build()
-            val response = httpClient.newCall(request).execute()
+            val response = try {
+                httpClient.newCall(request).execute()
+            } catch (protoEx: java.net.ProtocolException) {
+                // Handle 407 Proxy Auth or other protocol issues gracefully
+                Log.w(TAG, "Protocol error for ${url}: ${protoEx.message}")
+                return gson.toJson(mapOf(
+                    "ok" to false,
+                    "status" to 407,
+                    "statusText" to (protoEx.message ?: "Protocol error"),
+                    "url" to url,
+                    "body" to "",
+                    "headers" to emptyMap<String, String>()
+                ))
+            }
 
             val responseBodyBytes = response.body?.bytes() ?: ByteArray(0)
             val contentEncoding = response.header("Content-Encoding")?.lowercase()?.trim()
@@ -433,6 +465,7 @@ class PluginRuntime @Inject constructor() {
                 "headers" to responseHeaders
             )
 
+            Log.d(TAG, "Fetch result: ${response.code} ${response.message} url=$url bodyLen=${responseBody.length} bodyPreview=${responseBody.take(300)}")
             gson.toJson(result)
         } catch (e: Exception) {
             Log.e(TAG, "Fetch error: ${e.message}")
@@ -520,10 +553,21 @@ class PluginRuntime @Inject constructor() {
             };
 
             // URL class
-            var URL = function(urlString) {
-                var parsed = __parse_url(urlString);
+            var URL = function(urlString, base) {
+                var fullUrl = urlString;
+                if (base && !/^https?:\/\//i.test(urlString)) {
+                    // Resolve relative URL against base
+                    var b = typeof base === 'string' ? base : base.href;
+                    if (urlString.charAt(0) === '/') {
+                        var m = b.match(/^(https?:\/\/[^\/]+)/);
+                        fullUrl = m ? m[1] + urlString : urlString;
+                    } else {
+                        fullUrl = b.replace(/\/[^\/]*$/, '/') + urlString;
+                    }
+                }
+                var parsed = __parse_url(fullUrl);
                 var data = JSON.parse(parsed);
-                this.href = urlString;
+                this.href = fullUrl;
                 this.protocol = data.protocol;
                 this.host = data.host;
                 this.hostname = data.hostname;
@@ -531,7 +575,11 @@ class PluginRuntime @Inject constructor() {
                 this.pathname = data.pathname;
                 this.search = data.search;
                 this.hash = data.hash;
+                this.origin = data.protocol + '//' + data.host;
+                // Build searchParams from search string
+                this.searchParams = new URLSearchParams(data.search || '');
             };
+            URL.prototype.toString = function() { return this.href; };
 
             // URLSearchParams class
             var URLSearchParams = function(init) {
@@ -570,6 +618,32 @@ class PluginRuntime @Inject constructor() {
             };
             URLSearchParams.prototype.delete = function(key) {
                 delete this._params[key];
+            };
+            URLSearchParams.prototype.keys = function() {
+                return Object.keys(this._params);
+            };
+            URLSearchParams.prototype.values = function() {
+                var self = this;
+                return Object.keys(this._params).map(function(k) { return self._params[k]; });
+            };
+            URLSearchParams.prototype.entries = function() {
+                var self = this;
+                return Object.keys(this._params).map(function(k) { return [k, self._params[k]]; });
+            };
+            URLSearchParams.prototype.forEach = function(callback) {
+                var self = this;
+                Object.keys(this._params).forEach(function(key) {
+                    callback(self._params[key], key, self);
+                });
+            };
+            URLSearchParams.prototype.getAll = function(key) {
+                return this._params.hasOwnProperty(key) ? [this._params[key]] : [];
+            };
+            URLSearchParams.prototype.sort = function() {
+                var sorted = {};
+                var self = this;
+                Object.keys(this._params).sort().forEach(function(k) { sorted[k] = self._params[k]; });
+                this._params = sorted;
             };
 
             // Cheerio implementation
