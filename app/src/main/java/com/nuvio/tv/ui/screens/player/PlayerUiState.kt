@@ -24,6 +24,7 @@ data class PlayerUiState(
     val description: String? = null,
     val castMembers: List<MetaCastMember> = emptyList(),
     val showControls: Boolean = true,
+    val showSeekOverlay: Boolean = false,
     val playbackSpeed: Float = 1f,
     val loadingOverlayEnabled: Boolean = true,
     val showLoadingOverlay: Boolean = true,

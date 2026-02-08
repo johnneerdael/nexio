@@ -424,6 +424,17 @@ fun PlayerScreen(
             )
         }
 
+        // Seek-only overlay (progress bar + time) when controls are hidden
+        AnimatedVisibility(
+            visible = uiState.showSeekOverlay && !uiState.showControls && uiState.error == null &&
+                !uiState.showLoadingOverlay && !uiState.showPauseOverlay,
+            enter = fadeIn(animationSpec = tween(150)),
+            exit = fadeOut(animationSpec = tween(150)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            SeekOverlay(uiState = uiState)
+        }
+
         // Episodes/streams side panel (slides in from right)
         AnimatedVisibility(
             visible = uiState.showEpisodesPanel && uiState.error == null,
@@ -812,6 +823,35 @@ private fun ProgressBar(
                 .clip(RoundedCornerShape(3.dp))
                 .background(NuvioColors.Secondary)
         )
+    }
+}
+
+@Composable
+private fun SeekOverlay(uiState: PlayerUiState) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 24.dp)
+    ) {
+        ProgressBar(
+            currentPosition = uiState.currentPosition,
+            duration = uiState.duration,
+            onSeekTo = {}
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${formatTime(uiState.currentPosition)} / ${formatTime(uiState.duration)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.9f)
+            )
+        }
     }
 }
 

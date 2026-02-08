@@ -159,6 +159,7 @@ class PlayerViewModel @Inject constructor(
 
     private var progressJob: Job? = null
     private var hideControlsJob: Job? = null
+    private var hideSeekOverlayJob: Job? = null
     private var watchProgressSaveJob: Job? = null
     
     // Track last saved position to avoid redundant saves
@@ -1469,7 +1470,7 @@ class PlayerViewModel @Inject constructor(
 
     fun hideControls() {
         hideControlsJob?.cancel()
-        _uiState.update { it.copy(showControls = false) }
+        _uiState.update { it.copy(showControls = false, showSeekOverlay = false) }
     }
 
     fun onEvent(event: PlayerEvent) {
@@ -1491,24 +1492,35 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnSeekForward -> {
                 _exoPlayer?.let { player ->
-                    player.seekTo((player.currentPosition + 10000).coerceAtMost(player.duration))
+                    val target = (player.currentPosition + 10000).coerceAtMost(player.duration)
+                    player.seekTo(target)
+                    _uiState.update { it.copy(currentPosition = target) }
                 }
                 if (_uiState.value.showControls) {
-                    scheduleHideControls()
+                    showControlsTemporarily()
+                } else {
+                    showSeekOverlayTemporarily()
                 }
             }
             PlayerEvent.OnSeekBackward -> {
                 _exoPlayer?.let { player ->
-                    player.seekTo((player.currentPosition - 10000).coerceAtLeast(0))
+                    val target = (player.currentPosition - 10000).coerceAtLeast(0)
+                    player.seekTo(target)
+                    _uiState.update { it.copy(currentPosition = target) }
                 }
                 if (_uiState.value.showControls) {
-                    scheduleHideControls()
+                    showControlsTemporarily()
+                } else {
+                    showSeekOverlayTemporarily()
                 }
             }
             is PlayerEvent.OnSeekTo -> {
                 _exoPlayer?.seekTo(event.position)
+                _uiState.update { it.copy(currentPosition = event.position) }
                 if (_uiState.value.showControls) {
-                    scheduleHideControls()
+                    showControlsTemporarily()
+                } else {
+                    showSeekOverlayTemporarily()
                 }
             }
             is PlayerEvent.OnSelectAudioTrack -> {
@@ -1665,8 +1677,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun showControlsTemporarily() {
-        _uiState.update { it.copy(showControls = true) }
+        hideSeekOverlayJob?.cancel()
+        _uiState.update { it.copy(showControls = true, showSeekOverlay = false) }
         scheduleHideControls()
+    }
+
+    private fun showSeekOverlayTemporarily() {
+        hideSeekOverlayJob?.cancel()
+        _uiState.update { it.copy(showSeekOverlay = true) }
+        hideSeekOverlayJob = viewModelScope.launch {
+            delay(1500)
+            _uiState.update { it.copy(showSeekOverlay = false) }
+        }
     }
 
     private fun selectAudioTrack(trackIndex: Int) {
