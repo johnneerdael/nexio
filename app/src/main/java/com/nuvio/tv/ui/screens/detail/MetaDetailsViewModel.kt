@@ -54,6 +54,9 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var trailerDelayMs = 7000L
 
+    /** Once true, the trailer will never auto-play again for this screen session. */
+    private var trailerHasBeenTriggered = false
+
     init {
         observeLibraryState()
         observeWatchProgress()
@@ -481,15 +484,20 @@ class MetaDetailsViewModel @Inject constructor(
 
         val state = _uiState.value
         if (state.trailerUrl == null || state.isTrailerPlaying) return
+        // Never restart the idle timer once the trailer has played or the user has interacted
+        if (trailerHasBeenTriggered) return
 
         idleTimerJob = viewModelScope.launch {
             delay(trailerDelayMs)
+            trailerHasBeenTriggered = true
             _uiState.update { it.copy(isTrailerPlaying = true) }
         }
     }
 
     private fun handleUserInteraction() {
         idleTimerJob?.cancel()
+        // Permanently prevent trailer from replaying for this screen session
+        trailerHasBeenTriggered = true
 
         if (_uiState.value.isTrailerPlaying) {
             _uiState.update { it.copy(isTrailerPlaying = false) }

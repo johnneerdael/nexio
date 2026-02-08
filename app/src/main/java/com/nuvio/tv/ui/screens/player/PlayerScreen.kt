@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -131,6 +132,22 @@ fun PlayerScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Frame rate matching: switch display refresh rate to match video frame rate
+    val activity = LocalContext.current as? android.app.Activity
+    LaunchedEffect(uiState.detectedFrameRate, uiState.frameRateMatchingEnabled) {
+        if (activity != null && uiState.frameRateMatchingEnabled && uiState.detectedFrameRate > 0f) {
+            com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(activity, uiState.detectedFrameRate)
+        }
+    }
+    // Restore original display mode when leaving the player
+    DisposableEffect(activity) {
+        onDispose {
+            if (activity != null) {
+                com.nuvio.tv.core.player.FrameRateUtils.restoreOriginalMode(activity)
+            }
         }
     }
 

@@ -28,6 +28,7 @@ import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.common.MimeTypes
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
@@ -526,6 +527,9 @@ class PlayerViewModel @Inject constructor(
                     if (playerSettings.skipSilence) {
                         skipSilenceEnabled = true
                     }
+
+                    // Store frame rate matching preference for later use
+                    _uiState.update { it.copy(frameRateMatchingEnabled = playerSettings.frameRateMatching) }
 
                     // Loudness enhancer for volume boost beyond system max
                     try {
@@ -1139,6 +1143,19 @@ class PlayerViewModel @Inject constructor(
             val trackType = trackGroup.type
             
             when (trackType) {
+                C.TRACK_TYPE_VIDEO -> {
+                    // Detect video frame rate from the first selected video track
+                    for (i in 0 until trackGroup.length) {
+                        if (trackGroup.isTrackSelected(i)) {
+                            val format = trackGroup.getTrackFormat(i)
+                            if (format.frameRate > 0f) {
+                                val snapped = FrameRateUtils.snapToStandardRate(format.frameRate)
+                                _uiState.update { it.copy(detectedFrameRate = snapped) }
+                            }
+                            break
+                        }
+                    }
+                }
                 C.TRACK_TYPE_AUDIO -> {
                     for (i in 0 until trackGroup.length) {
                         val format = trackGroup.getTrackFormat(i)

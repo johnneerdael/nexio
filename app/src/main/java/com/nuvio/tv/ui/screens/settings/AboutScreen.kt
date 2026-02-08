@@ -82,8 +82,8 @@ fun AboutSettingsContent() {
         Spacer(modifier = Modifier.height(16.dp))
 
         Image(
-            painter = painterResource(id = R.drawable.nuvio_text),
-            contentDescription = "Nuvio",
+            painter = painterResource(id = R.drawable.nuviotv_logo),
+            contentDescription = "NuvioTV",
             modifier = Modifier
                 .width(180.dp)
                 .height(50.dp),

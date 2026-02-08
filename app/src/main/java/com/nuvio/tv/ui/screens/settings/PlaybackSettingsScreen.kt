@@ -223,6 +223,20 @@ fun PlaybackSettingsContent(
                 )
             }
 
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Speed,
+                    title = "Auto Frame Rate",
+                    subtitle = "Switch display refresh rate to match video frame rate for judder-free playback",
+                    isChecked = playerSettings.frameRateMatching,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setFrameRateMatching(enabled)
+                        }
+                    }
+                )
+            }
+
             // Trailer Section Header
             item {
                 Text(

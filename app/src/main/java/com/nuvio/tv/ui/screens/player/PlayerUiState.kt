@@ -81,7 +81,10 @@ data class PlayerUiState(
     val parentalGuideHasShown: Boolean = false,
     // Skip intro
     val activeSkipInterval: SkipInterval? = null,
-    val skipIntervalDismissed: Boolean = false
+    val skipIntervalDismissed: Boolean = false,
+    // Frame rate matching
+    val detectedFrameRate: Float = 0f,
+    val frameRateMatchingEnabled: Boolean = false
 )
 
 data class TrackInfo(

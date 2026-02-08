@@ -53,6 +53,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(enabled)
     }
 
+    suspend fun setFrameRateMatching(enabled: Boolean) {
+        playerSettingsDataStore.setFrameRateMatching(enabled)
+    }
+
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
      */
