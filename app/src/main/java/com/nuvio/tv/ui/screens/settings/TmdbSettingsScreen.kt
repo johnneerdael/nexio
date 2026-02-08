@@ -96,7 +96,7 @@ fun TmdbSettingsContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         TvLazyColumn(
-            contentPadding = PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -242,7 +242,8 @@ private fun ToggleCard(
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = NuvioColors.Secondary,
                     checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f),
-                    uncheckedThumbColor = Color.Gray
+                    uncheckedThumbColor = NuvioColors.TextSecondary,
+                    uncheckedTrackColor = NuvioColors.BackgroundCard
                 )
             )
         }

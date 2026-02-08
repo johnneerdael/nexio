@@ -104,7 +104,7 @@ fun ThemeSettingsContent(
 
         TvLazyVerticalGrid(
             columns = TvGridCells.Fixed(3),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {

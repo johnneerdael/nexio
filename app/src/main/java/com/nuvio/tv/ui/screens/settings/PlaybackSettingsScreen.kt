@@ -1033,8 +1033,8 @@ private fun ToggleSettingsItem(
                 checked = isChecked,
                 onCheckedChange = null, // Handled by Card onClick
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = NuvioColors.Primary,
-                    checkedTrackColor = NuvioColors.Primary.copy(alpha = 0.5f),
+                    checkedThumbColor = NuvioColors.Secondary,
+                    checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.35f),
                     uncheckedThumbColor = NuvioColors.TextSecondary,
                     uncheckedTrackColor = NuvioColors.BackgroundCard
                 )

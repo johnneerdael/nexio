@@ -215,12 +215,5 @@ fun AboutSettingsContent() {
         }
 
         Spacer(modifier = Modifier.weight(1f))
-
-        Text(
-            text = "v${BuildConfig.VERSION_NAME}",
-            style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary.copy(alpha = 0.5f),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
     }
 }
