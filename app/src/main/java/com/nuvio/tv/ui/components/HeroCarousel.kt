@@ -140,7 +140,7 @@ fun HeroCarousel(
                             when {
                                 isFocused && isActive -> NuvioColors.FocusRing
                                 isFocused -> NuvioColors.FocusRing.copy(alpha = 0.4f)
-                                isActive -> NuvioColors.Primary
+                                isActive -> NuvioColors.FocusRing
                                 else -> Color.White.copy(alpha = 0.3f)
                             }
                         )
