@@ -13,5 +13,6 @@ data class CatalogRow(
     val items: List<MetaPreview>,
     val isLoading: Boolean = false,
     val hasMore: Boolean = true,
-    val currentPage: Int = 0
+    val currentPage: Int = 0,
+    val supportsSkip: Boolean = false
 )

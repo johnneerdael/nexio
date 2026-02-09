@@ -53,9 +53,9 @@ fun CatalogSeeAllScreen(
 
     BackHandler { onBackPress() }
 
-    // Find the matching catalog row
+    // Find the matching catalog row from full (untruncated) data
     val catalogKey = "${addonId}_${type}_${catalogId}"
-    val catalogRow = uiState.catalogRows.find {
+    val catalogRow = uiState.fullCatalogRows.find {
         "${it.addonId}_${it.type.toApiString()}_${it.catalogId}" == catalogKey
     }
 
@@ -113,27 +113,42 @@ fun CatalogSeeAllScreen(
         val isCatalogLoading = catalogRow == null || catalogRow.isLoading
 
         if (hasItems) {
-            TvLazyVerticalGrid(
-                state = gridState,
-                columns = TvGridCells.Fixed(5),
-                contentPadding = PaddingValues(bottom = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                itemsIndexed(
-                    items = catalogRow.items,
-                    key = { index, item -> "${catalogRow.catalogId}_${item.id}_$index" }
-                ) { _, item ->
-                    GridContentCard(
-                        item = item,
-                        onClick = {
-                            onNavigateToDetail(
-                                item.id,
-                                item.type.toApiString(),
-                                catalogRow.addonBaseUrl
-                            )
-                        }
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                TvLazyVerticalGrid(
+                    state = gridState,
+                    columns = TvGridCells.Fixed(5),
+                    contentPadding = PaddingValues(bottom = if (catalogRow.isLoading) 80.dp else 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    itemsIndexed(
+                        items = catalogRow.items,
+                        key = { index, item -> "${catalogRow.catalogId}_${item.id}_$index" }
+                    ) { _, item ->
+                        GridContentCard(
+                            item = item,
+                            onClick = {
+                                onNavigateToDetail(
+                                    item.id,
+                                    item.type.toApiString(),
+                                    catalogRow.addonBaseUrl
+                                )
+                            }
+                        )
+                    }
+                }
+
+                // Loading indicator at bottom when loading more items
+                if (catalogRow.isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator()
+                    }
                 }
             }
         } else if (isCatalogLoading) {

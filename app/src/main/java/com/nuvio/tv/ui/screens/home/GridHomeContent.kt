@@ -61,7 +61,6 @@ fun GridHomeContent(
     gridFocusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
-    onLoadMore: (catalogId: String, addonId: String, type: String) -> Unit,
     onRemoveContinueWatching: (String) -> Unit,
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
@@ -120,27 +119,6 @@ fun GridHomeContent(
     // Pre-compute section bounds once when gridItems changes (not on every scroll)
     val sectionBounds = remember(uiState.gridItems, continueWatchingOffset) {
         buildSectionBounds(uiState.gridItems, continueWatchingOffset)
-    }
-
-    // Per-section load-more detection
-    LaunchedEffect(gridState, sectionBounds, uiState.catalogRows) {
-        snapshotFlow {
-            gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-        }
-            .distinctUntilChanged()
-            .collect { lastVisibleIndex ->
-                for (bound in sectionBounds) {
-                    // If the last visible item is within 5 items of this section's end
-                    if (lastVisibleIndex >= bound.lastContentIndex - 5 && lastVisibleIndex <= bound.lastContentIndex) {
-                        val row = uiState.catalogRows.find {
-                            it.catalogId == bound.catalogId && it.addonId == bound.addonId
-                        }
-                        if (row != null && row.hasMore && !row.isLoading) {
-                            onLoadMore(row.catalogId, row.addonId, row.type.toApiString())
-                        }
-                    }
-                }
-            }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

@@ -53,11 +53,6 @@ fun GridContinueWatchingSection(
                     style = MaterialTheme.typography.headlineMedium,
                     color = NuvioColors.TextPrimary
                 )
-                Text(
-                    text = "Hold OK for options",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextSecondary
-                )
             }
         }
 

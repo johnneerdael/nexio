@@ -257,6 +257,7 @@ class HomeViewModel @Inject constructor(
     private fun loadCatalog(addon: Addon, catalog: CatalogDescriptor) {
         viewModelScope.launch {
             catalogLoadSemaphore.withPermit {
+                val supportsSkip = catalog.extra.any { it.name == "skip" }
                 catalogRepository.getCatalog(
                     addonBaseUrl = addon.baseUrl,
                     addonId = addon.id,
@@ -264,7 +265,8 @@ class HomeViewModel @Inject constructor(
                     catalogId = catalog.id,
                     catalogName = catalog.name,
                     type = catalog.type.toApiString(),
-                    skip = 0
+                    skip = 0,
+                    supportsSkip = supportsSkip
                 ).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
@@ -300,7 +302,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val addon = addonsCache.find { it.id == addonId } ?: return@launch
 
-            val nextSkip = (currentRow.currentPage + 1) * 100
+            // Use actual loaded item count for skip, not fixed 100-page size
+            val nextSkip = currentRow.items.size
             catalogRepository.getCatalog(
                 addonBaseUrl = addon.baseUrl,
                 addonId = addon.id,
@@ -308,7 +311,8 @@ class HomeViewModel @Inject constructor(
                 catalogId = catalogId,
                 catalogName = currentRow.catalogName,
                 type = currentRow.type.toApiString(),
-                skip = nextSkip
+                skip = nextSkip,
+                supportsSkip = currentRow.supportsSkip
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
@@ -407,8 +411,12 @@ class HomeViewModel @Inject constructor(
             Triple(computedDisplayRows, computedHeroItems, computedGridItems)
         }
 
+        // Full (untruncated) rows for CatalogSeeAllScreen
+        val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+
         _uiState.value = _uiState.value.copy(
             catalogRows = displayRows,
+            fullCatalogRows = fullRows,
             heroItems = heroItems,
             gridItems = gridItems,
             isLoading = false

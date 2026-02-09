@@ -27,7 +27,6 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val focusState by viewModel.focusState.collectAsState()
     val gridFocusState by viewModel.gridFocusState.collectAsState()
-    val loadingCatalogs by viewModel.loadingCatalogs.collectAsState()
 
     Box(
         modifier = Modifier
@@ -78,12 +77,8 @@ fun HomeScreen(
                     HomeLayout.CLASSIC -> ClassicHomeContent(
                         uiState = uiState,
                         focusState = focusState,
-                        loadingCatalogs = loadingCatalogs,
                         onNavigateToDetail = onNavigateToDetail,
                         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                        onLoadMore = { cid, aid, t ->
-                            viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
-                        },
                         onRemoveContinueWatching = { contentId ->
                             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
                         },
@@ -96,9 +91,6 @@ fun HomeScreen(
                         gridFocusState = gridFocusState,
                         onNavigateToDetail = onNavigateToDetail,
                         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                        onLoadMore = { cid, aid, t ->
-                            viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
-                        },
                         onRemoveContinueWatching = { contentId ->
                             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
                         },

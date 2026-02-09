@@ -25,10 +25,8 @@ import com.nuvio.tv.ui.components.HeroCarousel
 fun ClassicHomeContent(
     uiState: HomeUiState,
     focusState: HomeScreenFocusState,
-    loadingCatalogs: Set<String> = emptySet(),
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
-    onLoadMore: (catalogId: String, addonId: String, type: String) -> Unit,
     onRemoveContinueWatching: (String) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
@@ -129,20 +127,10 @@ fun ClassicHomeContent(
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val focusedItemIndex = if (shouldRestoreFocus) focusState.focusedItemIndex else -1
 
-            val loadMoreKey = "${catalogRow.addonId}_${catalogRow.type.toApiString()}_${catalogRow.catalogId}"
-
             CatalogRowSection(
                 catalogRow = catalogRow,
-                isLoadingMore = loadMoreKey in loadingCatalogs,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
-                },
-                onLoadMore = {
-                    onLoadMore(
-                        catalogRow.catalogId,
-                        catalogRow.addonId,
-                        catalogRow.type.toApiString()
-                    )
                 },
                 onSeeAll = {
                     onNavigateToCatalogSeeAll(

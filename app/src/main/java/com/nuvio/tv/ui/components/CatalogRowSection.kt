@@ -24,8 +24,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -51,10 +49,8 @@ private val SeeAllCardShape = RoundedCornerShape(8.dp)
 fun CatalogRowSection(
     catalogRow: CatalogRow,
     onItemClick: (String, String, String) -> Unit,
-    onLoadMore: () -> Unit,
     onSeeAll: () -> Unit = {},
     modifier: Modifier = Modifier,
-    isLoadingMore: Boolean = false,
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {},
@@ -71,9 +67,6 @@ fun CatalogRowSection(
     }
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
-    val currentHasMore by rememberUpdatedState(catalogRow.hasMore)
-    val currentIsLoadingMore by rememberUpdatedState(isLoadingMore)
-    val currentOnLoadMore by rememberUpdatedState(onLoadMore)
 
     // Only allocate FocusRequester when actually restoring focus
     val itemFocusRequester = if (focusedItemIndex >= 0) {
@@ -88,21 +81,6 @@ fun CatalogRowSection(
         }
         requester
     } else null
-
-    // Check load-more only when scrolling stops — avoids per-frame layoutInfo reads
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .distinctUntilChanged()
-            .collect { scrolling ->
-                if (!scrolling) {
-                    val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    val total = listState.layoutInfo.totalItemsCount
-                    if (lastVisible >= total - 5 && currentHasMore && !currentIsLoadingMore) {
-                        currentOnLoadMore()
-                    }
-                }
-            }
-    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -160,21 +138,8 @@ fun CatalogRowSection(
                 )
             }
 
-            if (isLoadingMore || catalogRow.isLoading) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .width(150.dp)
-                            .height(225.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator()
-                    }
-                }
-            }
-
-            // "See All" card — only when catalog has more items available
-            if (!isLoadingMore && !catalogRow.isLoading && catalogRow.items.size >= 15) {
+            // "See All" card
+            if (catalogRow.items.size >= 15) {
                 item(key = "${catalogRow.type}_${catalogRow.catalogId}_see_all") {
                     Card(
                         onClick = onSeeAll,

@@ -42,7 +42,8 @@ import com.nuvio.tv.ui.theme.NuvioColors
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
-    onNavigateToDetail: (String, String, String) -> Unit
+    onNavigateToDetail: (String, String, String) -> Unit,
+    onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val searchFocusRequester = remember { FocusRequester() }
@@ -170,13 +171,11 @@ fun SearchScreen(
                             onItemClick = { id, type, addonBaseUrl ->
                                 onNavigateToDetail(id, type, addonBaseUrl)
                             },
-                            onLoadMore = {
-                                viewModel.onEvent(
-                                    SearchEvent.LoadMoreCatalog(
-                                        catalogId = catalogRow.catalogId,
-                                        addonId = catalogRow.addonId,
-                                        type = catalogRow.type.toApiString()
-                                    )
+                            onSeeAll = {
+                                onNavigateToSeeAll(
+                                    catalogRow.catalogId,
+                                    catalogRow.addonId,
+                                    catalogRow.type.toApiString()
                                 )
                             }
                         )

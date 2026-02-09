@@ -134,6 +134,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private suspend fun loadCatalog(addon: Addon, catalog: CatalogDescriptor, query: String) {
+        val supportsSkip = catalog.extra.any { it.name == "skip" }
         catalogRepository.getCatalog(
             addonBaseUrl = addon.baseUrl,
             addonId = addon.id,
@@ -142,7 +143,8 @@ class SearchViewModel @Inject constructor(
             catalogName = catalog.name,
             type = catalog.type.toApiString(),
             skip = 0,
-            extraArgs = mapOf("search" to query)
+            extraArgs = mapOf("search" to query),
+            supportsSkip = supportsSkip
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
@@ -186,7 +188,8 @@ class SearchViewModel @Inject constructor(
                 return@launch
             }
 
-            val nextSkip = (currentRow.currentPage + 1) * 100
+            // Use actual loaded item count for skip, not fixed 100-page size
+            val nextSkip = currentRow.items.size
             catalogRepository.getCatalog(
                 addonBaseUrl = addon.baseUrl,
                 addonId = addon.id,
@@ -195,7 +198,8 @@ class SearchViewModel @Inject constructor(
                 catalogName = currentRow.catalogName,
                 type = currentRow.type.toApiString(),
                 skip = nextSkip,
-                extraArgs = mapOf("search" to query)
+                extraArgs = mapOf("search" to query),
+                supportsSkip = currentRow.supportsSkip
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {

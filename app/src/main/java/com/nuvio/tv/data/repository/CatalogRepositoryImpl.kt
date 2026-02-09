@@ -24,7 +24,8 @@ class CatalogRepositoryImpl @Inject constructor(
         catalogName: String,
         type: String,
         skip: Int,
-        extraArgs: Map<String, String>
+        extraArgs: Map<String, String>,
+        supportsSkip: Boolean
     ): Flow<NetworkResult<CatalogRow>> = flow {
         emit(NetworkResult.Loading)
 
@@ -33,6 +34,7 @@ class CatalogRepositoryImpl @Inject constructor(
         when (val result = safeApiCall { api.getCatalog(url) }) {
             is NetworkResult.Success -> {
                 val items = result.data.metas.map { it.toDomain() }
+                
                 val catalogRow = CatalogRow(
                     addonId = addonId,
                     addonName = addonName,
@@ -42,8 +44,9 @@ class CatalogRepositoryImpl @Inject constructor(
                     type = ContentType.fromString(type),
                     items = items,
                     isLoading = false,
-                    hasMore = items.size >= 100,
-                    currentPage = skip / 100
+                    hasMore = supportsSkip && items.isNotEmpty(),
+                    currentPage = skip / 100,
+                    supportsSkip = supportsSkip
                 )
                 emit(NetworkResult.Success(catalogRow))
             }

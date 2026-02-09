@@ -98,11 +98,6 @@ fun ContinueWatchingSection(
                 style = MaterialTheme.typography.titleLarge,
                 color = NuvioColors.TextPrimary
             )
-            Text(
-                text = "Hold OK for options",
-                style = MaterialTheme.typography.labelMedium,
-                color = NuvioColors.TextSecondary
-            )
         }
 
         TvLazyRow(
