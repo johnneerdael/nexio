@@ -128,6 +128,14 @@ sealed class PlayerEvent {
     data object OnDismissPauseOverlay : PlayerEvent()
     data object OnSkipIntro : PlayerEvent()
     data object OnDismissSkipIntro : PlayerEvent()
+    // Subtitle style events (for in-player style tab)
+    data class OnSetSubtitleSize(val size: Int) : PlayerEvent()
+    data class OnSetSubtitleTextColor(val color: Int) : PlayerEvent()
+    data class OnSetSubtitleBold(val bold: Boolean) : PlayerEvent()
+    data class OnSetSubtitleOutlineEnabled(val enabled: Boolean) : PlayerEvent()
+    data class OnSetSubtitleOutlineColor(val color: Int) : PlayerEvent()
+    data class OnSetSubtitleVerticalOffset(val offset: Int) : PlayerEvent()
+    data object OnResetSubtitleDefaults : PlayerEvent()
 }
 
 data class ParentalWarning(

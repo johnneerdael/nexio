@@ -489,7 +489,7 @@ fun PlaybackSettingsContent(
                     title = "Vertical Offset",
                     value = playerSettings.subtitleStyle.verticalOffset,
                     valueText = "${playerSettings.subtitleStyle.verticalOffset}%",
-                    minValue = 0,
+                    minValue = -20,
                     maxValue = 50,
                     step = 1,
                     onValueChange = { newOffset ->

@@ -17,7 +17,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
@@ -46,7 +45,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,10 +80,8 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -324,14 +320,14 @@ fun PlayerScreen(
                         
                         setApplyEmbeddedStyles(false)
                         
-                        // Apply vertical offset (0% = bottom, 50% = middle)
-                        // Convert percentage to fraction (5% offset = 0.05 padding from bottom)
-                        val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0.02f, 0.4f)
+                        // Apply vertical offset (-20 = very bottom, 0 = default, 50 = middle)
+                        // Convert percentage to fraction for bottom padding
+                        val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
                         setBottomPaddingFraction(bottomPaddingFraction)
 
                         // Also apply explicit bottom padding based on view height for stronger offset effect
                         post {
-                            val extraPadding = (height * (subtitleStyle.verticalOffset / 400f)).toInt()
+                            val extraPadding = (height * (subtitleStyle.verticalOffset / 400f)).toInt().coerceAtLeast(0)
                             setPadding(paddingLeft, paddingTop, paddingRight, extraPadding)
                         }
                     }
@@ -539,9 +535,11 @@ fun PlayerScreen(
                 addonSubtitles = uiState.addonSubtitles,
                 selectedAddonSubtitle = uiState.selectedAddonSubtitle,
                 isLoadingAddons = uiState.isLoadingAddonSubtitles,
+                subtitleStyle = uiState.subtitleStyle,
                 onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
                 onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },
                 onDisableSubtitles = { viewModel.onEvent(PlayerEvent.OnDisableSubtitles) },
+                onStyleEvent = { viewModel.onEvent(it) },
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissDialog) }
             )
         }
@@ -704,7 +702,7 @@ private fun PlayerControlsOverlay(
                     )
 
                     // Subtitles
-                    if (uiState.subtitleTracks.isNotEmpty()) {
+                    if (uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()) {
                         ControlButton(
                             icon = Icons.Default.ClosedCaption,
                             contentDescription = "Subtitles",
@@ -958,315 +956,6 @@ private fun TrackSelectionDialog(
     }
 }
 
-@Composable
-private fun SubtitleSelectionDialog(
-    internalTracks: List<TrackInfo>,
-    selectedInternalIndex: Int,
-    addonSubtitles: List<Subtitle>,
-    selectedAddonSubtitle: Subtitle?,
-    isLoadingAddons: Boolean,
-    onInternalTrackSelected: (Int) -> Unit,
-    onAddonSubtitleSelected: (Subtitle) -> Unit,
-    onDisableSubtitles: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Internal", "Addons")
-    val tabFocusRequesters = remember { tabs.map { FocusRequester() } }
-    
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .width(450.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp)
-            ) {
-                Text(
-                    text = "Subtitles",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                // Tab row
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    tabs.forEachIndexed { index, _ ->
-                        SubtitleTab(
-                            title = tabs[index],
-                            isSelected = selectedTabIndex == index,
-                            badgeCount = if (index == 1) addonSubtitles.size else null,
-                            focusRequester = tabFocusRequesters[index],
-                            onClick = { selectedTabIndex = index }
-                        )
-                        if (index < tabs.lastIndex) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                    }
-                }
-                
-                // Content based on selected tab
-                when (selectedTabIndex) {
-                    0 -> {
-                        // Internal subtitles tab
-                        InternalSubtitlesContent(
-                            tracks = internalTracks,
-                            selectedIndex = selectedInternalIndex,
-                            selectedAddonSubtitle = selectedAddonSubtitle,
-                            onTrackSelected = onInternalTrackSelected,
-                            onDisableSubtitles = onDisableSubtitles
-                        )
-                    }
-                    1 -> {
-                        // Addon subtitles tab
-                        AddonSubtitlesContent(
-                            subtitles = addonSubtitles,
-                            selectedSubtitle = selectedAddonSubtitle,
-                            isLoading = isLoadingAddons,
-                            onSubtitleSelected = onAddonSubtitleSelected
-                        )
-                    }
-                }
-            }
-        }
-    }
-    
-    // Request focus on the first tab when dialog opens
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(100)
-        try {
-            tabFocusRequesters[0].requestFocus()
-        } catch (e: Exception) {
-            // Focus requester may not be ready
-        }
-    }
-}
-
-@Composable
-private fun SubtitleTab(
-    title: String,
-    isSelected: Boolean,
-    badgeCount: Int?,
-    focusRequester: FocusRequester,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .focusRequester(focusRequester)
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = when {
-                isSelected -> NuvioColors.Primary
-                isFocused -> NuvioColors.SurfaceVariant
-                else -> NuvioColors.Background
-            },
-            focusedContainerColor = if (isSelected) NuvioColors.Primary else NuvioColors.SurfaceVariant
-        ),
-        shape = CardDefaults.shape(RoundedCornerShape(8.dp))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isSelected) Color.White else NuvioColors.TextPrimary
-            )
-            
-            // Badge for addon count
-            if (badgeCount != null && badgeCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isSelected) Color.White.copy(alpha = 0.2f) else NuvioColors.Primary)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = badgeCount.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InternalSubtitlesContent(
-    tracks: List<TrackInfo>,
-    selectedIndex: Int,
-    selectedAddonSubtitle: Subtitle?,
-    onTrackSelected: (Int) -> Unit,
-    onDisableSubtitles: () -> Unit
-) {
-    TvLazyColumn(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(top = 4.dp),
-        modifier = Modifier.height(300.dp)
-    ) {
-        // Off option
-        item {
-            TrackItem(
-                track = TrackInfo(index = -1, name = "Off", language = null),
-                isSelected = selectedIndex == -1 && selectedAddonSubtitle == null,
-                onClick = onDisableSubtitles
-            )
-        }
-
-        if (tracks.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No internal subtitles available",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
-                    )
-                }
-            }
-        } else {
-            items(tracks) { track ->
-                TrackItem(
-                    track = track,
-                    isSelected = track.index == selectedIndex && selectedAddonSubtitle == null,
-                    onClick = { onTrackSelected(track.index) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AddonSubtitlesContent(
-    subtitles: List<Subtitle>,
-    selectedSubtitle: Subtitle?,
-    isLoading: Boolean,
-    onSubtitleSelected: (Subtitle) -> Unit
-) {
-    TvLazyColumn(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(top = 4.dp),
-        modifier = Modifier.height(300.dp)
-    ) {
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        LoadingIndicator(modifier = Modifier.size(24.dp))
-                        Text(
-                            text = "Loading subtitles from addons...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = NuvioColors.TextSecondary
-                        )
-                    }
-                }
-            }
-        } else if (subtitles.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No addon subtitles available",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
-                    )
-                }
-            }
-        } else {
-            items(subtitles) { subtitle ->
-                AddonSubtitleItem(
-                    subtitle = subtitle,
-                    isSelected = selectedSubtitle?.id == subtitle.id,
-                    onClick = { onSubtitleSelected(subtitle) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AddonSubtitleItem(
-    subtitle: Subtitle,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = when {
-                isSelected -> NuvioColors.Primary.copy(alpha = 0.3f)
-                isFocused -> NuvioColors.SurfaceVariant
-                else -> NuvioColors.Background
-            },
-            focusedContainerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.5f) else NuvioColors.SurfaceVariant
-        ),
-        shape = CardDefaults.shape(RoundedCornerShape(8.dp))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = subtitle.getDisplayLanguage(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextPrimary
-                )
-                Text(
-                    text = subtitle.addonName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
-                )
-            }
-            
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = NuvioColors.Primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun SpeedSelectionDialog(
@@ -1303,59 +992,6 @@ private fun SpeedSelectionDialog(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TrackItem(
-    track: TrackInfo,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.Secondary.copy(alpha = 0.2f) else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = track.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isSelected) NuvioColors.Secondary else NuvioColors.TextPrimary
-                )
-                if (track.language != null) {
-                    Text(
-                        text = track.language.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = NuvioTheme.extendedColors.textSecondary
-                    )
-                }
-            }
-
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = NuvioColors.Secondary,
-                    modifier = Modifier.size(24.dp)
-                )
             }
         }
     }

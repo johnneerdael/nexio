@@ -44,6 +44,7 @@ import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
@@ -1732,6 +1733,37 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnDismissSkipIntro -> {
                 _uiState.update { it.copy(skipIntervalDismissed = true) }
+            }
+            is PlayerEvent.OnSetSubtitleSize -> {
+                viewModelScope.launch { playerSettingsDataStore.setSubtitleSize(event.size) }
+            }
+            is PlayerEvent.OnSetSubtitleTextColor -> {
+                viewModelScope.launch { playerSettingsDataStore.setSubtitleTextColor(event.color) }
+            }
+            is PlayerEvent.OnSetSubtitleBold -> {
+                viewModelScope.launch { playerSettingsDataStore.setSubtitleBold(event.bold) }
+            }
+            is PlayerEvent.OnSetSubtitleOutlineEnabled -> {
+                viewModelScope.launch { playerSettingsDataStore.setSubtitleOutlineEnabled(event.enabled) }
+            }
+            is PlayerEvent.OnSetSubtitleOutlineColor -> {
+                viewModelScope.launch { playerSettingsDataStore.setSubtitleOutlineColor(event.color) }
+            }
+            is PlayerEvent.OnSetSubtitleVerticalOffset -> {
+                viewModelScope.launch { playerSettingsDataStore.setSubtitleVerticalOffset(event.offset) }
+            }
+            PlayerEvent.OnResetSubtitleDefaults -> {
+                viewModelScope.launch {
+                    val defaults = SubtitleStyleSettings()
+                    playerSettingsDataStore.setSubtitleSize(defaults.size)
+                    playerSettingsDataStore.setSubtitleTextColor(defaults.textColor)
+                    playerSettingsDataStore.setSubtitleBold(defaults.bold)
+                    playerSettingsDataStore.setSubtitleOutlineEnabled(defaults.outlineEnabled)
+                    playerSettingsDataStore.setSubtitleOutlineColor(defaults.outlineColor)
+                    playerSettingsDataStore.setSubtitleOutlineWidth(defaults.outlineWidth)
+                    playerSettingsDataStore.setSubtitleVerticalOffset(defaults.verticalOffset)
+                    playerSettingsDataStore.setSubtitleBackgroundColor(defaults.backgroundColor)
+                }
             }
         }
     }

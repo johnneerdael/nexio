@@ -83,7 +83,7 @@ data class SubtitleStyleSettings(
     val preferredLanguage: String = "en",
     val secondaryPreferredLanguage: String? = null,
     val size: Int = 120, // Percentage (50-200)
-    val verticalOffset: Int = 5, // Percentage from bottom (0-50)
+    val verticalOffset: Int = 5, // Percentage from bottom (-20 to 50)
     val bold: Boolean = false,
     val textColor: Int = Color.White.toArgb(),
     val backgroundColor: Int = Color.Transparent.toArgb(),
@@ -373,7 +373,7 @@ class PlayerSettingsDataStore @Inject constructor(
     
     suspend fun setSubtitleVerticalOffset(offset: Int) {
         dataStore.edit { prefs ->
-            prefs[subtitleVerticalOffsetKey] = offset.coerceIn(0, 50)
+            prefs[subtitleVerticalOffsetKey] = offset.coerceIn(-20, 50)
         }
     }
     
