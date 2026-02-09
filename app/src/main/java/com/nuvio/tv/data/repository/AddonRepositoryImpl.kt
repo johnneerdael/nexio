@@ -65,13 +65,14 @@ class AddonRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addAddon(url: String) {
-        preferences.addAddon(url)
+        val cleanUrl = url.trimEnd('/')
+        preferences.addAddon(cleanUrl)
     }
 
     override suspend fun removeAddon(url: String) {
         val cleanUrl = url.trimEnd('/')
         manifestCache.remove(cleanUrl)
-        preferences.removeAddon(url)
+        preferences.removeAddon(cleanUrl)
     }
 
     override suspend fun setAddonOrder(urls: List<String>) {

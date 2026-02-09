@@ -51,16 +51,22 @@ class AddonPreferences @Inject constructor(
     suspend fun addAddon(url: String) {
         context.dataStore.edit { preferences ->
             val current = getCurrentList(preferences)
-            if (url !in current) {
-                preferences[orderedUrlsKey] = gson.toJson(current + url)
-            }
+            val normalizedUrl = url.trimEnd('/')
+           
+            preferences[orderedUrlsKey] = gson.toJson(current + normalizedUrl)
         }
     }
 
     suspend fun removeAddon(url: String) {
         context.dataStore.edit { preferences ->
-            val current = getCurrentList(preferences)
-            preferences[orderedUrlsKey] = gson.toJson(current - url)
+            val current = getCurrentList(preferences).toMutableList()
+            val normalizedUrl = url.trimEnd('/')
+            
+            val indexToRemove = current.indexOfFirst { it.trimEnd('/') == normalizedUrl }
+            if (indexToRemove != -1) {
+                current.removeAt(indexToRemove)
+            }
+            preferences[orderedUrlsKey] = gson.toJson(current)
         }
     }
 
