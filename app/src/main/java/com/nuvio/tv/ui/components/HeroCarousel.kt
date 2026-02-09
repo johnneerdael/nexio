@@ -182,13 +182,15 @@ private fun HeroCarouselSlide(
         modifier = Modifier.fillMaxSize()
     ) {
         // Background image
-        FadeInAsyncImage(
-            model = item.background ?: item.poster,
+        // Background image
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(item.background ?: item.poster)
+                .crossfade(true)
+                .build(),
             contentDescription = item.name,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            enableFadeIn = true,
-            fadeDurationMs = 600
+            contentScale = ContentScale.Crop
         )
 
         // Bottom gradient for text readability
@@ -214,16 +216,17 @@ private fun HeroCarouselSlide(
         ) {
             // Title logo or text title
             if (item.logo != null) {
-                FadeInAsyncImage(
-                    model = item.logo,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.logo)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = item.name,
                     modifier = Modifier
                         .height(80.dp)
                         .fillMaxWidth(),
                     contentScale = ContentScale.Fit,
-                    alignment = Alignment.CenterStart,
-                    enableFadeIn = true,
-                    fadeDurationMs = 500
+                    alignment = Alignment.CenterStart
                 )
             } else {
                 Text(

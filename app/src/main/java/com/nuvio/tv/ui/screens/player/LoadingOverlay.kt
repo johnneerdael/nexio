@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import com.nuvio.tv.ui.components.FadeInAsyncImage
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.ui.components.LoadingIndicator
 
 @Composable
@@ -63,8 +65,11 @@ fun LoadingOverlay(
                 .background(Color.Black)
         ) {
             if (!backdropUrl.isNullOrBlank()) {
-                FadeInAsyncImage(
-                    model = backdropUrl,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(backdropUrl)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = "Loading backdrop",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -91,8 +96,11 @@ fun LoadingOverlay(
                 contentAlignment = Alignment.Center
             ) {
                 if (!logoUrl.isNullOrBlank()) {
-                    FadeInAsyncImage(
-                        model = logoUrl,
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(logoUrl)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = "Loading logo",
                         modifier = Modifier
                             .width(320.dp)

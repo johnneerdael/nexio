@@ -23,9 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -56,7 +56,7 @@ fun LibraryScreen(
         ContentType.fromString(it.type) == selectedTab.type
     }
 
-    TvLazyColumn(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioColors.Background),
@@ -82,7 +82,7 @@ fun LibraryScreen(
 
         if (filteredItems.isNotEmpty()) {
             item {
-                TvLazyRow(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -109,7 +109,7 @@ private fun LibraryTabs(
     selectedTab: LibraryTab,
     onTabSelected: (LibraryTab) -> Unit
 ) {
-    TvLazyRow(
+    LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)

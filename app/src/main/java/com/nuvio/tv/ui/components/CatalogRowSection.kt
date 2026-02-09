@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.itemsIndexed
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -57,7 +57,7 @@ fun CatalogRowSection(
     upFocusRequester: FocusRequester? = null
 ) {
 
-    val listState = rememberTvLazyListState()
+    val listState = rememberLazyListState()
 
     // Restore scroll position if needed
     LaunchedEffect(initialScrollIndex) {
@@ -106,7 +106,7 @@ fun CatalogRowSection(
             }
         }
 
-        TvLazyRow(
+        LazyRow(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth(),
@@ -115,7 +115,7 @@ fun CatalogRowSection(
         ) {
             itemsIndexed(
                 items = catalogRow.items,
-                key = { index, item -> "${catalogRow.type}_${catalogRow.catalogId}_${item.id}_$index" },
+                key = { _, item -> "${catalogRow.type}_${catalogRow.catalogId}_${item.id}" },
                 contentType = { _, _ -> "content_card" }
             ) { index, item ->
                 ContentCard(

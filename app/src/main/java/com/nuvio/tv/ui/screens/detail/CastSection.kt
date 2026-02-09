@@ -19,8 +19,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -28,7 +32,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCastMember
-import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -53,7 +56,7 @@ fun CastSection(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -105,13 +108,18 @@ private fun CastMemberItem(
             ) {
                 val photo = member.photo
                 if (!photo.isNullOrBlank()) {
-                    FadeInAsyncImage(
-                        model = photo,
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(photo)
+                            .crossfade(true)
+                            .size(
+                                width = with(LocalDensity.current) { 100.dp.roundToPx() },
+                                height = with(LocalDensity.current) { 100.dp.roundToPx() }
+                            )
+                            .build(),
                         contentDescription = member.name,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        requestedWidthDp = 100.dp,
-                        requestedHeightDp = 100.dp
+                        contentScale = ContentScale.Crop
                     )
                 } else {
                     Text(

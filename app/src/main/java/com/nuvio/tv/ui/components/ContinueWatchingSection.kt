@@ -35,8 +35,10 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.itemsIndexed
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -49,6 +51,10 @@ import androidx.compose.ui.window.Dialog
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import java.util.concurrent.TimeUnit
 
 private val CwCardShape = RoundedCornerShape(12.dp)
@@ -72,6 +78,8 @@ fun ContinueWatchingSection(
     var lastFocusedIndex by remember { mutableStateOf(-1) }
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
+    
+    val listState = rememberLazyListState()
 
     // Restore focus to specific item if requested
     LaunchedEffect(focusedItemIndex) {
@@ -100,12 +108,13 @@ fun ContinueWatchingSection(
             )
         }
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRestorer(),
             contentPadding = PaddingValues(horizontal = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            state = listState
         ) {
             itemsIndexed(
                 items = items,
@@ -260,13 +269,18 @@ internal fun ContinueWatchingCard(
                     .clip(CwClipShape)
             ) {
                 // Background image with size hints for efficient decoding
-                FadeInAsyncImage(
-                    model = imageModel,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageModel)
+                        .crossfade(true)
+                        .size(
+                            width = with(LocalDensity.current) { cardWidth.roundToPx() },
+                            height = with(LocalDensity.current) { imageHeight.roundToPx() }
+                        )
+                        .build(),
                     contentDescription = titleText,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    requestedWidthDp = cardWidth,
-                    requestedHeightDp = imageHeight
+                     modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
 
                 // Gradient overlay for text readability

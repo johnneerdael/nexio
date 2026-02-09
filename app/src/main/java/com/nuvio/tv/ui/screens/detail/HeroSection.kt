@@ -46,7 +46,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Video
-import com.nuvio.tv.ui.components.FadeInAsyncImage
+import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
@@ -56,7 +56,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.platform.LocalContext
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
-import com.nuvio.tv.domain.model.NextToWatch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -101,16 +100,18 @@ fun HeroContentSection(
         ) {
             // Logo/Title — always visible during trailer, animates size
             if (meta.logo != null) {
-                FadeInAsyncImage(
-                    model = meta.logo,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(meta.logo)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = meta.name,
                     modifier = Modifier
                         .height(logoHeight)
                         .fillMaxWidth(logoMaxWidth)
                         .padding(bottom = logoBottomPadding),
                     contentScale = ContentScale.Fit,
-                    alignment = Alignment.CenterStart,
-                    fadeDurationMs = 500
+                    alignment = Alignment.CenterStart
                 )
             } else {
                 // Text title hides entirely during trailer

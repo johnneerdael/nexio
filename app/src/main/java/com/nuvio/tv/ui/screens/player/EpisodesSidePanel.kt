@@ -46,9 +46,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Card
@@ -58,10 +58,12 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.screens.detail.formatReleaseDate
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -225,7 +227,7 @@ private fun EpisodeStreamsView(
         }
 
         else -> {
-            TvLazyColumn(
+            LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 4.dp),
                 modifier = Modifier.fillMaxHeight()
@@ -293,7 +295,7 @@ private fun EpisodesListView(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                TvLazyColumn(
+                LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(top = 4.dp),
                     modifier = Modifier
@@ -331,7 +333,7 @@ private fun EpisodesSeasonTabs(
         regular + specials
     }
 
-    TvLazyRow(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .focusRestorer { selectedTabFocusRequester },
@@ -433,8 +435,11 @@ private fun EpisodeItem(
                     .clip(RoundedCornerShape(12.dp))
                     .background(NuvioColors.SurfaceVariant)
             ) {
-                FadeInAsyncImage(
-                    model = episode.thumbnail,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(episode.thumbnail)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = episode.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

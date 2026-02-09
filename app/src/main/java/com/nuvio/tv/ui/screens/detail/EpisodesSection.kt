@@ -30,8 +30,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -39,7 +44,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.Video
-import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -58,7 +62,7 @@ fun SeasonTabs(
         regularSeasons + specials
     }
 
-    TvLazyRow(
+    LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -116,7 +120,7 @@ fun EpisodesRow(
     onEpisodeClick: (Video) -> Unit,
     upFocusRequester: FocusRequester
 ) {
-    TvLazyRow(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 16.dp),
@@ -179,13 +183,18 @@ private fun EpisodeCard(
                     .height(158.dp)
                     .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
             ) {
-                FadeInAsyncImage(
-                    model = episode.thumbnail,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(episode.thumbnail)
+                        .crossfade(true)
+                        .size(
+                             width = with(LocalDensity.current) { 280.dp.roundToPx() },
+                             height = with(LocalDensity.current) { 158.dp.roundToPx() }
+                        )
+                        .build(),
                     contentDescription = episode.title,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    requestedWidthDp = 280.dp,
-                    requestedHeightDp = 158.dp
+                    contentScale = ContentScale.Crop
                 )
 
                 // Show watched/in-progress indicator

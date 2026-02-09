@@ -20,12 +20,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCompany
-import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -48,7 +50,7 @@ fun CompanyLogosSection(
             modifier = Modifier.padding(horizontal = 48.dp)
         )
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -71,15 +73,20 @@ private fun CompanyLogoCard(company: MetaCompany) {
         contentAlignment = Alignment.Center
     ) {
         if (company.logo != null) {
-            FadeInAsyncImage(
-                model = company.logo,
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(company.logo)
+                    .crossfade(true)
+                    .size(
+                        width = with(LocalDensity.current) { 140.dp.roundToPx() },
+                        height = with(LocalDensity.current) { 56.dp.roundToPx() }
+                    )
+                    .build(),
                 contentDescription = company.name,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
-                contentScale = ContentScale.Fit,
-                requestedWidthDp = 140.dp,
-                requestedHeightDp = 56.dp
+                contentScale = ContentScale.Fit
             )
         } else {
             Text(

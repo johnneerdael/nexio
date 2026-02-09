@@ -34,15 +34,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.MetaCastMember
-import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @Composable
@@ -214,7 +216,7 @@ private fun PauseMetadataView(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                TvLazyRow(
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     content = {
                         items(cast.take(8)) { member ->
@@ -285,8 +287,11 @@ private fun CastDetailView(
             verticalAlignment = Alignment.Top
         ) {
             if (!member.photo.isNullOrBlank()) {
-                FadeInAsyncImage(
-                    model = member.photo,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(member.photo)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = member.name,
                     modifier = Modifier
                         .size(width = 160.dp, height = 240.dp)

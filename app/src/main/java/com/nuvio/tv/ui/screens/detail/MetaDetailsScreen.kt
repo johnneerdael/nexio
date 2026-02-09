@@ -31,9 +31,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaCastMember
@@ -41,7 +45,6 @@ import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
-import com.nuvio.tv.ui.components.FadeInAsyncImage
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -203,7 +206,7 @@ private fun MetaDetailsContent(
         }
         byId ?: bySeasonEpisode ?: nextEpisode
     }
-    val listState = rememberTvLazyListState()
+    val listState = rememberLazyListState()
     val initialFocusRequester = remember { FocusRequester() }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
     var anchorCanFocus by remember { mutableStateOf(true) }
@@ -297,16 +300,20 @@ private fun MetaDetailsContent(
         // Sticky background — backdrop or trailer
         Box(modifier = Modifier.fillMaxSize()) {
             // Backdrop image (fades out when trailer plays)
-            FadeInAsyncImage(
-                model = meta.background ?: meta.poster,
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(meta.background ?: meta.poster)
+                    .crossfade(true)
+                    .size(
+                        width = with(LocalDensity.current) { screenWidthDp.roundToPx() },
+                        height = with(LocalDensity.current) { screenHeightDp.roundToPx() }
+                    )
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = backdropAlpha },
-                contentScale = ContentScale.Crop,
-                fadeDurationMs = 600,
-                requestedWidthDp = screenWidthDp,
-                requestedHeightDp = screenHeightDp
+                contentScale = ContentScale.Crop
             )
 
             // Trailer video (fades in when trailer plays)
@@ -342,7 +349,7 @@ private fun MetaDetailsContent(
         }
 
         // Single scrollable column with hero + content
-        TvLazyColumn(
+        LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState
         ) {

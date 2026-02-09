@@ -24,6 +24,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 private val GridCardShape = RoundedCornerShape(8.dp)
 
@@ -65,8 +68,11 @@ fun GridContentCard(
                     .fillMaxSize()
                     .clip(GridCardShape)
             ) {
-                FadeInAsyncImage(
-                    model = item.poster,
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.poster)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
