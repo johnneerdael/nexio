@@ -518,8 +518,7 @@ fun PlayerScreen(
 
         // Audio track dialog
         if (uiState.showAudioDialog) {
-            TrackSelectionDialog(
-                title = "Audio",
+            AudioSelectionDialog(
                 tracks = uiState.audioTracks,
                 selectedIndex = uiState.selectedAudioTrackIndex,
                 onTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectAudioTrack(it)) },
@@ -912,50 +911,6 @@ private fun ErrorOverlay(
         }
     }
 }
-
-@Composable
-private fun TrackSelectionDialog(
-    title: String,
-    tracks: List<TrackInfo>,
-    selectedIndex: Int,
-    onTrackSelected: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .width(400.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                TvLazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(top = 4.dp),
-                    modifier = Modifier.height(300.dp)
-                ) {
-                    items(tracks) { track ->
-                        TrackItem(
-                            track = track,
-                            isSelected = track.index == selectedIndex,
-                            onClick = { onTrackSelected(track.index) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 
 @Composable
 private fun SpeedSelectionDialog(

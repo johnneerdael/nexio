@@ -55,7 +55,6 @@ import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
 
 // Subtitle text color options (matching mobile app)
 private val SUBTITLE_TEXT_COLORS = listOf(
@@ -675,7 +674,7 @@ private fun StyleToggleButton(
     }
 }
 
-// Shared TrackItem composable (used by both audio TrackSelectionDialog and subtitle dialog)
+// Shared TrackItem composable (used by both audio and subtitle dialogs)
 @Composable
 internal fun TrackItem(
     track: TrackInfo,
@@ -690,29 +689,29 @@ internal fun TrackItem(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.Secondary.copy(alpha = 0.2f) else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = if (isSelected) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
+            focusedContainerColor = Color.White.copy(alpha = 0.15f)
         ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp))
+        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.name,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (isSelected) NuvioColors.Secondary else NuvioColors.TextPrimary
+                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.9f)
                 )
                 if (track.language != null) {
                     Text(
                         text = track.language.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = NuvioTheme.extendedColors.textSecondary
+                        color = Color.White.copy(alpha = 0.5f)
                     )
                 }
             }
@@ -722,7 +721,7 @@ internal fun TrackItem(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
                     tint = NuvioColors.Secondary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

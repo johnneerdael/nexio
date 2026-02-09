@@ -438,10 +438,14 @@ fun PlaybackSettingsContent(
             
             // Preferred Language
             item {
-                val languageName = AVAILABLE_SUBTITLE_LANGUAGES.find { 
-                    it.code == playerSettings.subtitleStyle.preferredLanguage 
-                }?.name ?: "English"
-                
+                val languageName = if (playerSettings.subtitleStyle.preferredLanguage == "none") {
+                    "None"
+                } else {
+                    AVAILABLE_SUBTITLE_LANGUAGES.find {
+                        it.code == playerSettings.subtitleStyle.preferredLanguage
+                    }?.name ?: "English"
+                }
+
                 NavigationSettingsItem(
                     icon = Icons.Default.Language,
                     title = "Preferred Language",
@@ -891,13 +895,11 @@ fun PlaybackSettingsContent(
     if (showLanguageDialog) {
         LanguageSelectionDialog(
             title = "Preferred Language",
-            selectedLanguage = playerSettings.subtitleStyle.preferredLanguage,
-            showNoneOption = false,
+            selectedLanguage = if (playerSettings.subtitleStyle.preferredLanguage == "none") null else playerSettings.subtitleStyle.preferredLanguage,
+            showNoneOption = true,
             onLanguageSelected = { language ->
-                language?.let {
-                    coroutineScope.launch {
-                        viewModel.setSubtitlePreferredLanguage(it)
-                    }
+                coroutineScope.launch {
+                    viewModel.setSubtitlePreferredLanguage(language ?: "none")
                 }
                 showLanguageDialog = false
             },
