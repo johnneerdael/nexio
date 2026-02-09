@@ -100,10 +100,10 @@ data class BufferSettings(
     val maxBufferMs: Int = 25_000,
     val bufferForPlaybackMs: Int = 2_500,
     val bufferForPlaybackAfterRebufferMs: Int = 5_000,
-    val targetBufferSizeMb: Int = 0, // 0 = auto (calculated from available heap)
-    val backBufferDurationMs: Int = 0,
+    val targetBufferSizeMb: Int = 0, // 0 = ExoPlayer default
+    val backBufferDurationMs: Int = 10_000,
     val retainBackBufferFromKeyframe: Boolean = false,
-    val useParallelConnections: Boolean = true
+    val useParallelConnections: Boolean = false
 )
 
 /**
@@ -192,12 +192,23 @@ class PlayerSettingsDataStore @Inject constructor(
     private val retainBackBufferFromKeyframeKey = booleanPreferencesKey("retain_back_buffer_from_keyframe")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
 
+    private val migrationParallelConnectionsDefaultOffDoneKey = booleanPreferencesKey("migration_parallel_connections_default_off_done")
+
     init {
         ioScope.launch {
             dataStore.edit { prefs ->
                 val currentMax = prefs[maxBufferMsKey]
                 if (currentMax == null || currentMax == 50_000) {
                     prefs[maxBufferMsKey] = 25_000
+                }
+
+                val migrated = prefs[migrationParallelConnectionsDefaultOffDoneKey] ?: false
+                if (!migrated) {
+                    val currentParallel = prefs[useParallelConnectionsKey]
+                    if (currentParallel == null || currentParallel == true) {
+                        prefs[useParallelConnectionsKey] = false
+                    }
+                    prefs[migrationParallelConnectionsDefaultOffDoneKey] = true
                 }
             }
         }
@@ -403,12 +414,6 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     // Buffer settings functions
-
-    fun calculateDefaultBufferSizeMb(): Int {
-        val maxHeapBytes = Runtime.getRuntime().maxMemory()
-        val thirtyPercent = (maxHeapBytes * 0.30).toLong() / (1024 * 1024)
-        return thirtyPercent.toInt().coerceIn(75, 300)
-    }
 
     suspend fun setBufferMinBufferMs(ms: Int) {
         dataStore.edit { prefs ->

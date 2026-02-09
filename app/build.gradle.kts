@@ -87,6 +87,7 @@ android {
 configurations.all {
     exclude(group = "androidx.media3", module = "media3-exoplayer")
     exclude(group = "androidx.media3", module = "media3-ui")
+    exclude(group = "androidx.media3", module = "media3-extractor")
 }
 
 dependencies {
@@ -148,7 +149,7 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.common)
     implementation(libs.media3.container)
-    implementation(libs.media3.extractor)
+
     
     // Local AAR libraries from forked ExoPlayer (matching Just Player setup):
     // - lib-exoplayer-release.aar    — Custom forked ExoPlayer core (replaces media3-exoplayer)

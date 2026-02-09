@@ -501,30 +501,23 @@ class PlayerViewModel @Inject constructor(
                 val bufferSettings = playerSettings.bufferSettings
                 currentUseParallelConnections = bufferSettings.useParallelConnections
 
-                
-                val targetBufferBytes = if (bufferSettings.targetBufferSizeMb == 0) {
-                    
-                    val runtime = Runtime.getRuntime()
-                    val freeHeap = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory())
-                    val sixtyPercent = (freeHeap * 0.60).toLong()
-                    sixtyPercent.coerceIn(50L * 1024 * 1024, 1000L * 1024 * 1024).toInt()
-                } else {
-                    bufferSettings.targetBufferSizeMb * 1024 * 1024
-                }
-
-                val loadControl = DefaultLoadControl.Builder()
+                val loadControlBuilder = DefaultLoadControl.Builder()
                     .setBufferDurationsMs(
                         bufferSettings.minBufferMs,
                         bufferSettings.maxBufferMs,
                         bufferSettings.bufferForPlaybackMs,
                         bufferSettings.bufferForPlaybackAfterRebufferMs
                     )
-                    .setTargetBufferBytes(targetBufferBytes)
                     .setBackBuffer(
                         bufferSettings.backBufferDurationMs,
                         bufferSettings.retainBackBufferFromKeyframe
                     )
-                    .build()
+
+                if (bufferSettings.targetBufferSizeMb > 0) {
+                    loadControlBuilder.setTargetBufferBytes(bufferSettings.targetBufferSizeMb * 1024 * 1024)
+                }
+
+                val loadControl = loadControlBuilder.build()
 
                 
                 trackSelector = DefaultTrackSelector(context).apply {
