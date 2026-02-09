@@ -12,8 +12,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -148,6 +152,7 @@ class PlayerSettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val dataStore = context.playerSettingsDataStore
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Libass settings keys
     private val useLibassKey = booleanPreferencesKey("use_libass")
@@ -184,6 +189,17 @@ class PlayerSettingsDataStore @Inject constructor(
     private val backBufferDurationMsKey = intPreferencesKey("back_buffer_duration_ms")
     private val retainBackBufferFromKeyframeKey = booleanPreferencesKey("retain_back_buffer_from_keyframe")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
+
+    init {
+        ioScope.launch {
+            dataStore.edit { prefs ->
+                val currentMax = prefs[maxBufferMsKey]
+                if (currentMax == null || currentMax == 50_000) {
+                    prefs[maxBufferMsKey] = 25_000
+                }
+            }
+        }
+    }
 
     /**
      * Flow of current player settings
