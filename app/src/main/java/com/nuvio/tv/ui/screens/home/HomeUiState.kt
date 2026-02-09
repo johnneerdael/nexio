@@ -9,7 +9,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 @Immutable
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
-    val continueWatchingItems: List<WatchProgress> = emptyList(),
+    val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedItemId: String? = null,
@@ -18,6 +18,31 @@ data class HomeUiState(
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKey: String? = null,
     val gridItems: List<GridItem> = emptyList()
+)
+
+@Immutable
+sealed class ContinueWatchingItem {
+    @Immutable
+    data class InProgress(val progress: WatchProgress) : ContinueWatchingItem()
+
+    @Immutable
+    data class NextUp(val info: NextUpInfo) : ContinueWatchingItem()
+}
+
+@Immutable
+data class NextUpInfo(
+    val contentId: String,
+    val contentType: String,
+    val name: String,
+    val poster: String?,
+    val backdrop: String?,
+    val logo: String?,
+    val videoId: String,
+    val season: Int,
+    val episode: Int,
+    val episodeTitle: String?,
+    val thumbnail: String?,
+    val lastWatched: Long
 )
 
 @Immutable
@@ -50,5 +75,6 @@ sealed class GridItem {
 sealed class HomeEvent {
     data class OnItemClick(val itemId: String, val itemType: String) : HomeEvent()
     data class OnLoadMoreCatalog(val catalogId: String, val addonId: String, val type: String) : HomeEvent()
+    data class OnRemoveContinueWatching(val contentId: String) : HomeEvent()
     data object OnRetry : HomeEvent()
 }

@@ -29,6 +29,7 @@ fun ClassicHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onLoadMore: (catalogId: String, addonId: String, type: String) -> Unit,
+    onRemoveContinueWatching: (String) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
@@ -84,12 +85,25 @@ fun ClassicHomeContent(
             item(key = "continue_watching", contentType = "continue_watching") {
                 ContinueWatchingSection(
                     items = uiState.continueWatchingItems,
-                    onItemClick = { progress ->
+                    onItemClick = { item ->
                         onNavigateToDetail(
-                            progress.contentId,
-                            progress.contentType,
+                            when (item) {
+                                is ContinueWatchingItem.InProgress -> item.progress.contentId
+                                is ContinueWatchingItem.NextUp -> item.info.contentId
+                            },
+                            when (item) {
+                                is ContinueWatchingItem.InProgress -> item.progress.contentType
+                                is ContinueWatchingItem.NextUp -> item.info.contentType
+                            },
                             ""
                         )
+                    },
+                    onRemoveItem = { item ->
+                        val contentId = when (item) {
+                            is ContinueWatchingItem.InProgress -> item.progress.contentId
+                            is ContinueWatchingItem.NextUp -> item.info.contentId
+                        }
+                        onRemoveContinueWatching(contentId)
                     },
                     focusedItemIndex = if (focusState.focusedRowIndex == -1) focusState.focusedItemIndex else -1,
                     onItemFocused = { itemIndex ->

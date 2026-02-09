@@ -105,7 +105,7 @@ class PlayerViewModel @Inject constructor(
         if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
     }
 
-    // Watch progress metadata
+    
     private val contentId: String? = savedStateHandle.get<String>("contentId")?.let {
         if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
     }
@@ -166,27 +166,28 @@ class PlayerViewModel @Inject constructor(
     private var hideSeekOverlayJob: Job? = null
     private var watchProgressSaveJob: Job? = null
     
-    // Track last saved position to avoid redundant saves
+    
     private var lastSavedPosition: Long = 0L
-    private val saveThresholdMs = 5000L // Save every 5 seconds of playback change
+    private val saveThresholdMs = 5000L 
+    private var lastKnownDuration: Long = 0L
 
-    // Track whether playback has started (for parental guide trigger)
+    
     private var playbackStartedForParentalGuide = false
     private var hasRenderedFirstFrame = false
     private var metaVideos: List<Video> = emptyList()
     private var userPausedManually = false
 
-    // Skip intro
+    
     private var skipIntervals: List<SkipInterval> = emptyList()
     private var lastActiveSkipType: String? = null
     private var autoSubtitleSelected: Boolean = false
     private var pendingAddonSubtitleLanguage: String? = null
 
-    // OkHttp client for media downloads
+    
     private var okHttpClient: OkHttpClient? = null
     private var currentUseParallelConnections: Boolean = true
     private var lastBufferLogTimeMs: Long = 0L
-    // Audio enhancement
+    
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var currentMediaSession: MediaSession? = null
@@ -211,7 +212,7 @@ class PlayerViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingAddonSubtitles = true, addonSubtitlesError = null) }
             
             try {
-                // For series, construct videoId with season:episode
+                
                 val videoId = if (type == "series" && currentSeason != null && currentEpisode != null) {
                     "${id.split(":").firstOrNull() ?: id}:$currentSeason:$currentEpisode"
                 } else {
@@ -220,7 +221,7 @@ class PlayerViewModel @Inject constructor(
                 
                 val subtitles = subtitleRepository.getSubtitles(
                     type = type,
-                    id = id.split(":").firstOrNull() ?: id, // Use base IMDB ID
+                    id = id.split(":").firstOrNull() ?: id, 
                     videoId = videoId
                 )
                 
@@ -289,14 +290,14 @@ class PlayerViewModel @Inject constructor(
             }
             
             progress?.let { saved ->
-                // Only seek if we have a meaningful position (more than 2% but less than 90%)
+                
                 if (saved.isInProgress()) {
                     _exoPlayer?.let { player ->
-                        // Wait for player to be ready before seeking
+                        
                         if (player.playbackState == Player.STATE_READY) {
                             player.seekTo(saved.position)
                         } else {
-                            // Set a flag to seek when ready
+                            
                             _uiState.update { it.copy(pendingSeekPosition = saved.position) }
                         }
                     }
@@ -328,10 +329,10 @@ class PlayerViewModel @Inject constructor(
                     applyMetaDetails(result.data)
                 }
                 is NetworkResult.Error -> {
-                    // Keep existing metadata if fetch fails
+                    
                 }
                 NetworkResult.Loading -> {
-                    // filtered above
+                    
                 }
             }
         }
@@ -387,13 +388,13 @@ class PlayerViewModel @Inject constructor(
         val currentActive = _uiState.value.activeSkipInterval
 
         if (active != null) {
-            // New interval or different interval
+            
             if (currentActive == null || active.type != currentActive.type || active.startTime != currentActive.startTime) {
                 lastActiveSkipType = active.type
                 _uiState.update { it.copy(activeSkipInterval = active, skipIntervalDismissed = false) }
             }
         } else if (currentActive != null) {
-            // Exited interval
+            
             _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = false) }
         }
     }
@@ -408,7 +409,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun fetchParentalGuide(id: String?, type: String?, season: Int?, episode: Int?) {
         if (id.isNullOrBlank()) return
-        // Extract base IMDB ID (contentId may be like "tt1234567:1:2")
+        
         val imdbId = id.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
 
         viewModelScope.launch {
@@ -453,7 +454,7 @@ class PlayerViewModel @Inject constructor(
                     )
                 }
 
-                // If playback already started, show now
+                
                 if (_uiState.value.isPlaying) {
                     tryShowParentalGuide()
                 }
@@ -479,9 +480,9 @@ class PlayerViewModel @Inject constructor(
                 val bufferSettings = playerSettings.bufferSettings
                 currentUseParallelConnections = bufferSettings.useParallelConnections
 
-                // Calculate target buffer bytes
+                
                 val targetBufferBytes = if (bufferSettings.targetBufferSizeMb == 0) {
-                    // Auto: 60% of free heap at init time
+                    
                     val runtime = Runtime.getRuntime()
                     val freeHeap = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory())
                     val sixtyPercent = (freeHeap * 0.60).toLong()
@@ -504,7 +505,7 @@ class PlayerViewModel @Inject constructor(
                     )
                     .build()
 
-                // Track selector with tunneling and audio language support
+                
                 trackSelector = DefaultTrackSelector(context).apply {
                     setParameters(
                         buildUponParameters()
@@ -515,11 +516,11 @@ class PlayerViewModel @Inject constructor(
                             buildUponParameters().setTunnelingEnabled(true)
                         )
                     }
-                    // Apply preferred audio language (matching Just Player)
+                    
                     when (playerSettings.preferredAudioLanguage) {
-                        AudioLanguageOption.DEFAULT -> { /* use media default */ }
+                        AudioLanguageOption.DEFAULT -> {   }
                         AudioLanguageOption.DEVICE -> {
-                            // Get ALL device locales (primary + secondary languages)
+                            
                             val deviceLanguages = if (Build.VERSION.SDK_INT >= 24) {
                                 val localeList = Resources.getSystem().configuration.locales
                                 Array(localeList.size()) { localeList[it].isO3Language }
@@ -539,7 +540,7 @@ class PlayerViewModel @Inject constructor(
                         }
                     }
 
-                    // System captioning preferences (matching Just Player)
+                    
                     val appContext = this@PlayerViewModel.context
                     val captioningManager = appContext.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
                     if (captioningManager != null) {
@@ -556,18 +557,18 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
 
-                // Extractors with HDMV DTS support (for Blu-ray TS containers)
+                
                 val extractorsFactory = DefaultExtractorsFactory()
                     .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
                     .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
 
-                // Renderers with decoder priority from settings
+                
                 val renderersFactory = DefaultRenderersFactory(context)
                     .setExtensionRendererMode(playerSettings.decoderPriority)
                     .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
 
                 _exoPlayer = if (useLibass) {
-                    // Build ExoPlayer with libass support for ASS/SSA subtitles
+                    
                     ExoPlayer.Builder(context)
                         .setLoadControl(loadControl)
                         .setTrackSelector(trackSelector!!)
@@ -578,7 +579,7 @@ class PlayerViewModel @Inject constructor(
                             renderersFactory = renderersFactory
                         )
                 } else {
-                    // Standard ExoPlayer without libass
+                    
                     ExoPlayer.Builder(context)
                         .setTrackSelector(trackSelector!!)
                         .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
@@ -588,22 +589,22 @@ class PlayerViewModel @Inject constructor(
                 }
 
                 _exoPlayer?.apply {
-                    // Audio attributes — critical for proper HDMI passthrough routing
+                    
                     val audioAttributes = AudioAttributes.Builder()
                         .setUsage(C.USAGE_MEDIA)
                         .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                         .build()
                     setAudioAttributes(audioAttributes, true)
 
-                    // Skip silence
+                    
                     if (playerSettings.skipSilence) {
                         skipSilenceEnabled = true
                     }
 
-                    // Pause playback when headphones/bluetooth disconnected (matching Just Player)
+                    
                     setHandleAudioBecomingNoisy(true)
 
-                    // Media session for system media controls (matching Just Player)
+                    
                     try {
                         currentMediaSession?.release()
                         if (canAdvertiseSession()) {
@@ -613,10 +614,10 @@ class PlayerViewModel @Inject constructor(
                         e.printStackTrace()
                     }
 
-                    // Store frame rate matching preference for later use
+                    
                     _uiState.update { it.copy(frameRateMatchingEnabled = playerSettings.frameRateMatching) }
 
-                    // Loudness enhancer for volume boost beyond system max
+                    
                     try {
                         loudnessEnhancer?.release()
                         loudnessEnhancer = LoudnessEnhancer(audioSessionId)
@@ -624,7 +625,7 @@ class PlayerViewModel @Inject constructor(
                         e.printStackTrace()
                     }
 
-                    // Notify audio session for 3rd-party equalizer apps
+                    
                     notifyAudioSessionUpdate(true)
 
                     val preferred = playerSettings.subtitleStyle.preferredLanguage
@@ -637,11 +638,15 @@ class PlayerViewModel @Inject constructor(
 
                     addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(playbackState: Int) {
+                            val playerDuration = duration
+                            if (playerDuration > lastKnownDuration) {
+                                lastKnownDuration = playerDuration
+                            }
                             val isBuffering = playbackState == Player.STATE_BUFFERING
                             _uiState.update { 
                                 it.copy(
                                     isBuffering = isBuffering,
-                                    duration = duration.coerceAtLeast(0L)
+                                    duration = playerDuration.coerceAtLeast(0L)
                                 )
                             }
 
@@ -655,7 +660,7 @@ class PlayerViewModel @Inject constructor(
                                 }
                             }
                         
-                            // Handle pending seek position when player is ready
+                            
                             if (playbackState == Player.STATE_READY) {
                                 _uiState.value.pendingSeekPosition?.let { position ->
                                     seekTo(position)
@@ -663,7 +668,7 @@ class PlayerViewModel @Inject constructor(
                                 }
                             }
                         
-                            // Save progress when playback ends
+                            
                             if (playbackState == Player.STATE_ENDED) {
                                 saveWatchProgress()
                             }
@@ -686,7 +691,7 @@ class PlayerViewModel @Inject constructor(
                                 }
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
-                                // Save progress when paused
+                                
                                 saveWatchProgress()
                             }
                         }
@@ -725,6 +730,7 @@ class PlayerViewModel @Inject constructor(
     private fun resetLoadingOverlayForNewStream() {
         hasRenderedFirstFrame = false
         userPausedManually = false
+        lastKnownDuration = 0L
         _uiState.update { state ->
             state.copy(
                 showLoadingOverlay = state.loadingOverlayEnabled,
@@ -733,9 +739,9 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Convert LibassRenderType to AssRenderType
-     */
+    
+
+ 
     private fun LibassRenderType.toAssRenderType(): AssRenderType {
         return when (this) {
             LibassRenderType.CUES -> AssRenderType.CUES
@@ -790,7 +796,7 @@ class PlayerViewModel @Inject constructor(
             isDash -> DashMediaSource.Factory(okHttpFactory)
                 .createMediaSource(mediaItem)
             else -> {
-                // For progressive files, optionally wrap with parallel range downloads
+                
                 val progressiveFactory: DataSource.Factory = if (currentUseParallelConnections) {
                     ParallelRangeDataSource.Factory(okHttpFactory)
                 } else {
@@ -806,7 +812,7 @@ class PlayerViewModel @Inject constructor(
         if (headers.isNullOrEmpty()) return emptyMap()
         
         return try {
-            // Simple parsing for key=value&key2=value2 format
+            
             headers.split("&").associate { pair ->
                 val parts = pair.split("=", limit = 2)
                 if (parts.size == 2) {
@@ -831,7 +837,7 @@ class PlayerViewModel @Inject constructor(
             )
         }
 
-        // If episodes are already cached, ensure the selected season matches current playback.
+        
         val desiredSeason = currentSeason ?: _uiState.value.episodesSelectedSeason
         if (_uiState.value.episodesAll.isNotEmpty() && desiredSeason != null) {
             selectEpisodesSeason(desiredSeason)
@@ -1092,7 +1098,7 @@ class PlayerViewModel @Inject constructor(
                 }
 
                 NetworkResult.Loading -> {
-                    // filtered above
+                    
                 }
             }
         }
@@ -1192,7 +1198,7 @@ class PlayerViewModel @Inject constructor(
                 currentSeason = currentSeason,
                 currentEpisode = currentEpisode,
                 currentEpisodeTitle = currentEpisodeTitle,
-                currentStreamName = stream.name ?: stream.addonName, // Track the stream source name
+                currentStreamName = stream.name ?: stream.addonName, 
                 showEpisodesPanel = false,
                 showEpisodeStreams = false,
                 isLoadingEpisodeStreams = false,
@@ -1205,11 +1211,11 @@ class PlayerViewModel @Inject constructor(
                 episodeStreamsSeason = null,
                 episodeStreamsEpisode = null,
                 episodeStreamsTitle = null,
-                // Reset parental guide for new episode
+                
                 parentalWarnings = emptyList(),
                 showParentalGuide = false,
                 parentalGuideHasShown = false,
-                // Reset skip intro
+                
                 activeSkipInterval = null,
                 skipIntervalDismissed = false
             )
@@ -1221,7 +1227,7 @@ class PlayerViewModel @Inject constructor(
         skipIntervals = emptyList()
         lastActiveSkipType = null
 
-        // Fetch parental guide for new episode
+        
         fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
         fetchSkipIntervals(contentId, currentSeason, currentEpisode)
 
@@ -1253,7 +1259,7 @@ class PlayerViewModel @Inject constructor(
             
             when (trackType) {
                 C.TRACK_TYPE_VIDEO -> {
-                    // Detect video frame rate from the first selected video track
+                    
                     for (i in 0 until trackGroup.length) {
                         if (trackGroup.isTrackSelected(i)) {
                             val format = trackGroup.getTrackFormat(i)
@@ -1271,7 +1277,7 @@ class PlayerViewModel @Inject constructor(
                         val isSelected = trackGroup.isTrackSelected(i)
                         if (isSelected) selectedAudioIndex = audioTracks.size
 
-                        // Build a rich track name with codec and channel info
+                        
                         val codecName = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
                         val channelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
                             format.channelCount
@@ -1372,15 +1378,19 @@ class PlayerViewModel @Inject constructor(
             while (isActive) {
                 _exoPlayer?.let { player ->
                     val pos = player.currentPosition.coerceAtLeast(0L)
+                    val playerDuration = player.duration
+                    if (playerDuration > lastKnownDuration) {
+                        lastKnownDuration = playerDuration
+                    }
                     _uiState.update {
                         it.copy(
                             currentPosition = pos,
-                            duration = player.duration.coerceAtLeast(0L)
+                            duration = playerDuration.coerceAtLeast(0L)
                         )
                     }
                     updateActiveSkipInterval(pos)
 
-                    // Periodic buffer logging every 10s during playback
+                    
                     if (player.isPlaying) {
                         val now = System.currentTimeMillis()
                         if (now - lastBufferLogTimeMs >= 10_000) {
@@ -1408,7 +1418,7 @@ class PlayerViewModel @Inject constructor(
         watchProgressSaveJob?.cancel()
         watchProgressSaveJob = viewModelScope.launch {
             while (isActive) {
-                delay(10000) // Save every 10 seconds
+                delay(10000) 
                 saveWatchProgressIfNeeded()
             }
         }
@@ -1421,9 +1431,10 @@ class PlayerViewModel @Inject constructor(
 
     private fun saveWatchProgressIfNeeded() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
-        val duration = _exoPlayer?.duration ?: return
+        val duration = getEffectiveDuration(currentPosition)
+        if (duration <= 0L) return
         
-        // Only save if position has changed significantly
+        
         if (kotlin.math.abs(currentPosition - lastSavedPosition) >= saveThresholdMs) {
             lastSavedPosition = currentPosition
             saveWatchProgressInternal(currentPosition, duration)
@@ -1432,16 +1443,28 @@ class PlayerViewModel @Inject constructor(
 
     private fun saveWatchProgress() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
-        val duration = _exoPlayer?.duration ?: return
+        val duration = getEffectiveDuration(currentPosition)
+        if (duration <= 0L) return
         saveWatchProgressInternal(currentPosition, duration)
     }
 
+    private fun getEffectiveDuration(position: Long): Long {
+        val playerDuration = _exoPlayer?.duration ?: 0L
+        val effectiveDuration = maxOf(playerDuration, lastKnownDuration)
+        if (effectiveDuration <= 0L) return 0L
+
+        val isEnded = _exoPlayer?.playbackState == Player.STATE_ENDED
+        if (!isEnded && effectiveDuration < position) return 0L
+
+        return effectiveDuration
+    }
+
     private fun saveWatchProgressInternal(position: Long, duration: Long) {
-        // Don't save if we don't have content metadata
+        
         if (contentId.isNullOrEmpty() || contentType.isNullOrEmpty()) return
-        // Don't save if duration is invalid
+        
         if (duration <= 0) return
-        // Don't save if position is too early (less than 1 second)
+        
         if (position < 1000) return
 
         val progress = WatchProgress(
@@ -1570,7 +1593,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { 
                     it.copy(
                         showSubtitleDialog = false,
-                        selectedAddonSubtitle = null // Clear addon subtitle when selecting internal
+                        selectedAddonSubtitle = null 
                     ) 
                 }
             }
@@ -1794,7 +1817,7 @@ class PlayerViewModel @Inject constructor(
             val normalizedLang = normalizeLanguageCode(subtitle.lang)
             pendingAddonSubtitleLanguage = normalizedLang
 
-            // Add the addon subtitle as a side-loaded subtitle
+            
             val currentItem = player.currentMediaItem ?: return@let
             val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(
                 android.net.Uri.parse(subtitle.url)
@@ -1815,7 +1838,7 @@ class PlayerViewModel @Inject constructor(
             player.prepare()
             player.playWhenReady = playWhenReady
 
-            // Ensure text tracks are enabled and prefer the addon subtitle language
+            
             player.trackSelectionParameters = player.trackSelectionParameters
                 .buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
@@ -1826,7 +1849,7 @@ class PlayerViewModel @Inject constructor(
             _uiState.update { 
                 it.copy(
                     selectedAddonSubtitle = subtitle,
-                    selectedSubtitleTrackIndex = -1 // Clear internal track selection
+                    selectedSubtitleTrackIndex = -1 
                 )
             }
         }
@@ -1880,18 +1903,18 @@ class PlayerViewModel @Inject constructor(
             lowerUrl.endsWith(".vtt") || lowerUrl.endsWith(".webvtt") -> MimeTypes.TEXT_VTT
             lowerUrl.endsWith(".ass") || lowerUrl.endsWith(".ssa") -> MimeTypes.TEXT_SSA
             lowerUrl.endsWith(".ttml") || lowerUrl.endsWith(".dfxp") -> MimeTypes.APPLICATION_TTML
-            else -> MimeTypes.APPLICATION_SUBRIP // Default to SRT
+            else -> MimeTypes.APPLICATION_SUBRIP 
         }
     }
 
     private fun releasePlayer() {
-        // Save progress before releasing
+        
         saveWatchProgress()
 
-        // Notify audio session closing
+        
         notifyAudioSessionUpdate(false)
 
-        // Release loudness enhancer
+        
         try {
             loudnessEnhancer?.release()
             loudnessEnhancer = null
@@ -1899,7 +1922,7 @@ class PlayerViewModel @Inject constructor(
             e.printStackTrace()
         }
         
-        // Release media session
+        
         try {
             currentMediaSession?.release()
             currentMediaSession = null
@@ -1914,10 +1937,10 @@ class PlayerViewModel @Inject constructor(
         _exoPlayer = null
     }
 
-    /**
-     * Broadcast audio session updates for 3rd-party equalizer apps (e.g., Wavelet).
-     * Matches Just (Video) Player's implementation.
-     */
+    
+
+
+ 
     private fun notifyAudioSessionUpdate(active: Boolean) {
         _exoPlayer?.let { player ->
             try {
@@ -1940,7 +1963,7 @@ class PlayerViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         releasePlayer()
-        // Clean up OkHttp connection pool on background thread
+        
         okHttpClient?.let { client ->
             Thread {
                 client.connectionPool.evictAll()

@@ -62,6 +62,7 @@ fun GridHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onLoadMore: (catalogId: String, addonId: String, type: String) -> Unit,
+    onRemoveContinueWatching: (String) -> Unit,
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
     val gridState = rememberTvLazyGridState(
@@ -189,12 +190,25 @@ fun GridHomeContent(
                             ) {
                                 GridContinueWatchingSection(
                                     items = uiState.continueWatchingItems,
-                                    onItemClick = { progress ->
+                                    onItemClick = { item ->
                                         onNavigateToDetail(
-                                            progress.contentId,
-                                            progress.contentType,
+                                            when (item) {
+                                                is ContinueWatchingItem.InProgress -> item.progress.contentId
+                                                is ContinueWatchingItem.NextUp -> item.info.contentId
+                                            },
+                                            when (item) {
+                                                is ContinueWatchingItem.InProgress -> item.progress.contentType
+                                                is ContinueWatchingItem.NextUp -> item.info.contentType
+                                            },
                                             ""
                                         )
+                                    },
+                                    onRemoveItem = { item ->
+                                        val contentId = when (item) {
+                                            is ContinueWatchingItem.InProgress -> item.progress.contentId
+                                            is ContinueWatchingItem.NextUp -> item.info.contentId
+                                        }
+                                        onRemoveContinueWatching(contentId)
                                     }
                                 )
                             }

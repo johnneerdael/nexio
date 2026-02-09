@@ -8,9 +8,12 @@ import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.CatalogRepository
+import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -33,6 +37,7 @@ class HomeViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val metaRepository: MetaRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore
 ) : ViewModel() {
 
@@ -84,15 +89,101 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
+            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId)
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
         }
     }
 
     private fun loadContinueWatching() {
         viewModelScope.launch {
-            watchProgressRepository.continueWatching.collectLatest { items ->
-                _uiState.update { it.copy(continueWatchingItems = items) }
+            watchProgressRepository.allProgress.collectLatest { items ->
+                val entries = buildContinueWatchingItems(items)
+                _uiState.update { it.copy(continueWatchingItems = entries) }
             }
+        }
+    }
+
+    private suspend fun buildContinueWatchingItems(
+        allProgress: List<WatchProgress>
+    ): List<ContinueWatchingItem> = withContext(Dispatchers.IO) {
+        val inProgressItems = allProgress
+            .filter { it.isInProgress() }
+            .map { ContinueWatchingItem.InProgress(it) }
+
+        val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
+
+        val latestCompletedBySeries = allProgress
+            .filter { progress ->
+                isSeriesType(progress.contentType) &&
+                    progress.season != null &&
+                    progress.episode != null &&
+                    progress.season != 0 &&
+                    progress.isCompleted()
+            }
+            .groupBy { it.contentId }
+            .mapNotNull { (_, items) -> items.maxByOrNull { it.lastWatched } }
+            .filter { it.contentId !in inProgressIds }
+
+        val nextUpItems = latestCompletedBySeries.mapNotNull { progress ->
+            val nextEpisode = findNextEpisode(progress) ?: return@mapNotNull null
+            val meta = nextEpisode.first
+            val video = nextEpisode.second
+            val info = NextUpInfo(
+                contentId = progress.contentId,
+                contentType = progress.contentType,
+                name = meta.name,
+                poster = meta.poster,
+                backdrop = meta.background,
+                logo = meta.logo,
+                videoId = video.id,
+                season = video.season ?: return@mapNotNull null,
+                episode = video.episode ?: return@mapNotNull null,
+                episodeTitle = video.title,
+                thumbnail = video.thumbnail,
+                lastWatched = progress.lastWatched
+            )
+            ContinueWatchingItem.NextUp(info)
+        }
+
+        val combined = mutableListOf<Pair<Long, ContinueWatchingItem>>()
+        inProgressItems.forEach { combined.add(it.progress.lastWatched to it) }
+        nextUpItems.forEach { combined.add(it.info.lastWatched to it) }
+
+        combined
+            .sortedByDescending { it.first }
+            .map { it.second }
+    }
+
+    private suspend fun findNextEpisode(progress: WatchProgress): Pair<Meta, Video>? {
+        if (!isSeriesType(progress.contentType)) return null
+
+        val result = metaRepository.getMetaFromAllAddons(
+            type = progress.contentType,
+            id = progress.contentId
+        ).first { it !is NetworkResult.Loading }
+
+        val meta = (result as? NetworkResult.Success)?.data ?: return null
+
+        val episodes = meta.videos
+            .filter { it.season != null && it.episode != null && it.season != 0 }
+            .sortedWith(compareBy<Video> { it.season }.thenBy { it.episode })
+
+        val currentIndex = episodes.indexOfFirst {
+            it.season == progress.season && it.episode == progress.episode
+        }
+
+        if (currentIndex == -1 || currentIndex + 1 >= episodes.size) return null
+
+        return meta to episodes[currentIndex + 1]
+    }
+
+    private fun isSeriesType(type: String?): Boolean {
+        return type == "series" || type == "tv"
+    }
+
+    private fun removeContinueWatching(contentId: String) {
+        viewModelScope.launch {
+            watchProgressRepository.removeProgress(contentId)
         }
     }
 

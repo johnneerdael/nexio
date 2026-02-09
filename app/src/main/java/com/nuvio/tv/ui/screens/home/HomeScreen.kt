@@ -84,6 +84,9 @@ fun HomeScreen(
                         onLoadMore = { cid, aid, t ->
                             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
                         },
+                        onRemoveContinueWatching = { contentId ->
+                            viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
+                        },
                         onSaveFocusState = { vi, vo, ri, ii, m ->
                             viewModel.saveFocusState(vi, vo, ri, ii, m)
                         }
@@ -95,6 +98,9 @@ fun HomeScreen(
                         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
                         onLoadMore = { cid, aid, t ->
                             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(cid, aid, t))
+                        },
+                        onRemoveContinueWatching = { contentId ->
+                            viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
                         },
                         onSaveGridFocusState = { vi, vo ->
                             viewModel.saveGridFocusState(vi, vo)
