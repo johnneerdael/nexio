@@ -47,6 +47,8 @@ fun ClassicHomeContent(
     var currentFocusedRowIndex by remember { mutableStateOf(focusState.focusedRowIndex) }
     var currentFocusedItemIndex by remember { mutableStateOf(focusState.focusedItemIndex) }
     val catalogRowScrollStates = remember { mutableMapOf<String, Int>() }
+    val perCatalogFocusedItem = remember { mutableMapOf<String, Int>() }
+    var restoringFocus by remember { mutableStateOf(focusState.hasSavedFocus) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -122,7 +124,7 @@ fun ClassicHomeContent(
             contentType = { _, _ -> "catalog_row" }
         ) { index, catalogRow ->
             val catalogKey = "${catalogRow.addonId}_${catalogRow.type.toApiString()}_${catalogRow.catalogId}"
-            val shouldRestoreFocus = index == focusState.focusedRowIndex
+            val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val focusedItemIndex = if (shouldRestoreFocus) focusState.focusedItemIndex else -1
 
             val loadMoreKey = "${catalogRow.addonId}_${catalogRow.type.toApiString()}_${catalogRow.catalogId}"
@@ -150,8 +152,10 @@ fun ClassicHomeContent(
                 initialScrollIndex = focusState.catalogRowScrollStates[catalogKey] ?: 0,
                 focusedItemIndex = focusedItemIndex,
                 onItemFocused = { itemIndex ->
+                    restoringFocus = false
                     currentFocusedRowIndex = index
                     currentFocusedItemIndex = itemIndex
+                    perCatalogFocusedItem[catalogKey] = itemIndex
                     catalogRowScrollStates[catalogKey] = itemIndex
                 }
             )
