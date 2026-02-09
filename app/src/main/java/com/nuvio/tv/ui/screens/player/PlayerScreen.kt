@@ -99,7 +99,9 @@ fun PlayerScreen(
     val skipIntroFocusRequester = remember { FocusRequester() }
 
     BackHandler {
-        if (uiState.showSourcesPanel) {
+        if (uiState.showPauseOverlay) {
+            viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+        } else if (uiState.showSourcesPanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
         } else if (uiState.showEpisodesPanel) {
             viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
@@ -200,6 +202,7 @@ fun PlayerScreen(
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     if (uiState.showPauseOverlay) {
                         viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+                        return@onKeyEvent true
                     }
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -782,9 +785,9 @@ private fun ControlButton(
             },
         colors = IconButtonDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = NuvioColors.FocusBackground,
+            focusedContainerColor = Color.White,
             contentColor = Color.White,
-            focusedContentColor = Color.White
+            focusedContentColor = Color.Black
         ),
         shape = IconButtonDefaults.shape(shape = CircleShape)
     ) {

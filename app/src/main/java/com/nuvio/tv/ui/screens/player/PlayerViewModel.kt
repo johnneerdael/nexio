@@ -1552,8 +1552,9 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun onUserInteraction() {
-        if (!_uiState.value.isPlaying && userPausedManually) {
-            schedulePauseOverlay()
+        
+        if (_uiState.value.showPauseOverlay || pauseOverlayJob != null) {
+            cancelPauseOverlay()
         }
     }
 
@@ -1732,10 +1733,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { it.copy(showParentalGuide = false) }
             }
             PlayerEvent.OnDismissPauseOverlay -> {
-                _uiState.update { it.copy(showPauseOverlay = false) }
-                if (!_uiState.value.isPlaying) {
-                    schedulePauseOverlay()
-                }
+                cancelPauseOverlay()
             }
             PlayerEvent.OnSkipIntro -> {
                 _uiState.value.activeSkipInterval?.let { interval ->
