@@ -93,7 +93,7 @@ data class SubtitleStyleSettings(
  */
 data class BufferSettings(
     val minBufferMs: Int = 15_000,
-    val maxBufferMs: Int = 50_000,
+    val maxBufferMs: Int = 25_000,
     val bufferForPlaybackMs: Int = 2_500,
     val bufferForPlaybackAfterRebufferMs: Int = 5_000,
     val targetBufferSizeMb: Int = 0, // 0 = auto (calculated from available heap)
@@ -216,7 +216,7 @@ class PlayerSettingsDataStore @Inject constructor(
             ),
             bufferSettings = BufferSettings(
                 minBufferMs = prefs[minBufferMsKey] ?: 15_000,
-                maxBufferMs = prefs[maxBufferMsKey] ?: 50_000,
+                maxBufferMs = prefs[maxBufferMsKey] ?: 25_000,
                 bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: 2_500,
                 bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 5_000,
                 targetBufferSizeMb = prefs[targetBufferSizeMbKey] ?: 0,
