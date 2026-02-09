@@ -1348,22 +1348,31 @@ class PlayerViewModel @Inject constructor(
             pendingAddonSubtitleLanguage = null
         } else if (selectedSubtitleIndex == -1 && subtitleTracks.isNotEmpty() && !autoSubtitleSelected) {
             val preferred = _uiState.value.subtitleStyle.preferredLanguage.lowercase()
-            val secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage?.lowercase()
 
-            val preferredMatch = subtitleTracks.indexOfFirst { matchesLanguage(it, preferred) }
-            val secondaryMatch = secondary?.let { target ->
-                subtitleTracks.indexOfFirst { matchesLanguage(it, target) }
-            } ?: -1
+            
+            if (preferred == "none") {
+                autoSubtitleSelected = true
+                // Leave selectedSubtitleIndex as -1 (no subtitle)
+            } else {
+                val secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage?.lowercase()
 
-            val autoIndex = when {
-                preferredMatch >= 0 -> preferredMatch
-                secondaryMatch >= 0 -> secondaryMatch
-                else -> 0
+                val preferredMatch = subtitleTracks.indexOfFirst { matchesLanguage(it, preferred) }
+                val secondaryMatch = secondary?.let { target ->
+                    subtitleTracks.indexOfFirst { matchesLanguage(it, target) }
+                } ?: -1
+
+                val autoIndex = when {
+                    preferredMatch >= 0 -> preferredMatch
+                    secondaryMatch >= 0 -> secondaryMatch
+                    else -> -1
+                }
+
+                autoSubtitleSelected = true
+                if (autoIndex >= 0) {
+                    selectSubtitleTrack(autoIndex)
+                    selectedSubtitleIndex = autoIndex
+                }
             }
-
-            autoSubtitleSelected = true
-            selectSubtitleTrack(autoIndex)
-            selectedSubtitleIndex = autoIndex
         }
 
         _uiState.update {
@@ -1378,11 +1387,14 @@ class PlayerViewModel @Inject constructor(
 
     private fun applySubtitlePreferences(preferred: String, secondary: String?) {
         _exoPlayer?.let { player ->
-            val builder = player.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            val builder = player.trackSelectionParameters.buildUpon()
 
-            builder.setPreferredTextLanguage(preferred)
+            if (preferred == "none") {
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            } else {
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                builder.setPreferredTextLanguage(preferred)
+            }
 
             player.trackSelectionParameters = builder.build()
         }
