@@ -5,6 +5,7 @@
 
 package com.nuvio.tv.ui.screens.player
 
+import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -34,8 +35,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Speed
@@ -60,9 +63,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
@@ -278,6 +283,7 @@ fun PlayerScreen(
         // Video Player
         viewModel.exoPlayer?.let { player ->
             val subtitleStyle = uiState.subtitleStyle
+            val resizeMode = uiState.resizeMode
             
             AndroidView(
                 factory = { context ->
@@ -289,6 +295,8 @@ fun PlayerScreen(
                     }
                 },
                 update = { playerView ->
+                    Log.d("PlayerScreen", "Applying resizeMode: $resizeMode")
+                    playerView.resizeMode = resizeMode
                     playerView.subtitleView?.apply {
                         // Calculate font size based on percentage (100% = 24sp base)
                         val baseFontSize = 24f
@@ -424,9 +432,25 @@ fun PlayerScreen(
                 onShowAudioDialog = { viewModel.onEvent(PlayerEvent.OnShowAudioDialog) },
                 onShowSubtitleDialog = { viewModel.onEvent(PlayerEvent.OnShowSubtitleDialog) },
                 onShowSpeedDialog = { viewModel.onEvent(PlayerEvent.OnShowSpeedDialog) },
+                onToggleAspectRatio = { 
+                    Log.d("PlayerScreen", "onToggleAspectRatio called - dispatching event")
+                    viewModel.onEvent(PlayerEvent.OnToggleAspectRatio) 
+                },
                 onResetHideTimer = { viewModel.scheduleHideControls() },
                 onBack = onBackPress
             )
+        }
+
+        // Aspect ratio indicator (floating pill)
+        AnimatedVisibility(
+            visible = uiState.showAspectRatioIndicator,
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 80.dp)
+        ) {
+            AspectRatioIndicator(text = uiState.aspectRatioIndicatorText)
         }
 
         // Seek-only overlay (progress bar + time) when controls are hidden
@@ -571,6 +595,7 @@ private fun PlayerControlsOverlay(
     onShowAudioDialog: () -> Unit,
     onShowSubtitleDialog: () -> Unit,
     onShowSpeedDialog: () -> Unit,
+    onToggleAspectRatio: () -> Unit,
     onResetHideTimer: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -731,6 +756,17 @@ private fun PlayerControlsOverlay(
                         onFocused = onResetHideTimer
                     )
 
+                    // Aspect Ratio
+                    ControlButton(
+                        icon = Icons.Default.AspectRatio,
+                        contentDescription = "Aspect ratio",
+                        onClick = {
+                            Log.d("PlayerScreen", "Aspect ratio button clicked")
+                            onToggleAspectRatio()
+                        },
+                        onFocused = onResetHideTimer
+                    )
+
                     // Sources - switch stream source
                     ControlButton(
                         icon = Icons.Default.SwapHoriz,
@@ -858,6 +894,51 @@ private fun SeekOverlay(uiState: PlayerUiState) {
                 color = Color.White.copy(alpha = 0.9f)
             )
         }
+    }
+}
+
+@Composable
+private fun AspectRatioIndicator(text: String) {
+    // Floating pill indicator for aspect ratio changes
+    Row(
+        modifier = Modifier
+            .background(
+                color = Color.Black.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(24.dp)
+            )
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icon background circle
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    color = Color(0xFF3B3B3B),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.AspectRatio,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // Text
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = Color.White
+        )
     }
 }
 

@@ -166,6 +166,7 @@ class PlayerViewModel @Inject constructor(
     private var hideControlsJob: Job? = null
     private var hideSeekOverlayJob: Job? = null
     private var watchProgressSaveJob: Job? = null
+    private var hideAspectRatioIndicatorJob: Job? = null
     
     
     private var lastSavedPosition: Long = 0L
@@ -1773,6 +1774,33 @@ class PlayerViewModel @Inject constructor(
                     playerSettingsDataStore.setSubtitleOutlineWidth(defaults.outlineWidth)
                     playerSettingsDataStore.setSubtitleVerticalOffset(defaults.verticalOffset)
                     playerSettingsDataStore.setSubtitleBackgroundColor(defaults.backgroundColor)
+                }
+            }
+            PlayerEvent.OnToggleAspectRatio -> {
+                val currentMode = _uiState.value.resizeMode
+                val newMode = if (currentMode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                    androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                } else {
+                    androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                }
+                val modeText = if (newMode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                    "Fit"
+                } else {
+                    "Zoom"
+                }
+                Log.d("PlayerViewModel", "Aspect ratio toggled: $currentMode -> $newMode")
+                _uiState.update { 
+                    it.copy(
+                        resizeMode = newMode,
+                        showAspectRatioIndicator = true,
+                        aspectRatioIndicatorText = modeText
+                    ) 
+                }
+                // Auto-hide indicator after 1.5 seconds
+                hideAspectRatioIndicatorJob?.cancel()
+                hideAspectRatioIndicatorJob = viewModelScope.launch {
+                    delay(1500)
+                    _uiState.update { it.copy(showAspectRatioIndicator = false) }
                 }
             }
         }

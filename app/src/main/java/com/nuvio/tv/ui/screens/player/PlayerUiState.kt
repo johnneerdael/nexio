@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.player
 
 import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.domain.model.MetaCastMember
@@ -85,7 +86,11 @@ data class PlayerUiState(
     val skipIntervalDismissed: Boolean = false,
     // Frame rate matching
     val detectedFrameRate: Float = 0f,
-    val frameRateMatchingEnabled: Boolean = false
+    val frameRateMatchingEnabled: Boolean = false,
+    // Aspect ratio / resize mode
+    val resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
+    val showAspectRatioIndicator: Boolean = false,
+    val aspectRatioIndicatorText: String = ""
 )
 
 data class TrackInfo(
@@ -136,6 +141,7 @@ sealed class PlayerEvent {
     data class OnSetSubtitleOutlineColor(val color: Int) : PlayerEvent()
     data class OnSetSubtitleVerticalOffset(val offset: Int) : PlayerEvent()
     data object OnResetSubtitleDefaults : PlayerEvent()
+    data object OnToggleAspectRatio : PlayerEvent()
 }
 
 data class ParentalWarning(
