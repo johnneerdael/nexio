@@ -179,6 +179,8 @@ class PlayerViewModel @Inject constructor(
 
     
     private var skipIntervals: List<SkipInterval> = emptyList()
+    private var skipIntroEnabled: Boolean = true
+    private var skipIntroFetchedKey: String? = null
     private var lastActiveSkipType: String? = null
     private var autoSubtitleSelected: Boolean = false
     private var pendingAddonSubtitleLanguage: String? = null
@@ -198,7 +200,6 @@ class PlayerViewModel @Inject constructor(
         initializePlayer(currentStreamUrl, currentHeaders)
         loadSavedProgressFor(currentSeason, currentEpisode)
         fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
-        fetchSkipIntervals(contentId, currentSeason, currentEpisode)
         observeSubtitleSettings()
         fetchAddonSubtitles()
         fetchMetaDetails(contentId, contentType)
@@ -275,6 +276,21 @@ class PlayerViewModel @Inject constructor(
                     settings.subtitleStyle.preferredLanguage,
                     settings.subtitleStyle.secondaryPreferredLanguage
                 )
+
+                val wasEnabled = skipIntroEnabled
+                skipIntroEnabled = settings.skipIntroEnabled
+                if (!skipIntroEnabled) {
+                    if (skipIntervals.isNotEmpty() || _uiState.value.activeSkipInterval != null) {
+                        skipIntervals = emptyList()
+                        skipIntroFetchedKey = null
+                        _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
+                    }
+                } else {
+                    if (!wasEnabled || skipIntroFetchedKey == null) {
+                        _uiState.update { it.copy(skipIntervalDismissed = false) }
+                        fetchSkipIntervals(contentId, currentSeason, currentEpisode)
+                    }
+                }
             }
         }
     }
@@ -307,9 +323,14 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun fetchSkipIntervals(id: String?, season: Int?, episode: Int?) {
+        if (!skipIntroEnabled) return
         if (id.isNullOrBlank()) return
         val imdbId = id.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
         if (season == null || episode == null) return
+
+        val key = "$imdbId:$season:$episode"
+        if (skipIntroFetchedKey == key) return
+        skipIntroFetchedKey = key
 
         viewModelScope.launch {
             val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
@@ -1225,6 +1246,7 @@ class PlayerViewModel @Inject constructor(
 
         playbackStartedForParentalGuide = false
         skipIntervals = emptyList()
+        skipIntroFetchedKey = null
         lastActiveSkipType = null
 
         

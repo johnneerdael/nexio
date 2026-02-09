@@ -57,6 +57,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(enabled)
     }
 
+    suspend fun setSkipIntroEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setSkipIntroEnabled(enabled)
+    }
+
     suspend fun setFrameRateMatching(enabled: Boolean) {
         playerSettingsDataStore.setFrameRateMatching(enabled)
     }

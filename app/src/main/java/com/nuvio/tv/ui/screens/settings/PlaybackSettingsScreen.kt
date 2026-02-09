@@ -236,6 +236,20 @@ fun PlaybackSettingsContent(
 
             item {
                 ToggleSettingsItem(
+                    icon = Icons.Default.History,
+                    title = "Skip Intro",
+                    subtitle = "Use introdb.app to detect intros and recaps",
+                    isChecked = playerSettings.skipIntroEnabled,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setSkipIntroEnabled(enabled)
+                        }
+                    }
+                )
+            }
+
+            item {
+                ToggleSettingsItem(
                     icon = Icons.Default.Speed,
                     title = "Auto Frame Rate",
                     subtitle = "Switch display refresh rate to match video frame rate for judder-free playback",

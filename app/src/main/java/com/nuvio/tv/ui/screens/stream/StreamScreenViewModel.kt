@@ -5,11 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.domain.model.Stream
+import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -17,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
+    private val addonRepository: AddonRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -70,6 +73,9 @@ class StreamScreenViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
+            val installedAddons = addonRepository.getInstalledAddons().first()
+            val installedAddonOrder = installedAddons.map { it.name }
+
             streamRepository.getStreamsFromAllAddons(
                 type = contentType,
                 videoId = videoId,
@@ -78,7 +84,7 @@ class StreamScreenViewModel @Inject constructor(
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
-                        val addonStreams = result.data
+                        val addonStreams = orderStreams(result.data, installedAddonOrder)
                         val allStreams = addonStreams.flatMap { it.streams }
                         val availableAddons = addonStreams.map { it.addonName }
                         
@@ -158,6 +164,17 @@ class StreamScreenViewModel @Inject constructor(
             episode = episode,
             episodeTitle = episodeName
         )
+    }
+
+    private fun orderStreams(
+        streams: List<com.nuvio.tv.domain.model.AddonStreams>,
+        installedOrder: List<String>
+    ): List<com.nuvio.tv.domain.model.AddonStreams> {
+        if (streams.isEmpty()) return streams
+
+        val (addonEntries, pluginEntries) = streams.partition { it.addonName in installedOrder }
+        val orderedAddons = addonEntries.sortedBy { installedOrder.indexOf(it.addonName) }
+        return orderedAddons + pluginEntries
     }
 }
 
