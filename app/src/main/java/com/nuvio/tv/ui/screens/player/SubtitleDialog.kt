@@ -41,8 +41,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -224,7 +224,7 @@ private fun InternalSubtitlesContent(
     onTrackSelected: (Int) -> Unit,
     onDisableSubtitles: () -> Unit
 ) {
-    TvLazyColumn(
+    LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(top = 4.dp),
         modifier = Modifier.height(300.dp)
@@ -271,7 +271,7 @@ private fun AddonSubtitlesContent(
     isLoading: Boolean,
     onSubtitleSelected: (Subtitle) -> Unit
 ) {
-    TvLazyColumn(
+    LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(top = 4.dp),
         modifier = Modifier.height(300.dp)
@@ -385,7 +385,7 @@ private fun SubtitleStyleContent(
     subtitleStyle: SubtitleStyleSettings,
     onEvent: (PlayerEvent) -> Unit
 ) {
-    TvLazyColumn(
+    LazyColumn(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 4.dp),
         modifier = Modifier.height(340.dp)

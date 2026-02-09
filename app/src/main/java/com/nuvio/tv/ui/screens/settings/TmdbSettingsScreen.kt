@@ -28,7 +28,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -95,7 +95,7 @@ fun TmdbSettingsContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        TvLazyColumn(
+        LazyColumn(
             contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {

@@ -29,9 +29,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @Composable
@@ -39,7 +39,7 @@ fun StreamsSkeletonList(
     modifier: Modifier = Modifier,
     itemCount: Int = 6
 ) {
-    TvLazyColumn(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
@@ -106,7 +106,7 @@ fun MetaDetailsSkeleton() {
             .fillMaxSize()
             .background(NuvioColors.Background)
     ) {
-        TvLazyColumn(
+        LazyColumn(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
@@ -201,7 +201,7 @@ private fun MetaHeroSkeleton(shimmerBrush: Brush) {
 
 @Composable
 private fun SeasonTabsSkeleton(shimmerBrush: Brush) {
-    TvLazyRow(
+    LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -214,7 +214,7 @@ private fun SeasonTabsSkeleton(shimmerBrush: Brush) {
 
 @Composable
 private fun EpisodesRowSkeleton(shimmerBrush: Brush) {
-    TvLazyRow(
+    LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -256,7 +256,7 @@ private fun CastSectionSkeleton(shimmerBrush: Brush) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -296,7 +296,7 @@ private fun CompanyLogosSkeleton(
             SkeletonBar(width = titleWidth, height = 20.dp, brush = shimmerBrush, cornerRadius = 10.dp)
         }
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)

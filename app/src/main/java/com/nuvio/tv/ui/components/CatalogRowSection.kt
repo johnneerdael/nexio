@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -54,17 +55,11 @@ fun CatalogRowSection(
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {},
-    upFocusRequester: FocusRequester? = null
+    upFocusRequester: FocusRequester? = null,
+    listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
 
-    val listState = rememberLazyListState()
 
-    // Restore scroll position if needed
-    LaunchedEffect(initialScrollIndex) {
-        if (initialScrollIndex > 0) {
-            listState.scrollToItem(initialScrollIndex)
-        }
-    }
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 

@@ -69,8 +69,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -141,7 +141,7 @@ fun PluginScreenContent(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        TvLazyColumn(
+        LazyColumn(
             contentPadding = PaddingValues(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()

@@ -19,8 +19,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -56,7 +56,7 @@ fun GridContinueWatchingSection(
             }
         }
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRestorer(),

@@ -31,8 +31,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -40,6 +40,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
 import androidx.tv.material3.FilterChipDefaults
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -116,7 +118,10 @@ internal fun StreamItem(
             ) {
                 if (stream.addonLogo != null) {
                     AsyncImage(
-                        model = stream.addonLogo,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(stream.addonLogo)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = stream.addonName,
                         modifier = Modifier
                             .size(32.dp)
@@ -165,7 +170,7 @@ internal fun AddonFilterChips(
     selectedAddon: String?,
     onAddonSelected: (String?) -> Unit
 ) {
-    TvLazyRow(
+    LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
     ) {

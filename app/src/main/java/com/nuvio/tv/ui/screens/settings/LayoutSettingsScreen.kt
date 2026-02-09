@@ -34,9 +34,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -101,7 +101,7 @@ fun LayoutSettingsContent(
         }
     }
 
-    TvLazyColumn(
+    LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -162,7 +162,7 @@ fun LayoutSettingsContent(
                         color = NuvioColors.TextSecondary
                     )
                     Spacer(modifier = Modifier.height(10.dp))
-                    TvLazyRow(
+                    LazyRow(
                         contentPadding = PaddingValues(end = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {

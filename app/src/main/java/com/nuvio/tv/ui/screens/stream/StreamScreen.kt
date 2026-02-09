@@ -47,10 +47,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
-import androidx.tv.foundation.lazy.list.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -146,7 +148,10 @@ private fun StreamBackdrop(
         // Backdrop image
         if (backdrop != null) {
             AsyncImage(
-                model = backdrop,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(backdrop)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -222,7 +227,10 @@ private fun LeftContentSection(
         ) {
             if (logo != null) {
                 AsyncImage(
-                    model = logo,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(logo)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = title,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -378,7 +386,7 @@ private fun AddonFilterChips(
     selectedAddon: String?,
     onAddonSelected: (String?) -> Unit
 ) {
-    TvLazyRow(
+    LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
     ) {
@@ -549,7 +557,7 @@ private fun StreamsList(
     streams: List<Stream>,
     onStreamSelected: (Stream) -> Unit
 ) {
-    TvLazyColumn(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
@@ -637,7 +645,10 @@ private fun StreamCard(
             ) {
                 if (stream.addonLogo != null) {
                     AsyncImage(
-                        model = stream.addonLogo,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(stream.addonLogo)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = stream.addonName,
                         modifier = Modifier
                             .size(32.dp)

@@ -3,9 +3,10 @@ package com.nuvio.tv.ui.screens.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.itemsIndexed
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,7 +32,7 @@ fun ClassicHomeContent(
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
-    val columnListState = rememberTvLazyListState()
+    val columnListState = rememberLazyListState()
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
         if (focusState.verticalScrollIndex > 0 || focusState.verticalScrollOffset > 0) {
@@ -44,25 +45,30 @@ fun ClassicHomeContent(
 
     var currentFocusedRowIndex by remember { mutableStateOf(focusState.focusedRowIndex) }
     var currentFocusedItemIndex by remember { mutableStateOf(focusState.focusedItemIndex) }
+    
+    // Store scroll state for each row to persist position during recycling
+    val rowStates = remember { mutableMapOf<String, LazyListState>() }
+    
     val catalogRowScrollStates = remember { mutableMapOf<String, Int>() }
     val perCatalogFocusedItem = remember { mutableMapOf<String, Int>() }
     var restoringFocus by remember { mutableStateOf(focusState.hasSavedFocus) }
 
     DisposableEffect(Unit) {
         onDispose {
+
             onSaveFocusState(
                 columnListState.firstVisibleItemIndex,
                 columnListState.firstVisibleItemScrollOffset,
                 currentFocusedRowIndex,
                 currentFocusedItemIndex,
-                catalogRowScrollStates.toMap()
+                focusState.catalogRowScrollStates + rowStates.mapValues { it.value.firstVisibleItemIndex }
             )
         }
     }
 
     val heroVisible = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
 
-    TvLazyColumn(
+    LazyColumn(
         state = columnListState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = if (heroVisible) 0.dp else 24.dp, bottom = 24.dp),
@@ -127,6 +133,12 @@ fun ClassicHomeContent(
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val focusedItemIndex = if (shouldRestoreFocus) focusState.focusedItemIndex else -1
 
+            val listState = rowStates.getOrPut(catalogKey) {
+                LazyListState(
+                    firstVisibleItemIndex = focusState.catalogRowScrollStates[catalogKey] ?: 0
+                )
+            }
+
             CatalogRowSection(
                 catalogRow = catalogRow,
                 onItemClick = { id, type, addonBaseUrl ->
@@ -139,7 +151,8 @@ fun ClassicHomeContent(
                         catalogRow.type.toApiString()
                     )
                 },
-                initialScrollIndex = focusState.catalogRowScrollStates[catalogKey] ?: 0,
+                listState = listState,
+                // We don't need initialScrollIndex anymore as listState handles it
                 focusedItemIndex = focusedItemIndex,
                 onItemFocused = { itemIndex ->
                     restoringFocus = false
@@ -147,6 +160,8 @@ fun ClassicHomeContent(
                     currentFocusedItemIndex = itemIndex
                     perCatalogFocusedItem[catalogKey] = itemIndex
                     catalogRowScrollStates[catalogKey] = itemIndex
+                    // Update the state as well, though getOrPut handles creation
+                    // rowStates[catalogKey] already holds the live state object
                 }
             )
         }

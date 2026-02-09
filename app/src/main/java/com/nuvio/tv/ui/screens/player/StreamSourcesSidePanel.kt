@@ -33,8 +33,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -151,7 +151,7 @@ internal fun StreamSourcesSidePanel(
                 }
 
                 else -> {
-                    TvLazyColumn(
+                    LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(top = 4.dp),
                         modifier = Modifier.fillMaxHeight()

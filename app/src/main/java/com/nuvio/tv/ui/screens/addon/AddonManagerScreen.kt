@@ -65,8 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -110,7 +110,7 @@ fun AddonManagerScreen(
             .fillMaxSize()
             .background(NuvioColors.Background)
     ) {
-        TvLazyColumn(
+        LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 36.dp, vertical = 28.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)

@@ -61,8 +61,9 @@ import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -202,7 +203,7 @@ fun PlaybackSettingsContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         // Settings list
-        TvLazyColumn(
+        LazyColumn(
             contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1514,7 +1515,7 @@ private fun LanguageSelectionDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                TvLazyColumn(
+                LazyColumn(
                     modifier = Modifier.height(400.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1638,8 +1639,8 @@ private fun ColorSelectionDialog(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Color grid using TvLazyRow for proper TV focus
-            TvLazyRow(
+            // Color grid using LazyRow for proper TV focus
+            LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.focusRequester(focusRequester)
             ) {
@@ -1793,7 +1794,7 @@ private fun AudioLanguageSelectionDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                TvLazyColumn(
+                LazyColumn(
                     modifier = Modifier.height(400.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1894,7 +1895,7 @@ private fun DecoderPriorityDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                TvLazyColumn(
+                LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(options.size) { index ->

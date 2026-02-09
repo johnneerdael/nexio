@@ -75,8 +75,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.ui.PlayerView
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -1019,7 +1019,7 @@ private fun SpeedSelectionDialog(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                TvLazyColumn(
+                LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(top = 4.dp)
                 ) {
