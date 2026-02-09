@@ -396,6 +396,21 @@ fun PlaybackSettingsContent(
                 )
             }
 
+            // Map Dolby Vision Profile 7 to HEVC
+            item {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = "DV7 → HEVC Fallback",
+                    subtitle = "Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support",
+                    isChecked = playerSettings.mapDV7ToHevc,
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            viewModel.setMapDV7ToHevc(enabled)
+                        }
+                    }
+                )
+            }
+
             // Subtitle Style Settings Section Header
             item {
                 Spacer(modifier = Modifier.height(16.dp))

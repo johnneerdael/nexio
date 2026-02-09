@@ -1,8 +1,11 @@
 package com.nuvio.tv.core.player
 
 import android.app.Activity
+import android.content.Context
 import android.hardware.display.DisplayManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
@@ -10,7 +13,8 @@ import android.view.WindowManager
 /**
  * Auto frame rate matching utility.
  * Switches the display refresh rate to match the video frame rate for judder-free playback.
- * Inspired by Just (Video) Player's implementation.
+ * Inspired by Just (Video) Player's implementation, including DisplayManager listener
+ * coordination to pause playback during the mode switch and resume once the display settles.
  */
 object FrameRateUtils {
 
@@ -18,6 +22,17 @@ object FrameRateUtils {
 
     /** Saved original display mode ID so we can restore it when playback ends. */
     private var originalModeId: Int = -1
+
+    /** Handler for DisplayManager callbacks and timeout. */
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Active display listener (for cleanup). */
+    private var displayManager: DisplayManager? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
+    private var timeoutRunnable: Runnable? = null
+
+    /** Timeout before we give up waiting for the display to change (ms). */
+    private const val DISPLAY_SWITCH_TIMEOUT_MS = 3000L
 
     /**
      * Normalize a refresh rate to an integer × 100 for safe floating-point comparison.
@@ -27,11 +42,24 @@ object FrameRateUtils {
     /**
      * Attempt to match the display refresh rate to the video [frameRate].
      *
+     * Like Just (Video) Player, this method coordinates with playback:
+     * - [onBeforeSwitch] is invoked right before the mode switch is applied (caller should pause the player).
+     * - [onAfterSwitch] is invoked once the display has actually changed (caller should resume playback).
+     * - If no switch is needed, neither callback is invoked.
+     * - A safety timeout ensures playback resumes even if the TV never fires the display-changed callback.
+     *
      * @param activity The current Activity (needed for window attributes).
      * @param frameRate The detected video frame rate (e.g. 23.976, 24, 25, 29.97, 30, 50, 59.94).
+     * @param onBeforeSwitch Called on the main thread right before the mode switch. Pause the player here.
+     * @param onAfterSwitch Called on the main thread when the display change completes (or times out). Resume here.
      * @return `true` if a mode switch was requested, `false` if not needed or unavailable.
      */
-    fun matchFrameRate(activity: Activity, frameRate: Float): Boolean {
+    fun matchFrameRate(
+        activity: Activity,
+        frameRate: Float,
+        onBeforeSwitch: (() -> Unit)? = null,
+        onAfterSwitch: (() -> Unit)? = null
+    ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
         if (frameRate <= 0f) return false
 
@@ -83,6 +111,37 @@ object FrameRateUtils {
             if (switchNeeded) {
                 Log.d(TAG, "Switching display mode: ${activeMode.refreshRate}Hz → ${modeBest.refreshRate}Hz " +
                         "(video ${frameRate}fps)")
+
+                // Clean up any previous listener
+                cleanupDisplayListener()
+
+                // Register DisplayManager listener to know when the TV has finished switching
+                if (onAfterSwitch != null) {
+                    displayManager = activity.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+                    displayListener = object : DisplayManager.DisplayListener {
+                        override fun onDisplayAdded(displayId: Int) {}
+                        override fun onDisplayRemoved(displayId: Int) {}
+                        override fun onDisplayChanged(displayId: Int) {
+                            Log.d(TAG, "Display mode switch completed")
+                            cleanupDisplayListener()
+                            onAfterSwitch()
+                        }
+                    }
+                    displayManager?.registerDisplayListener(displayListener, mainHandler)
+
+                    // Safety timeout — resume playback even if the callback never fires
+                    timeoutRunnable = Runnable {
+                        Log.w(TAG, "Display mode switch timed out after ${DISPLAY_SWITCH_TIMEOUT_MS}ms, resuming")
+                        cleanupDisplayListener()
+                        onAfterSwitch()
+                    }
+                    mainHandler.postDelayed(timeoutRunnable!!, DISPLAY_SWITCH_TIMEOUT_MS)
+                }
+
+                // Notify caller to pause playback before the switch
+                onBeforeSwitch?.invoke()
+
+                // Apply the mode switch
                 val layoutParams = window.attributes
                 layoutParams.preferredDisplayModeId = modeBest.modeId
                 window.attributes = layoutParams
@@ -95,6 +154,18 @@ object FrameRateUtils {
             Log.e(TAG, "Failed to match frame rate", e)
             return false
         }
+    }
+
+    /**
+     * Clean up any active DisplayManager listener and pending timeout.
+     * Safe to call multiple times.
+     */
+    fun cleanupDisplayListener() {
+        timeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        timeoutRunnable = null
+        displayListener?.let { displayManager?.unregisterDisplayListener(it) }
+        displayListener = null
+        displayManager = null
     }
 
     /**

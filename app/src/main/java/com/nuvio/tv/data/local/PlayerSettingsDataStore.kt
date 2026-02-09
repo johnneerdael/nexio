@@ -92,10 +92,10 @@ data class SubtitleStyleSettings(
  * Data class representing buffer settings
  */
 data class BufferSettings(
-    val minBufferMs: Int = 50_000,
+    val minBufferMs: Int = 15_000,
     val maxBufferMs: Int = 50_000,
-    val bufferForPlaybackMs: Int = 3_000,
-    val bufferForPlaybackAfterRebufferMs: Int = 9_000,
+    val bufferForPlaybackMs: Int = 2_500,
+    val bufferForPlaybackAfterRebufferMs: Int = 5_000,
     val targetBufferSizeMb: Int = 0, // 0 = auto (calculated from available heap)
     val backBufferDurationMs: Int = 0,
     val retainBackBufferFromKeyframe: Boolean = false,
@@ -125,6 +125,8 @@ data class PlayerSettings(
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
     val loadingOverlayEnabled: Boolean = true,
     val pauseOverlayEnabled: Boolean = true,
+    // Dolby Vision Profile 7 → HEVC fallback (requires forked ExoPlayer)
+    val mapDV7ToHevc: Boolean = false,
     // Display settings
     val frameRateMatching: Boolean = false
 )
@@ -158,6 +160,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val loadingOverlayEnabledKey = booleanPreferencesKey("loading_overlay_enabled")
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
+    private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
 
     // Subtitle style settings keys
@@ -197,6 +200,7 @@ class PlayerSettingsDataStore @Inject constructor(
             preferredAudioLanguage = prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE,
             loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
             pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
+            mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
             frameRateMatching = prefs[frameRateMatchingKey] ?: false,
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
@@ -211,10 +215,10 @@ class PlayerSettingsDataStore @Inject constructor(
                 outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
             ),
             bufferSettings = BufferSettings(
-                minBufferMs = prefs[minBufferMsKey] ?: 50_000,
+                minBufferMs = prefs[minBufferMsKey] ?: 15_000,
                 maxBufferMs = prefs[maxBufferMsKey] ?: 50_000,
-                bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: 3_000,
-                bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 9_000,
+                bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: 2_500,
+                bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 5_000,
                 targetBufferSizeMb = prefs[targetBufferSizeMbKey] ?: 0,
                 backBufferDurationMs = prefs[backBufferDurationMsKey] ?: 0,
                 retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false,
@@ -280,6 +284,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setFrameRateMatching(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[frameRateMatchingKey] = enabled
+        }
+    }
+
+    suspend fun setMapDV7ToHevc(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[mapDV7ToHevcKey] = enabled
         }
     }
 

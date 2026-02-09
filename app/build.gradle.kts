@@ -83,9 +83,16 @@ android {
     }
 }
 
+// Globally exclude stock media3-exoplayer and media3-ui — replaced by forked local AARs
+configurations.all {
+    exclude(group = "androidx.media3", module = "media3-exoplayer")
+    exclude(group = "androidx.media3", module = "media3-ui")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -128,18 +135,29 @@ dependencies {
     // ViewModel
     implementation(libs.lifecycle.viewmodel.compose)
 
-    // Media3 ExoPlayer
-    implementation(libs.media3.exoplayer)
+    // Media3 ExoPlayer — using custom forked ExoPlayer from local AARs (like Just Player)
+    // The forked lib-exoplayer-release.aar replaces stock media3-exoplayer (globally excluded above)
+    // lib-ui-release.aar replaces stock media3-ui (globally excluded above)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
+    implementation(libs.media3.exoplayer.smoothstreaming)
+    implementation(libs.media3.exoplayer.rtsp)
+    implementation(libs.media3.datasource)
     implementation(libs.media3.datasource.okhttp)
-    implementation(libs.media3.ui)
+    implementation(libs.media3.decoder)
     implementation(libs.media3.session)
     implementation(libs.media3.common)
+    implementation(libs.media3.container)
     implementation(libs.media3.extractor)
     
-    // Media3 FFmpeg Decoder Extension (locally built AAR)
-    implementation(files("libs/media3-decoder-ffmpeg.aar"))
+    // Local AAR libraries from forked ExoPlayer (matching Just Player setup):
+    // - lib-exoplayer-release.aar    — Custom forked ExoPlayer core (replaces media3-exoplayer)
+    // - lib-ui-release.aar           — Custom forked ExoPlayer UI
+    // - lib-decoder-ffmpeg-release.aar — FFmpeg audio decoders (vorbis,opus,flac,alac,pcm,mp3,amr,aac,ac3,eac3,dca,mlp,truehd)
+    // - lib-decoder-av1-release.aar  — AV1 software video decoder (libgav1)
+    // - lib-decoder-iamf-release.aar — IAMF immersive audio decoder
+    // - lib-decoder-mpegh-release.aar — MPEG-H 3D audio decoder
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
 
     // libass-android for ASS/SSA subtitle support (from Maven Central)
     implementation("io.github.peerless2012:ass-media:0.4.0-beta01")

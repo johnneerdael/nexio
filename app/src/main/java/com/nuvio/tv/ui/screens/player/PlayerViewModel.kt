@@ -1,10 +1,14 @@
 package com.nuvio.tv.ui.screens.player
 
 import android.content.Context
+import android.content.res.Resources
+import android.os.Build
 import android.util.Log
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.LoudnessEnhancer
+import android.view.accessibility.CaptioningManager
+import androidx.media3.session.MediaSession
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -185,6 +189,7 @@ class PlayerViewModel @Inject constructor(
     // Audio enhancement
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var trackSelector: DefaultTrackSelector? = null
+    private var currentMediaSession: MediaSession? = null
     private var pauseOverlayJob: Job? = null
     private val pauseOverlayDelayMs = 5000L
 
@@ -510,15 +515,19 @@ class PlayerViewModel @Inject constructor(
                             buildUponParameters().setTunnelingEnabled(true)
                         )
                     }
-                    // Apply preferred audio language
+                    // Apply preferred audio language (matching Just Player)
                     when (playerSettings.preferredAudioLanguage) {
                         AudioLanguageOption.DEFAULT -> { /* use media default */ }
                         AudioLanguageOption.DEVICE -> {
+                            // Get ALL device locales (primary + secondary languages)
+                            val deviceLanguages = if (Build.VERSION.SDK_INT >= 24) {
+                                val localeList = Resources.getSystem().configuration.locales
+                                Array(localeList.size()) { localeList[it].isO3Language }
+                            } else {
+                                arrayOf(Resources.getSystem().configuration.locale.isO3Language)
+                            }
                             setParameters(
-                                buildUponParameters().setPreferredAudioLanguages(
-                                    Locale.getDefault().isO3Language,
-                                    Locale.getDefault().language
-                                )
+                                buildUponParameters().setPreferredAudioLanguages(*deviceLanguages)
                             )
                         }
                         else -> {
@@ -526,6 +535,22 @@ class PlayerViewModel @Inject constructor(
                                 buildUponParameters().setPreferredAudioLanguages(
                                     playerSettings.preferredAudioLanguage
                                 )
+                            )
+                        }
+                    }
+
+                    // System captioning preferences (matching Just Player)
+                    val appContext = this@PlayerViewModel.context
+                    val captioningManager = appContext.getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
+                    if (captioningManager != null) {
+                        if (!captioningManager.isEnabled) {
+                            setParameters(
+                                buildUponParameters().setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                            )
+                        }
+                        captioningManager.locale?.let { locale ->
+                            setParameters(
+                                buildUponParameters().setPreferredTextLanguage(locale.isO3Language)
                             )
                         }
                     }
@@ -539,7 +564,7 @@ class PlayerViewModel @Inject constructor(
                 // Renderers with decoder priority from settings
                 val renderersFactory = DefaultRenderersFactory(context)
                     .setExtensionRendererMode(playerSettings.decoderPriority)
-                    .setEnableDecoderFallback(true)
+                    .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
 
                 _exoPlayer = if (useLibass) {
                     // Build ExoPlayer with libass support for ASS/SSA subtitles
@@ -573,6 +598,19 @@ class PlayerViewModel @Inject constructor(
                     // Skip silence
                     if (playerSettings.skipSilence) {
                         skipSilenceEnabled = true
+                    }
+
+                    // Pause playback when headphones/bluetooth disconnected (matching Just Player)
+                    setHandleAudioBecomingNoisy(true)
+
+                    // Media session for system media controls (matching Just Player)
+                    try {
+                        currentMediaSession?.release()
+                        if (canAdvertiseSession()) {
+                            currentMediaSession = MediaSession.Builder(context, this).build()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
 
                     // Store frame rate matching preference for later use
@@ -1857,6 +1895,14 @@ class PlayerViewModel @Inject constructor(
         try {
             loudnessEnhancer?.release()
             loudnessEnhancer = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        // Release media session
+        try {
+            currentMediaSession?.release()
+            currentMediaSession = null
         } catch (e: Exception) {
             e.printStackTrace()
         }

@@ -136,16 +136,23 @@ fun PlayerScreen(
     }
 
     // Frame rate matching: switch display refresh rate to match video frame rate
+    // Like Just Player, we pause playback during the switch and resume when the display settles.
     val activity = LocalContext.current as? android.app.Activity
     LaunchedEffect(uiState.detectedFrameRate, uiState.frameRateMatchingEnabled) {
         if (activity != null && uiState.frameRateMatchingEnabled && uiState.detectedFrameRate > 0f) {
-            com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(activity, uiState.detectedFrameRate)
+            val switched = com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(
+                activity,
+                uiState.detectedFrameRate,
+                onBeforeSwitch = { viewModel.exoPlayer?.pause() },
+                onAfterSwitch = { viewModel.exoPlayer?.play() }
+            )
         }
     }
     // Restore original display mode when leaving the player
     DisposableEffect(activity) {
         onDispose {
             if (activity != null) {
+                com.nuvio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
                 com.nuvio.tv.core.player.FrameRateUtils.restoreOriginalMode(activity)
             }
         }
