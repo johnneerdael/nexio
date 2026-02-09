@@ -62,13 +62,15 @@ fun ClassicHomeContent(
         }
     }
 
+    val heroVisible = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
+
     TvLazyColumn(
         state = columnListState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(top = if (heroVisible) 0.dp else 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
-        if (uiState.heroItems.isNotEmpty()) {
+        if (heroVisible) {
             item(key = "hero_carousel", contentType = "hero") {
                 HeroCarousel(
                     items = uiState.heroItems,

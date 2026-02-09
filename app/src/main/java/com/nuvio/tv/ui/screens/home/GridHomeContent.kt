@@ -104,6 +104,7 @@ fun GridHomeContent(
     val hasHero = remember(uiState.gridItems) {
         uiState.gridItems.firstOrNull() is GridItem.Hero
     }
+    val topPadding = if (hasHero) 0.dp else 24.dp
 
     // Determine if hero is scrolled past
     val isScrolledPastHero by remember(hasHero) {
@@ -150,7 +151,7 @@ fun GridHomeContent(
             contentPadding = PaddingValues(
                 start = 24.dp,
                 end = 24.dp,
-                top = 0.dp,
+                top = topPadding,
                 bottom = 32.dp
             ),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

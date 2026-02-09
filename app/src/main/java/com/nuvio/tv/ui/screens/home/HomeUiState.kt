@@ -17,6 +17,7 @@ data class HomeUiState(
     val homeLayout: HomeLayout = HomeLayout.CLASSIC,
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKey: String? = null,
+    val heroSectionEnabled: Boolean = true,
     val gridItems: List<GridItem> = emptyList()
 )
 

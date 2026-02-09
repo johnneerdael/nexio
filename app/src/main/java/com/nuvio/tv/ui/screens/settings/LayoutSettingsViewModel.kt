@@ -19,7 +19,8 @@ data class LayoutSettingsUiState(
     val hasChosen: Boolean = false,
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKey: String? = null,
-    val sidebarCollapsedByDefault: Boolean = true
+    val sidebarCollapsedByDefault: Boolean = false,
+    val heroSectionEnabled: Boolean = true
 )
 
 data class CatalogInfo(
@@ -32,6 +33,7 @@ sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SelectHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
+    data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
 }
 
 @HiltViewModel
@@ -64,6 +66,11 @@ class LayoutSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(sidebarCollapsedByDefault = collapsed) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.heroSectionEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(heroSectionEnabled = enabled) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
@@ -72,6 +79,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SelectHeroCatalog -> selectHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
+            is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
         }
     }
 
@@ -90,6 +98,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setSidebarCollapsed(collapsed: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setSidebarCollapsedByDefault(collapsed)
+        }
+    }
+
+    private fun setHeroSectionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setHeroSectionEnabled(enabled)
         }
     }
 

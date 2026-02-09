@@ -63,6 +63,7 @@ class HomeViewModel @Inject constructor(
     init {
         loadLayoutPreference()
         loadHeroCatalogPreference()
+        loadHeroSectionPreference()
         loadContinueWatching()
         observeInstalledAddons()
     }
@@ -81,6 +82,14 @@ class HomeViewModel @Inject constructor(
                 currentHeroCatalogKey = key
                 _uiState.update { it.copy(heroCatalogKey = key) }
                 scheduleUpdateCatalogRows()
+            }
+        }
+    }
+
+    private fun loadHeroSectionPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.heroSectionEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(heroSectionEnabled = enabled) }
             }
         }
     }
@@ -334,6 +343,7 @@ class HomeViewModel @Inject constructor(
         val heroCatalogKey = currentHeroCatalogKey
         val currentLayout = _uiState.value.homeLayout
         val currentGridItems = _uiState.value.gridItems
+        val heroSectionEnabled = _uiState.value.heroSectionEnabled
 
         val (displayRows, heroItems, gridItems) = withContext(Dispatchers.Default) {
             val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
@@ -354,7 +364,7 @@ class HomeViewModel @Inject constructor(
 
             val computedGridItems = if (currentLayout == HomeLayout.GRID) {
                 buildList {
-                    if (computedHeroItems.isNotEmpty()) {
+                    if (heroSectionEnabled && computedHeroItems.isNotEmpty()) {
                         add(GridItem.Hero(computedHeroItems))
                     }
                     computedDisplayRows.filter { it.items.isNotEmpty() }.forEach { row ->

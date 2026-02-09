@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
                     // Wait for DataStore to emit before rendering to avoid flickering
                     val layoutChosen = hasChosenLayout ?: return@Surface
 
-                    val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = true)
+                    val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
                     val updateState by updateViewModel.uiState.collectAsState()
@@ -208,6 +208,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     }
                                                     drawerState.setValue(DrawerValue.Closed)
+                                                    focusManager.moveFocus(FocusDirection.Right)
                                                 },
                                                 colors = itemColors,
                                                 leadingContent = {
