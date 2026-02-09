@@ -379,7 +379,6 @@ fun PlayerScreen(
         if (uiState.error != null) {
             ErrorOverlay(
                 message = uiState.error!!,
-                onRetry = { viewModel.onEvent(PlayerEvent.OnRetry) },
                 onBack = onBackPress
             )
         }
@@ -865,9 +864,14 @@ private fun SeekOverlay(uiState: PlayerUiState) {
 @Composable
 private fun ErrorOverlay(
     message: String,
-    onRetry: () -> Unit,
     onBack: () -> Unit
 ) {
+    val exitFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        exitFocusRequester.requestFocus()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -901,13 +905,10 @@ private fun ErrorOverlay(
                 DialogButton(
                     text = "Go Back",
                     onClick = onBack,
-                    isPrimary = false
-                )
-
-                DialogButton(
-                    text = "Retry",
-                    onClick = onRetry,
-                    isPrimary = true
+                    isPrimary = true,
+                    modifier = Modifier
+                        .focusRequester(exitFocusRequester)
+                        .focusable()
                 )
             }
         }
@@ -1408,13 +1409,14 @@ private fun SpeedItem(
 internal fun DialogButton(
     text: String,
     onClick: () -> Unit,
-    isPrimary: Boolean
+    isPrimary: Boolean,
+    modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
         onClick = onClick,
-        modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
+        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
             containerColor = if (isPrimary) NuvioColors.Secondary else NuvioColors.BackgroundCard,
             focusedContainerColor = if (isPrimary) NuvioColors.Secondary else NuvioColors.FocusBackground
