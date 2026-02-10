@@ -21,15 +21,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,7 +66,10 @@ fun HeroContentSection(
     onPlayClick: () -> Unit,
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
-    isTrailerPlaying: Boolean = false
+    isTrailerPlaying: Boolean = false,
+    playButtonFocusRequester: FocusRequester? = null,
+    restorePlayFocusToken: Int = 0,
+    onPlayFocusRestored: () -> Unit = {}
 ) {
     // Animate logo properties for trailer mode
     val logoHeight by animateDpAsState(
@@ -159,7 +162,10 @@ fun HeroContentSection(
                                 nextEpisode != null -> "Play S${nextEpisode.season}, E${nextEpisode.episode}"
                                 else -> "Play"
                             },
-                            onClick = onPlayClick
+                            onClick = onPlayClick,
+                            focusRequester = playButtonFocusRequester,
+                            restoreFocusToken = restorePlayFocusToken,
+                            onFocusRestored = onPlayFocusRestored
                         )
 
                         ActionIconButton(
@@ -219,14 +225,26 @@ fun HeroContentSection(
 @Composable
 private fun PlayButton(
     text: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    restoreFocusToken: Int = 0,
+    onFocusRestored: () -> Unit = {}
 ) {
-    var isFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(restoreFocusToken) {
+        if (restoreFocusToken > 0 && focusRequester != null) {
+            focusRequester.requestFocusAfterFrames()
+        }
+    }
 
     Button(
         onClick = onClick,
         modifier = Modifier
-            .onFocusChanged { isFocused = it.isFocused }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged {
+                if (it.isFocused) {
+                    onFocusRestored()
+                }
+            }
             .focusProperties { up = FocusRequester.Cancel },
         colors = ButtonDefaults.colors(
             containerColor = androidx.compose.ui.graphics.Color.White,
@@ -269,13 +287,10 @@ private fun ActionIconButton(
     contentDescription: String,
     onClick: () -> Unit
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-
     IconButton(
         onClick = onClick,
         modifier = Modifier
             .size(48.dp)
-            .onFocusChanged { isFocused = it.isFocused }
             .focusProperties { up = FocusRequester.Cancel },
         colors = IconButtonDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,

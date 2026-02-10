@@ -4,24 +4,25 @@ import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -30,6 +31,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +41,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
@@ -48,6 +53,11 @@ import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
+
+private enum class RestoreTarget {
+    HERO,
+    EPISODE
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -172,7 +182,7 @@ fun MetaDetailsScreen(
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MetaDetailsContent(
     meta: Meta,
@@ -207,10 +217,49 @@ private fun MetaDetailsContent(
         byId ?: bySeasonEpisode ?: nextEpisode
     }
     val listState = rememberLazyListState()
-    val initialFocusRequester = remember { FocusRequester() }
+    // Suppress auto-scroll when hero buttons get focus
+    val heroNoScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
+        }
+    }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
-    var anchorCanFocus by remember { mutableStateOf(true) }
-    var anchorHadFocus by remember { mutableStateOf(false) }
+    val heroPlayFocusRequester = remember { FocusRequester() }
+    var pendingRestoreType by rememberSaveable { mutableStateOf<RestoreTarget?>(null) }
+    var pendingRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    fun clearPendingRestore() {
+        pendingRestoreType = null
+        pendingRestoreEpisodeId = null
+    }
+
+    fun markHeroRestore() {
+        pendingRestoreType = RestoreTarget.HERO
+        pendingRestoreEpisodeId = null
+    }
+
+    fun markEpisodeRestore(episodeId: String) {
+        pendingRestoreType = RestoreTarget.EPISODE
+        pendingRestoreEpisodeId = episodeId
+    }
+
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, pendingRestoreType, pendingRestoreEpisodeId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME &&
+                (pendingRestoreType != null || pendingRestoreEpisodeId != null)
+            ) {
+                restoreFocusToken += 1
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // Track if scrolled past hero (first item)
     val isScrolledPastHero by remember {
@@ -267,13 +316,38 @@ private fun MetaDetailsContent(
     val dimColor = remember(backgroundColor) { backgroundColor.copy(alpha = 0.08f) }
 
     // Stable hero play callback
-    val heroPlayClick = remember(heroVideo, meta.id) {
+    val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
         {
+            markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
             } else {
                 onPlayClick(meta.id)
             }
+        }
+    }
+
+    val episodeClick = remember(onEpisodeClick) {
+        { video: Video ->
+            markEpisodeRestore(video.id)
+            onEpisodeClick(video)
+        }
+    }
+
+    LaunchedEffect(
+        pendingRestoreType,
+        pendingRestoreEpisodeId,
+        initialHeroFocusRequested,
+        isTrailerPlaying
+    ) {
+        if (
+            !initialHeroFocusRequested &&
+            pendingRestoreType == null &&
+            pendingRestoreEpisodeId == null &&
+            !isTrailerPlaying
+        ) {
+            heroPlayFocusRequester.requestFocusAfterFrames()
+            initialHeroFocusRequested = true
         }
     }
 
@@ -353,42 +427,25 @@ private fun MetaDetailsContent(
             modifier = Modifier.fillMaxSize(),
             state = listState
         ) {
-            // Invisible focus anchor — captures initial focus so no button is highlighted on entry
-            // It disables itself after losing focus, so UP won't land here later.
-            item(key = "focus_anchor", contentType = "focus_anchor") {
-                Box(
-                    modifier = Modifier
-                        .focusRequester(initialFocusRequester)
-                        .onFocusChanged { state ->
-                            if (state.isFocused) {
-                                anchorHadFocus = true
-                            } else if (anchorHadFocus) {
-                                anchorCanFocus = false
-                            }
-                        }
-                        .focusProperties {
-                            // Prevent UP from taking focus into the anchor.
-                            up = FocusRequester.Cancel
-                            canFocus = anchorCanFocus
-                        }
-                        .focusable(enabled = anchorCanFocus)
-                )
-                LaunchedEffect(Unit) {
-                    initialFocusRequester.requestFocus()
-                }
-            }
-
             // Hero as first item in the lazy column
             item(key = "hero", contentType = "hero") {
-                HeroContentSection(
-                    meta = meta,
-                    nextEpisode = nextEpisode,
-                    nextToWatch = nextToWatch,
-                    onPlayClick = heroPlayClick,
-                    isInLibrary = isInLibrary,
-                    onToggleLibrary = onToggleLibrary,
-                    isTrailerPlaying = isTrailerPlaying
-                )
+                Box(modifier = Modifier.bringIntoViewResponder(heroNoScrollResponder)) {
+                    HeroContentSection(
+                        meta = meta,
+                        nextEpisode = nextEpisode,
+                        nextToWatch = nextToWatch,
+                        onPlayClick = heroPlayClick,
+                        isInLibrary = isInLibrary,
+                        onToggleLibrary = onToggleLibrary,
+                        isTrailerPlaying = isTrailerPlaying,
+                        playButtonFocusRequester = heroPlayFocusRequester,
+                        restorePlayFocusToken = if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0,
+                        onPlayFocusRestored = {
+                            initialHeroFocusRequested = true
+                            clearPendingRestore()
+                        }
+                    )
+                }
             }
 
             // Season tabs and episodes for series
@@ -405,8 +462,13 @@ private fun MetaDetailsContent(
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
-                        onEpisodeClick = onEpisodeClick,
-                        upFocusRequester = selectedSeasonFocusRequester
+                        onEpisodeClick = episodeClick,
+                        upFocusRequester = selectedSeasonFocusRequester,
+                        restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
+                        restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
+                        onRestoreFocusHandled = {
+                            clearPendingRestore()
+                        }
                     )
                 }
             }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
@@ -118,8 +118,19 @@ fun EpisodesRow(
     episodes: List<Video>,
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
     onEpisodeClick: (Video) -> Unit,
-    upFocusRequester: FocusRequester
+    upFocusRequester: FocusRequester,
+    restoreEpisodeId: String? = null,
+    restoreFocusToken: Int = 0,
+    onRestoreFocusHandled: () -> Unit = {}
 ) {
+    val restoreFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(restoreFocusToken, restoreEpisodeId, episodes) {
+        if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
+        if (episodes.none { it.id == restoreEpisodeId }) return@LaunchedEffect
+        restoreFocusRequester.requestFocusAfterFrames()
+    }
+
     LazyRow(
         modifier = Modifier
             .fillMaxWidth(),
@@ -136,7 +147,9 @@ fun EpisodesRow(
                 episode = episode,
                 watchProgress = progress,
                 onClick = { onEpisodeClick(episode) },
-                upFocusRequester = upFocusRequester
+                upFocusRequester = upFocusRequester,
+                focusRequester = if (episode.id == restoreEpisodeId) restoreFocusRequester else null,
+                onFocusRestored = if (episode.id == restoreEpisodeId) onRestoreFocusHandled else null
             )
         }
     }
@@ -148,7 +161,9 @@ private fun EpisodeCard(
     episode: Video,
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
     onClick: () -> Unit,
-    upFocusRequester: FocusRequester
+    upFocusRequester: FocusRequester,
+    focusRequester: FocusRequester? = null,
+    onFocusRestored: (() -> Unit)? = null
 ) {
     val formattedDate = remember(episode.released) {
         episode.released?.let { formatReleaseDate(it) } ?: ""
@@ -158,6 +173,8 @@ private fun EpisodeCard(
         onClick = onClick,
         modifier = Modifier
             .width(280.dp)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { if (it.isFocused) onFocusRestored?.invoke() }
             .focusProperties { up = upFocusRequester },
         shape = CardDefaults.shape(
             shape = RoundedCornerShape(8.dp)
