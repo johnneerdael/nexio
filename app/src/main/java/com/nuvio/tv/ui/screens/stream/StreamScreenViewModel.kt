@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
@@ -20,6 +22,7 @@ import javax.inject.Inject
 class StreamScreenViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -64,6 +67,7 @@ class StreamScreenViewModel @Inject constructor(
         when (event) {
             is StreamScreenEvent.OnAddonFilterSelected -> filterByAddon(event.addonName)
             is StreamScreenEvent.OnStreamSelected -> { /* Handle stream selection - will be handled in UI */ }
+            StreamScreenEvent.OnAutoPlayConsumed -> _uiState.update { it.copy(autoPlayStream = null) }
             StreamScreenEvent.OnRetry -> loadStreams()
             StreamScreenEvent.OnBackPress -> { /* Handle in screen */ }
         }
@@ -84,6 +88,7 @@ class StreamScreenViewModel @Inject constructor(
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
+                        val playerSettings = playerSettingsDataStore.playerSettings.first()
                         val addonStreams = orderStreams(result.data, installedAddonOrder)
                         val allStreams = addonStreams.flatMap { it.streams }
                         val availableAddons = addonStreams.map { it.addonName }
@@ -103,6 +108,11 @@ class StreamScreenViewModel @Inject constructor(
                                 allStreams = allStreams,
                                 filteredStreams = filteredStreams,
                                 availableAddons = availableAddons,
+                                autoPlayStream = selectAutoPlayStream(
+                                    streams = allStreams,
+                                    mode = playerSettings.streamAutoPlayMode,
+                                    regexPattern = playerSettings.streamAutoPlayRegex
+                                ),
                                 error = null
                             )
                         }
@@ -175,6 +185,39 @@ class StreamScreenViewModel @Inject constructor(
         val (addonEntries, pluginEntries) = streams.partition { it.addonName in installedOrder }
         val orderedAddons = addonEntries.sortedBy { installedOrder.indexOf(it.addonName) }
         return orderedAddons + pluginEntries
+    }
+
+    private fun selectAutoPlayStream(
+        streams: List<Stream>,
+        mode: StreamAutoPlayMode,
+        regexPattern: String
+    ): Stream? {
+        if (streams.isEmpty()) return null
+
+        return when (mode) {
+            StreamAutoPlayMode.MANUAL -> null
+            StreamAutoPlayMode.FIRST_STREAM -> streams.firstOrNull { it.getStreamUrl() != null }
+            StreamAutoPlayMode.REGEX_MATCH -> {
+                val pattern = regexPattern.trim()
+                if (pattern.isBlank()) return null
+                val regex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull() ?: return null
+
+                streams.firstOrNull { stream ->
+                    val searchableText = buildString {
+                        append(stream.addonName)
+                        append(' ')
+                        append(stream.name.orEmpty())
+                        append(' ')
+                        append(stream.title.orEmpty())
+                        append(' ')
+                        append(stream.description.orEmpty())
+                        append(' ')
+                        append(stream.getStreamUrl().orEmpty())
+                    }
+                    stream.getStreamUrl() != null && regex.containsMatchIn(searchableText)
+                }
+            }
+        }
     }
 }
 

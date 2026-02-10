@@ -81,6 +81,15 @@ fun StreamScreen(
         onBackPress()
     }
 
+    LaunchedEffect(uiState.autoPlayStream) {
+        val stream = uiState.autoPlayStream ?: return@LaunchedEffect
+        val playbackInfo = viewModel.getStreamForPlayback(stream)
+        if (playbackInfo.url != null) {
+            onStreamSelected(playbackInfo)
+            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -123,6 +132,7 @@ fun StreamScreen(
                 onStreamSelected = { stream ->
                     val playbackInfo = viewModel.getStreamForPlayback(stream)
                     onStreamSelected(playbackInfo)
+                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 },
                 onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
                 modifier = Modifier
@@ -688,4 +698,3 @@ private fun StreamTypeChip(
         )
     }
 }
-

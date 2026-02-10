@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -54,9 +57,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
@@ -65,6 +72,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -78,6 +87,7 @@ import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.launch
@@ -184,6 +194,8 @@ fun PlaybackSettingsContent(
     var showAudioLanguageDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showAdvancedExperimental by remember { mutableStateOf(false) }
+    var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
+    var showStreamRegexDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -261,6 +273,44 @@ fun PlaybackSettingsContent(
                         }
                     }
                 )
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Stream Selection",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextSecondary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+
+            item {
+                val modeLabel = when (playerSettings.streamAutoPlayMode) {
+                    StreamAutoPlayMode.MANUAL -> "Manual (choose stream)"
+                    StreamAutoPlayMode.FIRST_STREAM -> "Auto-play first source"
+                    StreamAutoPlayMode.REGEX_MATCH -> "Auto-play regex match"
+                }
+                NavigationSettingsItem(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Auto Stream Selection",
+                    subtitle = modeLabel,
+                    onClick = { showStreamAutoPlayModeDialog = true }
+                )
+            }
+
+            if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH) {
+                item {
+                    val regexSubtitle = playerSettings.streamAutoPlayRegex.ifBlank {
+                        "No pattern set. Example: 4K|2160p|Remux"
+                    }
+                    NavigationSettingsItem(
+                        icon = Icons.Default.Tune,
+                        title = "Regex Pattern",
+                        subtitle = regexSubtitle,
+                        onClick = { showStreamRegexDialog = true }
+                    )
+                }
             }
 
             // Trailer Section Header
@@ -998,6 +1048,32 @@ fun PlaybackSettingsContent(
                 showDecoderPriorityDialog = false
             },
             onDismiss = { showDecoderPriorityDialog = false }
+        )
+    }
+
+    if (showStreamAutoPlayModeDialog) {
+        StreamAutoPlayModeDialog(
+            selectedMode = playerSettings.streamAutoPlayMode,
+            onModeSelected = { mode ->
+                coroutineScope.launch {
+                    viewModel.setStreamAutoPlayMode(mode)
+                }
+                showStreamAutoPlayModeDialog = false
+            },
+            onDismiss = { showStreamAutoPlayModeDialog = false }
+        )
+    }
+
+    if (showStreamRegexDialog) {
+        StreamRegexDialog(
+            initialRegex = playerSettings.streamAutoPlayRegex,
+            onSave = { regex ->
+                coroutineScope.launch {
+                    viewModel.setStreamAutoPlayRegex(regex)
+                }
+                showStreamRegexDialog = false
+            },
+            onDismiss = { showStreamRegexDialog = false }
         )
     }
 }
@@ -1952,6 +2028,322 @@ private fun DecoderPriorityDialog(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamAutoPlayModeDialog(
+    selectedMode: StreamAutoPlayMode,
+    onModeSelected: (StreamAutoPlayMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = listOf(
+        Triple(StreamAutoPlayMode.MANUAL, "Manual", "Always show source list and let me choose."),
+        Triple(StreamAutoPlayMode.FIRST_STREAM, "Auto-play first stream", "Play the first available source automatically."),
+        Triple(StreamAutoPlayMode.REGEX_MATCH, "Auto-play regex match", "Play first source whose text matches your regex pattern.")
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
+            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(460.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Auto Stream Selection",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(options.size) { index ->
+                        val (mode, title, description) = options[index]
+                        val isSelected = mode == selectedMode
+                        var isFocused by remember { mutableStateOf(false) }
+
+                        Card(
+                            onClick = { onModeSelected(mode) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
+                                .onFocusChanged { isFocused = it.isFocused },
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected || isFocused) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = description,
+                                        color = NuvioColors.TextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamRegexDialog(
+    initialRegex: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var regex by remember(initialRegex) { mutableStateOf(initialRegex) }
+    var regexError by remember { mutableStateOf<String?>(null) }
+    var isInputFocused by remember { mutableStateOf(false) }
+    val inputFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val presets = remember {
+        listOf(
+            "4K / Remux" to "(2160p|4k|remux)",
+            "1080p High Bitrate" to "(1080p|x264|x265|hevc)",
+            "Smaller Files" to "(720p|webrip|web-dl)",
+            "HDR / Dolby Vision" to "(hdr|dv|dolby\\s*vision)",
+            "English Preferred" to "(eng|english)"
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        inputFocusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
+            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(700.dp)
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Stream Regex Pattern",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Text(
+                    text = "Matches against stream name/title/description/addon/url. Example: 4K|2160p|Remux",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextSecondary
+                )
+
+                Card(
+                    onClick = { inputFocusRequester.requestFocus() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
+                    colors = CardDefaults.colors(
+                        containerColor = NuvioColors.BackgroundElevated,
+                        focusedContainerColor = NuvioColors.BackgroundElevated
+                    ),
+                    border = CardDefaults.border(
+                        border = Border(
+                            border = BorderStroke(1.dp, NuvioColors.Border),
+                            shape = RoundedCornerShape(10.dp)
+                        ),
+                        focusedBorder = Border(
+                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    ),
+                    shape = CardDefaults.shape(RoundedCornerShape(10.dp)),
+                    scale = CardDefaults.scale(focusedScale = 1f)
+                ) {
+                    Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        BasicTextField(
+                            value = regex,
+                            onValueChange = {
+                                regex = it
+                                regexError = null
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(inputFocusRequester)
+                                .onKeyEvent { keyEvent ->
+                                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER &&
+                                        keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
+                                    ) {
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = { keyboardController?.hide() }
+                            ),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
+                            cursorBrush = SolidColor(if (isInputFocused) NuvioColors.Primary else Color.Transparent),
+                            decorationBox = { innerTextField ->
+                                if (regex.isBlank()) {
+                                    Text(
+                                        text = "4K|2160p|Remux",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = NuvioColors.TextTertiary
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Presets",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = NuvioColors.TextSecondary
+                )
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(presets) { (label, pattern) ->
+                        var isFocused by remember { mutableStateOf(false) }
+                        Card(
+                            onClick = {
+                                regex = pattern
+                                regexError = null
+                            },
+                            modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
+                            colors = CardDefaults.colors(
+                                containerColor = NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(20.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Text(
+                                text = label,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (isFocused) NuvioColors.Primary else NuvioColors.TextPrimary
+                            )
+                        }
+                    }
+                }
+
+                if (regexError != null) {
+                    Text(
+                        text = regexError ?: "",
+                        color = NuvioColors.Error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundElevated,
+                            contentColor = NuvioColors.TextPrimary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                    ) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            regex = ""
+                            regexError = null
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundElevated,
+                            contentColor = NuvioColors.TextPrimary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                    ) {
+                        Text("Clear")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val value = regex.trim()
+                            if (value.isNotEmpty()) {
+                                val valid = runCatching { Regex(value, RegexOption.IGNORE_CASE) }.isSuccess
+                                if (!valid) {
+                                    regexError = "Invalid regex pattern"
+                                    return@Button
+                                }
+                            }
+                            onSave(value)
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                    ) {
+                        Text("Save")
                     }
                 }
             }

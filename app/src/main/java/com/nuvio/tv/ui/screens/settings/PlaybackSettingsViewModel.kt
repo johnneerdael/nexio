@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -176,5 +177,13 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setUseParallelConnections(enabled: Boolean) {
         playerSettingsDataStore.setUseParallelConnections(enabled)
+    }
+
+    suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
+        playerSettingsDataStore.setStreamAutoPlayMode(mode)
+    }
+
+    suspend fun setStreamAutoPlayRegex(regex: String) {
+        playerSettingsDataStore.setStreamAutoPlayRegex(regex)
     }
 }

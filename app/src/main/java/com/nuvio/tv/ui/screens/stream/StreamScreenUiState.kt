@@ -24,6 +24,7 @@ data class StreamScreenUiState(
     val selectedAddonFilter: String? = null, // null means "All"
     val filteredStreams: List<Stream> = emptyList(),
     val availableAddons: List<String> = emptyList(),
+    val autoPlayStream: Stream? = null,
     val error: String? = null
 ) {
     val isEpisode: Boolean get() = season != null && episode != null
@@ -32,6 +33,7 @@ data class StreamScreenUiState(
 sealed class StreamScreenEvent {
     data class OnAddonFilterSelected(val addonName: String?) : StreamScreenEvent()
     data class OnStreamSelected(val stream: Stream) : StreamScreenEvent()
+    data object OnAutoPlayConsumed : StreamScreenEvent()
     data object OnRetry : StreamScreenEvent()
     data object OnBackPress : StreamScreenEvent()
 }

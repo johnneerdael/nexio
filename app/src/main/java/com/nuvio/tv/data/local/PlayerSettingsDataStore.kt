@@ -133,8 +133,17 @@ data class PlayerSettings(
     // Dolby Vision Profile 7 → HEVC fallback (requires forked ExoPlayer)
     val mapDV7ToHevc: Boolean = false,
     // Display settings
-    val frameRateMatching: Boolean = false
+    val frameRateMatching: Boolean = false,
+    // Stream selection settings
+    val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
+    val streamAutoPlayRegex: String = ""
 )
+
+enum class StreamAutoPlayMode {
+    MANUAL,
+    FIRST_STREAM,
+    REGEX_MATCH
+}
 
 /**
  * Enum representing the different libass render types
@@ -169,6 +178,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
+    private val streamAutoPlayModeKey = stringPreferencesKey("stream_auto_play_mode")
+    private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -232,6 +243,10 @@ class PlayerSettingsDataStore @Inject constructor(
             skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
             mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
             frameRateMatching = prefs[frameRateMatchingKey] ?: false,
+            streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
+                runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
+            } ?: StreamAutoPlayMode.MANUAL,
+            streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
                 secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
@@ -320,6 +335,18 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setFrameRateMatching(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[frameRateMatchingKey] = enabled
+        }
+    }
+
+    suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlayModeKey] = mode.name
+        }
+    }
+
+    suspend fun setStreamAutoPlayRegex(regex: String) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlayRegexKey] = regex.trim()
         }
     }
 
