@@ -128,6 +128,9 @@ class UpdateViewModel @Inject constructor(
                             errorMessage = null
                         )
                     }
+                    // Auto-start installation flow immediately after successful download.
+                    // If unknown sources permission is missing, this will surface the settings prompt.
+                    installUpdateOrRequestPermission()
                 }
                 .onFailure { e ->
                     _uiState.update {

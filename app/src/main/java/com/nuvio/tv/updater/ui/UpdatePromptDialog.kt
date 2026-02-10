@@ -1,5 +1,7 @@
 package com.nuvio.tv.updater.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,7 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -17,7 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +44,7 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.updater.UpdateUiState
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -52,9 +61,24 @@ fun UpdatePromptDialog(
     val closeFocusRequester = remember { FocusRequester() }
     val primaryFocusRequester = remember { FocusRequester() }
     val canDownload = state.isUpdateAvailable && state.update != null
+    val showDownloadMode = state.isDownloading
+    var installButtonEnabled by remember(state.downloadedApkPath) {
+        mutableStateOf(state.downloadedApkPath == null)
+    }
     val hasPrimaryAction = state.showUnknownSourcesDialog ||
         state.downloadedApkPath != null ||
         canDownload
+
+    LaunchedEffect(state.downloadedApkPath) {
+        if (state.downloadedApkPath != null) {
+            // Prevent accidental install click from the same D-pad/OK press that started download.
+            installButtonEnabled = false
+            delay(700)
+            installButtonEnabled = true
+        } else {
+            installButtonEnabled = true
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         val shape = RoundedCornerShape(16.dp)
@@ -75,6 +99,7 @@ fun UpdatePromptDialog(
                 val subtitle = when {
                     state.errorMessage != null -> state.errorMessage
                     state.isChecking -> "Checking for updates…"
+                    state.downloadedApkPath != null -> "Download complete. Ready to install."
                     state.update != null && state.isUpdateAvailable -> "New version: ${state.update.tag}"
                     state.update != null && !state.isUpdateAvailable -> "You're up to date."
                     else -> ""
@@ -101,7 +126,7 @@ fun UpdatePromptDialog(
                     }
                 }
 
-                if (displayNotes != null && state.isUpdateAvailable) {
+                if (!showDownloadMode && displayNotes != null && state.isUpdateAvailable) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -122,13 +147,59 @@ fun UpdatePromptDialog(
                     }
                 }
 
-                if (state.isDownloading) {
+                if (showDownloadMode) {
                     val pct = ((state.downloadProgress ?: 0f) * 100).toInt().coerceIn(0, 100)
-                    Text(
-                        text = "Downloading… ${pct}%",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = (state.downloadProgress ?: 0f).coerceIn(0f, 1f),
+                        animationSpec = tween(durationMillis = 180),
+                        label = "downloadProgress"
                     )
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Downloading update",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioColors.TextSecondary
+                            )
+                            Text(
+                                text = String.format("%3d%%", pct),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioColors.TextSecondary
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        color = NuvioColors.Background.copy(alpha = 0.7f),
+                                        shape = RoundedCornerShape(999.dp)
+                                    )
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(animatedProgress)
+                                    .background(
+                                        color = NuvioColors.Primary,
+                                        shape = RoundedCornerShape(999.dp)
+                                    )
+                            )
+                        }
+                    }
                 }
 
                 if (state.showUnknownSourcesDialog) {
@@ -174,6 +245,7 @@ fun UpdatePromptDialog(
                     } else if (state.downloadedApkPath != null) {
                         Button(
                             onClick = onInstall,
+                            enabled = installButtonEnabled,
                             modifier = Modifier.focusRequester(primaryFocusRequester),
                             colors = ButtonDefaults.colors(
                                 containerColor = NuvioColors.BackgroundCard,
