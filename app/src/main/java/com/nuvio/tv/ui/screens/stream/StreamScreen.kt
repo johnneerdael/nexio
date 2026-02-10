@@ -34,10 +34,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -67,6 +72,9 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.theme.NuvioTheme
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -76,6 +84,10 @@ fun StreamScreen(
     onStreamSelected: (StreamPlaybackInfo) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var focusedStreamIndex by rememberSaveable { mutableStateOf(0) }
+    var restoreFocusedStream by rememberSaveable { mutableStateOf(false) }
+    var pendingRestoreOnResume by rememberSaveable { mutableStateOf(false) }
 
     BackHandler {
         onBackPress()
@@ -87,6 +99,19 @@ fun StreamScreen(
         if (playbackInfo.url != null) {
             onStreamSelected(playbackInfo)
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, pendingRestoreOnResume) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingRestoreOnResume) {
+                restoreFocusedStream = true
+                pendingRestoreOnResume = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -130,10 +155,24 @@ fun StreamScreen(
                 selectedAddonFilter = uiState.selectedAddonFilter,
                 onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
                 onStreamSelected = { stream ->
+                    val currentIndex = uiState.filteredStreams.indexOfFirst {
+                        it.url == stream.url &&
+                            it.infoHash == stream.infoHash &&
+                            it.ytId == stream.ytId &&
+                            it.addonName == stream.addonName
+                    }
+                    if (currentIndex >= 0) {
+                        focusedStreamIndex = currentIndex
+                    }
                     val playbackInfo = viewModel.getStreamForPlayback(stream)
                     onStreamSelected(playbackInfo)
+                    pendingRestoreOnResume = true
                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 },
+                focusedStreamIndex = focusedStreamIndex,
+                shouldRestoreFocusedStream = restoreFocusedStream,
+                onRestoreFocusedStreamHandled = { restoreFocusedStream = false },
+                onStreamFocused = { index -> focusedStreamIndex = index },
                 onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
                 modifier = Modifier
                     .weight(0.6f)
@@ -316,12 +355,25 @@ private fun RightStreamSection(
     selectedAddonFilter: String?,
     onAddonFilterSelected: (String?) -> Unit,
     onStreamSelected: (Stream) -> Unit,
+    focusedStreamIndex: Int,
+    shouldRestoreFocusedStream: Boolean,
+    onRestoreFocusedStreamHandled: () -> Unit,
+    onStreamFocused: (Int) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var enter by remember { mutableStateOf(false) }
+    var shouldFocusFirstStream by remember { mutableStateOf(false) }
+    var wasLoading by remember { mutableStateOf(true) }
+
     LaunchedEffect(Unit) {
         enter = true
+    }
+    LaunchedEffect(isLoading, streams.size) {
+        if (wasLoading && !isLoading && streams.isNotEmpty()) {
+            shouldFocusFirstStream = true
+        }
+        wasLoading = isLoading
     }
 
     Column(
@@ -380,7 +432,13 @@ private fun RightStreamSection(
                     else -> {
                         StreamsList(
                             streams = streams,
-                            onStreamSelected = onStreamSelected
+                            onStreamSelected = onStreamSelected,
+                            focusedStreamIndex = focusedStreamIndex,
+                            shouldRestoreFocusedStream = shouldRestoreFocusedStream,
+                            onRestoreFocusedStreamHandled = onRestoreFocusedStreamHandled,
+                            onStreamFocused = onStreamFocused,
+                            requestInitialFocus = shouldFocusFirstStream,
+                            onInitialFocusConsumed = { shouldFocusFirstStream = false }
                         )
                     }
                 }
@@ -565,8 +623,44 @@ private fun EmptyState() {
 @Composable
 private fun StreamsList(
     streams: List<Stream>,
-    onStreamSelected: (Stream) -> Unit
+    onStreamSelected: (Stream) -> Unit,
+    focusedStreamIndex: Int = 0,
+    shouldRestoreFocusedStream: Boolean = false,
+    onRestoreFocusedStreamHandled: () -> Unit = {},
+    onStreamFocused: (Int) -> Unit = {},
+    requestInitialFocus: Boolean = false,
+    onInitialFocusConsumed: () -> Unit = {}
 ) {
+    val firstCardFocusRequester = remember { FocusRequester() }
+    val restoreFocusRequester = remember { FocusRequester() }
+    val firstStreamKey = streams.firstOrNull()?.let { first ->
+        "${first.addonName}_${first.url ?: first.infoHash ?: first.ytId ?: "unknown"}"
+    }
+
+    LaunchedEffect(requestInitialFocus, firstStreamKey) {
+        if (!requestInitialFocus || streams.isEmpty()) return@LaunchedEffect
+        repeat(2) { withFrameNanos { } }
+        try {
+            firstCardFocusRequester.requestFocus()
+        } catch (_: Exception) {
+        }
+        onInitialFocusConsumed()
+    }
+
+    LaunchedEffect(shouldRestoreFocusedStream, focusedStreamIndex, streams.size) {
+        if (!shouldRestoreFocusedStream) return@LaunchedEffect
+        if (streams.isEmpty()) {
+            onRestoreFocusedStreamHandled()
+            return@LaunchedEffect
+        }
+        repeat(2) { withFrameNanos { } }
+        try {
+            restoreFocusRequester.requestFocus()
+        } catch (_: Exception) {
+        }
+        onRestoreFocusedStreamHandled()
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -576,10 +670,16 @@ private fun StreamsList(
     ) {
         itemsIndexed(streams, key = { index, stream ->
             "${stream.addonName}_${stream.url ?: stream.infoHash ?: stream.ytId ?: "unknown"}_$index"
-        }) { _, stream ->
+        }) { index, stream ->
             StreamCard(
                 stream = stream,
-                onClick = { onStreamSelected(stream) }
+                onClick = { onStreamSelected(stream) },
+                focusRequester = when {
+                    shouldRestoreFocusedStream && index == focusedStreamIndex.coerceIn(0, (streams.lastIndex).coerceAtLeast(0)) -> restoreFocusRequester
+                    index == 0 -> firstCardFocusRequester
+                    else -> null
+                },
+                onFocused = { onStreamFocused(index) }
             )
         }
     }
@@ -589,12 +689,18 @@ private fun StreamsList(
 @Composable
 private fun StreamCard(
     stream: Stream,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {}
 ) {
     Card(
         onClick = onClick,
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { state ->
+                if (state.isFocused) onFocused()
+            },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundElevated,
             focusedContainerColor = NuvioColors.FocusBackground
