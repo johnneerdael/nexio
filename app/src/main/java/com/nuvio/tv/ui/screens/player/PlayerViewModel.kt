@@ -60,6 +60,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.peerless2012.ass.media.kt.buildWithAssSupport
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,6 +70,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.URLDecoder
 import java.util.Locale
 import javax.inject.Inject
@@ -164,6 +166,8 @@ class PlayerViewModel @Inject constructor(
     private var hideControlsJob: Job? = null
     private var hideSeekOverlayJob: Job? = null
     private var watchProgressSaveJob: Job? = null
+    private var frameRateProbeJob: Job? = null
+    private var frameRateProbeToken: Long = 0L
     private var hideAspectRatioIndicatorJob: Job? = null
     
     
@@ -649,6 +653,7 @@ class PlayerViewModel @Inject constructor(
 
                     playWhenReady = true
                     prepare()
+                    startFrameRateProbe(url, headers, playerSettings.frameRateMatching)
 
                     addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -1017,6 +1022,7 @@ class PlayerViewModel @Inject constructor(
                 player.setMediaSource(createMediaSource(url, newHeaders))
                 player.prepare()
                 player.playWhenReady = true
+                startFrameRateProbe(url, newHeaders, _uiState.value.frameRateMatchingEnabled)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
                 return
@@ -1263,6 +1269,7 @@ class PlayerViewModel @Inject constructor(
                 player.setMediaSource(createMediaSource(url, newHeaders))
                 player.prepare()
                 player.playWhenReady = true
+                startFrameRateProbe(url, newHeaders, _uiState.value.frameRateMatchingEnabled)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
                 return
@@ -1292,6 +1299,7 @@ class PlayerViewModel @Inject constructor(
                             val format = trackGroup.getTrackFormat(i)
                             if (format.frameRate > 0f) {
                                 val snapped = FrameRateUtils.snapToStandardRate(format.frameRate)
+                                frameRateProbeJob?.cancel()
                                 _uiState.update { it.copy(detectedFrameRate = snapped) }
                             }
                             break
@@ -1393,6 +1401,27 @@ class PlayerViewModel @Inject constructor(
                 selectedAudioTrackIndex = selectedAudioIndex,
                 selectedSubtitleTrackIndex = selectedSubtitleIndex
             )
+        }
+    }
+
+    private fun startFrameRateProbe(
+        url: String,
+        headers: Map<String, String>,
+        frameRateMatchingEnabled: Boolean
+    ) {
+        frameRateProbeJob?.cancel()
+        _uiState.update { it.copy(detectedFrameRate = 0f) }
+        if (!frameRateMatchingEnabled) return
+
+        val token = ++frameRateProbeToken
+        frameRateProbeJob = viewModelScope.launch(Dispatchers.IO) {
+            val detected = FrameRateUtils.detectFrameRateFromSource(context, url, headers)
+            if (!isActive || detected <= 0f) return@launch
+            withContext(Dispatchers.Main) {
+                if (token == frameRateProbeToken && _uiState.value.detectedFrameRate <= 0f) {
+                    _uiState.update { it.copy(detectedFrameRate = detected) }
+                }
+            }
         }
     }
 
@@ -2028,6 +2057,7 @@ class PlayerViewModel @Inject constructor(
         progressJob?.cancel()
         hideControlsJob?.cancel()
         watchProgressSaveJob?.cancel()
+        frameRateProbeJob?.cancel()
         _exoPlayer?.release()
         _exoPlayer = null
     }

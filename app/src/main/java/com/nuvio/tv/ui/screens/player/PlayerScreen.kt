@@ -156,7 +156,6 @@ fun PlayerScreen(
         onDispose {
             if (activity != null) {
                 com.nuvio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
-                com.nuvio.tv.core.player.FrameRateUtils.restoreOriginalMode(activity)
             }
         }
     }

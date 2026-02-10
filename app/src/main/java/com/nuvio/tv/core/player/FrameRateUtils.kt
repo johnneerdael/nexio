@@ -3,9 +3,9 @@ package com.nuvio.tv.core.player
 import android.app.Activity
 import android.content.Context
 import android.hardware.display.DisplayManager
+import android.media.MediaExtractor
+import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
@@ -20,19 +20,9 @@ object FrameRateUtils {
 
     private const val TAG = "FrameRateUtils"
 
-    /** Saved original display mode ID so we can restore it when playback ends. */
-    private var originalModeId: Int = -1
-
-    /** Handler for DisplayManager callbacks and timeout. */
-    private val mainHandler = Handler(Looper.getMainLooper())
-
     /** Active display listener (for cleanup). */
     private var displayManager: DisplayManager? = null
     private var displayListener: DisplayManager.DisplayListener? = null
-    private var timeoutRunnable: Runnable? = null
-
-    /** Timeout before we give up waiting for the display to change (ms). */
-    private const val DISPLAY_SWITCH_TIMEOUT_MS = 3000L
 
     /**
      * Normalize a refresh rate to an integer × 100 for safe floating-point comparison.
@@ -71,11 +61,6 @@ object FrameRateUtils {
 
             if (supportedModes.size <= 1) return false
 
-            // Save original mode so we can restore later
-            if (originalModeId == -1) {
-                originalModeId = activeMode.modeId
-            }
-
             // Collect modes that match current resolution
             val sameSizeModes = supportedModes.filter {
                 it.physicalWidth == activeMode.physicalWidth &&
@@ -95,7 +80,7 @@ object FrameRateUtils {
             // Find the best mode — one whose refresh rate is an exact integer multiple of the video FPS
             var modeBest: Display.Mode? = null
             for (mode in modesHigh) {
-                if (normRate(mode.refreshRate) % normRate(frameRate) <= 1) {
+                if (normRate(mode.refreshRate) % normRate(frameRate) == 0) {
                     if (modeBest == null || normRate(mode.refreshRate) > normRate(modeBest.refreshRate)) {
                         modeBest = mode
                     }
@@ -127,15 +112,7 @@ object FrameRateUtils {
                             onAfterSwitch()
                         }
                     }
-                    displayManager?.registerDisplayListener(displayListener, mainHandler)
-
-                    // Safety timeout — resume playback even if the callback never fires
-                    timeoutRunnable = Runnable {
-                        Log.w(TAG, "Display mode switch timed out after ${DISPLAY_SWITCH_TIMEOUT_MS}ms, resuming")
-                        cleanupDisplayListener()
-                        onAfterSwitch()
-                    }
-                    mainHandler.postDelayed(timeoutRunnable!!, DISPLAY_SWITCH_TIMEOUT_MS)
+                    displayManager?.registerDisplayListener(displayListener, null)
                 }
 
                 // Notify caller to pause playback before the switch
@@ -161,32 +138,9 @@ object FrameRateUtils {
      * Safe to call multiple times.
      */
     fun cleanupDisplayListener() {
-        timeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-        timeoutRunnable = null
         displayListener?.let { displayManager?.unregisterDisplayListener(it) }
         displayListener = null
         displayManager = null
-    }
-
-    /**
-     * Restore the original display mode that was active before frame rate matching.
-     *
-     * @param activity The current Activity.
-     */
-    fun restoreOriginalMode(activity: Activity) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        if (originalModeId == -1) return
-
-        try {
-            val window = activity.window ?: return
-            val layoutParams = window.attributes
-            layoutParams.preferredDisplayModeId = originalModeId
-            window.attributes = layoutParams
-            Log.d(TAG, "Restored original display mode id=$originalModeId")
-            originalModeId = -1
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to restore display mode", e)
-        }
     }
 
     /**
@@ -207,6 +161,69 @@ object FrameRateUtils {
             formatFrameRate in 59.9f..59.97f -> 60000f / 1001f    // 59.94 NTSC
             formatFrameRate in 59.97f..60.1f -> 60f
             else -> formatFrameRate
+        }
+    }
+
+    /**
+     * Fallback FPS detection using MediaExtractor, similar to JustPlayer.
+     * Useful when ExoPlayer track Format doesn't report frameRate.
+     */
+    fun detectFrameRateFromSource(
+        context: Context,
+        sourceUrl: String,
+        headers: Map<String, String> = emptyMap()
+    ): Float {
+        val extractor = MediaExtractor()
+        return try {
+            val uri = Uri.parse(sourceUrl)
+            when (uri.scheme?.lowercase()) {
+                "http", "https" -> extractor.setDataSource(sourceUrl, headers)
+                else -> extractor.setDataSource(context, uri, headers)
+            }
+
+            var videoTrackIndex = -1
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(android.media.MediaFormat.KEY_MIME)
+                if (mime?.startsWith("video/") == true) {
+                    videoTrackIndex = i
+                    break
+                }
+            }
+            if (videoTrackIndex < 0) return 0f
+
+            extractor.selectTrack(videoTrackIndex)
+            val timestamps = ArrayList<Long>(400)
+            val ignoreSamples = 30
+            val targetSamples = 350 + ignoreSamples
+
+            while (timestamps.size < targetSamples) {
+                val ts = extractor.sampleTime
+                if (ts < 0) break
+                timestamps.add(ts)
+                if (!extractor.advance()) break
+            }
+
+            if (timestamps.size <= ignoreSamples + 1) return 0f
+
+            var totalFrameDurationUs = 0L
+            for (i in 1 until (timestamps.size - ignoreSamples)) {
+                totalFrameDurationUs += (timestamps[i] - timestamps[i - 1])
+            }
+            val sampleCount = (timestamps.size - ignoreSamples - 1).coerceAtLeast(1)
+            val averageFrameDurationUs = totalFrameDurationUs.toFloat() / sampleCount.toFloat()
+            if (averageFrameDurationUs <= 0f) return 0f
+
+            val measured = 1_000_000f / averageFrameDurationUs
+            snapToStandardRate(measured)
+        } catch (e: Exception) {
+            Log.w(TAG, "Frame rate probe failed: ${e.message}")
+            0f
+        } finally {
+            try {
+                extractor.release()
+            } catch (_: Exception) {
+            }
         }
     }
 }
