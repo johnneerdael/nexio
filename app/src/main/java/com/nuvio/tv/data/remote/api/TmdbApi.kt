@@ -31,25 +31,29 @@ interface TmdbApi {
     @GET("movie/{movie_id}")
     suspend fun getMovieDetails(
         @Path("movie_id") movieId: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): Response<TmdbDetailsResponse>
 
     @GET("tv/{tv_id}")
     suspend fun getTvDetails(
         @Path("tv_id") tvId: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): Response<TmdbDetailsResponse>
 
     @GET("movie/{movie_id}/credits")
     suspend fun getMovieCredits(
         @Path("movie_id") movieId: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): Response<TmdbCreditsResponse>
 
     @GET("tv/{tv_id}/credits")
     suspend fun getTvCredits(
         @Path("tv_id") tvId: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): Response<TmdbCreditsResponse>
 
     @GET("movie/{movie_id}/images")
@@ -70,7 +74,8 @@ interface TmdbApi {
     suspend fun getTvSeasonDetails(
         @Path("tv_id") tvId: Int,
         @Path("season_number") seasonNumber: Int,
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null
     ): Response<TmdbSeasonResponse>
 }
 

@@ -171,7 +171,11 @@ class MetaDetailsViewModel @Inject constructor(
             ?: tmdbService.ensureTmdbId(itemId, itemType)
             ?: return meta
 
-        val enrichment = tmdbMetadataService.fetchEnrichment(tmdbId, meta.type)
+        val enrichment = tmdbMetadataService.fetchEnrichment(
+            tmdbId = tmdbId,
+            contentType = meta.type,
+            language = settings.language
+        )
 
         var updated = meta
 
@@ -185,7 +189,10 @@ class MetaDetailsViewModel @Inject constructor(
 
         // Group: Basic Info (description, genres, rating)
         if (enrichment != null && settings.useBasicInfo) {
-            updated = updated.copy(description = enrichment.description ?: updated.description)
+            updated = updated.copy(
+                name = enrichment.localizedTitle ?: updated.name,
+                description = enrichment.description ?: updated.description
+            )
             if (enrichment.genres.isNotEmpty()) {
                 updated = updated.copy(genres = enrichment.genres)
             }
@@ -229,7 +236,11 @@ class MetaDetailsViewModel @Inject constructor(
         // Group: Episodes (titles, overviews, thumbnails, runtime)
         if (settings.useEpisodes && meta.type.toApiString() in listOf("series", "tv")) {
             val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
-            val episodeMap = tmdbMetadataService.fetchEpisodeEnrichment(tmdbId, seasonNumbers)
+            val episodeMap = tmdbMetadataService.fetchEpisodeEnrichment(
+                tmdbId = tmdbId,
+                seasonNumbers = seasonNumbers,
+                language = settings.language
+            )
             if (episodeMap.isNotEmpty()) {
                 updated = updated.copy(
                     videos = meta.videos.map { video ->

@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.LazyColumn
+import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -77,6 +78,7 @@ fun TmdbSettingsContent(
     viewModel: TmdbSettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showLanguageDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -105,6 +107,20 @@ fun TmdbSettingsContent(
                     subtitle = "Use TMDB as a metadata source to enhance addon data",
                     checked = uiState.enabled,
                     onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(it)) }
+                )
+            }
+
+            item {
+                val languageName = AVAILABLE_SUBTITLE_LANGUAGES
+                    .find { it.code == uiState.language }
+                    ?.name
+                    ?: uiState.language.uppercase()
+                ActionCard(
+                    title = "Language",
+                    subtitle = "TMDB metadata language for title, logo, and enabled fields",
+                    value = languageName,
+                    enabled = uiState.enabled,
+                    onClick = { showLanguageDialog = true }
                 )
             }
 
@@ -179,6 +195,19 @@ fun TmdbSettingsContent(
             }
         }
     }
+
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            title = "TMDB Language",
+            selectedLanguage = uiState.language,
+            showNoneOption = false,
+            onLanguageSelected = { language ->
+                viewModel.onEvent(TmdbSettingsEvent.SetLanguage(language ?: "en"))
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -245,6 +274,69 @@ private fun ToggleCard(
                     uncheckedThumbColor = NuvioColors.TextSecondary,
                     uncheckedTrackColor = NuvioColors.BackgroundCard
                 )
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActionCard(
+    title: String,
+    subtitle: String,
+    value: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val disabledAlpha = 0.5f
+
+    Card(
+        onClick = { if (enabled) onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused },
+        colors = CardDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
+        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+        scale = CardDefaults.scale(focusedScale = 1.02f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextPrimary.copy(alpha = if (enabled) 1f else disabledAlpha)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextSecondary.copy(alpha = if (enabled) 1f else disabledAlpha)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioColors.Secondary.copy(alpha = if (enabled) 1f else disabledAlpha)
             )
         }
     }

@@ -32,6 +32,7 @@ class TmdbSettingsViewModel @Inject constructor(
     fun onEvent(event: TmdbSettingsEvent) {
         when (event) {
             is TmdbSettingsEvent.ToggleEnabled -> update { dataStore.setEnabled(event.enabled) }
+            is TmdbSettingsEvent.SetLanguage -> update { dataStore.setLanguage(event.language) }
             is TmdbSettingsEvent.ToggleArtwork -> update { dataStore.setUseArtwork(event.enabled) }
             is TmdbSettingsEvent.ToggleBasicInfo -> update { dataStore.setUseBasicInfo(event.enabled) }
             is TmdbSettingsEvent.ToggleDetails -> update { dataStore.setUseDetails(event.enabled) }
@@ -49,6 +50,7 @@ class TmdbSettingsViewModel @Inject constructor(
 
 data class TmdbSettingsUiState(
     val enabled: Boolean = false,
+    val language: String = "en",
     val useArtwork: Boolean = true,
     val useBasicInfo: Boolean = true,
     val useDetails: Boolean = true,
@@ -59,6 +61,7 @@ data class TmdbSettingsUiState(
 ) {
     fun fromSettings(settings: TmdbSettings): TmdbSettingsUiState = copy(
         enabled = settings.enabled,
+        language = settings.language,
         useArtwork = settings.useArtwork,
         useBasicInfo = settings.useBasicInfo,
         useDetails = settings.useDetails,
@@ -71,6 +74,7 @@ data class TmdbSettingsUiState(
 
 sealed class TmdbSettingsEvent {
     data class ToggleEnabled(val enabled: Boolean) : TmdbSettingsEvent()
+    data class SetLanguage(val language: String) : TmdbSettingsEvent()
     data class ToggleArtwork(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleBasicInfo(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleDetails(val enabled: Boolean) : TmdbSettingsEvent()

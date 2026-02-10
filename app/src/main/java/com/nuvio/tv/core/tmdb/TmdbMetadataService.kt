@@ -23,9 +23,14 @@ class TmdbMetadataService @Inject constructor(
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
     private val episodeCache = ConcurrentHashMap<String, Map<Pair<Int, Int>, TmdbEpisodeEnrichment>>()
 
-    suspend fun fetchEnrichment(tmdbId: String, contentType: ContentType): TmdbEnrichment? =
+    suspend fun fetchEnrichment(
+        tmdbId: String,
+        contentType: ContentType,
+        language: String = "en"
+    ): TmdbEnrichment? =
         withContext(Dispatchers.IO) {
-            val cacheKey = "$tmdbId:${contentType.name}"
+            val normalizedLanguage = normalizeTmdbLanguage(language)
+            val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage"
             enrichmentCache[cacheKey]?.let { return@withContext it }
 
             val numericId = tmdbId.toIntOrNull() ?: return@withContext null
@@ -36,18 +41,24 @@ class TmdbMetadataService @Inject constructor(
 
             try {
                 val details = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvDetails(numericId, TMDB_API_KEY)
-                    else -> tmdbApi.getMovieDetails(numericId, TMDB_API_KEY)
+                    "tv" -> tmdbApi.getTvDetails(numericId, TMDB_API_KEY, normalizedLanguage)
+                    else -> tmdbApi.getMovieDetails(numericId, TMDB_API_KEY, normalizedLanguage)
                 }.body()
 
                 val credits = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvCredits(numericId, TMDB_API_KEY)
-                    else -> tmdbApi.getMovieCredits(numericId, TMDB_API_KEY)
+                    "tv" -> tmdbApi.getTvCredits(numericId, TMDB_API_KEY, normalizedLanguage)
+                    else -> tmdbApi.getMovieCredits(numericId, TMDB_API_KEY, normalizedLanguage)
                 }.body()
 
+                val includeImageLanguage = buildString {
+                    append(normalizedLanguage.substringBefore("-"))
+                    append(",")
+                    append(normalizedLanguage)
+                    append(",en,null")
+                }
                 val images = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvImages(numericId, TMDB_API_KEY)
-                    else -> tmdbApi.getMovieImages(numericId, TMDB_API_KEY)
+                    "tv" -> tmdbApi.getTvImages(numericId, TMDB_API_KEY, includeImageLanguage)
+                    else -> tmdbApi.getMovieImages(numericId, TMDB_API_KEY, includeImageLanguage)
                 }.body()
 
                 val genres = details?.genres?.mapNotNull { genre ->
@@ -63,6 +74,7 @@ class TmdbMetadataService @Inject constructor(
                     ?.takeIf { it.isNotEmpty() }
                     ?: details?.originCountry?.takeIf { it.isNotEmpty() }
                 val language = details?.originalLanguage?.takeIf { it.isNotBlank() }
+                val localizedTitle = (details?.title ?: details?.name)?.takeIf { it.isNotBlank() }
                 val productionCompanies = details?.productionCompanies
                     .orEmpty()
                     .mapNotNull { company ->
@@ -86,7 +98,10 @@ class TmdbMetadataService @Inject constructor(
 
                 val logoPath = images?.logos
                     ?.sortedWith(
-                        compareByDescending<com.nuvio.tv.data.remote.api.TmdbImage> { it.iso6391 == "en" }
+                        compareByDescending<com.nuvio.tv.data.remote.api.TmdbImage> {
+                            it.iso6391 == normalizedLanguage.substringBefore("-")
+                        }
+                            .thenByDescending { it.iso6391 == "en" }
                             .thenByDescending { it.iso6391 == null }
                     )
                     ?.firstOrNull()
@@ -128,6 +143,7 @@ class TmdbMetadataService @Inject constructor(
                 }
 
                 val enrichment = TmdbEnrichment(
+                    localizedTitle = localizedTitle,
                     description = description,
                     genres = genres,
                     backdrop = backdrop,
@@ -154,9 +170,11 @@ class TmdbMetadataService @Inject constructor(
 
     suspend fun fetchEpisodeEnrichment(
         tmdbId: String,
-        seasonNumbers: List<Int>
+        seasonNumbers: List<Int>,
+        language: String = "en"
     ): Map<Pair<Int, Int>, TmdbEpisodeEnrichment> = withContext(Dispatchers.IO) {
-        val cacheKey = "$tmdbId:${seasonNumbers.sorted().joinToString(",")}"
+        val normalizedLanguage = normalizeTmdbLanguage(language)
+        val cacheKey = "$tmdbId:${seasonNumbers.sorted().joinToString(",")}:$normalizedLanguage"
         episodeCache[cacheKey]?.let { return@withContext it }
 
         val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyMap()
@@ -164,7 +182,7 @@ class TmdbMetadataService @Inject constructor(
 
         seasonNumbers.distinct().forEach { season ->
             try {
-                val response = tmdbApi.getTvSeasonDetails(numericId, season, TMDB_API_KEY)
+                val response = tmdbApi.getTvSeasonDetails(numericId, season, TMDB_API_KEY, normalizedLanguage)
                 val episodes = response.body()?.episodes.orEmpty()
                 episodes.forEach { ep ->
                     val epNum = ep.episodeNumber ?: return@forEach
@@ -185,9 +203,18 @@ class TmdbMetadataService @Inject constructor(
         val clean = path?.trim()?.takeIf { it.isNotBlank() } ?: return null
         return "https://image.tmdb.org/t/p/$size$clean"
     }
+
+    private fun normalizeTmdbLanguage(language: String?): String {
+        return language
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.replace('_', '-')
+            ?: "en"
+    }
 }
 
 data class TmdbEnrichment(
+    val localizedTitle: String?,
     val description: String?,
     val genres: List<String>,
     val backdrop: String?,
