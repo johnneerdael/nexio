@@ -454,22 +454,30 @@ class SearchViewModel @Inject constructor(
                 when (result) {
                     is NetworkResult.Success -> {
                         val incoming = result.data.items
-                        val merged = if (reset) {
-                            incoming
+                        val existing = if (reset) {
+                            emptyList()
                         } else {
-                            (_uiState.value.discoverResults + _uiState.value.pendingDiscoverResults + incoming)
+                            _uiState.value.discoverResults + _uiState.value.pendingDiscoverResults
                         }
+                        val existingKeys = existing.asSequence()
+                            .map { "${it.type.toApiString()}:${it.id}" }
+                            .toSet()
+                        val hasNewUniqueIncoming = incoming.any { item ->
+                            "${item.type.toApiString()}:${item.id}" !in existingKeys
+                        }
+                        val merged = if (reset) incoming else (existing + incoming)
                         val deduped = merged.distinctBy { "${it.type.toApiString()}:${it.id}" }
                         val visible = deduped.take(DISCOVER_INITIAL_LIMIT)
                         val pending = deduped.drop(DISCOVER_INITIAL_LIMIT)
+                        val shouldStopPagination = !reset && !hasNewUniqueIncoming
                         _uiState.update {
                             it.copy(
                                 discoverLoading = false,
                                 discoverLoadingMore = false,
                                 discoverResults = visible,
                                 pendingDiscoverResults = pending,
-                                discoverHasMore = result.data.hasMore,
-                                discoverPage = currentPage
+                                discoverHasMore = if (shouldStopPagination) false else result.data.hasMore,
+                                discoverPage = if (shouldStopPagination) it.discoverPage else currentPage
                             )
                         }
                     }

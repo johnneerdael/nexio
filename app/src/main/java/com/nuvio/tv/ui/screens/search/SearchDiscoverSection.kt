@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -301,7 +302,11 @@ private fun DiscoverGrid(
             onRestoreFocusedItemHandled()
             return@LaunchedEffect
         }
-        kotlinx.coroutines.delay(100)
+        try {
+            restoreFocusRequester.requestFocus()
+        } catch (_: Exception) {
+        }
+        repeat(2) { withFrameNanos { } }
         try {
             restoreFocusRequester.requestFocus()
         } catch (_: Exception) {

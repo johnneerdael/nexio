@@ -32,7 +32,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -133,6 +136,14 @@ class MainActivity : ComponentActivity() {
                     val openDrawerWidth = 260.dp
 
                     val focusManager = LocalFocusManager.current
+                    var pendingContentFocusTransfer by remember { mutableStateOf(false) }
+
+                    LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
+                        if (!pendingContentFocusTransfer || drawerState.currentValue != DrawerValue.Closed) return@LaunchedEffect
+                        repeat(2) { withFrameNanos { } }
+                        focusManager.moveFocus(FocusDirection.Right)
+                        pendingContentFocusTransfer = false
+                    }
 
                     ModalNavigationDrawer(
                         drawerState = drawerState,
@@ -151,7 +162,7 @@ class MainActivity : ComponentActivity() {
                                                 keyEvent.type == KeyEventType.KeyDown
                                             ) {
                                                 drawerState.setValue(DrawerValue.Closed)
-                                                focusManager.moveFocus(FocusDirection.Right)
+                                                pendingContentFocusTransfer = true
                                                 true
                                             } else {
                                                 false
@@ -208,7 +219,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     }
                                                     drawerState.setValue(DrawerValue.Closed)
-                                                    focusManager.moveFocus(FocusDirection.Right)
+                                                    pendingContentFocusTransfer = true
                                                 },
                                                 colors = itemColors,
                                                 leadingContent = {
