@@ -2144,11 +2144,18 @@ private fun StreamRegexDialog(
     val keyboardController = LocalSoftwareKeyboardController.current
     val presets = remember {
         listOf(
+            "Any 1080p+" to "(2160p|4k|1080p)",
             "4K / Remux" to "(2160p|4k|remux)",
-            "1080p High Bitrate" to "(1080p|x264|x265|hevc)",
-            "Smaller Files" to "(720p|webrip|web-dl)",
-            "HDR / Dolby Vision" to "(hdr|dv|dolby\\s*vision)",
-            "English Preferred" to "(eng|english)"
+            "1080p Standard" to "(1080p|full\\s*hd)",
+            "720p / Smaller" to "(720p|webrip|web-dl)",
+            "WEB Sources" to "(web[-\\s]?dl|webrip)",
+            "BluRay Quality" to "(bluray|b[dr]rip|remux)",
+            "HEVC / x265" to "(hevc|x265|h\\.265)",
+            "AVC / x264" to "(x264|h\\.264|avc)",
+            "HDR / Dolby Vision" to "(hdr|hdr10\\+?|dv|dolby\\s*vision)",
+            "Dolby Atmos / DTS" to "(atmos|truehd|dts[-\\s]?hd|dtsx?)",
+            "English" to "(\\beng\\b|english)",
+            "No CAM/TS" to "^(?!.*\\b(cam|hdcam|ts|telesync)\\b).*$"
         )
     }
 
@@ -2178,6 +2185,44 @@ private fun StreamRegexDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
                 )
+
+                Text(
+                    text = "Presets",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = NuvioColors.TextSecondary
+                )
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(presets) { (label, pattern) ->
+                        var isFocused by remember { mutableStateOf(false) }
+                        Card(
+                            onClick = {
+                                regex = pattern
+                                regexError = null
+                            },
+                            modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
+                            colors = CardDefaults.colors(
+                                containerColor = NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(20.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Text(
+                                text = label,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (isFocused) NuvioColors.Primary else NuvioColors.TextPrimary
+                            )
+                        }
+                    }
+                }
 
                 Card(
                     onClick = { inputFocusRequester.requestFocus() },
@@ -2241,44 +2286,6 @@ private fun StreamRegexDialog(
                                 innerTextField()
                             }
                         )
-                    }
-                }
-
-                Text(
-                    text = "Presets",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextSecondary
-                )
-
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(presets) { (label, pattern) ->
-                        var isFocused by remember { mutableStateOf(false) }
-                        Card(
-                            onClick = {
-                                regex = pattern
-                                regexError = null
-                            },
-                            modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
-                            colors = CardDefaults.colors(
-                                containerColor = NuvioColors.BackgroundElevated,
-                                focusedContainerColor = NuvioColors.FocusBackground
-                            ),
-                            border = CardDefaults.border(
-                                focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                                    shape = RoundedCornerShape(20.dp)
-                                )
-                            ),
-                            shape = CardDefaults.shape(RoundedCornerShape(20.dp)),
-                            scale = CardDefaults.scale(focusedScale = 1.02f)
-                        ) {
-                            Text(
-                                text = label,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isFocused) NuvioColors.Primary else NuvioColors.TextPrimary
-                            )
-                        }
                     }
                 }
 

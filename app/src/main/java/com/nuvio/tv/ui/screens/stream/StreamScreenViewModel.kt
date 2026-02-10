@@ -25,6 +25,7 @@ class StreamScreenViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    private var autoPlayHandledForSession = false
 
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
@@ -67,7 +68,10 @@ class StreamScreenViewModel @Inject constructor(
         when (event) {
             is StreamScreenEvent.OnAddonFilterSelected -> filterByAddon(event.addonName)
             is StreamScreenEvent.OnStreamSelected -> { /* Handle stream selection - will be handled in UI */ }
-            StreamScreenEvent.OnAutoPlayConsumed -> _uiState.update { it.copy(autoPlayStream = null) }
+            StreamScreenEvent.OnAutoPlayConsumed -> {
+                autoPlayHandledForSession = true
+                _uiState.update { it.copy(autoPlayStream = null) }
+            }
             StreamScreenEvent.OnRetry -> loadStreams()
             StreamScreenEvent.OnBackPress -> { /* Handle in screen */ }
         }
@@ -108,11 +112,15 @@ class StreamScreenViewModel @Inject constructor(
                                 allStreams = allStreams,
                                 filteredStreams = filteredStreams,
                                 availableAddons = availableAddons,
-                                autoPlayStream = selectAutoPlayStream(
-                                    streams = allStreams,
-                                    mode = playerSettings.streamAutoPlayMode,
-                                    regexPattern = playerSettings.streamAutoPlayRegex
-                                ),
+                                autoPlayStream = if (autoPlayHandledForSession) {
+                                    null
+                                } else {
+                                    selectAutoPlayStream(
+                                        streams = allStreams,
+                                        mode = playerSettings.streamAutoPlayMode,
+                                        regexPattern = playerSettings.streamAutoPlayRegex
+                                    )
+                                },
                                 error = null
                             )
                         }
