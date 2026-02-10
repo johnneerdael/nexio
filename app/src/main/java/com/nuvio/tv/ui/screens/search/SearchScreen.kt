@@ -21,7 +21,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,7 +38,12 @@ import com.nuvio.tv.ui.components.CatalogRowSection
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.PosterCardDefaults
+import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -48,6 +56,18 @@ fun SearchScreen(
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var focusResults by remember { mutableStateOf(false) }
+    var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
+    var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
+    var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
+    val posterCardStyle = PosterCardStyle(
+        width = uiState.posterCardWidthDp.dp,
+        height = computedHeightDp.dp,
+        cornerRadius = uiState.posterCardCornerRadiusDp.dp,
+        focusedBorderWidth = PosterCardDefaults.Style.focusedBorderWidth,
+        focusedScale = PosterCardDefaults.Style.focusedScale
+    )
 
     LaunchedEffect(uiState.query) {
         focusResults = false
@@ -68,6 +88,19 @@ fun SearchScreen(
             } catch (_: Exception) {
             }
             focusResults = false
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, pendingDiscoverRestoreOnResume) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingDiscoverRestoreOnResume) {
+                restoreDiscoverFocus = true
+                pendingDiscoverRestoreOnResume = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -128,9 +161,23 @@ fun SearchScreen(
                 item {
                     DiscoverSection(
                         uiState = uiState,
+                        posterCardStyle = posterCardStyle,
                         focusResults = focusResults,
                         firstItemFocusRequester = discoverFirstItemFocusRequester,
-                        onNavigateToDetail = onNavigateToDetail,
+                        focusedItemIndex = discoverFocusedItemIndex,
+                        shouldRestoreFocusedItem = restoreDiscoverFocus,
+                        onRestoreFocusedItemHandled = { restoreDiscoverFocus = false },
+                        onNavigateToDetail = { id, type, addonBaseUrl ->
+                            pendingDiscoverRestoreOnResume = true
+                            onNavigateToDetail(id, type, addonBaseUrl)
+                        },
+                        onDiscoverItemFocused = { index ->
+                            discoverFocusedItemIndex = index
+                        },
+                        onRequestRestoreFocus = { index ->
+                            discoverFocusedItemIndex = index
+                            restoreDiscoverFocus = true
+                        },
                         onSelectType = { viewModel.onEvent(SearchEvent.SelectDiscoverType(it)) },
                         onSelectCatalog = { viewModel.onEvent(SearchEvent.SelectDiscoverCatalog(it)) },
                         onSelectGenre = { viewModel.onEvent(SearchEvent.SelectDiscoverGenre(it)) },

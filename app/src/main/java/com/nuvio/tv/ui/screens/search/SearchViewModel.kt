@@ -63,6 +63,21 @@ class SearchViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
+                _uiState.update { it.copy(posterCardWidthDp = widthDp) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
+                _uiState.update { it.copy(posterCardHeightDp = heightDp) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
+                _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
+            }
+        }
     }
 
     fun onEvent(event: SearchEvent) {

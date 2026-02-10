@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,7 +38,8 @@ fun GridContentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {}
 ) {
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val density = LocalDensity.current
@@ -55,7 +57,10 @@ fun GridContentCard(
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
                     else Modifier
-                ),
+                )
+                .onFocusChanged { state ->
+                    if (state.isFocused) onFocused()
+                },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,

@@ -3,12 +3,14 @@ package com.nuvio.tv.ui.screens.search
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,11 +24,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.tv.material3.Border
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -36,15 +38,23 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlin.math.max
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun DiscoverSection(
     uiState: SearchUiState,
+    posterCardStyle: PosterCardStyle,
     focusResults: Boolean,
     firstItemFocusRequester: FocusRequester,
+    focusedItemIndex: Int,
+    shouldRestoreFocusedItem: Boolean,
+    onRestoreFocusedItemHandled: () -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
+    onDiscoverItemFocused: (Int) -> Unit,
+    onRequestRestoreFocus: (Int) -> Unit,
     onSelectType: (String) -> Unit,
     onSelectCatalog: (String) -> Unit,
     onSelectGenre: (String?) -> Unit,
@@ -162,9 +172,20 @@ internal fun DiscoverSection(
             uiState.discoverResults.isNotEmpty() -> {
                 DiscoverGrid(
                     items = uiState.discoverResults,
+                    posterCardStyle = posterCardStyle,
                     focusResults = focusResults,
                     firstItemFocusRequester = firstItemFocusRequester,
-                    onItemClick = { item ->
+                    focusedItemIndex = focusedItemIndex,
+                    shouldRestoreFocusedItem = shouldRestoreFocusedItem,
+                    onRestoreFocusedItemHandled = onRestoreFocusedItemHandled,
+                    onItemFocused = onDiscoverItemFocused,
+                    pendingCount = uiState.pendingDiscoverResults.size,
+                    canLoadMore = uiState.discoverHasMore,
+                    isLoadingMore = uiState.discoverLoadingMore,
+                    onShowMore = onShowMore,
+                    onLoadMore = onLoadMore,
+                    onRequestRestoreFocus = onRequestRestoreFocus,
+                    onItemClick = { _, item ->
                         onNavigateToDetail(
                             item.id,
                             item.type.toApiString(),
@@ -173,56 +194,6 @@ internal fun DiscoverSection(
                     }
                 )
 
-                if (uiState.pendingDiscoverResults.isNotEmpty()) {
-                    Button(
-                        onClick = onShowMore,
-                        shape = ButtonDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContentColor = NuvioColors.TextPrimary
-                        ),
-                        border = ButtonDefaults.border(
-                            focusedBorder = Border(
-                                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                        )
-                    ) {
-                        Text("Show more (${uiState.pendingDiscoverResults.size})")
-                    }
-                } else if (uiState.discoverHasMore) {
-                    if (uiState.discoverLoadingMore) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingIndicator()
-                        }
-                    } else {
-                        Button(
-                            onClick = onLoadMore,
-                            shape = ButtonDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContentColor = NuvioColors.TextPrimary
-                            ),
-                            border = ButtonDefaults.border(
-                                focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                            )
-                        ) {
-                            Text("Load more")
-                        }
-                    }
-                }
             }
 
             uiState.discoverInitialized && selectedCatalog == null -> {
@@ -257,11 +228,7 @@ private fun DiscoverFilterChip(
         onClick = onClick,
         modifier = Modifier
             .onFocusChanged { state ->
-                val nowFocused = state.isFocused
-                isFocused = nowFocused
-                if (nowFocused && !selected) {
-                    onClick()
-                }
+                isFocused = state.isFocused
             },
         shape = CardDefaults.shape(shape = RoundedCornerShape(20.dp)),
         colors = CardDefaults.colors(
@@ -304,37 +271,186 @@ private fun DiscoverFilterChip(
 @Composable
 private fun DiscoverGrid(
     items: List<MetaPreview>,
+    posterCardStyle: PosterCardStyle,
     focusResults: Boolean,
     firstItemFocusRequester: FocusRequester,
-    onItemClick: (MetaPreview) -> Unit
+    focusedItemIndex: Int,
+    shouldRestoreFocusedItem: Boolean,
+    onRestoreFocusedItemHandled: () -> Unit,
+    onItemFocused: (Int) -> Unit,
+    pendingCount: Int,
+    canLoadMore: Boolean,
+    isLoadingMore: Boolean,
+    onShowMore: () -> Unit,
+    onLoadMore: () -> Unit,
+    onRequestRestoreFocus: (Int) -> Unit,
+    onItemClick: (Int, MetaPreview) -> Unit
 ) {
-    val columns = 5
-    val rows = items.chunked(columns)
+    val restoreFocusRequester = remember { FocusRequester() }
+    val actionType = when {
+        pendingCount > 0 -> DiscoverGridAction.ShowMore(pendingCount)
+        isLoadingMore -> DiscoverGridAction.Loading
+        canLoadMore -> DiscoverGridAction.LoadMore
+        else -> DiscoverGridAction.None
+    }
+    val totalCells = items.size + if (actionType != DiscoverGridAction.None) 1 else 0
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        rows.forEachIndexed { rowIndex, rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (column in 0 until columns) {
-                    if (column < rowItems.size) {
-                        val item = rowItems[column]
-                        GridContentCard(
-                            item = item,
-                            onClick = { onItemClick(item) },
-                            modifier = Modifier.weight(1f),
-                            focusRequester = if (focusResults && rowIndex == 0 && column == 0) {
-                                firstItemFocusRequester
-                            } else {
-                                null
-                            }
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
+    androidx.compose.runtime.LaunchedEffect(shouldRestoreFocusedItem, focusedItemIndex, totalCells) {
+        if (!shouldRestoreFocusedItem) return@LaunchedEffect
+        if (focusedItemIndex !in 0 until totalCells) {
+            onRestoreFocusedItemHandled()
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(100)
+        try {
+            restoreFocusRequester.requestFocus()
+        } catch (_: Exception) {
+        }
+        onRestoreFocusedItemHandled()
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val horizontalSpacing = 10.dp
+        val preferredCardWidth = 120.dp
+        val minCardWidth = 108.dp
+        val maxCardWidth = 132.dp
+
+        fun widthForColumns(columns: Int) =
+            (maxWidth - (horizontalSpacing * (columns - 1))) / columns
+
+        var columns = max(
+            1,
+            ((maxWidth + horizontalSpacing) / (preferredCardWidth + horizontalSpacing)).toInt()
+        )
+
+        while (columns > 1 && widthForColumns(columns) < minCardWidth) {
+            columns--
+        }
+        while (widthForColumns(columns) > maxCardWidth) {
+            columns++
+        }
+
+        val cardWidth = widthForColumns(columns).coerceIn(minCardWidth, maxCardWidth)
+        val adaptiveStyle = posterCardStyle.copy(
+            width = cardWidth,
+            height = cardWidth * 1.5f
+        )
+
+        val cellIndices = (0 until totalCells).toList()
+        val rows = cellIndices.chunked(columns)
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            rows.forEachIndexed { rowIndex, rowIndices ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(horizontalSpacing)
+                ) {
+                    rowIndices.forEachIndexed { column, absoluteIndex ->
+                        val focusRequester = when {
+                            shouldRestoreFocusedItem && absoluteIndex == focusedItemIndex -> restoreFocusRequester
+                            focusResults && rowIndex == 0 && column == 0 -> firstItemFocusRequester
+                            else -> null
+                        }
+
+                        if (absoluteIndex < items.size) {
+                            val item = items[absoluteIndex]
+                            GridContentCard(
+                                item = item,
+                                onClick = { onItemClick(absoluteIndex, item) },
+                                posterCardStyle = adaptiveStyle,
+                                modifier = Modifier.width(adaptiveStyle.width),
+                                focusRequester = focusRequester,
+                                onFocused = { onItemFocused(absoluteIndex) }
+                            )
+                        } else {
+                            DiscoverActionCard(
+                                actionType = actionType,
+                                posterCardStyle = adaptiveStyle,
+                                modifier = Modifier.width(adaptiveStyle.width),
+                                focusRequester = focusRequester,
+                                onFocused = { onItemFocused(absoluteIndex) },
+                                onClick = {
+                                    onRequestRestoreFocus((items.lastIndex).coerceAtLeast(0))
+                                    when (actionType) {
+                                        is DiscoverGridAction.ShowMore -> onShowMore()
+                                        DiscoverGridAction.LoadMore -> onLoadMore()
+                                        DiscoverGridAction.Loading -> Unit
+                                        DiscoverGridAction.None -> Unit
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+private sealed class DiscoverGridAction {
+    object None : DiscoverGridAction()
+    data class ShowMore(val count: Int) : DiscoverGridAction()
+    object LoadMore : DiscoverGridAction()
+    object Loading : DiscoverGridAction()
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun DiscoverActionCard(
+    actionType: DiscoverGridAction,
+    posterCardStyle: PosterCardStyle,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {},
+    onClick: () -> Unit
+) {
+    val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
+    val title = when (actionType) {
+        is DiscoverGridAction.ShowMore -> "Show more\n(${actionType.count})"
+        DiscoverGridAction.LoadMore -> "Load more"
+        DiscoverGridAction.Loading -> "Loading..."
+        DiscoverGridAction.None -> ""
+    }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .width(posterCardStyle.width)
+            .onFocusChanged { state -> if (state.isFocused) onFocused() }
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                else Modifier
+            ),
+        shape = CardDefaults.shape(shape = cardShape),
+        colors = CardDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            border = Border(
+                border = BorderStroke(1.dp, NuvioColors.Border),
+                shape = cardShape
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                shape = cardShape
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .width(posterCardStyle.width)
+                .aspectRatio(posterCardStyle.aspectRatio),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = NuvioColors.TextPrimary,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

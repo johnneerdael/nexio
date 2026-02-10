@@ -23,7 +23,10 @@ data class SearchUiState(
     val discoverResults: List<MetaPreview> = emptyList(),
     val pendingDiscoverResults: List<MetaPreview> = emptyList(),
     val discoverHasMore: Boolean = true,
-    val discoverPage: Int = 1
+    val discoverPage: Int = 1,
+    val posterCardWidthDp: Int = 126,
+    val posterCardHeightDp: Int = 189,
+    val posterCardCornerRadiusDp: Int = 12
 )
 
 @Immutable
