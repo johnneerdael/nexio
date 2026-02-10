@@ -106,6 +106,7 @@ sealed class PlayerEvent {
     data object OnPlayPause : PlayerEvent()
     data object OnSeekForward : PlayerEvent()
     data object OnSeekBackward : PlayerEvent()
+    data class OnSeekBy(val deltaMs: Long) : PlayerEvent()
     data class OnSeekTo(val position: Long) : PlayerEvent()
     data class OnSelectAudioTrack(val index: Int) : PlayerEvent()
     data class OnSelectSubtitleTrack(val index: Int) : PlayerEvent()

@@ -220,7 +220,13 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             if (!uiState.showControls) {
-                                viewModel.onEvent(PlayerEvent.OnSeekForward)
+                                val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+                                val deltaMs = when {
+                                    repeatCount >= 8 -> 30_000L
+                                    repeatCount >= 3 -> 20_000L
+                                    else -> 10_000L
+                                }
+                                viewModel.onEvent(PlayerEvent.OnSeekBy(deltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible
@@ -229,7 +235,13 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             if (!uiState.showControls) {
-                                viewModel.onEvent(PlayerEvent.OnSeekBackward)
+                                val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+                                val deltaMs = when {
+                                    repeatCount >= 8 -> -30_000L
+                                    repeatCount >= 3 -> -20_000L
+                                    else -> -10_000L
+                                }
+                                viewModel.onEvent(PlayerEvent.OnSeekBy(deltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible

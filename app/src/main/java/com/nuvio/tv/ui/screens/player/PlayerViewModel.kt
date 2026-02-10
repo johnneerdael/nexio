@@ -1621,20 +1621,17 @@ class PlayerViewModel @Inject constructor(
                 showControlsTemporarily()
             }
             PlayerEvent.OnSeekForward -> {
-                _exoPlayer?.let { player ->
-                    val target = (player.currentPosition + 10000).coerceAtMost(player.duration)
-                    player.seekTo(target)
-                    _uiState.update { it.copy(currentPosition = target) }
-                }
-                if (_uiState.value.showControls) {
-                    showControlsTemporarily()
-                } else {
-                    showSeekOverlayTemporarily()
-                }
+                onEvent(PlayerEvent.OnSeekBy(deltaMs = 10_000L))
             }
             PlayerEvent.OnSeekBackward -> {
+                onEvent(PlayerEvent.OnSeekBy(deltaMs = -10_000L))
+            }
+            is PlayerEvent.OnSeekBy -> {
                 _exoPlayer?.let { player ->
-                    val target = (player.currentPosition - 10000).coerceAtLeast(0)
+                    val maxDuration = player.duration.takeIf { it >= 0 } ?: Long.MAX_VALUE
+                    val target = (player.currentPosition + event.deltaMs)
+                        .coerceAtLeast(0L)
+                        .coerceAtMost(maxDuration)
                     player.seekTo(target)
                     _uiState.update { it.copy(currentPosition = target) }
                 }
