@@ -104,33 +104,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Science
 
-// Preset colors for subtitle customization
-private val SUBTITLE_COLORS = listOf(
-    Color.White,
-    Color.Yellow,
-    Color.Cyan,
-    Color.Green,
-    Color.Magenta,
-    Color(0xFFFF6B6B), // Coral
-    Color(0xFFFFA500), // Orange
-    Color(0xFF90EE90), // Light Green
-)
-
-private val BACKGROUND_COLORS = listOf(
-    Color.Transparent,
-    Color.Black,
-    Color(0x80000000), // Semi-transparent black
-    Color(0xFF1A1A1A), // Dark gray
-    Color(0xFF2D2D2D), // Gray
-)
-
-private val OUTLINE_COLORS = listOf(
-    Color.Black,
-    Color(0xFF1A1A1A),
-    Color(0xFF333333),
-    Color.White,
-)
-
 @Composable
 fun PlaybackSettingsScreen(
     viewModel: PlaybackSettingsViewModel = hiltViewModel(),
@@ -463,251 +436,32 @@ fun PlaybackSettingsContent(
                 )
             }
 
-            // Subtitle Style Settings Section Header
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Subtitles",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextSecondary,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-            
-            // Preferred Language
-            item {
-                val languageName = if (playerSettings.subtitleStyle.preferredLanguage == "none") {
-                    "None"
-                } else {
-                    AVAILABLE_SUBTITLE_LANGUAGES.find {
-                        it.code == playerSettings.subtitleStyle.preferredLanguage
-                    }?.name ?: "English"
+            subtitleSettingsItems(
+                playerSettings = playerSettings,
+                onShowLanguageDialog = { showLanguageDialog = true },
+                onShowSecondaryLanguageDialog = { showSecondaryLanguageDialog = true },
+                onShowTextColorDialog = { showTextColorDialog = true },
+                onShowBackgroundColorDialog = { showBackgroundColorDialog = true },
+                onShowOutlineColorDialog = { showOutlineColorDialog = true },
+                onSetSubtitleSize = { newSize ->
+                    coroutineScope.launch { viewModel.setSubtitleSize(newSize) }
+                },
+                onSetSubtitleVerticalOffset = { newOffset ->
+                    coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) }
+                },
+                onSetSubtitleBold = { bold ->
+                    coroutineScope.launch { viewModel.setSubtitleBold(bold) }
+                },
+                onSetSubtitleOutlineEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) }
+                },
+                onSetUseLibass = { enabled ->
+                    coroutineScope.launch { viewModel.setUseLibass(enabled) }
+                },
+                onSetLibassRenderType = { renderType ->
+                    coroutineScope.launch { viewModel.setLibassRenderType(renderType) }
                 }
-
-                NavigationSettingsItem(
-                    icon = Icons.Default.Language,
-                    title = "Preferred Language",
-                    subtitle = languageName,
-                    onClick = { showLanguageDialog = true }
-                )
-            }
-            
-            // Secondary Preferred Language
-            item {
-                val secondaryLanguageName = playerSettings.subtitleStyle.secondaryPreferredLanguage?.let { code ->
-                    AVAILABLE_SUBTITLE_LANGUAGES.find { it.code == code }?.name
-                } ?: "Not set"
-                
-                NavigationSettingsItem(
-                    icon = Icons.Default.Language,
-                    title = "Secondary Preferred Language",
-                    subtitle = secondaryLanguageName,
-                    onClick = { showSecondaryLanguageDialog = true }
-                )
-            }
-            
-            // Size Slider
-            item {
-                SliderSettingsItem(
-                    icon = Icons.Default.FormatSize,
-                    title = "Size",
-                    value = playerSettings.subtitleStyle.size,
-                    valueText = "${playerSettings.subtitleStyle.size}%",
-                    minValue = 50,
-                    maxValue = 200,
-                    step = 10,
-                    onValueChange = { newSize ->
-                        coroutineScope.launch {
-                            viewModel.setSubtitleSize(newSize)
-                        }
-                    }
-                )
-            }
-            
-            // Vertical Offset Slider
-            item {
-                SliderSettingsItem(
-                    icon = Icons.Default.VerticalAlignBottom,
-                    title = "Vertical Offset",
-                    value = playerSettings.subtitleStyle.verticalOffset,
-                    valueText = "${playerSettings.subtitleStyle.verticalOffset}%",
-                    minValue = -20,
-                    maxValue = 50,
-                    step = 1,
-                    onValueChange = { newOffset ->
-                        coroutineScope.launch {
-                            viewModel.setSubtitleVerticalOffset(newOffset)
-                        }
-                    }
-                )
-            }
-            
-            // Bold Toggle
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.FormatBold,
-                    title = "Bold",
-                    subtitle = "Use bold font weight for subtitles",
-                    isChecked = playerSettings.subtitleStyle.bold,
-                    onCheckedChange = { bold ->
-                        coroutineScope.launch {
-                            viewModel.setSubtitleBold(bold)
-                        }
-                    }
-                )
-            }
-            
-            // Text Color
-            item {
-                ColorSettingsItem(
-                    icon = Icons.Default.Palette,
-                    title = "Text Color",
-                    currentColor = Color(playerSettings.subtitleStyle.textColor),
-                    onClick = { showTextColorDialog = true }
-                )
-            }
-            
-            // Background Color
-            item {
-                ColorSettingsItem(
-                    icon = Icons.Default.Palette,
-                    title = "Background Color",
-                    currentColor = Color(playerSettings.subtitleStyle.backgroundColor),
-                    showTransparent = playerSettings.subtitleStyle.backgroundColor == Color.Transparent.toArgb(),
-                    onClick = { showBackgroundColorDialog = true }
-                )
-            }
-            
-            // Outline Toggle
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.ClosedCaption,
-                    title = "Outline",
-                    subtitle = "Add outline around subtitle text for better visibility",
-                    isChecked = playerSettings.subtitleStyle.outlineEnabled,
-                    onCheckedChange = { enabled ->
-                        coroutineScope.launch {
-                            viewModel.setSubtitleOutlineEnabled(enabled)
-                        }
-                    }
-                )
-            }
-            
-            // Outline Color (only show when outline is enabled)
-            if (playerSettings.subtitleStyle.outlineEnabled) {
-                item {
-                    ColorSettingsItem(
-                        icon = Icons.Default.Palette,
-                        title = "Outline Color",
-                        currentColor = Color(playerSettings.subtitleStyle.outlineColor),
-                        onClick = { showOutlineColorDialog = true }
-                    )
-                }
-                
-            }
-            
-            // Advanced Subtitle Settings Section Header
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Advanced Subtitle Rendering",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextSecondary,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-
-            // Libass Toggle
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.Subtitles,
-                    title = "Use libass for ASS/SSA subtitles",
-                    subtitle = "Enable native libass rendering for advanced ASS/SSA subtitle features including animations, positioning, and styling",
-                    isChecked = playerSettings.useLibass,
-                    onCheckedChange = { enabled ->
-                        coroutineScope.launch {
-                            viewModel.setUseLibass(enabled)
-                        }
-                    }
-                )
-            }
-
-            // Libass Render Type Selection (only visible when libass is enabled)
-            if (playerSettings.useLibass) {
-                item {
-                    Text(
-                        text = "Libass Render Mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextSecondary,
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp)
-                    )
-                }
-
-                item {
-                    RenderTypeSettingsItem(
-                        title = "Overlay OpenGL (Recommended)",
-                        subtitle = "Best quality with HDR support. Renders subtitles on a separate thread.",
-                        isSelected = playerSettings.libassRenderType == LibassRenderType.OVERLAY_OPEN_GL,
-                        onClick = {
-                            coroutineScope.launch {
-                                viewModel.setLibassRenderType(LibassRenderType.OVERLAY_OPEN_GL)
-                            }
-                        }
-                    )
-                }
-
-                item {
-                    RenderTypeSettingsItem(
-                        title = "Overlay Canvas",
-                        subtitle = "HDR support with canvas rendering. May block UI thread.",
-                        isSelected = playerSettings.libassRenderType == LibassRenderType.OVERLAY_CANVAS,
-                        onClick = {
-                            coroutineScope.launch {
-                                viewModel.setLibassRenderType(LibassRenderType.OVERLAY_CANVAS)
-                            }
-                        }
-                    )
-                }
-
-                item {
-                    RenderTypeSettingsItem(
-                        title = "Effects OpenGL",
-                        subtitle = "Animation support using Media3 effects. Faster than Canvas.",
-                        isSelected = playerSettings.libassRenderType == LibassRenderType.EFFECTS_OPEN_GL,
-                        onClick = {
-                            coroutineScope.launch {
-                                viewModel.setLibassRenderType(LibassRenderType.EFFECTS_OPEN_GL)
-                            }
-                        }
-                    )
-                }
-
-                item {
-                    RenderTypeSettingsItem(
-                        title = "Effects Canvas",
-                        subtitle = "Animation support using Media3 effects with Canvas rendering.",
-                        isSelected = playerSettings.libassRenderType == LibassRenderType.EFFECTS_CANVAS,
-                        onClick = {
-                            coroutineScope.launch {
-                                viewModel.setLibassRenderType(LibassRenderType.EFFECTS_CANVAS)
-                            }
-                        }
-                    )
-                }
-
-                item {
-                    RenderTypeSettingsItem(
-                        title = "Standard Cues",
-                        subtitle = "Basic subtitle rendering without animation support. Most compatible.",
-                        isSelected = playerSettings.libassRenderType == LibassRenderType.CUES,
-                        onClick = {
-                            coroutineScope.launch {
-                                viewModel.setLibassRenderType(LibassRenderType.CUES)
-                            }
-                        }
-                    )
-                }
-            }
+            )
 
             // Advanced / Experimental Section Header
             item {
@@ -929,86 +683,44 @@ fun PlaybackSettingsContent(
         }
     }
     
-    // Language Selection Dialog
-    if (showLanguageDialog) {
-        LanguageSelectionDialog(
-            title = "Preferred Language",
-            selectedLanguage = if (playerSettings.subtitleStyle.preferredLanguage == "none") null else playerSettings.subtitleStyle.preferredLanguage,
-            showNoneOption = true,
-            onLanguageSelected = { language ->
-                coroutineScope.launch {
-                    viewModel.setSubtitlePreferredLanguage(language ?: "none")
-                }
-                showLanguageDialog = false
-            },
-            onDismiss = { showLanguageDialog = false }
-        )
-    }
-    
-    // Secondary Language Selection Dialog
-    if (showSecondaryLanguageDialog) {
-        LanguageSelectionDialog(
-            title = "Secondary Preferred Language",
-            selectedLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage,
-            showNoneOption = true,
-            onLanguageSelected = { language ->
-                coroutineScope.launch {
-                    viewModel.setSubtitleSecondaryLanguage(language)
-                }
-                showSecondaryLanguageDialog = false
-            },
-            onDismiss = { showSecondaryLanguageDialog = false }
-        )
-    }
-    
-    // Text Color Selection Dialog
-    if (showTextColorDialog) {
-        ColorSelectionDialog(
-            title = "Text Color",
-            colors = SUBTITLE_COLORS,
-            selectedColor = Color(playerSettings.subtitleStyle.textColor),
-            onColorSelected = { color ->
-                coroutineScope.launch {
-                    viewModel.setSubtitleTextColor(color.toArgb())
-                }
-                showTextColorDialog = false
-            },
-            onDismiss = { showTextColorDialog = false }
-        )
-    }
-    
-    // Background Color Selection Dialog
-    if (showBackgroundColorDialog) {
-        ColorSelectionDialog(
-            title = "Background Color",
-            colors = BACKGROUND_COLORS,
-            selectedColor = Color(playerSettings.subtitleStyle.backgroundColor),
-            showTransparentOption = true,
-            onColorSelected = { color ->
-                coroutineScope.launch {
-                    viewModel.setSubtitleBackgroundColor(color.toArgb())
-                }
-                showBackgroundColorDialog = false
-            },
-            onDismiss = { showBackgroundColorDialog = false }
-        )
-    }
-    
-    // Outline Color Selection Dialog
-    if (showOutlineColorDialog) {
-        ColorSelectionDialog(
-            title = "Outline Color",
-            colors = OUTLINE_COLORS,
-            selectedColor = Color(playerSettings.subtitleStyle.outlineColor),
-            onColorSelected = { color ->
-                coroutineScope.launch {
-                    viewModel.setSubtitleOutlineColor(color.toArgb())
-                }
-                showOutlineColorDialog = false
-            },
-            onDismiss = { showOutlineColorDialog = false }
-        )
-    }
+    SubtitleSettingsDialogs(
+        showLanguageDialog = showLanguageDialog,
+        showSecondaryLanguageDialog = showSecondaryLanguageDialog,
+        showTextColorDialog = showTextColorDialog,
+        showBackgroundColorDialog = showBackgroundColorDialog,
+        showOutlineColorDialog = showOutlineColorDialog,
+        playerSettings = playerSettings,
+        onSetPreferredLanguage = { language ->
+            coroutineScope.launch {
+                viewModel.setSubtitlePreferredLanguage(language ?: "none")
+            }
+        },
+        onSetSecondaryLanguage = { language ->
+            coroutineScope.launch {
+                viewModel.setSubtitleSecondaryLanguage(language)
+            }
+        },
+        onSetTextColor = { color ->
+            coroutineScope.launch {
+                viewModel.setSubtitleTextColor(color.toArgb())
+            }
+        },
+        onSetBackgroundColor = { color ->
+            coroutineScope.launch {
+                viewModel.setSubtitleBackgroundColor(color.toArgb())
+            }
+        },
+        onSetOutlineColor = { color ->
+            coroutineScope.launch {
+                viewModel.setSubtitleOutlineColor(color.toArgb())
+            }
+        },
+        onDismissLanguageDialog = { showLanguageDialog = false },
+        onDismissSecondaryLanguageDialog = { showSecondaryLanguageDialog = false },
+        onDismissTextColorDialog = { showTextColorDialog = false },
+        onDismissBackgroundColorDialog = { showBackgroundColorDialog = false },
+        onDismissOutlineColorDialog = { showOutlineColorDialog = false }
+    )
 
     // Audio Language Selection Dialog
     if (showAudioLanguageDialog) {
@@ -1081,7 +793,7 @@ fun PlaybackSettingsContent(
 }
 
 @Composable
-private fun ToggleSettingsItem(
+internal fun ToggleSettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String,
@@ -1154,7 +866,7 @@ private fun ToggleSettingsItem(
 }
 
 @Composable
-private fun RenderTypeSettingsItem(
+internal fun RenderTypeSettingsItem(
     title: String,
     subtitle: String,
     isSelected: Boolean,
@@ -1284,7 +996,7 @@ internal fun NavigationSettingsItem(
 }
 
 @Composable
-private fun SliderSettingsItem(
+internal fun SliderSettingsItem(
     icon: ImageVector,
     title: String,
     value: Int,
@@ -1475,7 +1187,7 @@ private fun SliderSettingsItem(
 }
 
 @Composable
-private fun ColorSettingsItem(
+internal fun ColorSettingsItem(
     icon: ImageVector,
     title: String,
     currentColor: Color,
@@ -1559,7 +1271,7 @@ private fun ColorSettingsItem(
 }
 
 @Composable
-private fun LanguageSelectionDialog(
+internal fun LanguageSelectionDialog(
     title: String,
     selectedLanguage: String?,
     showNoneOption: Boolean,
@@ -1693,7 +1405,7 @@ private fun LanguageOptionItem(
 }
 
 @Composable
-private fun ColorSelectionDialog(
+internal fun ColorSelectionDialog(
     title: String,
     colors: List<Color>,
     selectedColor: Color,
