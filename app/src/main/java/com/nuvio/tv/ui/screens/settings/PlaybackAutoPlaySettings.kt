@@ -204,10 +204,7 @@ internal fun AutoPlaySettingsDialogs(
             allLabel = "All installed addons",
             items = installedAddonNames,
             selectedItems = playerSettings.streamAutoPlaySelectedAddons,
-            onSave = {
-                onSetSelectedAddons(it)
-                onDismissAddonSelectionDialog()
-            },
+            onSelectionSaved = onSetSelectedAddons,
             onDismiss = onDismissAddonSelectionDialog
         )
     }
@@ -218,10 +215,7 @@ internal fun AutoPlaySettingsDialogs(
             allLabel = "All enabled plugins",
             items = enabledPluginNames,
             selectedItems = playerSettings.streamAutoPlaySelectedPlugins,
-            onSave = {
-                onSetSelectedPlugins(it)
-                onDismissPluginSelectionDialog()
-            },
+            onSelectionSaved = onSetSelectedPlugins,
             onDismiss = onDismissPluginSelectionDialog
         )
     }
@@ -436,7 +430,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
     allLabel: String,
     items: List<String>,
     selectedItems: Set<String>,
-    onSave: (Set<String>) -> Unit,
+    onSelectionSaved: (Set<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selected by remember(selectedItems, items) {
@@ -448,7 +442,12 @@ private fun StreamAutoPlayProviderSelectionDialog(
         focusRequester.requestFocus()
     }
 
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = {
+            onSelectionSaved(selected)
+            onDismiss()
+        }
+    ) {
         Card(
             onClick = { },
             colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
@@ -565,37 +564,6 @@ private fun StreamAutoPlayProviderSelectionDialog(
                                 }
                             }
                         }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundElevated,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
-                        ),
-                        shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    ) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { onSave(selected) },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
-                        ),
-                        shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    ) {
-                        Text("Save")
                     }
                 }
             }

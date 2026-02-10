@@ -31,7 +31,15 @@ class PlaybackSettingsViewModel @Inject constructor(
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
-        addons.map { it.name }.distinct().sorted()
+        addons
+            .filter { addon ->
+                addon.resources.any { resource ->
+                    resource.name.equals("stream", ignoreCase = true)
+                }
+            }
+            .map { it.name }
+            .distinct()
+            .sorted()
     }
     val enabledPluginNames: Flow<List<String>> = combine(
         pluginManager.pluginsEnabled,
