@@ -90,9 +90,7 @@ class PlayerViewModel @Inject constructor(
         private const val TAG = "PlayerViewModel"
     }
 
-    private val initialStreamUrl: String = savedStateHandle.get<String>("streamUrl")?.let {
-        URLDecoder.decode(it, "UTF-8")
-    } ?: ""
+    private val initialStreamUrl: String = savedStateHandle.get<String>("streamUrl") ?: ""
     private val title: String = savedStateHandle.get<String>("title")?.let {
         URLDecoder.decode(it, "UTF-8")
     } ?: ""
@@ -722,9 +720,19 @@ class PlayerViewModel @Inject constructor(
                         }
 
                         override fun onPlayerError(error: PlaybackException) {
-                            _uiState.update { 
+                            val detailedError = buildString {
+                                append(error.message ?: "Playback error")
+                                val cause = error.cause
+                                if (cause is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                                    append(" (HTTP ${cause.responseCode})")
+                                } else if (cause != null) {
+                                    append(": ${cause.message}")
+                                }
+                                append(" [${error.errorCode}]")
+                            }
+                            _uiState.update {
                                 it.copy(
-                                    error = error.message ?: "Playback error occurred",
+                                    error = detailedError,
                                     showLoadingOverlay = false,
                                     showPauseOverlay = false
                                 )
@@ -777,6 +785,8 @@ class PlayerViewModel @Inject constructor(
             .protocols(listOf(Protocol.HTTP_1_1))
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .build()
             .also { okHttpClient = it }
     }
