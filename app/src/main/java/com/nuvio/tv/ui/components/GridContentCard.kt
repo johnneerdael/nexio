@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
@@ -38,6 +40,10 @@ fun GridContentCard(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null
 ) {
+    val density = LocalDensity.current
+    val requestWidthPx = remember(density) { with(density) { 240.dp.roundToPx() } }
+    val requestHeightPx = remember(density) { with(density) { 360.dp.roundToPx() } }
+
     Column(
         modifier = modifier.fillMaxWidth()
     ) {
@@ -71,7 +77,8 @@ fun GridContentCard(
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(item.poster)
-                        .crossfade(true)
+                        .crossfade(false)
+                        .size(width = requestWidthPx, height = requestHeightPx)
                         .build(),
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),

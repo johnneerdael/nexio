@@ -35,7 +35,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -155,6 +157,13 @@ fun HeroCarousel(
 private fun HeroCarouselSlide(
     item: MetaPreview
 ) {
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val requestWidthPx = remember(configuration.screenWidthDp, density) {
+        with(density) { configuration.screenWidthDp.dp.roundToPx() }
+    }
+    val requestHeightPx = remember(density) { with(density) { 400.dp.roundToPx() } }
+
     val bgColor = NuvioColors.Background
     val bottomGradient = remember(bgColor) {
         Brush.verticalGradient(
@@ -186,7 +195,8 @@ private fun HeroCarouselSlide(
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(item.background ?: item.poster)
-                .crossfade(true)
+                .crossfade(false)
+                .size(width = requestWidthPx, height = requestHeightPx)
                 .build(),
             contentDescription = item.name,
             modifier = Modifier.fillMaxSize(),
@@ -219,7 +229,8 @@ private fun HeroCarouselSlide(
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(item.logo)
-                        .crossfade(true)
+                        .crossfade(false)
+                        .size(width = requestWidthPx, height = with(density) { 80.dp.roundToPx() })
                         .build(),
                     contentDescription = item.name,
                     modifier = Modifier

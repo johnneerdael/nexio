@@ -116,11 +116,6 @@ fun GridHomeContent(
         }
     }
 
-    // Pre-compute section bounds once when gridItems changes (not on every scroll)
-    val sectionBounds = remember(uiState.gridItems, continueWatchingOffset) {
-        buildSectionBounds(uiState.gridItems, continueWatchingOffset)
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         TvLazyVerticalGrid(
             state = gridState,
@@ -376,12 +371,14 @@ private data class SectionInfo(
 private class SectionMapping(
     private val indexToSection: Map<Int, SectionInfo>
 ) {
+    private val sortedSectionStarts = indexToSection.keys.sorted()
+
     fun findSectionForIndex(index: Int): SectionInfo? {
-        // Find the section for the given index by searching backwards
-        for (i in index downTo 0) {
-            indexToSection[i]?.let { return it }
-        }
-        return null
+        if (sortedSectionStarts.isEmpty()) return null
+        val insertionPoint = sortedSectionStarts.binarySearch(index)
+        val targetIdx = if (insertionPoint >= 0) insertionPoint else (-insertionPoint - 2)
+        if (targetIdx < 0) return null
+        return indexToSection[sortedSectionStarts[targetIdx]]
     }
 }
 
@@ -398,40 +395,4 @@ private fun buildSectionMapping(gridItems: List<GridItem>, indexOffset: Int = 0)
         }
     }
     return SectionMapping(mapping)
-}
-
-private data class SectionBound(
-    val catalogId: String,
-    val addonId: String,
-    val lastContentIndex: Int
-)
-
-private fun buildSectionBounds(gridItems: List<GridItem>, indexOffset: Int = 0): List<SectionBound> {
-    val bounds = mutableListOf<SectionBound>()
-    var currentCatalogId: String? = null
-    var currentAddonId: String? = null
-    var lastContentIndex = 0
-
-    fun flushSection() {
-        val catId = currentCatalogId ?: return
-        val addId = currentAddonId ?: return
-        bounds.add(SectionBound(catId, addId, lastContentIndex))
-    }
-
-    gridItems.forEachIndexed { index, item ->
-        when (item) {
-            is GridItem.SectionDivider -> {
-                flushSection()
-                currentCatalogId = item.catalogId
-                currentAddonId = item.addonId
-            }
-            is GridItem.Content -> {
-                lastContentIndex = index + indexOffset
-            }
-            is GridItem.Hero -> { /* skip */ }
-            is GridItem.SeeAll -> { /* skip */ }
-        }
-    }
-    flushSection()
-    return bounds
 }

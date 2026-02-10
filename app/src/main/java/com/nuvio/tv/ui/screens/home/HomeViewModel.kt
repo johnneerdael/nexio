@@ -414,7 +414,18 @@ class HomeViewModel @Inject constructor(
         // Full (untruncated) rows for CatalogSeeAllScreen
         val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
 
-        _uiState.value = _uiState.value.copy(
+        val currentState = _uiState.value
+        if (
+            currentState.catalogRows == displayRows &&
+            currentState.fullCatalogRows == fullRows &&
+            currentState.heroItems == heroItems &&
+            currentState.gridItems == gridItems &&
+            !currentState.isLoading
+        ) {
+            return
+        }
+
+        _uiState.value = currentState.copy(
             catalogRows = displayRows,
             fullCatalogRows = fullRows,
             heroItems = heroItems,
