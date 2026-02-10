@@ -34,23 +34,23 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
-private val CardShape = RoundedCornerShape(8.dp)
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ContentCard(
     item: MetaPreview,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onClick: () -> Unit = {}
 ) {
+    val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val cardWidth = when (item.posterShape) {
-        PosterShape.POSTER -> 140.dp
+        PosterShape.POSTER -> posterCardStyle.width
         PosterShape.LANDSCAPE -> 260.dp
         PosterShape.SQUARE -> 170.dp
     }
     val cardHeight = when (item.posterShape) {
-        PosterShape.POSTER -> 210.dp
+        PosterShape.POSTER -> posterCardStyle.height
         PosterShape.LANDSCAPE -> 148.dp
         PosterShape.SQUARE -> 170.dp
     }
@@ -70,24 +70,24 @@ fun ContentCard(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
                     else Modifier
                 ),
-            shape = CardDefaults.shape(shape = CardShape),
+            shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
                 focusedContainerColor = NuvioColors.BackgroundCard
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                    shape = CardShape
+                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                    shape = cardShape
                 )
             ),
-            scale = CardDefaults.scale(focusedScale = 1.02f)
+            scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(cardHeight)
-                    .clip(CardShape)
+                    .clip(cardShape)
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)

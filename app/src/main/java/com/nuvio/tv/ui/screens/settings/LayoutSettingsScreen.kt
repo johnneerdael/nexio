@@ -94,7 +94,9 @@ fun LayoutSettingsContent(
         buildList {
             add(LayoutSettingsSection.SidebarToggle)
             add(LayoutSettingsSection.HeroSectionToggle)
+            add(LayoutSettingsSection.DiscoverToggle)
             add(LayoutSettingsSection.LayoutCards)
+            add(LayoutSettingsSection.PosterCards)
             if (uiState.availableCatalogs.isNotEmpty()) {
                 add(LayoutSettingsSection.HeroCatalog)
             }
@@ -149,6 +151,14 @@ fun LayoutSettingsContent(
                         }
                     )
                 }
+                LayoutSettingsSection.DiscoverToggle -> {
+                    DiscoverToggle(
+                        isEnabled = uiState.searchDiscoverEnabled,
+                        onToggle = {
+                            viewModel.onEvent(LayoutSettingsEvent.SetSearchDiscoverEnabled(!uiState.searchDiscoverEnabled))
+                        }
+                    )
+                }
                 LayoutSettingsSection.HeroCatalog -> {
                     Text(
                         text = "Hero Catalog",
@@ -177,6 +187,21 @@ fun LayoutSettingsContent(
                         }
                     }
                 }
+                LayoutSettingsSection.PosterCards -> {
+                    PosterCardStyleSettings(
+                        widthDp = uiState.posterCardWidthDp,
+                        cornerRadiusDp = uiState.posterCardCornerRadiusDp,
+                        onWidthSelected = { width ->
+                            viewModel.onEvent(LayoutSettingsEvent.SetPosterCardWidth(width))
+                        },
+                        onCornerRadiusSelected = { radius ->
+                            viewModel.onEvent(LayoutSettingsEvent.SetPosterCardCornerRadius(radius))
+                        },
+                        onReset = {
+                            viewModel.onEvent(LayoutSettingsEvent.ResetPosterCardStyle)
+                        }
+                    )
+                }
             }
         }
     }
@@ -186,6 +211,8 @@ private enum class LayoutSettingsSection {
     LayoutCards,
     SidebarToggle,
     HeroSectionToggle,
+    DiscoverToggle,
+    PosterCards,
     HeroCatalog
 }
 
@@ -419,6 +446,76 @@ private fun HeroSectionToggle(
 }
 
 @Composable
+private fun DiscoverToggle(
+    isEnabled: Boolean,
+    onToggle: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onToggle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused },
+        colors = CardDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
+        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+        scale = CardDefaults.scale(focusedScale = 1.0f, pressedScale = 1.0f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Show Discover in Search",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Show featured browse section when search field is empty",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextTertiary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .width(48.dp)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (isEnabled) NuvioColors.FocusRing else Color.White.copy(alpha = 0.15f)
+                    )
+                    .padding(3.dp),
+                contentAlignment = if (isEnabled) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CatalogChip(
     catalogInfo: CatalogInfo,
     isSelected: Boolean,
@@ -464,3 +561,152 @@ private fun CatalogChip(
         }
     }
 }
+
+@Composable
+private fun PosterCardStyleSettings(
+    widthDp: Int,
+    cornerRadiusDp: Int,
+    onWidthSelected: (Int) -> Unit,
+    onCornerRadiusSelected: (Int) -> Unit,
+    onReset: () -> Unit
+) {
+    val widthOptions = listOf(
+        PresetOption("Compact", 104),
+        PresetOption("Dense", 112),
+        PresetOption("Standard", 120),
+        PresetOption("Balanced", 126),
+        PresetOption("Comfort", 134),
+        PresetOption("Large", 140)
+    )
+    val radiusOptions = listOf(
+        PresetOption("Sharp", 0),
+        PresetOption("Subtle", 4),
+        PresetOption("Classic", 8),
+        PresetOption("Rounded", 12),
+        PresetOption("Pill", 16)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+    ) {
+        Text(
+            text = "Poster Card Style",
+            style = MaterialTheme.typography.titleMedium,
+            color = NuvioColors.TextPrimary
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "Customize poster width and corner radius (height is auto 2:3)",
+            style = MaterialTheme.typography.bodySmall,
+            color = NuvioColors.TextSecondary
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+        OptionRow(
+            title = "Width",
+            selectedValue = widthDp,
+            options = widthOptions,
+            onSelected = onWidthSelected
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OptionRow(
+            title = "Corner Radius",
+            selectedValue = cornerRadiusDp,
+            options = radiusOptions,
+            onSelected = onCornerRadiusSelected
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = onReset,
+            shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                focusedContainerColor = NuvioColors.FocusBackground
+            ),
+            border = ButtonDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                    shape = RoundedCornerShape(10.dp)
+                )
+            )
+        ) {
+            Text(
+                text = "Reset to Default",
+                style = MaterialTheme.typography.labelLarge,
+                color = NuvioColors.TextPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun OptionRow(
+    title: String,
+    selectedValue: Int,
+    options: List<PresetOption>,
+    onSelected: (Int) -> Unit
+) {
+    val selectedLabel = options.firstOrNull { it.value == selectedValue }?.label ?: "Custom"
+    Text(
+        text = "$title ($selectedLabel)",
+        style = MaterialTheme.typography.labelLarge,
+        color = NuvioColors.TextSecondary
+    )
+    Spacer(modifier = Modifier.height(6.dp))
+
+    LazyRow(
+        contentPadding = PaddingValues(end = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(options) { option ->
+            ValueChip(
+                label = option.label,
+                isSelected = option.value == selectedValue,
+                onClick = { onSelected(option.value) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ValueChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = onClick,
+        modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
+        shape = ButtonDefaults.shape(shape = RoundedCornerShape(14.dp)),
+        colors = ButtonDefaults.colors(
+            containerColor = if (isSelected) NuvioColors.FocusRing.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = ButtonDefaults.border(
+            border = if (isSelected) Border(
+                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(14.dp)
+            ) else Border.None,
+            focusedBorder = Border(
+                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(14.dp)
+            )
+        )
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+        )
+    }
+}
+
+private data class PresetOption(
+    val label: String,
+    val value: Int
+)

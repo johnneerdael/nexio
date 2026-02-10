@@ -64,6 +64,7 @@ class HomeViewModel @Inject constructor(
         loadLayoutPreference()
         loadHeroCatalogPreference()
         loadHeroSectionPreference()
+        loadPosterCardStylePreferences()
         loadContinueWatching()
         observeInstalledAddons()
     }
@@ -90,6 +91,24 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.heroSectionEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(heroSectionEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadPosterCardStylePreferences() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
+                _uiState.update { it.copy(posterCardWidthDp = widthDp) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
+                _uiState.update { it.copy(posterCardHeightDp = heightDp) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
+                _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
             }
         }
     }

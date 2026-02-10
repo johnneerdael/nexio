@@ -20,11 +20,13 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.ui.components.CatalogRowSection
 import com.nuvio.tv.ui.components.ContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
+import com.nuvio.tv.ui.components.PosterCardStyle
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ClassicHomeContent(
     uiState: HomeUiState,
+    posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
@@ -141,6 +143,7 @@ fun ClassicHomeContent(
 
             CatalogRowSection(
                 catalogRow = catalogRow,
+                posterCardStyle = posterCardStyle,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },

@@ -8,14 +8,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.ui.components.PosterCardDefaults
+import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -27,6 +31,14 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val focusState by viewModel.focusState.collectAsState()
     val gridFocusState by viewModel.gridFocusState.collectAsState()
+    val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
+    val posterCardStyle = PosterCardStyle(
+        width = uiState.posterCardWidthDp.dp,
+        height = computedHeightDp.dp,
+        cornerRadius = uiState.posterCardCornerRadiusDp.dp,
+        focusedBorderWidth = PosterCardDefaults.Style.focusedBorderWidth,
+        focusedScale = PosterCardDefaults.Style.focusedScale
+    )
 
     Box(
         modifier = Modifier
@@ -76,6 +88,7 @@ fun HomeScreen(
                 when (uiState.homeLayout) {
                     HomeLayout.CLASSIC -> ClassicHomeContent(
                         uiState = uiState,
+                        posterCardStyle = posterCardStyle,
                         focusState = focusState,
                         onNavigateToDetail = onNavigateToDetail,
                         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
@@ -88,6 +101,7 @@ fun HomeScreen(
                     )
                     HomeLayout.GRID -> GridHomeContent(
                         uiState = uiState,
+                        posterCardStyle = posterCardStyle,
                         gridFocusState = gridFocusState,
                         onNavigateToDetail = onNavigateToDetail,
                         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,

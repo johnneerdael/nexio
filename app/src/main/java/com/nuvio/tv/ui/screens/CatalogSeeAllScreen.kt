@@ -35,10 +35,13 @@ import androidx.compose.foundation.layout.Box
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.PosterCardDefaults
+import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.screens.home.HomeEvent
 import com.nuvio.tv.ui.screens.home.HomeViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.math.roundToInt
 
 @Composable
 fun CatalogSeeAllScreen(
@@ -50,6 +53,14 @@ fun CatalogSeeAllScreen(
     onBackPress: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
+    val posterCardStyle = PosterCardStyle(
+        width = uiState.posterCardWidthDp.dp,
+        height = computedHeightDp.dp,
+        cornerRadius = uiState.posterCardCornerRadiusDp.dp,
+        focusedBorderWidth = PosterCardDefaults.Style.focusedBorderWidth,
+        focusedScale = PosterCardDefaults.Style.focusedScale
+    )
 
     BackHandler { onBackPress() }
 
@@ -116,7 +127,7 @@ fun CatalogSeeAllScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 TvLazyVerticalGrid(
                     state = gridState,
-                    columns = TvGridCells.Fixed(5),
+                    columns = TvGridCells.Adaptive(minSize = posterCardStyle.width),
                     contentPadding = PaddingValues(bottom = if (catalogRow.isLoading) 80.dp else 32.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -127,6 +138,7 @@ fun CatalogSeeAllScreen(
                     ) { _, item ->
                         GridContentCard(
                             item = item,
+                            posterCardStyle = posterCardStyle,
                             onClick = {
                                 onNavigateToDetail(
                                     item.id,

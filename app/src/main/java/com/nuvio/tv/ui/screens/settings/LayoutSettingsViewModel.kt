@@ -20,7 +20,11 @@ data class LayoutSettingsUiState(
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKey: String? = null,
     val sidebarCollapsedByDefault: Boolean = false,
-    val heroSectionEnabled: Boolean = true
+    val heroSectionEnabled: Boolean = true,
+    val searchDiscoverEnabled: Boolean = true,
+    val posterCardWidthDp: Int = 126,
+    val posterCardHeightDp: Int = 189,
+    val posterCardCornerRadiusDp: Int = 12
 )
 
 data class CatalogInfo(
@@ -34,6 +38,10 @@ sealed class LayoutSettingsEvent {
     data class SelectHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
     data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
+    data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
+    data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
 @HiltViewModel
@@ -71,6 +79,26 @@ class LayoutSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(heroSectionEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.searchDiscoverEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(searchDiscoverEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
+                _uiState.update { it.copy(posterCardWidthDp = widthDp) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
+                _uiState.update { it.copy(posterCardHeightDp = heightDp) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
+                _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
@@ -80,6 +108,10 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectHeroCatalog -> selectHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
             is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
+            is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
+            is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
+            is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
+            LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
 
@@ -104,6 +136,33 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setHeroSectionEnabled(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setHeroSectionEnabled(enabled)
+        }
+    }
+
+    private fun setSearchDiscoverEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setSearchDiscoverEnabled(enabled)
+        }
+    }
+
+    private fun setPosterCardWidth(widthDp: Int) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPosterCardWidthDp(widthDp)
+            layoutPreferenceDataStore.setPosterCardHeightDp((widthDp * 3) / 2)
+        }
+    }
+
+    private fun setPosterCardCornerRadius(cornerRadiusDp: Int) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPosterCardCornerRadiusDp(cornerRadiusDp)
+        }
+    }
+
+    private fun resetPosterCardStyle() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPosterCardWidthDp(126)
+            layoutPreferenceDataStore.setPosterCardHeightDp(189)
+            layoutPreferenceDataStore.setPosterCardCornerRadiusDp(12)
         }
     }
 

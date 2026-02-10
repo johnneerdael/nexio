@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nuvio.tv.domain.model.HomeLayout
@@ -27,6 +28,16 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val heroCatalogKey = stringPreferencesKey("hero_catalog_key")
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
+    private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
+    private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
+    private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
+    private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
+
+    private companion object {
+        const val DEFAULT_POSTER_CARD_WIDTH_DP = 126
+        const val DEFAULT_POSTER_CARD_HEIGHT_DP = 189
+        const val DEFAULT_POSTER_CARD_CORNER_RADIUS_DP = 12
+    }
 
     val selectedLayout: Flow<HomeLayout> = dataStore.data.map { prefs ->
         val layoutName = prefs[layoutKey] ?: HomeLayout.CLASSIC.name
@@ -53,6 +64,22 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[heroSectionEnabledKey] ?: true
     }
 
+    val searchDiscoverEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[searchDiscoverEnabledKey] ?: true
+    }
+
+    val posterCardWidthDp: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[posterCardWidthDpKey] ?: DEFAULT_POSTER_CARD_WIDTH_DP
+    }
+
+    val posterCardHeightDp: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[posterCardHeightDpKey] ?: DEFAULT_POSTER_CARD_HEIGHT_DP
+    }
+
+    val posterCardCornerRadiusDp: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[posterCardCornerRadiusDpKey] ?: DEFAULT_POSTER_CARD_CORNER_RADIUS_DP
+    }
+
     suspend fun setLayout(layout: HomeLayout) {
         dataStore.edit { prefs ->
             prefs[layoutKey] = layout.name
@@ -75,6 +102,30 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setHeroSectionEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[heroSectionEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSearchDiscoverEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[searchDiscoverEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setPosterCardWidthDp(widthDp: Int) {
+        dataStore.edit { prefs ->
+            prefs[posterCardWidthDpKey] = widthDp
+        }
+    }
+
+    suspend fun setPosterCardHeightDp(heightDp: Int) {
+        dataStore.edit { prefs ->
+            prefs[posterCardHeightDpKey] = heightDp
+        }
+    }
+
+    suspend fun setPosterCardCornerRadiusDp(cornerRadiusDp: Int) {
+        dataStore.edit { prefs ->
+            prefs[posterCardCornerRadiusDpKey] = cornerRadiusDp
         }
     }
 }

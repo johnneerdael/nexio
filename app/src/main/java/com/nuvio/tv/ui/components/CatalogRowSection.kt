@@ -43,14 +43,13 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.ui.theme.NuvioColors
 
-private val SeeAllCardShape = RoundedCornerShape(8.dp)
-
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun CatalogRowSection(
     catalogRow: CatalogRow,
     onItemClick: (String, String, String) -> Unit,
     onSeeAll: () -> Unit = {},
+    posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     modifier: Modifier = Modifier,
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
@@ -58,8 +57,7 @@ fun CatalogRowSection(
     upFocusRequester: FocusRequester? = null,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
-
-
+    val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
@@ -115,6 +113,7 @@ fun CatalogRowSection(
             ) { index, item ->
                 ContentCard(
                     item = item,
+                    posterCardStyle = posterCardStyle,
                     onClick = { onItemClick(item.id, item.type.toApiString(), catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
@@ -139,8 +138,8 @@ fun CatalogRowSection(
                     Card(
                         onClick = onSeeAll,
                         modifier = Modifier
-                            .width(140.dp)
-                            .height(210.dp)
+                            .width(posterCardStyle.width)
+                            .height(posterCardStyle.height)
                             .then(
                                 if (upFocusRequester != null) {
                                     Modifier.focusProperties { up = upFocusRequester }
@@ -148,18 +147,18 @@ fun CatalogRowSection(
                                     Modifier
                                 }
                             ),
-                        shape = CardDefaults.shape(shape = SeeAllCardShape),
+                        shape = CardDefaults.shape(shape = seeAllCardShape),
                         colors = CardDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,
                             focusedContainerColor = NuvioColors.BackgroundCard
                         ),
                         border = CardDefaults.border(
                             focusedBorder = Border(
-                                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                                shape = SeeAllCardShape
+                                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                                shape = seeAllCardShape
                             )
                         ),
-                        scale = CardDefaults.scale(focusedScale = 1.02f)
+                        scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),

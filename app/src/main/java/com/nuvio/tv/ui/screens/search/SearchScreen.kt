@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,13 +28,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.ui.components.CatalogRowSection
 import com.nuvio.tv.ui.components.EmptyScreenState
@@ -47,14 +46,30 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val searchFocusRequester = remember { FocusRequester() }
+    val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var focusResults by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.query) {
         focusResults = false
     }
 
-    val canMoveToResults = uiState.query.trim().length >= 2 &&
-        uiState.catalogRows.any { it.items.isNotEmpty() }
+    val isDiscoverMode = uiState.discoverEnabled && uiState.query.trim().isEmpty()
+    val canMoveToResults = if (isDiscoverMode) {
+        uiState.discoverResults.isNotEmpty()
+    } else {
+        uiState.query.trim().length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
+    }
+
+    LaunchedEffect(focusResults, isDiscoverMode, uiState.discoverResults.size) {
+        if (focusResults && isDiscoverMode && uiState.discoverResults.isNotEmpty()) {
+            kotlinx.coroutines.delay(100)
+            try {
+                discoverFirstItemFocusRequester.requestFocus()
+            } catch (_: Exception) {
+            }
+            focusResults = false
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -65,7 +80,7 @@ fun SearchScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp)
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
                 OutlinedTextField(
@@ -109,76 +124,96 @@ fun SearchScreen(
                 )
             }
 
-            when {
-                uiState.query.trim().length < 2 -> {
-                    item {
-                        EmptyScreenState(
-                            title = "Start Searching",
-                            subtitle = "Type at least 2 characters to search",
-                            icon = Icons.Default.Search
-                        )
-                    }
+            if (isDiscoverMode) {
+                item {
+                    DiscoverSection(
+                        uiState = uiState,
+                        focusResults = focusResults,
+                        firstItemFocusRequester = discoverFirstItemFocusRequester,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onSelectType = { viewModel.onEvent(SearchEvent.SelectDiscoverType(it)) },
+                        onSelectCatalog = { viewModel.onEvent(SearchEvent.SelectDiscoverCatalog(it)) },
+                        onSelectGenre = { viewModel.onEvent(SearchEvent.SelectDiscoverGenre(it)) },
+                        onShowMore = { viewModel.onEvent(SearchEvent.ShowMoreDiscoverResults) },
+                        onLoadMore = { viewModel.onEvent(SearchEvent.LoadMoreDiscoverResults) }
+                    )
                 }
-
-                uiState.isSearching && uiState.catalogRows.isEmpty() -> {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 80.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingIndicator()
+            } else {
+                when {
+                    uiState.query.trim().length < 2 -> {
+                        item {
+                            EmptyScreenState(
+                                title = "Start Searching",
+                                subtitle = if (uiState.discoverEnabled) {
+                                    "Type at least 2 characters to search"
+                                } else {
+                                    "Discover is disabled. Type at least 2 characters to search"
+                                },
+                                icon = Icons.Default.Search
+                            )
                         }
                     }
-                }
 
-                uiState.error != null && uiState.catalogRows.isEmpty() -> {
-                    item {
-                        ErrorState(
-                            message = uiState.error ?: "Search failed",
-                            onRetry = { viewModel.onEvent(SearchEvent.Retry) }
-                        )
-                    }
-                }
-
-                uiState.catalogRows.isEmpty() || uiState.catalogRows.none { it.items.isNotEmpty() } -> {
-                    item {
-                        EmptyScreenState(
-                            title = "No Results",
-                            subtitle = "Try searching with different keywords",
-                            icon = Icons.Default.Search
-                        )
-                    }
-                }
-
-                else -> {
-                    val visibleCatalogRows = uiState.catalogRows.filter { it.items.isNotEmpty() }
-
-                    itemsIndexed(
-                        items = visibleCatalogRows,
-                        key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}_${uiState.query.trim()}" }
-                    ) { index, catalogRow ->
-                        CatalogRowSection(
-                            catalogRow = catalogRow,
-                            focusedItemIndex = if (focusResults && index == 0) 0 else -1,
-                            onItemFocused = {
-                                if (focusResults) {
-                                    focusResults = false
-                                }
-                            },
-                            upFocusRequester = if (index == 0) searchFocusRequester else null,
-                            onItemClick = { id, type, addonBaseUrl ->
-                                onNavigateToDetail(id, type, addonBaseUrl)
-                            },
-                            onSeeAll = {
-                                onNavigateToSeeAll(
-                                    catalogRow.catalogId,
-                                    catalogRow.addonId,
-                                    catalogRow.type.toApiString()
-                                )
+                    uiState.isSearching && uiState.catalogRows.isEmpty() -> {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 80.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                LoadingIndicator()
                             }
-                        )
+                        }
+                    }
+
+                    uiState.error != null && uiState.catalogRows.isEmpty() -> {
+                        item {
+                            ErrorState(
+                                message = uiState.error ?: "Search failed",
+                                onRetry = { viewModel.onEvent(SearchEvent.Retry) }
+                            )
+                        }
+                    }
+
+                    uiState.catalogRows.isEmpty() || uiState.catalogRows.none { it.items.isNotEmpty() } -> {
+                        item {
+                            EmptyScreenState(
+                                title = "No Results",
+                                subtitle = "Try searching with different keywords",
+                                icon = Icons.Default.Search
+                            )
+                        }
+                    }
+
+                    else -> {
+                        val visibleCatalogRows = uiState.catalogRows.filter { it.items.isNotEmpty() }
+
+                        itemsIndexed(
+                            items = visibleCatalogRows,
+                            key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}_${uiState.query.trim()}" }
+                        ) { index, catalogRow ->
+                            CatalogRowSection(
+                                catalogRow = catalogRow,
+                                focusedItemIndex = if (focusResults && index == 0) 0 else -1,
+                                onItemFocused = {
+                                    if (focusResults) {
+                                        focusResults = false
+                                    }
+                                },
+                                upFocusRequester = if (index == 0) searchFocusRequester else null,
+                                onItemClick = { id, type, addonBaseUrl ->
+                                    onNavigateToDetail(id, type, addonBaseUrl)
+                                },
+                                onSeeAll = {
+                                    onNavigateToSeeAll(
+                                        catalogRow.catalogId,
+                                        catalogRow.addonId,
+                                        catalogRow.type.toApiString()
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
             }

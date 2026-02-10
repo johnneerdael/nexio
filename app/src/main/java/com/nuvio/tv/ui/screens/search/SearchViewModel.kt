@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
@@ -23,7 +25,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
-    private val catalogRepository: CatalogRepository
+    private val catalogRepository: CatalogRepository,
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -34,6 +37,33 @@ class SearchViewModel @Inject constructor(
 
     private var debounceJob: Job? = null
     private var activeSearchJobs: List<Job> = emptyList()
+    private var discoverJob: Job? = null
+
+    private companion object {
+        const val DISCOVER_INITIAL_LIMIT = 100
+        const val DISCOVER_SHOW_MORE_BATCH = 50
+    }
+
+    init {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.searchDiscoverEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(discoverEnabled = enabled) }
+                if (enabled) {
+                    loadDiscoverCatalogs()
+                } else {
+                    discoverJob?.cancel()
+                    _uiState.update {
+                        it.copy(
+                            discoverLoading = false,
+                            discoverLoadingMore = false,
+                            discoverResults = emptyList(),
+                            pendingDiscoverResults = emptyList()
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     fun onEvent(event: SearchEvent) {
         when (event) {
@@ -43,6 +73,11 @@ class SearchViewModel @Inject constructor(
                 addonId = event.addonId,
                 type = event.type
             )
+            is SearchEvent.SelectDiscoverType -> selectDiscoverType(event.type)
+            is SearchEvent.SelectDiscoverCatalog -> selectDiscoverCatalog(event.catalogKey)
+            is SearchEvent.SelectDiscoverGenre -> selectDiscoverGenre(event.genre)
+            SearchEvent.ShowMoreDiscoverResults -> showMoreDiscoverResults()
+            SearchEvent.LoadMoreDiscoverResults -> loadMoreDiscoverResults()
             SearchEvent.Retry -> performSearch(uiState.value.query)
         }
     }
@@ -74,6 +109,11 @@ class SearchViewModel @Inject constructor(
                     error = null,
                     catalogRows = emptyList()
                 )
+            }
+            if (_uiState.value.discoverEnabled && !_uiState.value.discoverInitialized) {
+                viewModelScope.launch {
+                    loadDiscoverCatalogs()
+                }
             }
             return
         }
@@ -224,6 +264,222 @@ class SearchViewModel @Inject constructor(
                 catalogRows = orderedRows
             )
         }
+    }
+
+    private suspend fun loadDiscoverCatalogs() {
+        if (!_uiState.value.discoverEnabled) return
+        _uiState.update { it.copy(discoverLoading = true) }
+        val addons = try {
+            addonRepository.getInstalledAddons().first()
+        } catch (_: Exception) {
+            _uiState.update { it.copy(discoverInitialized = true, discoverLoading = false) }
+            return
+        }
+
+        val discoverCatalogs = addons.flatMap { addon ->
+            addon.catalogs
+                .filter { catalog ->
+                    (catalog.type.toApiString() == "movie" || catalog.type.toApiString() == "series") &&
+                        !catalog.extra.any { it.name == "search" && it.isRequired }
+                }
+                .map { catalog ->
+                    val genres = catalog.extra
+                        .firstOrNull { it.name == "genre" }
+                        ?.options
+                        .orEmpty()
+                    DiscoverCatalog(
+                        key = "${addon.id}_${catalog.type.toApiString()}_${catalog.id}",
+                        addonId = addon.id,
+                        addonName = addon.name,
+                        addonBaseUrl = addon.baseUrl,
+                        catalogId = catalog.id,
+                        catalogName = catalog.name,
+                        type = catalog.type.toApiString(),
+                        genres = genres,
+                        supportsSkip = catalog.extra.any { it.name == "skip" }
+                    )
+                }
+        }
+
+        val selectedType = _uiState.value.selectedDiscoverType
+        val selectedCatalog = pickDiscoverCatalog(
+            catalogs = discoverCatalogs,
+            selectedType = selectedType,
+            preferredKey = _uiState.value.selectedDiscoverCatalogKey
+        )
+        val selectedGenre: String? = null
+
+        _uiState.update {
+            it.copy(
+                installedAddons = addons,
+                discoverCatalogs = discoverCatalogs,
+                selectedDiscoverCatalogKey = selectedCatalog?.key,
+                selectedDiscoverGenre = selectedGenre,
+                discoverInitialized = true,
+                discoverLoading = false,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList(),
+                discoverHasMore = true,
+                discoverPage = 1
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun selectDiscoverType(type: String) {
+        val catalogs = _uiState.value.discoverCatalogs
+        val selectedCatalog = pickDiscoverCatalog(
+            catalogs = catalogs,
+            selectedType = type,
+            preferredKey = _uiState.value.selectedDiscoverCatalogKey
+        )
+        val selectedGenre: String? = null
+        _uiState.update {
+            it.copy(
+                selectedDiscoverType = type,
+                selectedDiscoverCatalogKey = selectedCatalog?.key,
+                selectedDiscoverGenre = selectedGenre,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList(),
+                discoverPage = 1,
+                discoverHasMore = true
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun selectDiscoverCatalog(catalogKey: String) {
+        val catalog = _uiState.value.discoverCatalogs.firstOrNull { it.key == catalogKey } ?: return
+        _uiState.update {
+            it.copy(
+                selectedDiscoverCatalogKey = catalog.key,
+                selectedDiscoverType = catalog.type,
+                selectedDiscoverGenre = null,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList(),
+                discoverPage = 1,
+                discoverHasMore = true
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun selectDiscoverGenre(genre: String?) {
+        _uiState.update {
+            it.copy(
+                selectedDiscoverGenre = genre,
+                discoverResults = emptyList(),
+                pendingDiscoverResults = emptyList(),
+                discoverPage = 1,
+                discoverHasMore = true
+            )
+        }
+        fetchDiscoverContent(reset = true)
+    }
+
+    private fun showMoreDiscoverResults() {
+        val pending = _uiState.value.pendingDiscoverResults
+        if (pending.isEmpty()) return
+        val nextBatch = pending.take(DISCOVER_SHOW_MORE_BATCH)
+        val remaining = pending.drop(DISCOVER_SHOW_MORE_BATCH)
+        _uiState.update {
+            it.copy(
+                discoverResults = it.discoverResults + nextBatch,
+                pendingDiscoverResults = remaining
+            )
+        }
+    }
+
+    private fun loadMoreDiscoverResults() {
+        val state = _uiState.value
+        if (state.query.trim().isNotEmpty()) return
+        if (!state.discoverHasMore || state.discoverLoadingMore || state.pendingDiscoverResults.isNotEmpty()) return
+        fetchDiscoverContent(reset = false)
+    }
+
+    private fun fetchDiscoverContent(reset: Boolean) {
+        discoverJob?.cancel()
+        discoverJob = viewModelScope.launch {
+            val state = _uiState.value
+            if (state.query.trim().isNotEmpty()) return@launch
+            val selectedCatalog = state.discoverCatalogs.firstOrNull { it.key == state.selectedDiscoverCatalogKey }
+                ?: return@launch
+
+            if (reset) {
+                _uiState.update {
+                    it.copy(
+                        discoverLoading = true,
+                        discoverResults = emptyList(),
+                        pendingDiscoverResults = emptyList(),
+                        discoverPage = 1,
+                        discoverHasMore = true
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(discoverLoadingMore = true) }
+            }
+
+            val currentPage = if (reset) 1 else state.discoverPage + 1
+            val skip = if (currentPage <= 1) 0 else state.discoverResults.size + state.pendingDiscoverResults.size
+            val extraArgs = buildMap<String, String> {
+                state.selectedDiscoverGenre?.takeIf { it.isNotBlank() }?.let { put("genre", it) }
+            }
+
+            catalogRepository.getCatalog(
+                addonBaseUrl = selectedCatalog.addonBaseUrl,
+                addonId = selectedCatalog.addonId,
+                addonName = selectedCatalog.addonName,
+                catalogId = selectedCatalog.catalogId,
+                catalogName = selectedCatalog.catalogName,
+                type = selectedCatalog.type,
+                skip = skip,
+                extraArgs = extraArgs,
+                supportsSkip = selectedCatalog.supportsSkip
+            ).collect { result ->
+                when (result) {
+                    is NetworkResult.Success -> {
+                        val incoming = result.data.items
+                        val merged = if (reset) {
+                            incoming
+                        } else {
+                            (_uiState.value.discoverResults + _uiState.value.pendingDiscoverResults + incoming)
+                        }
+                        val deduped = merged.distinctBy { "${it.type.toApiString()}:${it.id}" }
+                        val visible = deduped.take(DISCOVER_INITIAL_LIMIT)
+                        val pending = deduped.drop(DISCOVER_INITIAL_LIMIT)
+                        _uiState.update {
+                            it.copy(
+                                discoverLoading = false,
+                                discoverLoadingMore = false,
+                                discoverResults = visible,
+                                pendingDiscoverResults = pending,
+                                discoverHasMore = result.data.hasMore,
+                                discoverPage = currentPage
+                            )
+                        }
+                    }
+                    is NetworkResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                discoverLoading = false,
+                                discoverLoadingMore = false,
+                                discoverHasMore = false
+                            )
+                        }
+                    }
+                    NetworkResult.Loading -> Unit
+                }
+            }
+        }
+    }
+
+    private fun pickDiscoverCatalog(
+        catalogs: List<DiscoverCatalog>,
+        selectedType: String,
+        preferredKey: String?
+    ): DiscoverCatalog? {
+        val filtered = catalogs.filter { it.type == selectedType }
+        return filtered.firstOrNull { it.key == preferredKey } ?: filtered.firstOrNull()
     }
 
     private fun buildSearchTargets(addons: List<Addon>): List<Pair<Addon, CatalogDescriptor>> {

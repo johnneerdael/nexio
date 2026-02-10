@@ -30,19 +30,19 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
-private val GridCardShape = RoundedCornerShape(8.dp)
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun GridContentCard(
     item: MetaPreview,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     focusRequester: FocusRequester? = null
 ) {
+    val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val density = LocalDensity.current
-    val requestWidthPx = remember(density) { with(density) { 240.dp.roundToPx() } }
-    val requestHeightPx = remember(density) { with(density) { 360.dp.roundToPx() } }
+    val requestWidthPx = remember(density, posterCardStyle.width) { with(density) { posterCardStyle.width.roundToPx() } }
+    val requestHeightPx = remember(density, posterCardStyle.height) { with(density) { posterCardStyle.height.roundToPx() } }
 
     Column(
         modifier = modifier.fillMaxWidth()
@@ -51,28 +51,28 @@ fun GridContentCard(
             onClick = onClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .aspectRatio(posterCardStyle.aspectRatio)
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
                     else Modifier
                 ),
-            shape = CardDefaults.shape(shape = GridCardShape),
+            shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
                 focusedContainerColor = NuvioColors.BackgroundCard
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                    shape = GridCardShape
+                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                    shape = cardShape
                 )
             ),
-            scale = CardDefaults.scale(focusedScale = 1.02f)
+            scale = CardDefaults.scale(focusedScale = posterCardStyle.focusedScale)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(GridCardShape)
+                    .clip(cardShape)
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)

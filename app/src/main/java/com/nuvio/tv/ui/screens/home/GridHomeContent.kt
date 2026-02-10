@@ -49,10 +49,10 @@ import androidx.tv.material3.Icon
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.GridContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
+import com.nuvio.tv.ui.components.PosterCardDefaults
+import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.flow.distinctUntilChanged
-
-private const val GRID_COLUMNS = 5
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -62,6 +62,7 @@ fun GridHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String) -> Unit,
+    posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
     val gridState = rememberTvLazyGridState(
@@ -119,7 +120,7 @@ fun GridHomeContent(
     Box(modifier = Modifier.fillMaxSize()) {
         TvLazyVerticalGrid(
             state = gridState,
-            columns = TvGridCells.Fixed(GRID_COLUMNS),
+            columns = TvGridCells.Adaptive(minSize = posterCardStyle.width),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 24.dp,
@@ -207,6 +208,7 @@ fun GridHomeContent(
                         ) {
                             GridContentCard(
                                 item = gridItem.item,
+                                posterCardStyle = posterCardStyle,
                                 onClick = {
                                     onNavigateToDetail(
                                         gridItem.item.id,
@@ -225,6 +227,7 @@ fun GridHomeContent(
                             contentType = "see_all"
                         ) {
                             SeeAllGridCard(
+                                posterCardStyle = posterCardStyle,
                                 onClick = {
                                     onNavigateToCatalogSeeAll(
                                         gridItem.catalogId,
@@ -310,15 +313,17 @@ private fun StickyCategoryHeader(
 @Composable
 private fun SeeAllGridCard(
     onClick: () -> Unit,
+    posterCardStyle: PosterCardStyle,
     modifier: Modifier = Modifier
 ) {
+    val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     Card(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(2f / 3f),
+            .aspectRatio(posterCardStyle.aspectRatio),
         shape = CardDefaults.shape(
-            shape = RoundedCornerShape(8.dp)
+            shape = seeAllCardShape
         ),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
@@ -326,12 +331,12 @@ private fun SeeAllGridCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(8.dp)
+                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                shape = seeAllCardShape
             )
         ),
         scale = CardDefaults.scale(
-            focusedScale = 1.02f
+            focusedScale = posterCardStyle.focusedScale
         )
     ) {
         Box(

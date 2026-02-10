@@ -19,6 +19,9 @@ data class HomeUiState(
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKey: String? = null,
     val heroSectionEnabled: Boolean = true,
+    val posterCardWidthDp: Int = 126,
+    val posterCardHeightDp: Int = 189,
+    val posterCardCornerRadiusDp: Int = 12,
     val gridItems: List<GridItem> = emptyList()
 )
 
