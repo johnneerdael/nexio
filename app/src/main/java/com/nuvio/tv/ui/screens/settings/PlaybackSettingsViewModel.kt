@@ -3,26 +3,46 @@ package com.nuvio.tv.ui.screens.settings
 import android.app.ActivityManager
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
+import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
-    private val trailerSettingsDataStore: TrailerSettingsDataStore
+    private val trailerSettingsDataStore: TrailerSettingsDataStore,
+    private val addonRepository: AddonRepository,
+    private val pluginManager: PluginManager
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
+    val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
+        addons.map { it.name }.distinct().sorted()
+    }
+    val enabledPluginNames: Flow<List<String>> = combine(
+        pluginManager.pluginsEnabled,
+        pluginManager.scrapers
+    ) { pluginsEnabled, scrapers ->
+        if (!pluginsEnabled) {
+            emptyList()
+        } else {
+            scrapers.filter { it.enabled }.map { it.name }.distinct().sorted()
+        }
+    }
 
     suspend fun setTrailerEnabled(enabled: Boolean) {
         trailerSettingsDataStore.setEnabled(enabled)
@@ -181,6 +201,18 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
         playerSettingsDataStore.setStreamAutoPlayMode(mode)
+    }
+
+    suspend fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
+        playerSettingsDataStore.setStreamAutoPlaySource(source)
+    }
+
+    suspend fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
+        playerSettingsDataStore.setStreamAutoPlaySelectedAddons(addons)
+    }
+
+    suspend fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
+        playerSettingsDataStore.setStreamAutoPlaySelectedPlugins(plugins)
     }
 
     suspend fun setStreamAutoPlayRegex(regex: String) {

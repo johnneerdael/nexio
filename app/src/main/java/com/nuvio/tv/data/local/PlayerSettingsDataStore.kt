@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -136,6 +137,9 @@ data class PlayerSettings(
     val frameRateMatching: Boolean = false,
     // Stream selection settings
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
+    val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
+    val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
+    val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = ""
 )
 
@@ -143,6 +147,12 @@ enum class StreamAutoPlayMode {
     MANUAL,
     FIRST_STREAM,
     REGEX_MATCH
+}
+
+enum class StreamAutoPlaySource {
+    ALL_SOURCES,
+    INSTALLED_ADDONS_ONLY,
+    ENABLED_PLUGINS_ONLY
 }
 
 /**
@@ -179,6 +189,9 @@ class PlayerSettingsDataStore @Inject constructor(
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
     private val streamAutoPlayModeKey = stringPreferencesKey("stream_auto_play_mode")
+    private val streamAutoPlaySourceKey = stringPreferencesKey("stream_auto_play_source")
+    private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
+    private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
 
     // Subtitle style settings keys
@@ -246,6 +259,11 @@ class PlayerSettingsDataStore @Inject constructor(
             streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
                 runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
             } ?: StreamAutoPlayMode.MANUAL,
+            streamAutoPlaySource = prefs[streamAutoPlaySourceKey]?.let {
+                runCatching { StreamAutoPlaySource.valueOf(it) }.getOrDefault(StreamAutoPlaySource.ALL_SOURCES)
+            } ?: StreamAutoPlaySource.ALL_SOURCES,
+            streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
+            streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
             streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
@@ -341,6 +359,24 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
         dataStore.edit { prefs ->
             prefs[streamAutoPlayModeKey] = mode.name
+        }
+    }
+
+    suspend fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlaySourceKey] = source.name
+        }
+    }
+
+    suspend fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlaySelectedAddonsKey] = addons
+        }
+    }
+
+    suspend fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlaySelectedPluginsKey] = plugins
         }
     }
 

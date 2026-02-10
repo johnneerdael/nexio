@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
+import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
@@ -118,7 +119,11 @@ class StreamScreenViewModel @Inject constructor(
                                     selectAutoPlayStream(
                                         streams = allStreams,
                                         mode = playerSettings.streamAutoPlayMode,
-                                        regexPattern = playerSettings.streamAutoPlayRegex
+                                        regexPattern = playerSettings.streamAutoPlayRegex,
+                                        source = playerSettings.streamAutoPlaySource,
+                                        installedAddonNames = installedAddonOrder.toSet(),
+                                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                        selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins
                                     )
                                 },
                                 error = null
@@ -198,19 +203,37 @@ class StreamScreenViewModel @Inject constructor(
     private fun selectAutoPlayStream(
         streams: List<Stream>,
         mode: StreamAutoPlayMode,
-        regexPattern: String
+        regexPattern: String,
+        source: StreamAutoPlaySource,
+        installedAddonNames: Set<String>,
+        selectedAddons: Set<String>,
+        selectedPlugins: Set<String>
     ): Stream? {
         if (streams.isEmpty()) return null
+        val sourceScopedStreams = when (source) {
+            StreamAutoPlaySource.ALL_SOURCES -> streams
+            StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> streams.filter { it.addonName in installedAddonNames }
+            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> streams.filter { it.addonName !in installedAddonNames }
+        }
+        val candidateStreams = sourceScopedStreams.filter { stream ->
+            val isAddonStream = stream.addonName in installedAddonNames
+            if (isAddonStream) {
+                selectedAddons.isEmpty() || stream.addonName in selectedAddons
+            } else {
+                selectedPlugins.isEmpty() || stream.addonName in selectedPlugins
+            }
+        }
+        if (candidateStreams.isEmpty()) return null
 
         return when (mode) {
             StreamAutoPlayMode.MANUAL -> null
-            StreamAutoPlayMode.FIRST_STREAM -> streams.firstOrNull { it.getStreamUrl() != null }
+            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { it.getStreamUrl() != null }
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
                 if (pattern.isBlank()) return null
                 val regex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull() ?: return null
 
-                streams.firstOrNull { stream ->
+                candidateStreams.firstOrNull { stream ->
                     val searchableText = buildString {
                         append(stream.addonName)
                         append(' ')

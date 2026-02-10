@@ -88,6 +88,7 @@ import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.StreamAutoPlayMode
+import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.launch
@@ -97,6 +98,7 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ExpandLess
@@ -183,6 +185,8 @@ fun PlaybackSettingsContent(
 ) {
     val playerSettings by viewModel.playerSettings.collectAsState(initial = PlayerSettings())
     val trailerSettings by viewModel.trailerSettings.collectAsState(initial = TrailerSettings())
+    val installedAddonNames by viewModel.installedAddonNames.collectAsState(initial = emptyList())
+    val enabledPluginNames by viewModel.enabledPluginNames.collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
 
     // Dialog states
@@ -195,6 +199,9 @@ fun PlaybackSettingsContent(
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showAdvancedExperimental by remember { mutableStateOf(false) }
     var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
+    var showStreamAutoPlaySourceDialog by remember { mutableStateOf(false) }
+    var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
+    var showStreamAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showStreamRegexDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -297,6 +304,54 @@ fun PlaybackSettingsContent(
                     subtitle = modeLabel,
                     onClick = { showStreamAutoPlayModeDialog = true }
                 )
+            }
+
+            if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
+                item {
+                    val sourceLabel = when (playerSettings.streamAutoPlaySource) {
+                        StreamAutoPlaySource.ALL_SOURCES -> "All sources"
+                        StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> "Installed addons only"
+                        StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> "Enabled plugins only"
+                    }
+                    NavigationSettingsItem(
+                        icon = Icons.Default.Tune,
+                        title = "Auto-play Source Scope",
+                        subtitle = sourceLabel,
+                        onClick = { showStreamAutoPlaySourceDialog = true }
+                    )
+                }
+
+                if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
+                    item {
+                        val addonSubtitle = if (playerSettings.streamAutoPlaySelectedAddons.isEmpty()) {
+                            "All installed addons"
+                        } else {
+                            "${playerSettings.streamAutoPlaySelectedAddons.size} selected"
+                        }
+                        NavigationSettingsItem(
+                            icon = Icons.Default.Language,
+                            title = "Allowed Addons",
+                            subtitle = addonSubtitle,
+                            onClick = { showStreamAutoPlayAddonSelectionDialog = true }
+                        )
+                    }
+                }
+
+                if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
+                    item {
+                        val pluginSubtitle = if (playerSettings.streamAutoPlaySelectedPlugins.isEmpty()) {
+                            "All enabled plugins"
+                        } else {
+                            "${playerSettings.streamAutoPlaySelectedPlugins.size} selected"
+                        }
+                        NavigationSettingsItem(
+                            icon = Icons.Default.Extension,
+                            title = "Allowed Plugins",
+                            subtitle = pluginSubtitle,
+                            onClick = { showStreamAutoPlayPluginSelectionDialog = true }
+                        )
+                    }
+                }
             }
 
             if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH) {
@@ -1064,6 +1119,19 @@ fun PlaybackSettingsContent(
         )
     }
 
+    if (showStreamAutoPlaySourceDialog) {
+        StreamAutoPlaySourceDialog(
+            selectedSource = playerSettings.streamAutoPlaySource,
+            onSourceSelected = { source ->
+                coroutineScope.launch {
+                    viewModel.setStreamAutoPlaySource(source)
+                }
+                showStreamAutoPlaySourceDialog = false
+            },
+            onDismiss = { showStreamAutoPlaySourceDialog = false }
+        )
+    }
+
     if (showStreamRegexDialog) {
         StreamRegexDialog(
             initialRegex = playerSettings.streamAutoPlayRegex,
@@ -1074,6 +1142,38 @@ fun PlaybackSettingsContent(
                 showStreamRegexDialog = false
             },
             onDismiss = { showStreamRegexDialog = false }
+        )
+    }
+
+    if (showStreamAutoPlayAddonSelectionDialog) {
+        StreamAutoPlayProviderSelectionDialog(
+            title = "Allowed Addons",
+            allLabel = "All installed addons",
+            items = installedAddonNames,
+            selectedItems = playerSettings.streamAutoPlaySelectedAddons,
+            onSave = { selected ->
+                coroutineScope.launch {
+                    viewModel.setStreamAutoPlaySelectedAddons(selected)
+                }
+                showStreamAutoPlayAddonSelectionDialog = false
+            },
+            onDismiss = { showStreamAutoPlayAddonSelectionDialog = false }
+        )
+    }
+
+    if (showStreamAutoPlayPluginSelectionDialog) {
+        StreamAutoPlayProviderSelectionDialog(
+            title = "Allowed Plugins",
+            allLabel = "All enabled plugins",
+            items = enabledPluginNames,
+            selectedItems = playerSettings.streamAutoPlaySelectedPlugins,
+            onSave = { selected ->
+                coroutineScope.launch {
+                    viewModel.setStreamAutoPlaySelectedPlugins(selected)
+                }
+                showStreamAutoPlayPluginSelectionDialog = false
+            },
+            onDismiss = { showStreamAutoPlayPluginSelectionDialog = false }
         )
     }
 }
@@ -2124,6 +2224,286 @@ private fun StreamAutoPlayModeDialog(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamAutoPlaySourceDialog(
+    selectedSource: StreamAutoPlaySource,
+    onSourceSelected: (StreamAutoPlaySource) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = listOf(
+        Triple(
+            StreamAutoPlaySource.ALL_SOURCES,
+            "All sources",
+            "Auto-play can use both installed addons and enabled plugins."
+        ),
+        Triple(
+            StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,
+            "Installed addons only",
+            "Auto-play only considers streams coming from your installed addons."
+        ),
+        Triple(
+            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY,
+            "Enabled plugins only",
+            "Auto-play only considers streams coming from enabled plugins."
+        )
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
+            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(520.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Auto-play Source Scope",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(options.size) { index ->
+                        val (source, title, description) = options[index]
+                        val isSelected = source == selectedSource
+
+                        Card(
+                            onClick = { onSourceSelected(source) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = description,
+                                        color = NuvioColors.TextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamAutoPlayProviderSelectionDialog(
+    title: String,
+    allLabel: String,
+    items: List<String>,
+    selectedItems: Set<String>,
+    onSave: (Set<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selected by remember(selectedItems, items) {
+        mutableStateOf(selectedItems.intersect(items.toSet()))
+    }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
+            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(560.dp)
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+
+                Card(
+                    onClick = { selected = emptySet() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    colors = CardDefaults.colors(
+                        containerColor = if (selected.isEmpty()) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                        focusedContainerColor = NuvioColors.FocusBackground
+                    ),
+                    border = CardDefaults.border(
+                        focusedBorder = Border(
+                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    ),
+                    shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                    scale = CardDefaults.scale(focusedScale = 1.02f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = allLabel,
+                            color = if (selected.isEmpty()) NuvioColors.Primary else NuvioColors.TextPrimary,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (selected.isEmpty()) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = NuvioColors.Primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (items.isEmpty()) {
+                    Text(
+                        text = "No items available",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioColors.TextSecondary
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.height(320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(items) { item ->
+                            val isSelected = item in selected
+                            Card(
+                                onClick = {
+                                    selected = if (isSelected) {
+                                        selected - item
+                                    } else {
+                                        selected + item
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.colors(
+                                    containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                    focusedContainerColor = NuvioColors.FocusBackground
+                                ),
+                                border = CardDefaults.border(
+                                    focusedBorder = Border(
+                                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                ),
+                                shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                                scale = CardDefaults.scale(focusedScale = 1.02f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = item,
+                                        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = NuvioColors.Primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundElevated,
+                            contentColor = NuvioColors.TextPrimary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                    ) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { onSave(selected) },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(10.dp))
+                    ) {
+                        Text("Save")
                     }
                 }
             }
