@@ -1,5 +1,8 @@
 package com.nuvio.tv.ui.screens.detail
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,11 +27,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -124,6 +130,7 @@ fun EpisodesRow(
     onRestoreFocusHandled: () -> Unit = {}
 ) {
     val restoreFocusRequester = remember { FocusRequester() }
+    var focusedEpisodeId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(restoreFocusToken, restoreEpisodeId, episodes) {
         if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
@@ -148,6 +155,11 @@ fun EpisodesRow(
                 watchProgress = progress,
                 onClick = { onEpisodeClick(episode) },
                 upFocusRequester = upFocusRequester,
+                dimmed = focusedEpisodeId != null && focusedEpisodeId != episode.id,
+                onFocused = { focusedEpisodeId = episode.id },
+                onFocusCleared = {
+                    if (focusedEpisodeId == episode.id) focusedEpisodeId = null
+                },
                 focusRequester = if (episode.id == restoreEpisodeId) restoreFocusRequester else null,
                 onFocusRestored = if (episode.id == restoreEpisodeId) onRestoreFocusHandled else null
             )
@@ -162,26 +174,107 @@ private fun EpisodeCard(
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
     onClick: () -> Unit,
     upFocusRequester: FocusRequester,
+    dimmed: Boolean = false,
+    onFocused: () -> Unit = {},
+    onFocusCleared: () -> Unit = {},
     focusRequester: FocusRequester? = null,
     onFocusRestored: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
     val formattedDate = remember(episode.released) {
         episode.released?.let { formatReleaseDate(it) } ?: ""
+    }
+    var isFocused by remember { mutableStateOf(false) }
+    val thumbnailWidth by animateDpAsState(
+        targetValue = if (isFocused) 268.dp else 280.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "episodeThumbnailWidth"
+    )
+    val cardWidth by animateDpAsState(
+        targetValue = if (isFocused) 456.dp else 280.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "episodeCardWidth"
+    )
+    val cardAlpha by animateFloatAsState(
+        targetValue = if (dimmed) 0.68f else 1f,
+        animationSpec = tween(durationMillis = 160),
+        label = "episodeCardAlpha"
+    )
+    val episodeCode = remember(episode.season, episode.episode) {
+        if (episode.season != null && episode.episode != null) {
+            "S${episode.season.toString().padStart(2, '0')}E${episode.episode.toString().padStart(2, '0')}"
+        } else {
+            "Episode"
+        }
+    }
+    val titleMedium = MaterialTheme.typography.titleMedium
+    val backgroundCard = NuvioColors.BackgroundCard
+    val episodeCodeTextStyle = remember(titleMedium) {
+        titleMedium.copy(
+            shadow = Shadow(
+                color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.95f),
+                offset = androidx.compose.ui.geometry.Offset(0f, 0f),
+                blurRadius = 5f
+            )
+        )
+    }
+    val edgeFadeBrush = remember(backgroundCard) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                androidx.compose.ui.graphics.Color.Transparent,
+                backgroundCard.copy(alpha = 0.62f),
+                backgroundCard.copy(alpha = 0.92f),
+                backgroundCard
+            )
+        )
+    }
+    val detailsGradientBrush = remember(backgroundCard) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                backgroundCard.copy(alpha = 0f),
+                backgroundCard.copy(alpha = 0.5f),
+                backgroundCard.copy(alpha = 0.9f),
+                backgroundCard
+            )
+        )
+    }
+    val thumbnailWidthPx = remember(thumbnailWidth, density) {
+        with(density) { thumbnailWidth.roundToPx() }
+    }
+    val thumbnailHeightPx = remember(density) {
+        with(density) { 158.dp.roundToPx() }
+    }
+    val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx) {
+        ImageRequest.Builder(context)
+            .data(episode.thumbnail)
+            .crossfade(true)
+            .size(width = thumbnailWidthPx, height = thumbnailHeightPx)
+            .build()
     }
 
     Card(
         onClick = onClick,
         modifier = Modifier
-            .width(280.dp)
+            .width(cardWidth)
+            .alpha(cardAlpha)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { if (it.isFocused) onFocusRestored?.invoke() }
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) {
+                    onFocused()
+                    onFocusRestored?.invoke()
+                } else {
+                    onFocusCleared()
+                }
+            }
             .focusProperties { up = upFocusRequester },
         shape = CardDefaults.shape(
             shape = RoundedCornerShape(8.dp)
         ),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -189,56 +282,36 @@ private fun EpisodeCard(
                 shape = RoundedCornerShape(8.dp)
             )
         ),
-        scale = CardDefaults.scale(
-            focusedScale = 1.02f
-        )
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
-        Column {
+        Row {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .width(thumbnailWidth)
                     .height(158.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
+                    .clip(RoundedCornerShape(8.dp))
             ) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(episode.thumbnail)
-                        .crossfade(true)
-                        .size(
-                             width = with(LocalDensity.current) { 280.dp.roundToPx() },
-                             height = with(LocalDensity.current) { 158.dp.roundToPx() }
-                        )
-                        .build(),
+                    model = thumbnailRequest,
                     contentDescription = episode.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
 
-                // Show watched/in-progress indicator
-                val isCompleted = watchProgress?.isCompleted() == true
-                val isInProgress = watchProgress?.isInProgress() == true
-                if (isCompleted || isInProgress) {
-                    val indicatorColor = if (isCompleted) {
-                        NuvioColors.Primary.copy(alpha = 0.9f)
-                    } else {
-                        NuvioColors.Primary
-                    }
-                    val indicatorText = if (isCompleted) "Watched" else "In Progress"
-
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(NuvioColors.Background.copy(alpha = 0.8f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = indicatorText,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = indicatorColor
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.62f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = episodeCode,
+                        style = episodeCodeTextStyle,
+                        color = NuvioColors.TextPrimary,
+                        maxLines = 1
+                    )
                 }
 
                 // Progress bar overlay at bottom of thumbnail
@@ -260,61 +333,92 @@ private fun EpisodeCard(
                         }
                     }
                 }
+
+                val edgeFadeAlpha by animateFloatAsState(
+                    targetValue = if (isFocused) 1f else 0f,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "episodeEdgeFadeAlpha"
+                )
+                // Always present and alpha-animated, so blend starts immediately with expansion.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(64.dp)
+                        .fillMaxSize()
+                        .alpha(edgeFadeAlpha)
+                        .background(edgeFadeBrush)
+                )
             }
 
+            val detailsAlpha by animateFloatAsState(
+                targetValue = if (isFocused) 1f else 0f,
+                animationSpec = tween(durationMillis = 170),
+                label = "episodeDetailsAlpha"
+            )
+            val detailsWidth by animateDpAsState(
+                targetValue = if (isFocused) 200.dp else 0.dp,
+                animationSpec = tween(durationMillis = 180),
+                label = "episodeDetailsWidth"
+            )
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
+                    .width(detailsWidth)
+                    .height(158.dp)
+                    .offset(x = (-12).dp)
+                    .alpha(detailsAlpha)
+                    .background(detailsGradientBrush)
+                    .padding(start = 0.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                horizontalAlignment = Alignment.Start
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column {
-                        Text(
-                            text = "S${episode.season?.toString()?.padStart(2, '0')}E${episode.episode?.toString()?.padStart(2, '0')}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = NuvioTheme.extendedColors.textSecondary
-                        )
+                if (detailsAlpha > 0.01f) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         if (formattedDate.isNotBlank()) {
                             Text(
                                 text = formattedDate,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NuvioTheme.extendedColors.textTertiary
+                                style = MaterialTheme.typography.labelMedium,
+                                color = NuvioTheme.extendedColors.textTertiary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        episode.runtime?.let { runtime ->
+                            Text(
+                                text = "${runtime}m",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = NuvioTheme.extendedColors.textTertiary,
+                                maxLines = 1
                             )
                         }
                     }
 
-                    episode.runtime?.let { runtime ->
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = episode.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    episode.overview?.let { overview ->
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${runtime}m",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = NuvioTheme.extendedColors.textTertiary
+                            text = overview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioTheme.extendedColors.textSecondary,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = episode.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                episode.overview?.let { overview ->
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = overview,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NuvioTheme.extendedColors.textSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
         }
