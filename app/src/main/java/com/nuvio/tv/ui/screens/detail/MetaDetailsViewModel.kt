@@ -54,8 +54,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var trailerDelayMs = 7000L
 
-    /** Once true, the trailer will never auto-play again for this screen session. */
-    private var trailerHasBeenTriggered = false
+    private var isPlayButtonFocused = false
 
     init {
         observeLibraryState()
@@ -72,6 +71,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnRetry -> loadMeta()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
             MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
+            MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
             MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
         }
     }
@@ -484,7 +484,7 @@ class MetaDetailsViewModel @Inject constructor(
 
             _uiState.update { it.copy(trailerUrl = url, isTrailerLoading = false) }
 
-            if (url != null) {
+            if (url != null && isPlayButtonFocused) {
                 startIdleTimer()
             }
         }
@@ -495,20 +495,22 @@ class MetaDetailsViewModel @Inject constructor(
 
         val state = _uiState.value
         if (state.trailerUrl == null || state.isTrailerPlaying) return
-        // Never restart the idle timer once the trailer has played or the user has interacted
-        if (trailerHasBeenTriggered) return
+        if (!isPlayButtonFocused) return
 
         idleTimerJob = viewModelScope.launch {
             delay(trailerDelayMs)
-            trailerHasBeenTriggered = true
             _uiState.update { it.copy(isTrailerPlaying = true) }
         }
     }
 
+    private fun handlePlayButtonFocused() {
+        isPlayButtonFocused = true
+        startIdleTimer()
+    }
+
     private fun handleUserInteraction() {
         idleTimerJob?.cancel()
-        // Permanently prevent trailer from replaying for this screen session
-        trailerHasBeenTriggered = true
+        isPlayButtonFocused = false
 
         if (_uiState.value.isTrailerPlaying) {
             _uiState.update { it.copy(isTrailerPlaying = false) }
@@ -516,6 +518,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun handleTrailerEnded() {
+        isPlayButtonFocused = false
         _uiState.update { it.copy(isTrailerPlaying = false) }
     }
 

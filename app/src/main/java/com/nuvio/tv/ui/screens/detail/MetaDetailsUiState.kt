@@ -28,5 +28,6 @@ sealed class MetaDetailsEvent {
     data object OnRetry : MetaDetailsEvent()
     data object OnBackPress : MetaDetailsEvent()
     data object OnUserInteraction : MetaDetailsEvent()
+    data object OnPlayButtonFocused : MetaDetailsEvent()
     data object OnTrailerEnded : MetaDetailsEvent()
 }

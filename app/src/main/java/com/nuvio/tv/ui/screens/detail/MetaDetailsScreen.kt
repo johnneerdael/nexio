@@ -171,6 +171,7 @@ fun MetaDetailsScreen(
                             null
                         )
                     },
+                    onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                     trailerUrl = uiState.trailerUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
@@ -195,6 +196,7 @@ private fun MetaDetailsContent(
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
+    onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     trailerUrl: String?,
     isTrailerPlaying: Boolean,
@@ -441,6 +443,7 @@ private fun MetaDetailsContent(
                         playButtonFocusRequester = heroPlayFocusRequester,
                         restorePlayFocusToken = if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0,
                         onPlayFocusRestored = {
+                            onPlayButtonFocused()
                             initialHeroFocusRequested = true
                             clearPendingRestore()
                         }
