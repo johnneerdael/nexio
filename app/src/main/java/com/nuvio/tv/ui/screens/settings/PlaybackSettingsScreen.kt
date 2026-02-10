@@ -177,277 +177,113 @@ fun PlaybackSettingsContent(
     var showStreamAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showStreamRegexDialog by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Playback",
-            style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.Secondary
-        )
+    PlaybackSettingsSections(
+        playerSettings = playerSettings,
+        trailerSettings = trailerSettings,
+        maxBufferSizeMb = viewModel.maxBufferSizeMb,
+        showAdvancedExperimental = showAdvancedExperimental,
+        onToggleAdvancedExperimental = { showAdvancedExperimental = !showAdvancedExperimental },
+        onShowAudioLanguageDialog = { showAudioLanguageDialog = true },
+        onShowDecoderPriorityDialog = { showDecoderPriorityDialog = true },
+        onShowLanguageDialog = { showLanguageDialog = true },
+        onShowSecondaryLanguageDialog = { showSecondaryLanguageDialog = true },
+        onShowTextColorDialog = { showTextColorDialog = true },
+        onShowBackgroundColorDialog = { showBackgroundColorDialog = true },
+        onShowOutlineColorDialog = { showOutlineColorDialog = true },
+        onShowStreamAutoPlayModeDialog = { showStreamAutoPlayModeDialog = true },
+        onShowStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = true },
+        onShowStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = true },
+        onShowStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = true },
+        onShowStreamRegexDialog = { showStreamRegexDialog = true },
+        onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
+        onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
+        onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
+        onSetFrameRateMatching = { enabled -> coroutineScope.launch { viewModel.setFrameRateMatching(enabled) } },
+        onSetTrailerEnabled = { enabled -> coroutineScope.launch { viewModel.setTrailerEnabled(enabled) } },
+        onSetTrailerDelaySeconds = { seconds -> coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) } },
+        onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
+        onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
+        onSetMapDV7ToHevc = { enabled -> coroutineScope.launch { viewModel.setMapDV7ToHevc(enabled) } },
+        onSetSubtitleSize = { newSize -> coroutineScope.launch { viewModel.setSubtitleSize(newSize) } },
+        onSetSubtitleVerticalOffset = { newOffset -> coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) } },
+        onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },
+        onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
+        onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
+        onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } },
+        onSetBufferMinBufferMs = { ms -> coroutineScope.launch { viewModel.setBufferMinBufferMs(ms) } },
+        onSetBufferMaxBufferMs = { ms -> coroutineScope.launch { viewModel.setBufferMaxBufferMs(ms) } },
+        onSetBufferForPlaybackMs = { ms -> coroutineScope.launch { viewModel.setBufferForPlaybackMs(ms) } },
+        onSetBufferForPlaybackAfterRebufferMs = { ms -> coroutineScope.launch { viewModel.setBufferForPlaybackAfterRebufferMs(ms) } },
+        onSetBufferTargetSizeMb = { mb -> coroutineScope.launch { viewModel.setBufferTargetSizeMb(mb) } },
+        onSetUseParallelConnections = { enabled -> coroutineScope.launch { viewModel.setUseParallelConnections(enabled) } },
+        onSetBufferBackBufferDurationMs = { ms -> coroutineScope.launch { viewModel.setBufferBackBufferDurationMs(ms) } },
+        onSetBufferRetainBackBufferFromKeyframe = { enabled -> coroutineScope.launch { viewModel.setBufferRetainBackBufferFromKeyframe(enabled) } }
+    )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Configure video playback and subtitle options",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Settings list
-        LazyColumn(
-            contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.Image,
-                    title = "Loading Overlay",
-                    subtitle = "Show a loading screen until the first video frame appears",
-                    isChecked = playerSettings.loadingOverlayEnabled,
-                    onCheckedChange = { enabled ->
-                        coroutineScope.launch {
-                            viewModel.setLoadingOverlayEnabled(enabled)
-                        }
-                    }
-                )
-            }
-
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.PauseCircle,
-                    title = "Pause Overlay",
-                    subtitle = "Show a details overlay after 5 seconds of no input while paused",
-                    isChecked = playerSettings.pauseOverlayEnabled,
-                    onCheckedChange = { enabled ->
-                        coroutineScope.launch {
-                            viewModel.setPauseOverlayEnabled(enabled)
-                        }
-                    }
-                )
-            }
-
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.History,
-                    title = "Skip Intro",
-                    subtitle = "Use introdb.app to detect intros and recaps",
-                    isChecked = playerSettings.skipIntroEnabled,
-                    onCheckedChange = { enabled ->
-                        coroutineScope.launch {
-                            viewModel.setSkipIntroEnabled(enabled)
-                        }
-                    }
-                )
-            }
-
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.Speed,
-                    title = "Auto Frame Rate",
-                    subtitle = "Switch display refresh rate to match video frame rate for judder-free playback",
-                    isChecked = playerSettings.frameRateMatching,
-                    onCheckedChange = { enabled ->
-                        coroutineScope.launch {
-                            viewModel.setFrameRateMatching(enabled)
-                        }
-                    }
-                )
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Stream Selection",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextSecondary,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-            autoPlaySettingsItems(
-                playerSettings = playerSettings,
-                onShowModeDialog = { showStreamAutoPlayModeDialog = true },
-                onShowSourceDialog = { showStreamAutoPlaySourceDialog = true },
-                onShowAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = true },
-                onShowPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = true },
-                onShowRegexDialog = { showStreamRegexDialog = true }
-            )
-
-            trailerAndAudioSettingsItems(
-                playerSettings = playerSettings,
-                trailerSettings = trailerSettings,
-                onShowAudioLanguageDialog = { showAudioLanguageDialog = true },
-                onShowDecoderPriorityDialog = { showDecoderPriorityDialog = true },
-                onSetTrailerEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setTrailerEnabled(enabled) }
-                },
-                onSetTrailerDelaySeconds = { seconds ->
-                    coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) }
-                },
-                onSetSkipSilence = { enabled ->
-                    coroutineScope.launch { viewModel.setSkipSilence(enabled) }
-                },
-                onSetTunnelingEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) }
-                },
-                onSetMapDV7ToHevc = { enabled ->
-                    coroutineScope.launch { viewModel.setMapDV7ToHevc(enabled) }
-                }
-            )
-
-            subtitleSettingsItems(
-                playerSettings = playerSettings,
-                onShowLanguageDialog = { showLanguageDialog = true },
-                onShowSecondaryLanguageDialog = { showSecondaryLanguageDialog = true },
-                onShowTextColorDialog = { showTextColorDialog = true },
-                onShowBackgroundColorDialog = { showBackgroundColorDialog = true },
-                onShowOutlineColorDialog = { showOutlineColorDialog = true },
-                onSetSubtitleSize = { newSize ->
-                    coroutineScope.launch { viewModel.setSubtitleSize(newSize) }
-                },
-                onSetSubtitleVerticalOffset = { newOffset ->
-                    coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) }
-                },
-                onSetSubtitleBold = { bold ->
-                    coroutineScope.launch { viewModel.setSubtitleBold(bold) }
-                },
-                onSetSubtitleOutlineEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) }
-                },
-                onSetUseLibass = { enabled ->
-                    coroutineScope.launch { viewModel.setUseLibass(enabled) }
-                },
-                onSetLibassRenderType = { renderType ->
-                    coroutineScope.launch { viewModel.setLibassRenderType(renderType) }
-                }
-            )
-
-            bufferSettingsItems(
-                showAdvancedExperimental = showAdvancedExperimental,
-                playerSettings = playerSettings,
-                maxBufferSizeMb = viewModel.maxBufferSizeMb,
-                onToggleAdvancedExperimental = { showAdvancedExperimental = !showAdvancedExperimental },
-                onSetBufferMinBufferMs = { ms ->
-                    coroutineScope.launch { viewModel.setBufferMinBufferMs(ms) }
-                },
-                onSetBufferMaxBufferMs = { ms ->
-                    coroutineScope.launch { viewModel.setBufferMaxBufferMs(ms) }
-                },
-                onSetBufferForPlaybackMs = { ms ->
-                    coroutineScope.launch { viewModel.setBufferForPlaybackMs(ms) }
-                },
-                onSetBufferForPlaybackAfterRebufferMs = { ms ->
-                    coroutineScope.launch { viewModel.setBufferForPlaybackAfterRebufferMs(ms) }
-                },
-                onSetBufferTargetSizeMb = { mb ->
-                    coroutineScope.launch { viewModel.setBufferTargetSizeMb(mb) }
-                },
-                onSetUseParallelConnections = { enabled ->
-                    coroutineScope.launch { viewModel.setUseParallelConnections(enabled) }
-                },
-                onSetBufferBackBufferDurationMs = { ms ->
-                    coroutineScope.launch { viewModel.setBufferBackBufferDurationMs(ms) }
-                },
-                onSetBufferRetainBackBufferFromKeyframe = { enabled ->
-                    coroutineScope.launch { viewModel.setBufferRetainBackBufferFromKeyframe(enabled) }
-                }
-            )
-        }
-    }
-    
-    SubtitleSettingsDialogs(
+    PlaybackSettingsDialogsHost(
+        playerSettings = playerSettings,
+        installedAddonNames = installedAddonNames,
+        enabledPluginNames = enabledPluginNames,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
         showTextColorDialog = showTextColorDialog,
         showBackgroundColorDialog = showBackgroundColorDialog,
         showOutlineColorDialog = showOutlineColorDialog,
-        playerSettings = playerSettings,
-        onSetPreferredLanguage = { language ->
-            coroutineScope.launch {
-                viewModel.setSubtitlePreferredLanguage(language ?: "none")
-            }
-        },
-        onSetSecondaryLanguage = { language ->
-            coroutineScope.launch {
-                viewModel.setSubtitleSecondaryLanguage(language)
-            }
-        },
-        onSetTextColor = { color ->
-            coroutineScope.launch {
-                viewModel.setSubtitleTextColor(color.toArgb())
-            }
-        },
-        onSetBackgroundColor = { color ->
-            coroutineScope.launch {
-                viewModel.setSubtitleBackgroundColor(color.toArgb())
-            }
-        },
-        onSetOutlineColor = { color ->
-            coroutineScope.launch {
-                viewModel.setSubtitleOutlineColor(color.toArgb())
-            }
-        },
-        onDismissLanguageDialog = { showLanguageDialog = false },
-        onDismissSecondaryLanguageDialog = { showSecondaryLanguageDialog = false },
-        onDismissTextColorDialog = { showTextColorDialog = false },
-        onDismissBackgroundColorDialog = { showBackgroundColorDialog = false },
-        onDismissOutlineColorDialog = { showOutlineColorDialog = false }
-    )
-
-    AudioSettingsDialogs(
         showAudioLanguageDialog = showAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
-        selectedLanguage = playerSettings.preferredAudioLanguage,
-        selectedPriority = playerSettings.decoderPriority,
+        showStreamAutoPlayModeDialog = showStreamAutoPlayModeDialog,
+        showStreamAutoPlaySourceDialog = showStreamAutoPlaySourceDialog,
+        showStreamAutoPlayAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
+        showStreamAutoPlayPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
+        showStreamRegexDialog = showStreamRegexDialog,
+        onSetSubtitlePreferredLanguage = { language ->
+            coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }
+        },
+        onSetSubtitleSecondaryLanguage = { language ->
+            coroutineScope.launch { viewModel.setSubtitleSecondaryLanguage(language) }
+        },
+        onSetSubtitleTextColor = { color ->
+            coroutineScope.launch { viewModel.setSubtitleTextColor(color.toArgb()) }
+        },
+        onSetSubtitleBackgroundColor = { color ->
+            coroutineScope.launch { viewModel.setSubtitleBackgroundColor(color.toArgb()) }
+        },
+        onSetSubtitleOutlineColor = { color ->
+            coroutineScope.launch { viewModel.setSubtitleOutlineColor(color.toArgb()) }
+        },
         onSetPreferredAudioLanguage = { language ->
             coroutineScope.launch { viewModel.setPreferredAudioLanguage(language) }
         },
         onSetDecoderPriority = { priority ->
             coroutineScope.launch { viewModel.setDecoderPriority(priority) }
         },
+        onSetStreamAutoPlayMode = { mode ->
+            coroutineScope.launch { viewModel.setStreamAutoPlayMode(mode) }
+        },
+        onSetStreamAutoPlaySource = { source ->
+            coroutineScope.launch { viewModel.setStreamAutoPlaySource(source) }
+        },
+        onSetStreamAutoPlayRegex = { regex ->
+            coroutineScope.launch { viewModel.setStreamAutoPlayRegex(regex) }
+        },
+        onSetStreamAutoPlaySelectedAddons = { selected ->
+            coroutineScope.launch { viewModel.setStreamAutoPlaySelectedAddons(selected) }
+        },
+        onSetStreamAutoPlaySelectedPlugins = { selected ->
+            coroutineScope.launch { viewModel.setStreamAutoPlaySelectedPlugins(selected) }
+        },
+        onDismissLanguageDialog = { showLanguageDialog = false },
+        onDismissSecondaryLanguageDialog = { showSecondaryLanguageDialog = false },
+        onDismissTextColorDialog = { showTextColorDialog = false },
+        onDismissBackgroundColorDialog = { showBackgroundColorDialog = false },
+        onDismissOutlineColorDialog = { showOutlineColorDialog = false },
         onDismissAudioLanguageDialog = { showAudioLanguageDialog = false },
-        onDismissDecoderPriorityDialog = { showDecoderPriorityDialog = false }
-    )
-
-    AutoPlaySettingsDialogs(
-        showModeDialog = showStreamAutoPlayModeDialog,
-        showSourceDialog = showStreamAutoPlaySourceDialog,
-        showRegexDialog = showStreamRegexDialog,
-        showAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
-        showPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
-        playerSettings = playerSettings,
-        installedAddonNames = installedAddonNames,
-        enabledPluginNames = enabledPluginNames,
-        onSetMode = { mode ->
-            coroutineScope.launch {
-                viewModel.setStreamAutoPlayMode(mode)
-            }
-        },
-        onSetSource = { source ->
-            coroutineScope.launch {
-                viewModel.setStreamAutoPlaySource(source)
-            }
-        },
-        onSetRegex = { regex ->
-            coroutineScope.launch {
-                viewModel.setStreamAutoPlayRegex(regex)
-            }
-        },
-        onSetSelectedAddons = { selected ->
-            coroutineScope.launch {
-                viewModel.setStreamAutoPlaySelectedAddons(selected)
-            }
-        },
-        onSetSelectedPlugins = { selected ->
-            coroutineScope.launch {
-                viewModel.setStreamAutoPlaySelectedPlugins(selected)
-            }
-        },
-        onDismissModeDialog = { showStreamAutoPlayModeDialog = false },
-        onDismissSourceDialog = { showStreamAutoPlaySourceDialog = false },
-        onDismissRegexDialog = { showStreamRegexDialog = false },
-        onDismissAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = false },
-        onDismissPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = false }
+        onDismissDecoderPriorityDialog = { showDecoderPriorityDialog = false },
+        onDismissStreamAutoPlayModeDialog = { showStreamAutoPlayModeDialog = false },
+        onDismissStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = false },
+        onDismissStreamRegexDialog = { showStreamRegexDialog = false },
+        onDismissStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = false },
+        onDismissStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = false }
     )
 }
 
