@@ -143,6 +143,26 @@ object AddonWebPage {
     border-color: rgba(207, 102, 121, 0.5);
     color: #CF6679;
   }
+  .btn-toggle {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .btn-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+  .btn-toggle.disabled {
+    border-color: rgba(207, 102, 121, 0.35);
+    color: rgba(207, 102, 121, 0.95);
+  }
+  .btn-toggle.disabled:hover {
+    background: rgba(207, 102, 121, 0.15);
+    border-color: rgba(207, 102, 121, 0.55);
+    color: #CF6679;
+  }
 
   /* Section Title */
   .section-label {
@@ -233,6 +253,9 @@ object AddonWebPage {
   }
   .addon-actions {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
   .badge-new {
     display: inline-block;
@@ -254,6 +277,42 @@ object AddonWebPage {
     font-size: 0.875rem;
     font-weight: 300;
     display: none;
+  }
+  .section-block {
+    margin-top: 2rem;
+  }
+  .catalog-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .catalog-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .catalog-meta {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.35);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.15rem;
+  }
+  .badge-disabled {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(207, 102, 121, 0.95);
+    border: 1px solid rgba(207, 102, 121, 0.35);
+    padding: 0.12rem 0.45rem;
+    border-radius: 100px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
   }
 
   /* Status Overlay */
@@ -356,7 +415,7 @@ object AddonWebPage {
 <div class="page">
   <div class="header">
     <img src="/logo.png" alt="NuvioTV" class="header-logo">
-    <p>Manage your addons</p>
+    <p>Manage addons and home catalogs</p>
   </div>
 
   <div class="add-section">
@@ -368,9 +427,15 @@ object AddonWebPage {
     <div class="add-error" id="addError"></div>
   </div>
 
-  <div class="section-label">Installed</div>
+  <div class="section-label">Installed Addons</div>
   <ul class="addon-list" id="addonList"></ul>
   <div class="empty-state" id="emptyState">No addons installed</div>
+
+  <div class="section-block">
+    <div class="section-label">Home Catalogs</div>
+    <ul class="addon-list" id="catalogList"></ul>
+    <div class="empty-state" id="catalogEmptyState">No home catalogs available</div>
+  </div>
 
   <button class="btn btn-save" id="saveBtn" onclick="saveChanges()">Save Changes</button>
 </div>
@@ -384,6 +449,8 @@ object AddonWebPage {
 <script>
 var addons = [];
 var originalAddons = [];
+var catalogs = [];
+var originalCatalogs = [];
 var pollTimer = null;
 var pollStartTime = 0;
 var POLL_TIMEOUT = 120000;
@@ -391,13 +458,17 @@ var POLL_INTERVAL = 1500;
 var connectionLost = false;
 var consecutiveErrors = 0;
 
-async function loadAddons() {
+async function loadState() {
   try {
-    var res = await fetch('/api/addons');
-    addons = await res.json();
+    var res = await fetch('/api/state');
+    var state = await res.json();
+    addons = state.addons || [];
+    catalogs = state.catalogs || [];
     originalAddons = JSON.parse(JSON.stringify(addons));
+    originalCatalogs = JSON.parse(JSON.stringify(catalogs));
     setConnectionLost(false);
-    renderList();
+    renderAddons();
+    renderCatalogs();
   } catch (e) {
     setConnectionLost(true);
   }
@@ -408,7 +479,7 @@ function setConnectionLost(lost) {
   document.getElementById('connectionBar').className = 'connection-bar' + (lost ? ' visible' : '');
 }
 
-function renderList() {
+function renderAddons() {
   var list = document.getElementById('addonList');
   var empty = document.getElementById('emptyState');
   list.innerHTML = '';
@@ -448,12 +519,71 @@ function renderList() {
   });
 }
 
+function renderCatalogs() {
+  var list = document.getElementById('catalogList');
+  var empty = document.getElementById('catalogEmptyState');
+  list.innerHTML = '';
+
+  if (catalogs.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  catalogs.forEach(function(catalog, i) {
+    var li = document.createElement('li');
+    li.className = 'addon-item';
+
+    var isFirst = (i === 0);
+    var isLast = (i === catalogs.length - 1);
+    var toggleClass = catalog.isDisabled ? 'btn btn-toggle disabled' : 'btn btn-toggle';
+
+    li.innerHTML =
+      '<div class="addon-order">' +
+        '<button class="btn-order" onclick="moveCatalog(' + i + ',-1)"' + (isFirst ? ' disabled' : '') + '>' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>' +
+        '</button>' +
+        '<button class="btn-order" onclick="moveCatalog(' + i + ',1)"' + (isLast ? ' disabled' : '') + '>' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="catalog-info">' +
+        '<div class="catalog-name">' + escapeHtml(formatCatalogTitle(catalog.catalogName, catalog.type)) +
+          (catalog.isDisabled ? '<span class="badge-disabled">Disabled</span>' : '') +
+        '</div>' +
+        '<div class="catalog-meta">' + escapeHtml(catalog.addonName) + '</div>' +
+      '</div>' +
+      '<div class="addon-actions">' +
+        '<button class="' + toggleClass + '" onclick="toggleCatalog(' + i + ')">' +
+          (catalog.isDisabled ? 'Enable' : 'Disable') +
+        '</button>' +
+      '</div>';
+
+    list.appendChild(li);
+  });
+}
+
 function moveAddon(index, direction) {
   var newIndex = index + direction;
   if (newIndex < 0 || newIndex >= addons.length) return;
   var item = addons.splice(index, 1)[0];
   addons.splice(newIndex, 0, item);
-  renderList();
+  renderAddons();
+}
+
+function moveCatalog(index, direction) {
+  var newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= catalogs.length) return;
+  var item = catalogs.splice(index, 1)[0];
+  catalogs.splice(newIndex, 0, item);
+  renderCatalogs();
+}
+
+function toggleCatalog(index) {
+  var item = catalogs[index];
+  if (!item) return;
+  item.isDisabled = !item.isDisabled;
+  renderCatalogs();
 }
 
 async function addAddon() {
@@ -502,7 +632,7 @@ async function addAddon() {
     } else {
       addons.push({ url: data.url, name: data.name || url, description: data.description, isNew: true });
       input.value = '';
-      renderList();
+      renderAddons();
     }
   } catch (e) {
     errorEl.textContent = 'Failed to validate addon';
@@ -516,7 +646,7 @@ async function addAddon() {
 
 function removeAddon(index) {
   addons.splice(index, 1);
-  renderList();
+  renderAddons();
 }
 
 async function saveChanges() {
@@ -524,11 +654,19 @@ async function saveChanges() {
   saveBtn.disabled = true;
 
   var urls = addons.map(function(a) { return a.url; });
+  var catalogOrderKeys = catalogs.map(function(c) { return c.key; });
+  var disabledCatalogKeys = catalogs
+    .filter(function(c) { return c.isDisabled; })
+    .map(function(c) { return c.disableKey; });
   try {
     var res = await fetch('/api/addons', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls: urls })
+      body: JSON.stringify({
+        urls: urls,
+        catalogOrderKeys: catalogOrderKeys,
+        disabledCatalogKeys: disabledCatalogKeys
+      })
     });
     var data = await res.json();
 
@@ -575,7 +713,9 @@ function showRejectedStatus() {
   content.className = 'status-content status-rejected';
   setTimeout(function() {
     addons = JSON.parse(JSON.stringify(originalAddons));
-    renderList();
+    catalogs = JSON.parse(JSON.stringify(originalCatalogs));
+    renderAddons();
+    renderCatalogs();
     dismissStatus();
   }, 2500);
 }
@@ -641,7 +781,7 @@ async function pollStatus(changeId) {
       if (data.status === 'confirmed') {
         showSuccessStatus();
         setTimeout(function() {
-          loadAddons();
+          loadState();
           document.getElementById('saveBtn').disabled = false;
         }, 2000);
       } else if (data.status === 'rejected') {
@@ -671,11 +811,23 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function formatCatalogTitle(name, type) {
+  var safeName = name || '';
+  var safeType = type || '';
+  if (!safeType) return safeName;
+  return safeName + ' - ' + toTitleCase(safeType);
+}
+
+function toTitleCase(value) {
+  if (!value) return '';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 document.getElementById('addonUrl').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') addAddon();
 });
 
-loadAddons();
+loadState();
 </script>
 </body>
 </html>

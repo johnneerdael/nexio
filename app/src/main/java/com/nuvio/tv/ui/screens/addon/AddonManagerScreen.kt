@@ -376,7 +376,7 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                         color = NuvioColors.TextPrimary
                     )
                     Text(
-                        text = "Scan a QR code to add, remove, and reorder addons from your phone",
+                        text = "Scan a QR code to manage addons and Home catalogs from your phone",
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioColors.TextSecondary
                     )
@@ -481,7 +481,7 @@ private fun QrCodeOverlay(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Scan with your phone to manage addons",
+                text = "Scan with your phone to manage addons and catalogs",
                 style = MaterialTheme.typography.bodyMedium,
                 color = NuvioColors.TextSecondary,
                 textAlign = TextAlign.Center
@@ -585,7 +585,7 @@ private fun ConfirmAddonChangesDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Confirm addon changes",
+                    text = "Confirm addon & catalog changes",
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
@@ -661,9 +661,70 @@ private fun ConfirmAddonChangesDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
 
-                        if (pendingChange.addedUrls.isEmpty() && pendingChange.removedUrls.isEmpty()) {
+                        if (pendingChange.catalogsReordered) {
                             Text(
-                                text = "Addons were reordered",
+                                text = "Catalog order was changed",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NuvioColors.TextSecondary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                            )
+                        }
+
+                        if (pendingChange.disabledCatalogNames.isNotEmpty()) {
+                            Text(
+                                text = "Catalogs disabled on Home:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioColors.Error,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 4.dp)
+                            )
+                            pendingChange.disabledCatalogNames.forEach { name ->
+                                Text(
+                                    text = "- $name",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioColors.Error,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        if (pendingChange.enabledCatalogNames.isNotEmpty()) {
+                            Text(
+                                text = "Catalogs enabled on Home:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NuvioColors.Success,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 4.dp)
+                            )
+                            pendingChange.enabledCatalogNames.forEach { name ->
+                                Text(
+                                    text = "+ $name",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NuvioColors.Success,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        if (
+                            pendingChange.addedUrls.isEmpty() &&
+                            pendingChange.removedUrls.isEmpty() &&
+                            !pendingChange.catalogsReordered &&
+                            pendingChange.disabledCatalogNames.isEmpty() &&
+                            pendingChange.enabledCatalogNames.isEmpty()
+                        ) {
+                            Text(
+                                text = "No visible changes detected",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = NuvioColors.TextSecondary
                             )
@@ -673,6 +734,12 @@ private fun ConfirmAddonChangesDialog(
 
                 Text(
                     text = "Total addons: ${pendingChange.proposedUrls.size}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextTertiary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Total catalogs: ${pendingChange.proposedCatalogOrderKeys.size}",
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextTertiary,
                     modifier = Modifier.fillMaxWidth()

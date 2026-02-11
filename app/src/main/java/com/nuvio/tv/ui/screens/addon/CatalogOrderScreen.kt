@@ -157,21 +157,15 @@ private fun CatalogOrderCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.catalogName,
+                    text = "${item.catalogName} - ${item.typeLabel.toDisplayTypeLabel()}",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = if (item.isDisabled) NuvioColors.TextSecondary else NuvioColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "from ${item.addonName}",
+                    text = item.addonName,
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Type: ${item.typeLabel}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary
                 )
                 if (item.isDisabled) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -253,5 +247,11 @@ private fun CatalogOrderCard(
                 }
             }
         }
+    }
+}
+
+private fun String.toDisplayTypeLabel(): String {
+    return replaceFirstChar { ch ->
+        if (ch.isLowerCase()) ch.titlecase() else ch.toString()
     }
 }

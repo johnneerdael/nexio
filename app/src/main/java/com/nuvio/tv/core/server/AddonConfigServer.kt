@@ -8,7 +8,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class AddonConfigServer(
-    private val currentAddonsProvider: () -> List<AddonInfo>,
+    private val currentPageStateProvider: () -> PageState,
     private val onChangeProposed: (PendingAddonChange) -> Unit,
     private val manifestFetcher: (String) -> AddonInfo?,
     private val logoProvider: (() -> ByteArray?)? = null,
@@ -21,9 +21,25 @@ class AddonConfigServer(
         val description: String?
     )
 
+    data class CatalogInfo(
+        val key: String,
+        val disableKey: String,
+        val catalogName: String,
+        val addonName: String,
+        val type: String,
+        val isDisabled: Boolean
+    )
+
+    data class PageState(
+        val addons: List<AddonInfo>,
+        val catalogs: List<CatalogInfo>
+    )
+
     data class PendingAddonChange(
         val id: String = UUID.randomUUID().toString(),
         val proposedUrls: List<String>,
+        val proposedCatalogOrderKeys: List<String> = emptyList(),
+        val proposedDisabledCatalogKeys: List<String> = emptyList(),
         var status: ChangeStatus = ChangeStatus.PENDING
     )
 
@@ -47,6 +63,7 @@ class AddonConfigServer(
         return when {
             method == Method.GET && uri == "/" -> serveWebPage()
             method == Method.GET && uri == "/logo.png" -> serveLogo()
+            method == Method.GET && uri == "/api/state" -> servePageState()
             method == Method.GET && uri == "/api/addons" -> serveAddonList()
             method == Method.POST && uri == "/api/addons" -> handleAddonUpdate(session)
             method == Method.POST && uri == "/api/validate" -> handleValidateAddon(session)
@@ -74,8 +91,14 @@ class AddonConfigServer(
     }
 
     private fun serveAddonList(): Response {
-        val addons = currentAddonsProvider()
+        val addons = currentPageStateProvider().addons
         val json = gson.toJson(addons)
+        return newFixedLengthResponse(Response.Status.OK, "application/json", json)
+    }
+
+    private fun servePageState(): Response {
+        val state = currentPageStateProvider()
+        val json = gson.toJson(state)
         return newFixedLengthResponse(Response.Status.OK, "application/json", json)
     }
 
@@ -90,10 +113,16 @@ class AddonConfigServer(
         session.parseBody(bodyMap)
         val body = bodyMap["postData"] ?: ""
 
-        val urls: List<String> = try {
+        val change: PendingAddonChange = try {
             val parsed = gson.fromJson<Map<String, Any>>(body, object : TypeToken<Map<String, Any>>() {}.type)
-            @Suppress("UNCHECKED_CAST")
-            (parsed["urls"] as? List<String>) ?: emptyList()
+            val urls = parseStringList(parsed["urls"])
+            val catalogOrderKeys = parseStringList(parsed["catalogOrderKeys"])
+            val disabledCatalogKeys = parseStringList(parsed["disabledCatalogKeys"])
+            PendingAddonChange(
+                proposedUrls = urls,
+                proposedCatalogOrderKeys = catalogOrderKeys,
+                proposedDisabledCatalogKeys = disabledCatalogKeys
+            )
         } catch (e: Exception) {
             val error = mapOf("error" to "Invalid request body")
             return newFixedLengthResponse(
@@ -103,7 +132,6 @@ class AddonConfigServer(
             )
         }
 
-        val change = PendingAddonChange(proposedUrls = urls)
         pendingChanges[change.id] = change
         onChangeProposed(change)
 
@@ -145,9 +173,18 @@ class AddonConfigServer(
         return newFixedLengthResponse(Response.Status.OK, "application/json", gson.toJson(response))
     }
 
+    private fun parseStringList(rawValue: Any?): List<String> {
+        val values = rawValue as? List<*> ?: return emptyList()
+        return values.asSequence()
+            .mapNotNull { (it as? String)?.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+    }
+
     companion object {
         fun startOnAvailablePort(
-            currentAddonsProvider: () -> List<AddonInfo>,
+            currentPageStateProvider: () -> PageState,
             onChangeProposed: (PendingAddonChange) -> Unit,
             manifestFetcher: (String) -> AddonInfo?,
             logoProvider: (() -> ByteArray?)? = null,
@@ -156,7 +193,7 @@ class AddonConfigServer(
         ): AddonConfigServer? {
             for (port in startPort until startPort + maxAttempts) {
                 try {
-                    val server = AddonConfigServer(currentAddonsProvider, onChangeProposed, manifestFetcher, logoProvider, port)
+                    val server = AddonConfigServer(currentPageStateProvider, onChangeProposed, manifestFetcher, logoProvider, port)
                     server.start(SOCKET_READ_TIMEOUT, false)
                     return server
                 } catch (e: Exception) {
