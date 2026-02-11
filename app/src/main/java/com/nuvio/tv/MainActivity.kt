@@ -37,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -129,6 +131,12 @@ class MainActivity : ComponentActivity() {
                             Screen.Settings.route to ("Settings" to Icons.Filled.Settings)
                         )
                     }
+                    val drawerItemFocusRequesters = remember(drawerItems) {
+                        drawerItems.associate { (route, _) -> route to FocusRequester() }
+                    }
+                    val selectedDrawerRoute = drawerItems.firstOrNull { (route, _) ->
+                        currentRoute == route || currentRoute?.startsWith("$route/") == true
+                    }?.first
 
                     val showSidebar = currentRoute in rootRoutes
 
@@ -143,6 +151,16 @@ class MainActivity : ComponentActivity() {
                         repeat(2) { withFrameNanos { } }
                         focusManager.moveFocus(FocusDirection.Right)
                         pendingContentFocusTransfer = false
+                    }
+                    LaunchedEffect(drawerState.currentValue, selectedDrawerRoute, showSidebar) {
+                        if (!showSidebar || drawerState.currentValue != DrawerValue.Open) return@LaunchedEffect
+                        val targetRoute = selectedDrawerRoute ?: return@LaunchedEffect
+                        val requester = drawerItemFocusRequesters[targetRoute] ?: return@LaunchedEffect
+                        repeat(2) { withFrameNanos { } }
+                        try {
+                            requester.requestFocus()
+                        } catch (_: IllegalStateException) {
+                        }
                     }
 
                     ModalNavigationDrawer(
@@ -207,7 +225,7 @@ class MainActivity : ComponentActivity() {
                                         drawerItems.forEach { (route, item) ->
                                             val (label, icon) = item
                                             NavigationDrawerItem(
-                                                selected = currentRoute == route,
+                                                selected = selectedDrawerRoute == route,
                                                 onClick = {
                                                     if (currentRoute != route) {
                                                         navController.navigate(route) {
@@ -222,6 +240,9 @@ class MainActivity : ComponentActivity() {
                                                     pendingContentFocusTransfer = true
                                                 },
                                                 colors = itemColors,
+                                                modifier = Modifier.focusRequester(
+                                                    drawerItemFocusRequesters.getValue(route)
+                                                ),
                                                 leadingContent = {
                                                     Icon(imageVector = icon, contentDescription = null)
                                                 }
