@@ -4,45 +4,31 @@ package com.nuvio.tv.ui.screens.settings
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Border
-import androidx.tv.material3.Card
-import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
 
 internal fun LazyListScope.bufferSettingsItems(
-    showAdvancedExperimental: Boolean,
     playerSettings: PlayerSettings,
     maxBufferSizeMb: Int,
-    onToggleAdvancedExperimental: () -> Unit,
     onSetBufferMinBufferMs: (Int) -> Unit,
     onSetBufferMaxBufferMs: (Int) -> Unit,
     onSetBufferForPlaybackMs: (Int) -> Unit,
@@ -54,61 +40,6 @@ internal fun LazyListScope.bufferSettingsItems(
 ) {
     item {
         Spacer(modifier = Modifier.height(16.dp))
-        Card(
-            onClick = onToggleAdvancedExperimental,
-            colors = CardDefaults.colors(
-                containerColor = Color.Transparent,
-                focusedContainerColor = NuvioColors.FocusBackground
-            ),
-            border = CardDefaults.border(
-                focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            ),
-            scale = CardDefaults.scale(focusedScale = 1.02f),
-            shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Science,
-                    contentDescription = null,
-                    tint = Color(0xFFFF9800),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text = "Advanced / Experimental",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextSecondary,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = if (showAdvancedExperimental) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (showAdvancedExperimental) "Collapse" else "Expand",
-                    tint = NuvioColors.TextSecondary
-                )
-            }
-        }
-    }
-
-    if (!showAdvancedExperimental) return
-
-    item {
-        Text(
-            text = "These settings affect buffering behavior. Incorrect values may cause playback issues.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFFFF9800),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-    }
-
-    item {
         Text(
             text = "Buffer Settings",
             style = MaterialTheme.typography.titleMedium,

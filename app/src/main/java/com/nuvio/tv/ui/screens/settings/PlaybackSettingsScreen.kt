@@ -100,9 +100,6 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.Science
 
 @Composable
 fun PlaybackSettingsScreen(
@@ -170,7 +167,6 @@ fun PlaybackSettingsContent(
     var showOutlineColorDialog by remember { mutableStateOf(false) }
     var showAudioLanguageDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
-    var showAdvancedExperimental by remember { mutableStateOf(false) }
     var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlaySourceDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
@@ -181,8 +177,6 @@ fun PlaybackSettingsContent(
         playerSettings = playerSettings,
         trailerSettings = trailerSettings,
         maxBufferSizeMb = viewModel.maxBufferSizeMb,
-        showAdvancedExperimental = showAdvancedExperimental,
-        onToggleAdvancedExperimental = { showAdvancedExperimental = !showAdvancedExperimental },
         onShowAudioLanguageDialog = { showAudioLanguageDialog = true },
         onShowDecoderPriorityDialog = { showDecoderPriorityDialog = true },
         onShowLanguageDialog = { showLanguageDialog = true },

@@ -32,8 +32,6 @@ internal fun PlaybackSettingsSections(
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
     maxBufferSizeMb: Int,
-    showAdvancedExperimental: Boolean,
-    onToggleAdvancedExperimental: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
     onShowLanguageDialog: () -> Unit,
@@ -178,10 +176,8 @@ internal fun PlaybackSettingsSections(
             )
 
             bufferSettingsItems(
-                showAdvancedExperimental = showAdvancedExperimental,
                 playerSettings = playerSettings,
                 maxBufferSizeMb = maxBufferSizeMb,
-                onToggleAdvancedExperimental = onToggleAdvancedExperimental,
                 onSetBufferMinBufferMs = onSetBufferMinBufferMs,
                 onSetBufferMaxBufferMs = onSetBufferMaxBufferMs,
                 onSetBufferForPlaybackMs = onSetBufferForPlaybackMs,
