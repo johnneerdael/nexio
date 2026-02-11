@@ -1,7 +1,9 @@
 package com.nuvio.tv.di
 
+import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.plugin.PluginRuntime
+import com.nuvio.tv.core.sync.PluginSyncService
 import com.nuvio.tv.data.local.PluginDataStore
 import dagger.Module
 import dagger.Provides
@@ -12,19 +14,21 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object PluginModule {
-    
+
     @Provides
     @Singleton
     fun providePluginRuntime(): PluginRuntime {
         return PluginRuntime()
     }
-    
+
     @Provides
     @Singleton
     fun providePluginManager(
         dataStore: PluginDataStore,
-        runtime: PluginRuntime
+        runtime: PluginRuntime,
+        pluginSyncService: PluginSyncService,
+        authManager: AuthManager
     ): PluginManager {
-        return PluginManager(dataStore, runtime)
+        return PluginManager(dataStore, runtime, pluginSyncService, authManager)
     }
 }

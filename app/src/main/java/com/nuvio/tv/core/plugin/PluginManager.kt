@@ -39,7 +39,9 @@ private const val MAX_RESPONSE_SIZE = 5 * 1024 * 1024L
 @Singleton
 class PluginManager @Inject constructor(
     private val dataStore: PluginDataStore,
-    private val runtime: PluginRuntime
+    private val runtime: PluginRuntime,
+    private val pluginSyncService: com.nuvio.tv.core.sync.PluginSyncService,
+    private val authManager: com.nuvio.tv.core.auth.AuthManager
 ) {
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -77,6 +79,18 @@ class PluginManager @Inject constructor(
     // Flow of plugins enabled state
     val pluginsEnabled: Flow<Boolean> = dataStore.pluginsEnabled
     
+    private val syncScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+    )
+
+    private fun triggerRemoteSync() {
+        if (authManager.isAuthenticated) {
+            syncScope.launch {
+                pluginSyncService.pushToRemote()
+            }
+        }
+    }
+
     // Combined flow of enabled scrapers
     val enabledScrapers: Flow<List<ScraperInfo>> = combine(
         scrapers,
@@ -113,8 +127,9 @@ class PluginManager @Inject constructor(
             downloadScrapers(repo.id, manifestUrl, manifest.scrapers)
             
             Log.d(TAG, "Repository added: ${repo.name} with ${manifest.scrapers.size} scrapers")
+            triggerRemoteSync()
             Result.success(repo)
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add repository: ${e.message}", e)
             Result.failure(e)
@@ -138,6 +153,7 @@ class PluginManager @Inject constructor(
         
         // Remove repository
         dataStore.removeRepository(repoId)
+        triggerRemoteSync()
     }
     
     /**

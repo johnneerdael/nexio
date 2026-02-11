@@ -26,6 +26,10 @@ import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
+import com.nuvio.tv.ui.screens.account.AccountScreen
+import com.nuvio.tv.ui.screens.account.AuthSignInScreen
+import com.nuvio.tv.ui.screens.account.SyncCodeGenerateScreen
+import com.nuvio.tv.ui.screens.account.SyncCodeClaimScreen
 
 @Composable
 fun NuvioNavHost(
@@ -329,7 +333,11 @@ fun NuvioNavHost(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) }
+                onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
+                onNavigateToAccount = { navController.navigate(Screen.Account.route) },
+                onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
+                onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
+                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) }
             )
         }
 
@@ -363,6 +371,34 @@ fun NuvioNavHost(
 
         composable(Screen.Plugins.route) {
             PluginScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Account.route) {
+            AccountScreen(
+                onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
+                onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
+                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) },
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.AuthSignIn.route) {
+            AuthSignInScreen(
+                onBackPress = { navController.popBackStack() },
+                onSuccess = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.SyncCodeGenerate.route) {
+            SyncCodeGenerateScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.SyncCodeClaim.route) {
+            SyncCodeClaimScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }

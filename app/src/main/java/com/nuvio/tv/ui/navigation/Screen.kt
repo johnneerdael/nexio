@@ -95,6 +95,10 @@ sealed class Screen(val route: String) {
     data object Plugins : Screen("plugins")
     data object LayoutSelection : Screen("layout_selection")
     data object LayoutSettings : Screen("layout_settings")
+    data object Account : Screen("account")
+    data object AuthSignIn : Screen("auth_sign_in")
+    data object SyncCodeGenerate : Screen("sync_code_generate")
+    data object SyncCodeClaim : Screen("sync_code_claim")
     data object CatalogSeeAll : Screen("catalog_see_all/{catalogId}/{addonId}/{type}") {
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")

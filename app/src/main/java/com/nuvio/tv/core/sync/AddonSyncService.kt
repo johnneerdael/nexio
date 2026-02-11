@@ -1,0 +1,80 @@
+package com.nuvio.tv.core.sync
+
+import android.util.Log
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.data.local.AddonPreferences
+import com.nuvio.tv.data.remote.supabase.SupabaseAddon
+import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
+
+private const val TAG = "AddonSyncService"
+
+@Singleton
+class AddonSyncService @Inject constructor(
+    private val postgrest: Postgrest,
+    private val authManager: AuthManager,
+    private val addonPreferences: AddonPreferences
+) {
+    /**
+     * Push local addon URLs to Supabase.
+     * Replaces all remote entries for the effective user.
+     */
+    suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val effectiveUserId = authManager.getEffectiveUserId()
+                ?: return@withContext Result.failure(Exception("Not authenticated"))
+
+            val localUrls = addonPreferences.installedAddonUrls.first()
+
+            postgrest.from("addons").delete {
+                filter { eq("user_id", effectiveUserId) }
+            }
+
+            if (localUrls.isNotEmpty()) {
+                val remoteAddons = localUrls.mapIndexed { index, url ->
+                    SupabaseAddon(
+                        userId = effectiveUserId,
+                        url = url,
+                        sortOrder = index
+                    )
+                }
+                postgrest.from("addons").insert(remoteAddons)
+            }
+
+            Log.d(TAG, "Pushed ${localUrls.size} addons to remote")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to push addons to remote", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Returns remote addon URLs that are not present locally.
+     * The caller should use AddonRepository.addAddon() to install each.
+     */
+    suspend fun getNewRemoteAddonUrls(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val effectiveUserId = authManager.getEffectiveUserId() ?: return@withContext emptyList()
+
+            val remoteAddons = postgrest.from("addons")
+                .select { filter { eq("user_id", effectiveUserId) } }
+                .decodeList<SupabaseAddon>()
+
+            val localUrls = addonPreferences.installedAddonUrls.first()
+                .map { it.trimEnd('/').lowercase() }.toSet()
+
+            remoteAddons
+                .filter { it.url.trimEnd('/').lowercase() !in localUrls }
+                .sortedBy { it.sortOrder }
+                .map { it.url }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get remote addon URLs", e)
+            emptyList()
+        }
+    }
+}

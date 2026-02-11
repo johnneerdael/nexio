@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
@@ -69,10 +70,14 @@ import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
 
+import com.nuvio.tv.ui.screens.account.AccountSettingsContent
+import com.nuvio.tv.ui.screens.account.AccountViewModel
+
 private enum class SettingsCategory(val displayName: String, val icon: ImageVector) {
     APPEARANCE("Appearance", Icons.Default.Palette),
     LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
+    ACCOUNT("Account", Icons.Default.Person),
     TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
     ABOUT("About", Icons.Default.Info)
@@ -81,11 +86,17 @@ private enum class SettingsCategory(val displayName: String, val icon: ImageVect
 @Composable
 fun SettingsScreen(
     onNavigateToPlugins: () -> Unit = {},
+    onNavigateToAccount: () -> Unit = {},
+    onNavigateToAuthSignIn: () -> Unit = {},
+    onNavigateToSyncGenerate: () -> Unit = {},
+    onNavigateToSyncClaim: () -> Unit = {},
 ) {
     var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
     var previousIndex by remember { mutableIntStateOf(0) }
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
+    val accountViewModel: AccountViewModel = hiltViewModel()
+    val accountUiState by accountViewModel.uiState.collectAsState()
 
     val accentColor = NuvioColors.Secondary
 
@@ -219,6 +230,12 @@ fun SettingsScreen(
                     SettingsCategory.PLUGINS -> PluginScreenContent(
                         uiState = pluginUiState,
                         viewModel = pluginViewModel
+                    )
+                    SettingsCategory.ACCOUNT -> AccountSettingsContent(
+                        uiState = accountUiState,
+                        viewModel = accountViewModel,
+                        onNavigateToSyncGenerate = onNavigateToSyncGenerate,
+                        onNavigateToSyncClaim = onNavigateToSyncClaim
                     )
                 }
             }

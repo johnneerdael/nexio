@@ -1,0 +1,82 @@
+package com.nuvio.tv.core.sync
+
+import android.util.Log
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.data.local.PluginDataStore
+import com.nuvio.tv.data.remote.supabase.SupabasePlugin
+import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
+
+private const val TAG = "PluginSyncService"
+
+@Singleton
+class PluginSyncService @Inject constructor(
+    private val postgrest: Postgrest,
+    private val authManager: AuthManager,
+    private val pluginDataStore: PluginDataStore
+) {
+    /**
+     * Push local plugin repository URLs to Supabase.
+     * Replaces all remote entries for the effective user.
+     */
+    suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val effectiveUserId = authManager.getEffectiveUserId()
+                ?: return@withContext Result.failure(Exception("Not authenticated"))
+
+            val localRepos = pluginDataStore.repositories.first()
+
+            postgrest.from("plugins").delete {
+                filter { eq("user_id", effectiveUserId) }
+            }
+
+            if (localRepos.isNotEmpty()) {
+                val remotePlugins = localRepos.mapIndexed { index, repo ->
+                    SupabasePlugin(
+                        userId = effectiveUserId,
+                        url = repo.url,
+                        name = repo.name,
+                        enabled = repo.enabled,
+                        sortOrder = index
+                    )
+                }
+                postgrest.from("plugins").insert(remotePlugins)
+            }
+
+            Log.d(TAG, "Pushed ${localRepos.size} plugin repos to remote")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to push plugins to remote", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Returns remote plugin repo URLs that are not present locally.
+     * The caller should use PluginManager.addRepository() to install each.
+     */
+    suspend fun getNewRemoteRepoUrls(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val effectiveUserId = authManager.getEffectiveUserId() ?: return@withContext emptyList()
+
+            val remotePlugins = postgrest.from("plugins")
+                .select { filter { eq("user_id", effectiveUserId) } }
+                .decodeList<SupabasePlugin>()
+
+            val localRepos = pluginDataStore.repositories.first()
+            val localUrls = localRepos.map { it.url.trimEnd('/').lowercase() }.toSet()
+
+            remotePlugins
+                .filter { it.url.trimEnd('/').lowercase() !in localUrls }
+                .sortedBy { it.sortOrder }
+                .map { it.url }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get remote repo URLs", e)
+            emptyList()
+        }
+    }
+}

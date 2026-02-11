@@ -11,16 +11,33 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.sync.AddonSyncService
 import javax.inject.Inject
 
 class AddonRepositoryImpl @Inject constructor(
     private val api: AddonApi,
-    private val preferences: AddonPreferences
+    private val preferences: AddonPreferences,
+    private val addonSyncService: AddonSyncService,
+    private val authManager: AuthManager
 ) : AddonRepository {
+
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private fun triggerRemoteSync() {
+        if (authManager.isAuthenticated) {
+            syncScope.launch {
+                addonSyncService.pushToRemote()
+            }
+        }
+    }
 
     private val manifestCache = mutableMapOf<String, Addon>()
 
@@ -67,15 +84,18 @@ class AddonRepositoryImpl @Inject constructor(
     override suspend fun addAddon(url: String) {
         val cleanUrl = url.trimEnd('/')
         preferences.addAddon(cleanUrl)
+        triggerRemoteSync()
     }
 
     override suspend fun removeAddon(url: String) {
         val cleanUrl = url.trimEnd('/')
         manifestCache.remove(cleanUrl)
         preferences.removeAddon(cleanUrl)
+        triggerRemoteSync()
     }
 
     override suspend fun setAddonOrder(urls: List<String>) {
         preferences.setAddonOrder(urls)
+        triggerRemoteSync()
     }
 }
