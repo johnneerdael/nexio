@@ -23,7 +23,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +73,9 @@ fun HeroContentSection(
     restorePlayFocusToken: Int = 0,
     onPlayFocusRestored: () -> Unit = {}
 ) {
+    var isDescriptionExpanded by remember(meta.id) { mutableStateOf(false) }
+    var descriptionHasOverflow by remember(meta.id) { mutableStateOf(false) }
+
     // Animate logo properties for trailer mode
     val logoHeight by animateDpAsState(
         targetValue = if (isTrailerPlaying) 60.dp else 100.dp,
@@ -206,12 +211,45 @@ fun HeroContentSection(
                             text = meta.description,
                             style = MaterialTheme.typography.bodyMedium,
                             color = NuvioColors.TextPrimary,
-                            maxLines = 2,
+                            maxLines = if (isDescriptionExpanded) Int.MAX_VALUE else 2,
                             overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { result ->
+                                if (!isDescriptionExpanded) {
+                                    descriptionHasOverflow = result.hasVisualOverflow
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth(0.6f)
                                 .padding(bottom = 12.dp)
                         )
+
+                        if (descriptionHasOverflow || isDescriptionExpanded) {
+                            Button(
+                                onClick = { isDescriptionExpanded = !isDescriptionExpanded },
+                                modifier = Modifier
+                                    .height(34.dp)
+                                    .padding(bottom = 12.dp),
+                                colors = ButtonDefaults.colors(
+                                    containerColor = NuvioColors.BackgroundElevated,
+                                    focusedContainerColor = NuvioColors.FocusBackground,
+                                    contentColor = NuvioColors.TextPrimary,
+                                    focusedContentColor = NuvioColors.TextPrimary
+                                ),
+                                shape = ButtonDefaults.shape(shape = RoundedCornerShape(20.dp)),
+                                border = ButtonDefaults.border(
+                                    focusedBorder = Border(
+                                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                        shape = RoundedCornerShape(20.dp)
+                                    )
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    text = if (isDescriptionExpanded) "Show less" else "Show more",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
                     }
 
                     MetaInfoRow(meta = meta)
