@@ -43,6 +43,8 @@ internal fun PlaybackSettingsSections(
     onShowStreamAutoPlayAddonSelectionDialog: () -> Unit,
     onShowStreamAutoPlayPluginSelectionDialog: () -> Unit,
     onShowStreamRegexDialog: () -> Unit,
+    onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
@@ -136,7 +138,9 @@ internal fun PlaybackSettingsSections(
                 onShowSourceDialog = onShowStreamAutoPlaySourceDialog,
                 onShowAddonSelectionDialog = onShowStreamAutoPlayAddonSelectionDialog,
                 onShowPluginSelectionDialog = onShowStreamAutoPlayPluginSelectionDialog,
-                onShowRegexDialog = onShowStreamRegexDialog
+                onShowRegexDialog = onShowStreamRegexDialog,
+                onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
+                onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled
             )
 
             trailerAndAudioSettingsItems(
@@ -186,6 +190,7 @@ internal fun PlaybackSettingsDialogsHost(
     showStreamAutoPlayAddonSelectionDialog: Boolean,
     showStreamAutoPlayPluginSelectionDialog: Boolean,
     showStreamRegexDialog: Boolean,
+    showReuseLastLinkCacheDialog: Boolean,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
     onSetSubtitleTextColor: (Color) -> Unit,
@@ -198,6 +203,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetStreamAutoPlayRegex: (String) -> Unit,
     onSetStreamAutoPlaySelectedAddons: (Set<String>) -> Unit,
     onSetStreamAutoPlaySelectedPlugins: (Set<String>) -> Unit,
+    onSetReuseLastLinkCacheHours: (Int) -> Unit,
     onDismissLanguageDialog: () -> Unit,
     onDismissSecondaryLanguageDialog: () -> Unit,
     onDismissTextColorDialog: () -> Unit,
@@ -209,7 +215,8 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissStreamAutoPlaySourceDialog: () -> Unit,
     onDismissStreamRegexDialog: () -> Unit,
     onDismissStreamAutoPlayAddonSelectionDialog: () -> Unit,
-    onDismissStreamAutoPlayPluginSelectionDialog: () -> Unit
+    onDismissStreamAutoPlayPluginSelectionDialog: () -> Unit,
+    onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
     SubtitleSettingsDialogs(
         showLanguageDialog = showLanguageDialog,
@@ -247,6 +254,7 @@ internal fun PlaybackSettingsDialogsHost(
         showRegexDialog = showStreamRegexDialog,
         showAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
         showPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
+        showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
         enabledPluginNames = enabledPluginNames,
@@ -255,10 +263,12 @@ internal fun PlaybackSettingsDialogsHost(
         onSetRegex = onSetStreamAutoPlayRegex,
         onSetSelectedAddons = onSetStreamAutoPlaySelectedAddons,
         onSetSelectedPlugins = onSetStreamAutoPlaySelectedPlugins,
+        onSetReuseLastLinkCacheHours = onSetReuseLastLinkCacheHours,
         onDismissModeDialog = onDismissStreamAutoPlayModeDialog,
         onDismissSourceDialog = onDismissStreamAutoPlaySourceDialog,
         onDismissRegexDialog = onDismissStreamRegexDialog,
         onDismissAddonSelectionDialog = onDismissStreamAutoPlayAddonSelectionDialog,
-        onDismissPluginSelectionDialog = onDismissStreamAutoPlayPluginSelectionDialog
+        onDismissPluginSelectionDialog = onDismissStreamAutoPlayPluginSelectionDialog,
+        onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
     )
 }

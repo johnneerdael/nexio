@@ -66,6 +66,7 @@ private val BadgeShape = RoundedCornerShape(4.dp)
 fun ContinueWatchingSection(
     items: List<ContinueWatchingItem>,
     onItemClick: (ContinueWatchingItem) -> Unit,
+    onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1,
@@ -160,7 +161,7 @@ fun ContinueWatchingSection(
                 optionsItem = null
             },
             onDetails = {
-                onItemClick(menuItem)
+                onDetailsClick(menuItem)
                 optionsItem = null
             }
         )

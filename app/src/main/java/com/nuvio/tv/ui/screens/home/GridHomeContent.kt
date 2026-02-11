@@ -63,6 +63,7 @@ fun GridHomeContent(
     uiState: HomeUiState,
     gridFocusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
+    onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String) -> Unit,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
@@ -203,6 +204,9 @@ fun GridHomeContent(
                                     items = uiState.continueWatchingItems,
                                     focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                                     onItemClick = { item ->
+                                        onContinueWatchingClick(item)
+                                    },
+                                    onDetailsClick = { item ->
                                         onNavigateToDetail(
                                             when (item) {
                                                 is ContinueWatchingItem.InProgress -> item.progress.contentId

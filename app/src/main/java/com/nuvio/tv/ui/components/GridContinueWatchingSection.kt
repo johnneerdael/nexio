@@ -32,6 +32,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 fun GridContinueWatchingSection(
     items: List<ContinueWatchingItem>,
     onItemClick: (ContinueWatchingItem) -> Unit,
+    onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1
@@ -121,7 +122,7 @@ fun GridContinueWatchingSection(
                 optionsItem = null
             },
             onDetails = {
-                onItemClick(menuItem)
+                onDetailsClick(menuItem)
                 optionsItem = null
             }
         )

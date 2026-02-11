@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,8 +66,31 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowSourceDialog: () -> Unit,
     onShowAddonSelectionDialog: () -> Unit,
     onShowPluginSelectionDialog: () -> Unit,
-    onShowRegexDialog: () -> Unit
+    onShowRegexDialog: () -> Unit,
+    onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetReuseLastLinkEnabled: (Boolean) -> Unit
 ) {
+    item {
+        ToggleSettingsItem(
+            icon = Icons.Default.History,
+            title = "Reuse Last Link",
+            subtitle = "Auto-play your last working stream for this same movie/episode when cache is still valid",
+            isChecked = playerSettings.streamReuseLastLinkEnabled,
+            onCheckedChange = onSetReuseLastLinkEnabled
+        )
+    }
+
+    if (playerSettings.streamReuseLastLinkEnabled) {
+        item {
+            NavigationSettingsItem(
+                icon = Icons.Default.Tune,
+                title = "Last Link Cache Duration",
+                subtitle = formatReuseCacheDuration(playerSettings.streamReuseLastLinkCacheHours),
+                onClick = onShowReuseLastLinkCacheDialog
+            )
+        }
+    }
+
     item {
         val modeLabel = when (playerSettings.streamAutoPlayMode) {
             StreamAutoPlayMode.MANUAL -> "Manual (choose stream)"
@@ -151,6 +175,7 @@ internal fun AutoPlaySettingsDialogs(
     showRegexDialog: Boolean,
     showAddonSelectionDialog: Boolean,
     showPluginSelectionDialog: Boolean,
+    showReuseLastLinkCacheDialog: Boolean,
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
     enabledPluginNames: List<String>,
@@ -159,11 +184,13 @@ internal fun AutoPlaySettingsDialogs(
     onSetRegex: (String) -> Unit,
     onSetSelectedAddons: (Set<String>) -> Unit,
     onSetSelectedPlugins: (Set<String>) -> Unit,
+    onSetReuseLastLinkCacheHours: (Int) -> Unit,
     onDismissModeDialog: () -> Unit,
     onDismissSourceDialog: () -> Unit,
     onDismissRegexDialog: () -> Unit,
     onDismissAddonSelectionDialog: () -> Unit,
-    onDismissPluginSelectionDialog: () -> Unit
+    onDismissPluginSelectionDialog: () -> Unit,
+    onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
     if (showModeDialog) {
         StreamAutoPlayModeDialog(
@@ -218,6 +245,32 @@ internal fun AutoPlaySettingsDialogs(
             onSelectionSaved = onSetSelectedPlugins,
             onDismiss = onDismissPluginSelectionDialog
         )
+    }
+
+    if (showReuseLastLinkCacheDialog) {
+        StreamReuseLastLinkCacheDurationDialog(
+            selectedHours = playerSettings.streamReuseLastLinkCacheHours,
+            onDurationSelected = {
+                onSetReuseLastLinkCacheHours(it)
+                onDismissReuseLastLinkCacheDialog()
+            },
+            onDismiss = onDismissReuseLastLinkCacheDialog
+        )
+    }
+}
+
+private fun formatReuseCacheDuration(hours: Int): String {
+    return when {
+        hours < 24 -> "$hours hour${if (hours == 1) "" else "s"}"
+        hours % 24 == 0 -> {
+            val days = hours / 24
+            "$days day${if (days == 1) "" else "s"}"
+        }
+        else -> {
+            val days = hours / 24
+            val remainingHours = hours % 24
+            "${days}d ${remainingHours}h"
+        }
     }
 }
 
@@ -300,6 +353,96 @@ private fun StreamAutoPlayModeDialog(
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.height(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StreamReuseLastLinkCacheDurationDialog(
+    selectedHours: Int,
+    onDurationSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = listOf(
+        1,
+        6,
+        12,
+        24,
+        48,
+        72,
+        168
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            onClick = { },
+            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
+            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(420.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Last Link Cache Duration",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    itemsIndexed(options) { index, hours ->
+                        val isSelected = hours == selectedHours
+                        Card(
+                            onClick = { onDurationSelected(hours) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = formatReuseCacheDuration(hours),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+
                                 if (isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,

@@ -25,6 +25,7 @@ import com.nuvio.tv.ui.screens.settings.SettingsScreen
 import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
+import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 
 @Composable
 fun NuvioNavHost(
@@ -53,6 +54,43 @@ fun NuvioNavHost(
             HomeScreen(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                },
+                onContinueWatchingClick = { item ->
+                    val route = when (item) {
+                        is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
+                            videoId = item.progress.videoId,
+                            contentType = item.progress.contentType,
+                            title = item.progress.name,
+                            poster = item.progress.poster,
+                            backdrop = item.progress.backdrop,
+                            logo = item.progress.logo,
+                            season = item.progress.season,
+                            episode = item.progress.episode,
+                            episodeName = item.progress.episodeTitle,
+                            genres = null,
+                            year = null,
+                            contentId = item.progress.contentId,
+                            contentName = item.progress.name,
+                            runtime = null
+                        )
+                        is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
+                            videoId = item.info.videoId,
+                            contentType = item.info.contentType,
+                            title = item.info.name,
+                            poster = item.info.poster,
+                            backdrop = item.info.backdrop,
+                            logo = item.info.logo,
+                            season = item.info.season,
+                            episode = item.info.episode,
+                            episodeName = item.info.episodeTitle,
+                            genres = null,
+                            year = null,
+                            contentId = item.info.contentId,
+                            contentName = item.info.name,
+                            runtime = null
+                        )
+                    }
+                    navController.navigate(route)
                 },
                 onNavigateToCatalogSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
@@ -261,7 +299,12 @@ fun NuvioNavHost(
             )
         ) {
             PlayerScreen(
-                onBackPress = { navController.popBackStack() }
+                onBackPress = {
+                    val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
+                    if (!returnedToStream) {
+                        navController.popBackStack()
+                    }
+                }
             )
         }
 

@@ -199,4 +199,12 @@ class PlaybackSettingsViewModel @Inject constructor(
     suspend fun setStreamAutoPlayRegex(regex: String) {
         playerSettingsDataStore.setStreamAutoPlayRegex(regex)
     }
+
+    suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setStreamReuseLastLinkEnabled(enabled)
+    }
+
+    suspend fun setStreamReuseLastLinkCacheHours(hours: Int) {
+        playerSettingsDataStore.setStreamReuseLastLinkCacheHours(hours)
+    }
 }

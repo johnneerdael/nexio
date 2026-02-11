@@ -97,6 +97,16 @@ fun StreamScreen(
         val stream = uiState.autoPlayStream ?: return@LaunchedEffect
         val playbackInfo = viewModel.getStreamForPlayback(stream)
         if (playbackInfo.url != null) {
+            pendingRestoreOnResume = true
+            onStreamSelected(playbackInfo)
+            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+        }
+    }
+
+    LaunchedEffect(uiState.autoPlayPlaybackInfo) {
+        val playbackInfo = uiState.autoPlayPlaybackInfo ?: return@LaunchedEffect
+        if (playbackInfo.url != null) {
+            pendingRestoreOnResume = true
             onStreamSelected(playbackInfo)
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
         }

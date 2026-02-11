@@ -25,6 +25,7 @@ data class StreamScreenUiState(
     val filteredStreams: List<Stream> = emptyList(),
     val availableAddons: List<String> = emptyList(),
     val autoPlayStream: Stream? = null,
+    val autoPlayPlaybackInfo: StreamPlaybackInfo? = null,
     val error: String? = null
 ) {
     val isEpisode: Boolean get() = season != null && episode != null

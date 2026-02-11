@@ -172,6 +172,7 @@ fun PlaybackSettingsContent(
     var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showStreamRegexDialog by remember { mutableStateOf(false) }
+    var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
 
     PlaybackSettingsSections(
         playerSettings = playerSettings,
@@ -188,6 +189,8 @@ fun PlaybackSettingsContent(
         onShowStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = true },
         onShowStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = true },
         onShowStreamRegexDialog = { showStreamRegexDialog = true },
+        onShowReuseLastLinkCacheDialog = { showReuseLastLinkCacheDialog = true },
+        onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
         onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
         onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
         onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
@@ -221,6 +224,7 @@ fun PlaybackSettingsContent(
         showStreamAutoPlayAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
         showStreamAutoPlayPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
         showStreamRegexDialog = showStreamRegexDialog,
+        showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         onSetSubtitlePreferredLanguage = { language ->
             coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }
         },
@@ -257,6 +261,9 @@ fun PlaybackSettingsContent(
         onSetStreamAutoPlaySelectedPlugins = { selected ->
             coroutineScope.launch { viewModel.setStreamAutoPlaySelectedPlugins(selected) }
         },
+        onSetReuseLastLinkCacheHours = { hours ->
+            coroutineScope.launch { viewModel.setStreamReuseLastLinkCacheHours(hours) }
+        },
         onDismissLanguageDialog = { showLanguageDialog = false },
         onDismissSecondaryLanguageDialog = { showSecondaryLanguageDialog = false },
         onDismissTextColorDialog = { showTextColorDialog = false },
@@ -268,7 +275,8 @@ fun PlaybackSettingsContent(
         onDismissStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = false },
         onDismissStreamRegexDialog = { showStreamRegexDialog = false },
         onDismissStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = false },
-        onDismissStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = false }
+        onDismissStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = false },
+        onDismissReuseLastLinkCacheDialog = { showReuseLastLinkCacheDialog = false }
     )
 }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.domain.model.Stream
@@ -24,6 +25,7 @@ class StreamScreenViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -42,6 +44,7 @@ class StreamScreenViewModel @Inject constructor(
     private val year: String? = savedStateHandle["year"]
     private val contentId: String? = savedStateHandle["contentId"]
     private val contentName: String? = savedStateHandle["contentName"]
+    private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
 
     private val _uiState = MutableStateFlow(
         StreamScreenUiState(
@@ -71,7 +74,7 @@ class StreamScreenViewModel @Inject constructor(
             is StreamScreenEvent.OnStreamSelected -> { /* Handle stream selection - will be handled in UI */ }
             StreamScreenEvent.OnAutoPlayConsumed -> {
                 autoPlayHandledForSession = true
-                _uiState.update { it.copy(autoPlayStream = null) }
+                _uiState.update { it.copy(autoPlayStream = null, autoPlayPlaybackInfo = null) }
             }
             StreamScreenEvent.OnRetry -> loadStreams()
             StreamScreenEvent.OnBackPress -> { /* Handle in screen */ }
@@ -80,6 +83,43 @@ class StreamScreenViewModel @Inject constructor(
 
     private fun loadStreams() {
         viewModelScope.launch {
+            val playerSettings = playerSettingsDataStore.playerSettings.first()
+
+            if (!autoPlayHandledForSession && playerSettings.streamReuseLastLinkEnabled) {
+                val cached = streamLinkCacheDataStore.getValid(
+                    contentKey = streamCacheKey,
+                    maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
+                )
+                if (cached != null) {
+                    autoPlayHandledForSession = true
+                    _uiState.update {
+                        it.copy(
+                            autoPlayPlaybackInfo = StreamPlaybackInfo(
+                                url = cached.url,
+                                title = title,
+                                streamName = cached.streamName,
+                                year = year,
+                                isExternal = false,
+                                isTorrent = false,
+                                infoHash = null,
+                                ytId = null,
+                                headers = cached.headers,
+                                contentId = contentId ?: videoId.substringBefore(":"),
+                                contentType = contentType,
+                                contentName = contentName ?: title,
+                                poster = poster,
+                                backdrop = backdrop,
+                                logo = logo,
+                                videoId = videoId,
+                                season = season,
+                                episode = episode,
+                                episodeTitle = episodeName
+                            )
+                        )
+                    }
+                }
+            }
+
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             val installedAddons = addonRepository.getInstalledAddons().first()
@@ -93,7 +133,6 @@ class StreamScreenViewModel @Inject constructor(
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
-                        val playerSettings = playerSettingsDataStore.playerSettings.first()
                         val addonStreams = orderStreams(result.data, installedAddonOrder)
                         val allStreams = addonStreams.flatMap { it.streams }
                         val availableAddons = addonStreams.map { it.addonName }
@@ -166,7 +205,7 @@ class StreamScreenViewModel @Inject constructor(
      * Gets the selected stream for playback
      */
     fun getStreamForPlayback(stream: Stream): StreamPlaybackInfo {
-        return StreamPlaybackInfo(
+        val playbackInfo = StreamPlaybackInfo(
             url = stream.getStreamUrl(),
             title = _uiState.value.title,
             streamName = stream.name ?: stream.addonName,
@@ -187,6 +226,20 @@ class StreamScreenViewModel @Inject constructor(
             episode = episode,
             episodeTitle = episodeName
         )
+
+        val url = playbackInfo.url
+        if (!url.isNullOrBlank()) {
+            viewModelScope.launch {
+                streamLinkCacheDataStore.save(
+                    contentKey = streamCacheKey,
+                    url = url,
+                    streamName = playbackInfo.streamName,
+                    headers = playbackInfo.headers
+                )
+            }
+        }
+
+        return playbackInfo
     }
 
     private fun orderStreams(

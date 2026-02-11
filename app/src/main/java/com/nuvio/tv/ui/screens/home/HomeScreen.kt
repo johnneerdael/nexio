@@ -32,6 +32,19 @@ import kotlin.math.roundToInt
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     onNavigateToDetail: (String, String, String) -> Unit,
+    onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
+        onNavigateToDetail(
+            when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.contentId
+                is ContinueWatchingItem.NextUp -> item.info.contentId
+            },
+            when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress.contentType
+                is ContinueWatchingItem.NextUp -> item.info.contentType
+            },
+            ""
+        )
+    },
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -123,6 +136,7 @@ fun HomeScreen(
                                 posterCardStyle = posterCardStyle,
                                 focusState = focusState,
                                 onNavigateToDetail = onNavigateToDetail,
+                                onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
                                 onRemoveContinueWatching = { contentId ->
                                     viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
@@ -136,6 +150,7 @@ fun HomeScreen(
                                 posterCardStyle = posterCardStyle,
                                 gridFocusState = gridFocusState,
                                 onNavigateToDetail = onNavigateToDetail,
+                                onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
                                 onRemoveContinueWatching = { contentId ->
                                     viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))

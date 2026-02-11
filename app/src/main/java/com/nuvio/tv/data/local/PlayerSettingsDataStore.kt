@@ -139,7 +139,9 @@ data class PlayerSettings(
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
-    val streamAutoPlayRegex: String = ""
+    val streamAutoPlayRegex: String = "",
+    val streamReuseLastLinkEnabled: Boolean = false,
+    val streamReuseLastLinkCacheHours: Int = 24
 )
 
 enum class StreamAutoPlayMode {
@@ -192,6 +194,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
     private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
+    private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
+    private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -271,6 +275,8 @@ class PlayerSettingsDataStore @Inject constructor(
             streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
             streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
             streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
+            streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
+            streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
                 secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
@@ -388,6 +394,18 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayRegex(regex: String) {
         dataStore.edit { prefs ->
             prefs[streamAutoPlayRegexKey] = regex.trim()
+        }
+    }
+
+    suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[streamReuseLastLinkEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setStreamReuseLastLinkCacheHours(hours: Int) {
+        dataStore.edit { prefs ->
+            prefs[streamReuseLastLinkCacheHoursKey] = hours.coerceIn(1, 168)
         }
     }
 
