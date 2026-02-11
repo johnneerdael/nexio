@@ -14,14 +14,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.tv.foundation.lazy.grid.TvGridCells
 import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
 import androidx.tv.foundation.lazy.grid.itemsIndexed
@@ -42,6 +51,7 @@ import com.nuvio.tv.ui.screens.home.HomeViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
+import androidx.compose.runtime.withFrameNanos
 
 @Composable
 fun CatalogSeeAllScreen(
@@ -71,6 +81,10 @@ fun CatalogSeeAllScreen(
     }
 
     val gridState = rememberTvLazyGridState()
+    val restoreFocusRequester = remember { FocusRequester() }
+    var focusedItemIndex by rememberSaveable(catalogKey) { mutableStateOf(0) }
+    var shouldRestoreFocus by rememberSaveable(catalogKey) { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // Load more when scrolling near the bottom
     LaunchedEffect(gridState, catalogRow?.items?.size) {
@@ -90,6 +104,36 @@ fun CatalogSeeAllScreen(
                     }
                 }
             }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                shouldRestoreFocus = true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(shouldRestoreFocus, catalogRow?.items?.size, focusedItemIndex) {
+        if (!shouldRestoreFocus) return@LaunchedEffect
+        val itemsCount = catalogRow?.items?.size ?: 0
+        if (itemsCount == 0) return@LaunchedEffect
+
+        val targetIndex = focusedItemIndex.coerceIn(0, itemsCount - 1)
+        val isTargetVisible = gridState.layoutInfo.visibleItemsInfo.any { it.index == targetIndex }
+        if (!isTargetVisible) {
+            gridState.animateScrollToItem(targetIndex)
+        }
+        repeat(2) { withFrameNanos { } }
+        try {
+            restoreFocusRequester.requestFocus()
+            shouldRestoreFocus = false
+        } catch (_: IllegalStateException) {
+        }
     }
 
     Column(
@@ -130,18 +174,25 @@ fun CatalogSeeAllScreen(
                 TvLazyVerticalGrid(
                     state = gridState,
                     columns = TvGridCells.Adaptive(minSize = posterCardStyle.width),
-                    contentPadding = PaddingValues(bottom = if (catalogRow.isLoading) 80.dp else 32.dp),
+                    contentPadding = PaddingValues(
+                        top = 12.dp,
+                        bottom = if (catalogRow.isLoading) 80.dp else 32.dp
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     itemsIndexed(
                         items = catalogRow.items,
                         key = { index, item -> "${catalogRow.catalogId}_${item.id}_$index" }
-                    ) { _, item ->
+                    ) { index, item ->
                         GridContentCard(
                             item = item,
                             posterCardStyle = posterCardStyle,
                             showLabel = uiState.posterLabelsEnabled,
+                            focusRequester = if (index == focusedItemIndex) restoreFocusRequester else null,
+                            onFocused = {
+                                focusedItemIndex = index
+                            },
                             onClick = {
                                 onNavigateToDetail(
                                     item.id,
