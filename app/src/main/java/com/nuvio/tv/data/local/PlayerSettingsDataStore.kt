@@ -97,12 +97,12 @@ data class SubtitleStyleSettings(
  * Data class representing buffer settings
  */
 data class BufferSettings(
-    val minBufferMs: Int = 15_000,
-    val maxBufferMs: Int = 25_000,
+    val minBufferMs: Int = 50_000,
+    val maxBufferMs: Int = 50_000,
     val bufferForPlaybackMs: Int = 2_500,
     val bufferForPlaybackAfterRebufferMs: Int = 5_000,
     val targetBufferSizeMb: Int = 0, // 0 = ExoPlayer default
-    val backBufferDurationMs: Int = 10_000,
+    val backBufferDurationMs: Int = 0,
     val retainBackBufferFromKeyframe: Boolean = false,
     val useParallelConnections: Boolean = false
 )
@@ -217,13 +217,31 @@ class PlayerSettingsDataStore @Inject constructor(
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
 
     private val migrationParallelConnectionsDefaultOffDoneKey = booleanPreferencesKey("migration_parallel_connections_default_off_done")
+    private val migrationLoadControlDefaultsAlignedDoneKey = booleanPreferencesKey("migration_load_control_defaults_aligned_done")
 
     init {
         ioScope.launch {
             dataStore.edit { prefs ->
-                val currentMax = prefs[maxBufferMsKey]
-                if (currentMax == null || currentMax == 50_000) {
-                    prefs[maxBufferMsKey] = 25_000
+                val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false
+                if (!loadControlMigrated) {
+                    val currentMin = prefs[minBufferMsKey]
+                    val currentMax = prefs[maxBufferMsKey]
+
+                    val legacyDefaultsDetected = (currentMin == null && currentMax == null) ||
+                        (currentMin == 15_000 && currentMax == 25_000)
+
+                    if (legacyDefaultsDetected) {
+                        prefs[minBufferMsKey] = 50_000
+                        prefs[maxBufferMsKey] = 50_000
+                    }
+
+                    prefs[migrationLoadControlDefaultsAlignedDoneKey] = true
+                }
+
+                val min = prefs[minBufferMsKey]
+                val max = prefs[maxBufferMsKey]
+                if (min != null && max != null && max < min) {
+                    prefs[maxBufferMsKey] = min
                 }
 
                 val migrated = prefs[migrationParallelConnectionsDefaultOffDoneKey] ?: false
@@ -278,8 +296,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
             ),
             bufferSettings = BufferSettings(
-                minBufferMs = prefs[minBufferMsKey] ?: 15_000,
-                maxBufferMs = prefs[maxBufferMsKey] ?: 25_000,
+                minBufferMs = prefs[minBufferMsKey] ?: 50_000,
+                maxBufferMs = prefs[maxBufferMsKey] ?: 50_000,
                 bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: 2_500,
                 bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 5_000,
                 targetBufferSizeMb = prefs[targetBufferSizeMbKey] ?: 0,
@@ -480,13 +498,19 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setBufferMinBufferMs(ms: Int) {
         dataStore.edit { prefs ->
-            prefs[minBufferMsKey] = ms.coerceIn(5_000, 120_000)
+            val newMin = ms.coerceIn(5_000, 120_000)
+            prefs[minBufferMsKey] = newMin
+            val currentMax = prefs[maxBufferMsKey] ?: 50_000
+            if (currentMax < newMin) {
+                prefs[maxBufferMsKey] = newMin
+            }
         }
     }
 
     suspend fun setBufferMaxBufferMs(ms: Int) {
         dataStore.edit { prefs ->
-            prefs[maxBufferMsKey] = ms.coerceIn(5_000, 120_000)
+            val currentMin = prefs[minBufferMsKey] ?: 50_000
+            prefs[maxBufferMsKey] = ms.coerceIn(currentMin, 120_000)
         }
     }
 

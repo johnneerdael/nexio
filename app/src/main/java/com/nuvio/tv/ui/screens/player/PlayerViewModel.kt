@@ -31,7 +31,6 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import java.util.concurrent.TimeUnit
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -502,26 +501,8 @@ class PlayerViewModel @Inject constructor(
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val useLibass = playerSettings.useLibass
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
-                val bufferSettings = playerSettings.bufferSettings
-                currentUseParallelConnections = bufferSettings.useParallelConnections
-
-                val loadControlBuilder = DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        bufferSettings.minBufferMs,
-                        bufferSettings.maxBufferMs,
-                        bufferSettings.bufferForPlaybackMs,
-                        bufferSettings.bufferForPlaybackAfterRebufferMs
-                    )
-                    .setBackBuffer(
-                        bufferSettings.backBufferDurationMs,
-                        bufferSettings.retainBackBufferFromKeyframe
-                    )
-
-                if (bufferSettings.targetBufferSizeMb > 0) {
-                    loadControlBuilder.setTargetBufferBytes(bufferSettings.targetBufferSizeMb * 1024 * 1024)
-                }
-
-                val loadControl = loadControlBuilder.build()
+                currentUseParallelConnections = playerSettings.bufferSettings.useParallelConnections
+                val loadControl = DefaultLoadControl.Builder().build()
 
                 
                 trackSelector = DefaultTrackSelector(context).apply {
@@ -787,7 +768,6 @@ class PlayerViewModel @Inject constructor(
         return okHttpClient ?: OkHttpClient.Builder()
             .connectTimeout(8000, TimeUnit.MILLISECONDS)
             .readTimeout(8000, TimeUnit.MILLISECONDS)
-            .protocols(listOf(Protocol.HTTP_1_1))
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .retryOnConnectionFailure(true)
             .followRedirects(true)
