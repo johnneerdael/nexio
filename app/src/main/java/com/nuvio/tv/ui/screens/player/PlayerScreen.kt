@@ -7,6 +7,7 @@ package com.nuvio.tv.ui.screens.player
 
 import android.util.Log
 import android.view.KeyEvent
+import androidx.annotation.RawRes
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,7 +15,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -85,6 +89,10 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
 import java.util.concurrent.TimeUnit
@@ -106,6 +114,8 @@ fun PlayerScreen(
     BackHandler {
         if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+        } else if (uiState.showSubtitleStylePanel) {
+            viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
         } else if (uiState.showSourcesPanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
         } else if (uiState.showEpisodesPanel) {
@@ -161,9 +171,10 @@ fun PlayerScreen(
     }
 
     // Request focus for key events when controls visibility or panel state changes
-    LaunchedEffect(uiState.showControls, uiState.showEpisodesPanel, uiState.showSourcesPanel) {
+    LaunchedEffect(uiState.showControls, uiState.showEpisodesPanel, uiState.showSourcesPanel, uiState.showSubtitleStylePanel) {
         if (uiState.showControls && !uiState.showEpisodesPanel && !uiState.showSourcesPanel &&
-            !uiState.showAudioDialog && !uiState.showSubtitleDialog && !uiState.showSpeedDialog
+            !uiState.showAudioDialog && !uiState.showSubtitleDialog &&
+            !uiState.showSubtitleStylePanel && !uiState.showSpeedDialog
         ) {
             // Wait for AnimatedVisibility animation to complete before focusing play/pause button
             kotlinx.coroutines.delay(250)
@@ -200,7 +211,8 @@ fun PlayerScreen(
             .onKeyEvent { keyEvent ->
                 // When a side panel or dialog is open, let it handle all keys
                 val panelOrDialogOpen = uiState.showEpisodesPanel || uiState.showSourcesPanel ||
-                        uiState.showAudioDialog || uiState.showSubtitleDialog || uiState.showSpeedDialog
+                        uiState.showAudioDialog || uiState.showSubtitleDialog ||
+                        uiState.showSubtitleStylePanel || uiState.showSpeedDialog
                 if (panelOrDialogOpen) return@onKeyEvent false
 
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
@@ -426,7 +438,9 @@ fun PlayerScreen(
 
         // Controls overlay
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.error == null && !uiState.showLoadingOverlay && !uiState.showPauseOverlay,
+            visible = uiState.showControls && uiState.error == null &&
+                !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
+                !uiState.showSubtitleStylePanel,
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
@@ -522,10 +536,10 @@ fun PlayerScreen(
             visible = uiState.showSourcesPanel && uiState.error == null,
             enter = fadeIn(animationSpec = tween(120)),
             exit = fadeOut(animationSpec = tween(120))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.45f))
             )
         }
@@ -554,6 +568,43 @@ fun PlayerScreen(
             }
         }
 
+        // Subtitle style panel scrim
+        AnimatedVisibility(
+            visible = uiState.showSubtitleStylePanel && uiState.error == null,
+            enter = fadeIn(animationSpec = tween(120)),
+            exit = fadeOut(animationSpec = tween(120))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f))
+            )
+        }
+
+        // Subtitle style panel
+        AnimatedVisibility(
+            visible = uiState.showSubtitleStylePanel && uiState.error == null,
+            enter = slideInVertically(
+                animationSpec = tween(220),
+                initialOffsetY = { -it }
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(220),
+                targetOffsetY = { -it }
+            )
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                SubtitleStyleSidePanel(
+                    subtitleStyle = uiState.subtitleStyle,
+                    onEvent = { viewModel.onEvent(it) },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                )
+            }
+        }
+
         // Audio track dialog
         if (uiState.showAudioDialog) {
             AudioSelectionDialog(
@@ -572,11 +623,10 @@ fun PlayerScreen(
                 addonSubtitles = uiState.addonSubtitles,
                 selectedAddonSubtitle = uiState.selectedAddonSubtitle,
                 isLoadingAddons = uiState.isLoadingAddonSubtitles,
-                subtitleStyle = uiState.subtitleStyle,
                 onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
                 onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },
                 onDisableSubtitles = { viewModel.onEvent(PlayerEvent.OnDisableSubtitles) },
-                onStyleEvent = { viewModel.onEvent(it) },
+                onOpenStylePanel = { viewModel.onEvent(PlayerEvent.OnOpenSubtitleStylePanel) },
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissDialog) }
             )
         }
@@ -610,6 +660,13 @@ private fun PlayerControlsOverlay(
     onResetHideTimer: () -> Unit,
     onBack: () -> Unit
 ) {
+    val customPlayPainter = rememberRawSvgPainter(R.raw.ic_player_play)
+    val customPausePainter = rememberRawSvgPainter(R.raw.ic_player_pause)
+    val customSubtitlePainter = rememberRawSvgPainter(R.raw.ic_player_subtitles)
+    val customAudioPainter = rememberRawSvgPainter(R.raw.ic_player_audio_filled)
+    val customSourcePainter = rememberRawSvgPainter(R.raw.ic_player_source)
+    val customAspectPainter = rememberRawSvgPainter(R.raw.ic_player_aspect_ratio)
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Top gradient
         Box(
@@ -733,6 +790,7 @@ private fun PlayerControlsOverlay(
                     // Play/Pause
                     ControlButton(
                         icon = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        iconPainter = if (uiState.isPlaying) customPausePainter else customPlayPainter,
                         contentDescription = if (uiState.isPlaying) "Pause" else "Play",
                         onClick = onPlayPause,
                         focusRequester = playPauseFocusRequester,
@@ -743,6 +801,7 @@ private fun PlayerControlsOverlay(
                     if (uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()) {
                         ControlButton(
                             icon = Icons.Default.ClosedCaption,
+                            iconPainter = customSubtitlePainter,
                             contentDescription = "Subtitles",
                             onClick = onShowSubtitleDialog,
                             onFocused = onResetHideTimer
@@ -753,6 +812,7 @@ private fun PlayerControlsOverlay(
                     if (uiState.audioTracks.isNotEmpty()) {
                         ControlButton(
                             icon = Icons.AutoMirrored.Filled.VolumeUp,
+                            iconPainter = customAudioPainter,
                             contentDescription = "Audio tracks",
                             onClick = onShowAudioDialog,
                             onFocused = onResetHideTimer
@@ -770,6 +830,7 @@ private fun PlayerControlsOverlay(
                     // Aspect Ratio
                     ControlButton(
                         icon = Icons.Default.AspectRatio,
+                        iconPainter = customAspectPainter,
                         contentDescription = "Aspect ratio",
                         onClick = {
                             Log.d("PlayerScreen", "Aspect ratio button clicked")
@@ -781,6 +842,7 @@ private fun PlayerControlsOverlay(
                     // Sources - switch stream source
                     ControlButton(
                         icon = Icons.Default.SwapHoriz,
+                        iconPainter = customSourcePainter,
                         contentDescription = "Sources",
                         onClick = onShowSourcesPanel,
                         onFocused = onResetHideTimer
@@ -811,6 +873,7 @@ private fun PlayerControlsOverlay(
 @Composable
 private fun ControlButton(
     icon: ImageVector,
+    iconPainter: Painter? = null,
     contentDescription: String,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
@@ -838,11 +901,19 @@ private fun ControlButton(
         ),
         shape = IconButtonDefaults.shape(shape = CircleShape)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(28.dp)
-        )
+        if (iconPainter != null) {
+            Icon(
+                painter = iconPainter,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp)
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(28.dp)
+            )
+        }
     }
 }
 
@@ -910,6 +981,8 @@ private fun SeekOverlay(uiState: PlayerUiState) {
 
 @Composable
 private fun AspectRatioIndicator(text: String) {
+    val customAspectPainter = rememberRawSvgPainter(R.raw.ic_player_aspect_ratio)
+
     // Floating pill indicator for aspect ratio changes
     Row(
         modifier = Modifier
@@ -932,7 +1005,7 @@ private fun AspectRatioIndicator(text: String) {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.AspectRatio,
+                painter = customAspectPainter,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(20.dp)
@@ -951,6 +1024,18 @@ private fun AspectRatioIndicator(text: String) {
             color = Color.White
         )
     }
+}
+
+@Composable
+private fun rememberRawSvgPainter(@RawRes iconRes: Int): Painter {
+    val context = LocalContext.current
+    val request = remember(iconRes, context) {
+        ImageRequest.Builder(context)
+            .data(iconRes)
+            .decoderFactory(SvgDecoder.Factory())
+            .build()
+    }
+    return rememberAsyncImagePainter(model = request)
 }
 
 @Composable

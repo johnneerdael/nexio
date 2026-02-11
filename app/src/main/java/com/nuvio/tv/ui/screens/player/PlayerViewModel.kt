@@ -835,6 +835,7 @@ class PlayerViewModel @Inject constructor(
                 showControls = true,
                 showAudioDialog = false,
                 showSubtitleDialog = false,
+                showSubtitleStylePanel = false,
                 showSpeedDialog = false
             )
         }
@@ -855,6 +856,7 @@ class PlayerViewModel @Inject constructor(
                 showControls = true,
                 showAudioDialog = false,
                 showSubtitleDialog = false,
+                showSubtitleStylePanel = false,
                 showSpeedDialog = false,
                 showEpisodesPanel = false,
                 showEpisodeStreams = false
@@ -1532,7 +1534,8 @@ class PlayerViewModel @Inject constructor(
         hideControlsJob = viewModelScope.launch {
             delay(3000)
             if (_uiState.value.isPlaying && !_uiState.value.showAudioDialog &&
-                !_uiState.value.showSubtitleDialog && !_uiState.value.showSpeedDialog &&
+                !_uiState.value.showSubtitleDialog && !_uiState.value.showSubtitleStylePanel &&
+                !_uiState.value.showSpeedDialog &&
                 !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel) {
                 _uiState.update { it.copy(showControls = false) }
             }
@@ -1630,6 +1633,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { 
                     it.copy(
                         showSubtitleDialog = false,
+                        showSubtitleStylePanel = false,
                         selectedAddonSubtitle = null 
                     ) 
                 }
@@ -1639,6 +1643,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { 
                     it.copy(
                         showSubtitleDialog = false,
+                        showSubtitleStylePanel = false,
                         selectedAddonSubtitle = null,
                         selectedSubtitleTrackIndex = -1
                     ) 
@@ -1646,7 +1651,7 @@ class PlayerViewModel @Inject constructor(
             }
             is PlayerEvent.OnSelectAddonSubtitle -> {
                 selectAddonSubtitle(event.subtitle)
-                _uiState.update { it.copy(showSubtitleDialog = false) }
+                _uiState.update { it.copy(showSubtitleDialog = false, showSubtitleStylePanel = false) }
             }
             is PlayerEvent.OnSetPlaybackSpeed -> {
                 _exoPlayer?.setPlaybackSpeed(event.speed)
@@ -1661,13 +1666,26 @@ class PlayerViewModel @Inject constructor(
                 }
             }
             PlayerEvent.OnShowAudioDialog -> {
-                _uiState.update { it.copy(showAudioDialog = true, showControls = true) }
+                _uiState.update { it.copy(showAudioDialog = true, showSubtitleStylePanel = false, showControls = true) }
             }
             PlayerEvent.OnShowSubtitleDialog -> {
-                _uiState.update { it.copy(showSubtitleDialog = true, showControls = true) }
+                _uiState.update { it.copy(showSubtitleDialog = true, showSubtitleStylePanel = false, showControls = true) }
+            }
+            PlayerEvent.OnOpenSubtitleStylePanel -> {
+                _uiState.update {
+                    it.copy(
+                        showSubtitleDialog = false,
+                        showSubtitleStylePanel = true,
+                        showControls = true
+                    )
+                }
+            }
+            PlayerEvent.OnDismissSubtitleStylePanel -> {
+                _uiState.update { it.copy(showSubtitleStylePanel = false) }
+                scheduleHideControls()
             }
             PlayerEvent.OnShowSpeedDialog -> {
-                _uiState.update { it.copy(showSpeedDialog = true, showControls = true) }
+                _uiState.update { it.copy(showSpeedDialog = true, showSubtitleStylePanel = false, showControls = true) }
             }
             PlayerEvent.OnShowEpisodesPanel -> {
                 showEpisodesPanel()
@@ -1721,6 +1739,7 @@ class PlayerViewModel @Inject constructor(
                     it.copy(
                         showAudioDialog = false, 
                         showSubtitleDialog = false, 
+                        showSubtitleStylePanel = false,
                         showSpeedDialog = false
                     ) 
                 }

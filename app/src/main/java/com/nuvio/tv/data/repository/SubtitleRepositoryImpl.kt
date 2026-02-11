@@ -42,11 +42,13 @@ class SubtitleRepositoryImpl @Inject constructor(
             Log.e(TAG, "Failed to get installed addons", e)
             return@withContext emptyList()
         }
+
+     
         
         // Filter addons that support subtitles resource
         val subtitleAddons = addons.filter { addon ->
             addon.resources.any { resource ->
-                resource.name == "subtitles" && supportsType(resource, type, id)
+                isSubtitleResource(resource.name) && supportsType(resource, type, id)
             }
         }
         
@@ -79,6 +81,11 @@ class SubtitleRepositoryImpl @Inject constructor(
         }
         
         return true
+    }
+
+    private fun isSubtitleResource(name: String): Boolean {
+        return name.equals("subtitles", ignoreCase = true) ||
+            name.equals("subtitle", ignoreCase = true)
     }
     
     private suspend fun fetchSubtitlesFromAddon(

@@ -80,11 +80,10 @@ internal fun SubtitleSelectionDialog(
     addonSubtitles: List<Subtitle>,
     selectedAddonSubtitle: Subtitle?,
     isLoadingAddons: Boolean,
-    subtitleStyle: SubtitleStyleSettings,
     onInternalTrackSelected: (Int) -> Unit,
     onAddonSubtitleSelected: (Subtitle) -> Unit,
     onDisableSubtitles: () -> Unit,
-    onStyleEvent: (PlayerEvent) -> Unit,
+    onOpenStylePanel: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -116,12 +115,21 @@ internal fun SubtitleSelectionDialog(
                         .padding(bottom = 16.dp)
                 ) {
                     tabs.forEachIndexed { index, _ ->
+                        val onTabClick = if (index == 2) {
+                            {
+                                onOpenStylePanel()
+                            }
+                        } else {
+                            {
+                                selectedTabIndex = index
+                            }
+                        }
                         SubtitleTab(
                             title = tabs[index],
                             isSelected = selectedTabIndex == index,
                             badgeCount = if (index == 1) addonSubtitles.size else null,
                             focusRequester = tabFocusRequesters[index],
-                            onClick = { selectedTabIndex = index }
+                            onClick = onTabClick
                         )
                         if (index < tabs.lastIndex) {
                             Spacer(modifier = Modifier.width(8.dp))
@@ -144,10 +152,7 @@ internal fun SubtitleSelectionDialog(
                         isLoading = isLoadingAddons,
                         onSubtitleSelected = onAddonSubtitleSelected
                     )
-                    2 -> SubtitleStyleContent(
-                        subtitleStyle = subtitleStyle,
-                        onEvent = onStyleEvent
-                    )
+                    2 -> Unit
                 }
             }
         }
