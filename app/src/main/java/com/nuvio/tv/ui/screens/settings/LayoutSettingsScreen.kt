@@ -107,6 +107,7 @@ fun LayoutSettingsContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(sections) { section ->
@@ -191,7 +192,7 @@ fun LayoutSettingsContent(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     LazyRow(
-                        contentPadding = PaddingValues(end = 16.dp),
+                        contentPadding = PaddingValues(start = 4.dp, end = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(uiState.availableCatalogs) { catalog ->
