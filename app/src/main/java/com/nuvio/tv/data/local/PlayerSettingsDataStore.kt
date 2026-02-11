@@ -103,8 +103,7 @@ data class BufferSettings(
     val bufferForPlaybackAfterRebufferMs: Int = 5_000,
     val targetBufferSizeMb: Int = 0, // 0 = ExoPlayer default
     val backBufferDurationMs: Int = 0,
-    val retainBackBufferFromKeyframe: Boolean = false,
-    val useParallelConnections: Boolean = false
+    val retainBackBufferFromKeyframe: Boolean = false
 )
 
 /**
@@ -214,9 +213,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val targetBufferSizeMbKey = intPreferencesKey("target_buffer_size_mb")
     private val backBufferDurationMsKey = intPreferencesKey("back_buffer_duration_ms")
     private val retainBackBufferFromKeyframeKey = booleanPreferencesKey("retain_back_buffer_from_keyframe")
-    private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
 
-    private val migrationParallelConnectionsDefaultOffDoneKey = booleanPreferencesKey("migration_parallel_connections_default_off_done")
     private val migrationLoadControlDefaultsAlignedDoneKey = booleanPreferencesKey("migration_load_control_defaults_aligned_done")
 
     init {
@@ -242,15 +239,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 val max = prefs[maxBufferMsKey]
                 if (min != null && max != null && max < min) {
                     prefs[maxBufferMsKey] = min
-                }
-
-                val migrated = prefs[migrationParallelConnectionsDefaultOffDoneKey] ?: false
-                if (!migrated) {
-                    val currentParallel = prefs[useParallelConnectionsKey]
-                    if (currentParallel == null || currentParallel == true) {
-                        prefs[useParallelConnectionsKey] = false
-                    }
-                    prefs[migrationParallelConnectionsDefaultOffDoneKey] = true
                 }
             }
         }
@@ -302,8 +290,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 5_000,
                 targetBufferSizeMb = prefs[targetBufferSizeMbKey] ?: 0,
                 backBufferDurationMs = prefs[backBufferDurationMsKey] ?: 0,
-                retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false,
-                useParallelConnections = prefs[useParallelConnectionsKey] ?: false
+                retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
             )
         )
     }
@@ -541,12 +528,6 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setBufferRetainBackBufferFromKeyframe(retain: Boolean) {
         dataStore.edit { prefs ->
             prefs[retainBackBufferFromKeyframeKey] = retain
-        }
-    }
-
-    suspend fun setUseParallelConnections(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[useParallelConnectionsKey] = enabled
         }
     }
 }

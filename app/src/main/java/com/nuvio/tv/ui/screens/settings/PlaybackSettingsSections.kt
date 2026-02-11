@@ -31,7 +31,6 @@ import com.nuvio.tv.ui.theme.NuvioColors
 internal fun PlaybackSettingsSections(
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
-    maxBufferSizeMb: Int,
     onShowAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
     onShowLanguageDialog: () -> Unit,
@@ -58,15 +57,7 @@ internal fun PlaybackSettingsSections(
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
-    onSetLibassRenderType: (com.nuvio.tv.data.local.LibassRenderType) -> Unit,
-    onSetBufferMinBufferMs: (Int) -> Unit,
-    onSetBufferMaxBufferMs: (Int) -> Unit,
-    onSetBufferForPlaybackMs: (Int) -> Unit,
-    onSetBufferForPlaybackAfterRebufferMs: (Int) -> Unit,
-    onSetBufferTargetSizeMb: (Int) -> Unit,
-    onSetUseParallelConnections: (Boolean) -> Unit,
-    onSetBufferBackBufferDurationMs: (Int) -> Unit,
-    onSetBufferRetainBackBufferFromKeyframe: (Boolean) -> Unit
+    onSetLibassRenderType: (com.nuvio.tv.data.local.LibassRenderType) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -173,19 +164,6 @@ internal fun PlaybackSettingsSections(
                 onSetSubtitleOutlineEnabled = onSetSubtitleOutlineEnabled,
                 onSetUseLibass = onSetUseLibass,
                 onSetLibassRenderType = onSetLibassRenderType
-            )
-
-            bufferSettingsItems(
-                playerSettings = playerSettings,
-                maxBufferSizeMb = maxBufferSizeMb,
-                onSetBufferMinBufferMs = onSetBufferMinBufferMs,
-                onSetBufferMaxBufferMs = onSetBufferMaxBufferMs,
-                onSetBufferForPlaybackMs = onSetBufferForPlaybackMs,
-                onSetBufferForPlaybackAfterRebufferMs = onSetBufferForPlaybackAfterRebufferMs,
-                onSetBufferTargetSizeMb = onSetBufferTargetSizeMb,
-                onSetUseParallelConnections = onSetUseParallelConnections,
-                onSetBufferBackBufferDurationMs = onSetBufferBackBufferDurationMs,
-                onSetBufferRetainBackBufferFromKeyframe = onSetBufferRetainBackBufferFromKeyframe
             )
         }
     }

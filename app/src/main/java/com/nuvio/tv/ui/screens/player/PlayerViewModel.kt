@@ -27,7 +27,6 @@ import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -190,7 +189,6 @@ class PlayerViewModel @Inject constructor(
 
     
     private var okHttpClient: OkHttpClient? = null
-    private var currentUseParallelConnections: Boolean = true
     private var lastBufferLogTimeMs: Long = 0L
     
     private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -501,7 +499,6 @@ class PlayerViewModel @Inject constructor(
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val useLibass = playerSettings.useLibass
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
-                currentUseParallelConnections = playerSettings.bufferSettings.useParallelConnections
                 val loadControl = DefaultLoadControl.Builder().build()
 
                 
@@ -807,13 +804,7 @@ class PlayerViewModel @Inject constructor(
             isDash -> DashMediaSource.Factory(okHttpFactory)
                 .createMediaSource(mediaItem)
             else -> {
-                
-                val progressiveFactory: DataSource.Factory = if (currentUseParallelConnections) {
-                    ParallelRangeDataSource.Factory(okHttpFactory)
-                } else {
-                    okHttpFactory
-                }
-                DefaultMediaSourceFactory(progressiveFactory)
+                DefaultMediaSourceFactory(okHttpFactory)
                     .createMediaSource(mediaItem)
             }
         }

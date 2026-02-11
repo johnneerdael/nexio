@@ -1,7 +1,5 @@
 package com.nuvio.tv.ui.screens.settings
 
-import android.app.ActivityManager
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.LibassRenderType
@@ -13,7 +11,6 @@ import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -21,7 +18,6 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val addonRepository: AddonRepository,
@@ -96,25 +92,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setMapDV7ToHevc(enabled: Boolean) {
         playerSettingsDataStore.setMapDV7ToHevc(enabled)
-    }
-
-    /**
-     * Calculate maximum safe buffer size based on device's available heap memory.
-     * Reserves ~60% of heap for video decoders, app UI, and other allocations.
-     * Returns value in MB, minimum 50MB.
-     */
-    val maxBufferSizeMb: Int by lazy {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val memoryInfo = ActivityManager.MemoryInfo()
-        activityManager.getMemoryInfo(memoryInfo)
-
-        // Get max heap size for this app (considers largeHeap setting)
-        val maxHeapMb = Runtime.getRuntime().maxMemory() / (1024 * 1024)
-
-        // Allow up to 40% of heap for buffer, leaving 60% for decoders and app
-        // Minimum 50MB, cap at 500MB even on high-memory devices
-        val calculatedMax = (maxHeapMb * 0.4).toInt()
-        calculatedMax.coerceIn(50, 500)
     }
 
     /**
@@ -201,10 +178,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setBufferRetainBackBufferFromKeyframe(retain: Boolean) {
         playerSettingsDataStore.setBufferRetainBackBufferFromKeyframe(retain)
-    }
-
-    suspend fun setUseParallelConnections(enabled: Boolean) {
-        playerSettingsDataStore.setUseParallelConnections(enabled)
     }
 
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {

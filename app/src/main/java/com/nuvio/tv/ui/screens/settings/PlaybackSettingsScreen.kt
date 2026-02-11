@@ -176,7 +176,6 @@ fun PlaybackSettingsContent(
     PlaybackSettingsSections(
         playerSettings = playerSettings,
         trailerSettings = trailerSettings,
-        maxBufferSizeMb = viewModel.maxBufferSizeMb,
         onShowAudioLanguageDialog = { showAudioLanguageDialog = true },
         onShowDecoderPriorityDialog = { showDecoderPriorityDialog = true },
         onShowLanguageDialog = { showLanguageDialog = true },
@@ -203,15 +202,7 @@ fun PlaybackSettingsContent(
         onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },
         onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
         onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
-        onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } },
-        onSetBufferMinBufferMs = { ms -> coroutineScope.launch { viewModel.setBufferMinBufferMs(ms) } },
-        onSetBufferMaxBufferMs = { ms -> coroutineScope.launch { viewModel.setBufferMaxBufferMs(ms) } },
-        onSetBufferForPlaybackMs = { ms -> coroutineScope.launch { viewModel.setBufferForPlaybackMs(ms) } },
-        onSetBufferForPlaybackAfterRebufferMs = { ms -> coroutineScope.launch { viewModel.setBufferForPlaybackAfterRebufferMs(ms) } },
-        onSetBufferTargetSizeMb = { mb -> coroutineScope.launch { viewModel.setBufferTargetSizeMb(mb) } },
-        onSetUseParallelConnections = { enabled -> coroutineScope.launch { viewModel.setUseParallelConnections(enabled) } },
-        onSetBufferBackBufferDurationMs = { ms -> coroutineScope.launch { viewModel.setBufferBackBufferDurationMs(ms) } },
-        onSetBufferRetainBackBufferFromKeyframe = { enabled -> coroutineScope.launch { viewModel.setBufferRetainBackBufferFromKeyframe(enabled) } }
+        onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } }
     )
 
     PlaybackSettingsDialogsHost(
