@@ -53,6 +53,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 
 private const val AUTO_ADVANCE_INTERVAL_MS = 5000L
+private val YEAR_REGEX = Regex("""\b\d{4}\b""")
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -204,7 +205,8 @@ private fun HeroCarouselSlide(
                 .build(),
             contentDescription = item.name,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.TopCenter
         )
 
         // Bottom gradient for text readability
@@ -287,7 +289,12 @@ private fun HeroCarouselSlide(
                     }
                 }
 
-                item.releaseInfo?.let { year ->
+                val releaseYear = remember(item.releaseInfo) {
+                    item.releaseInfo?.let { releaseInfo ->
+                        YEAR_REGEX.find(releaseInfo)?.value ?: releaseInfo.split("-").firstOrNull()
+                    }?.trim()?.takeIf { it.isNotEmpty() }
+                }
+                releaseYear?.let { year ->
                     Text(
                         text = year,
                         style = MaterialTheme.typography.labelLarge,

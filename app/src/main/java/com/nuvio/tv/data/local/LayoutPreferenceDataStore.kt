@@ -29,6 +29,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
+    private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
+    private val catalogAddonNameEnabledKey = booleanPreferencesKey("catalog_addon_name_enabled")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
@@ -66,6 +68,14 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val searchDiscoverEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[searchDiscoverEnabledKey] ?: true
+    }
+
+    val posterLabelsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[posterLabelsEnabledKey] ?: true
+    }
+
+    val catalogAddonNameEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[catalogAddonNameEnabledKey] ?: true
     }
 
     val posterCardWidthDp: Flow<Int> = dataStore.data.map { prefs ->
@@ -108,6 +118,18 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setSearchDiscoverEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[searchDiscoverEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setPosterLabelsEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[posterLabelsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setCatalogAddonNameEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[catalogAddonNameEnabledKey] = enabled
         }
     }
 

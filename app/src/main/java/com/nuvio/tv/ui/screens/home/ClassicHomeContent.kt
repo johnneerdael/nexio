@@ -180,6 +180,8 @@ fun ClassicHomeContent(
             CatalogRowSection(
                 catalogRow = catalogRow,
                 posterCardStyle = posterCardStyle,
+                showPosterLabels = uiState.posterLabelsEnabled,
+                showAddonName = uiState.catalogAddonNameEnabled,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },

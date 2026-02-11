@@ -41,6 +41,7 @@ fun ContentCard(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
+    showLabels: Boolean = true,
     onClick: () -> Unit = {}
 ) {
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
@@ -102,27 +103,29 @@ fun ContentCard(
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-        ) {
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            item.releaseInfo?.let { release ->
-                Spacer(modifier = Modifier.height(2.dp))
+        if (showLabels) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
                 Text(
-                    text = release,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary,
-                    maxLines = 1
+                    text = item.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                item.releaseInfo?.let { release ->
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = release,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NuvioTheme.extendedColors.textSecondary,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }

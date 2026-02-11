@@ -50,6 +50,8 @@ fun CatalogRowSection(
     onItemClick: (String, String, String) -> Unit,
     onSeeAll: () -> Unit = {},
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
+    showPosterLabels: Boolean = true,
+    showAddonName: Boolean = true,
     modifier: Modifier = Modifier,
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
@@ -91,11 +93,13 @@ fun CatalogRowSection(
                     maxLines = 3,
                     overflow = TextOverflow.Clip
                 )
-                Text(
-                    text = "from ${catalogRow.addonName}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextTertiary
-                )
+                if (showAddonName) {
+                    Text(
+                        text = "from ${catalogRow.addonName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NuvioColors.TextTertiary
+                    )
+                }
             }
         }
 
@@ -114,6 +118,7 @@ fun CatalogRowSection(
                 ContentCard(
                     item = item,
                     posterCardStyle = posterCardStyle,
+                    showLabels = showPosterLabels,
                     onClick = { onItemClick(item.id, item.type.toApiString(), catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->

@@ -110,12 +110,14 @@ fun CatalogSeeAllScreen(
             )
         }
 
-        catalogRow?.addonName?.let { addonName ->
-            Text(
-                text = "from $addonName",
-                style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary
-            )
+        if (uiState.catalogAddonNameEnabled) {
+            catalogRow?.addonName?.let { addonName ->
+                Text(
+                    text = "from $addonName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -139,6 +141,7 @@ fun CatalogSeeAllScreen(
                         GridContentCard(
                             item = item,
                             posterCardStyle = posterCardStyle,
+                            showLabel = uiState.posterLabelsEnabled,
                             onClick = {
                                 onNavigateToDetail(
                                     item.id,
