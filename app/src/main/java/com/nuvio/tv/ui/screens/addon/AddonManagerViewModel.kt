@@ -49,9 +49,7 @@ class AddonManagerViewModel @Inject constructor(
         try {
             val inputStream = context.resources.openRawResource(R.drawable.nuviotv_logo)
             logoBytes = inputStream.use { it.readBytes() }
-        } catch (_: Exception) {
-            // Logo is optional, page will fall back to text
-        }
+        } catch (_: Exception) { }
     }
 
     fun onInstallUrlChange(url: String) {
@@ -122,8 +120,6 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
-    // --- Reorder ---
-
     fun moveAddonUp(baseUrl: String) {
         reorderAddon(baseUrl, -1)
     }
@@ -149,8 +145,6 @@ class AddonManagerViewModel @Inject constructor(
             addonRepository.setAddonOrder(reordered.map { it.baseUrl })
         }
     }
-
-    // --- QR Mode ---
 
     fun startQrMode() {
         val ip = DeviceIpAddress.get(context)
@@ -350,7 +344,7 @@ class AddonManagerViewModel @Inject constructor(
                 } else {
                     when (addonRepository.fetchAddon(url)) {
                         is NetworkResult.Success -> validUrls.add(url)
-                        else -> { /* Skip invalid URLs */ }
+                        else -> { }
                     }
                 }
             }
@@ -359,13 +353,10 @@ class AddonManagerViewModel @Inject constructor(
             applyCatalogPreferencesFromPending(pending, validUrls)
             server?.confirmChange(pending.changeId)
 
-            // Dismiss confirmation dialog first so focus returns to QR overlay
             _uiState.update { it.copy(pendingChange = null) }
 
-            // Allow recomposition frame for focus to settle before dismissing QR overlay
-            delay(100)
+            delay(2500)
 
-            // Now close QR mode and stop server
             stopServerInternal()
             _uiState.update {
                 it.copy(

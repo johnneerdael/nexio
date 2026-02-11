@@ -30,8 +30,6 @@ object AddonWebPage {
     margin: 0 auto;
     padding: 0 1.5rem 6rem;
   }
-
-  /* Header */
   .header {
     text-align: center;
     padding: 3rem 0 2.5rem;
@@ -51,8 +49,6 @@ object AddonWebPage {
     color: rgba(255, 255, 255, 0.4);
     letter-spacing: 0.02em;
   }
-
-  /* Add Section */
   .add-section {
     margin-bottom: 2.5rem;
   }
@@ -94,8 +90,6 @@ object AddonWebPage {
     display: none;
     padding-left: 1.25rem;
   }
-
-  /* Buttons */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -163,8 +157,6 @@ object AddonWebPage {
     border-color: rgba(207, 102, 121, 0.55);
     color: #CF6679;
   }
-
-  /* Section Title */
   .section-label {
     font-size: 0.75rem;
     font-weight: 500;
@@ -173,8 +165,6 @@ object AddonWebPage {
     text-transform: uppercase;
     margin-bottom: 1rem;
   }
-
-  /* Addon List */
   .addon-list {
     list-style: none;
   }
@@ -314,8 +304,6 @@ object AddonWebPage {
     margin-left: 0.5rem;
     vertical-align: middle;
   }
-
-  /* Status Overlay */
   .status-overlay {
     position: fixed;
     top: 0;
@@ -382,8 +370,6 @@ object AddonWebPage {
     width: 40px;
     height: 40px;
   }
-
-  /* Connection lost bar */
   .connection-bar {
     position: fixed;
     top: 0;
@@ -402,8 +388,6 @@ object AddonWebPage {
   .connection-bar.visible {
     display: block;
   }
-
-  /* Mobile */
   @media (max-width: 480px) {
     .page { padding: 0 1rem 5rem; }
     .header { padding: 2rem 0 2rem; }
@@ -458,9 +442,21 @@ var POLL_INTERVAL = 1500;
 var connectionLost = false;
 var consecutiveErrors = 0;
 
+async function fetchWithTimeout(url, options, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+  try {
+    var opts = options || {};
+    opts.signal = controller.signal;
+    return await fetch(url, opts);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function loadState() {
   try {
-    var res = await fetch('/api/state');
+    var res = await fetchWithTimeout('/api/state', {}, 5000);
     var state = await res.json();
     addons = state.addons || [];
     catalogs = state.catalogs || [];
@@ -593,7 +589,6 @@ async function addAddon() {
   let url = input.value.trim();
   if (!url) return;
 
-  // Normalize
   if (url.startsWith('stremio://')) {
     url = url.replace(/^stremio:\/\//, 'https://');
   }
@@ -612,7 +607,6 @@ async function addAddon() {
     return;
   }
 
-  // Validate and fetch addon info from the TV
   addBtn.disabled = true;
   addBtn.textContent = '...';
   errorEl.style.display = 'none';
@@ -659,7 +653,7 @@ async function saveChanges() {
     .filter(function(c) { return c.isDisabled; })
     .map(function(c) { return c.disableKey; });
   try {
-    var res = await fetch('/api/addons', {
+    var res = await fetchWithTimeout('/api/addons', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -667,7 +661,7 @@ async function saveChanges() {
         catalogOrderKeys: catalogOrderKeys,
         disabledCatalogKeys: disabledCatalogKeys
       })
-    });
+    }, 8000);
     var data = await res.json();
 
     if (data.status === 'pending_confirmation') {
@@ -774,7 +768,7 @@ async function pollStatus(changeId) {
     }
 
     try {
-      var res = await fetch('/api/status/' + changeId);
+      var res = await fetchWithTimeout('/api/status/' + changeId, {}, 4000);
       var data = await res.json();
       consecutiveErrors = 0;
 
