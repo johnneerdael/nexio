@@ -3,12 +3,16 @@ package com.nuvio.tv.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.tmdb.TmdbMetadataService
+import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -38,7 +42,10 @@ class HomeViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val metaRepository: MetaRepository,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val tmdbService: TmdbService,
+    private val tmdbMetadataService: TmdbMetadataService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -64,7 +71,10 @@ class HomeViewModel @Inject constructor(
         loadLayoutPreference()
         loadHeroCatalogPreference()
         loadHeroSectionPreference()
+        loadPosterLabelPreference()
+        loadCatalogAddonNamePreference()
         loadPosterCardStylePreferences()
+        observeTmdbSettings()
         loadContinueWatching()
         observeInstalledAddons()
     }
@@ -95,6 +105,22 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun loadPosterLabelPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.posterLabelsEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(posterLabelsEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadCatalogAddonNamePreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
+            }
+        }
+    }
+
     private fun loadPosterCardStylePreferences() {
         viewModelScope.launch {
             layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
@@ -110,6 +136,16 @@ class HomeViewModel @Inject constructor(
             layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
                 _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
             }
+        }
+    }
+
+    private fun observeTmdbSettings() {
+        viewModelScope.launch {
+            tmdbSettingsDataStore.settings
+                .distinctUntilChanged()
+                .collectLatest {
+                    scheduleUpdateCatalogRows()
+                }
         }
     }
 
@@ -368,7 +404,7 @@ class HomeViewModel @Inject constructor(
         val currentGridItems = _uiState.value.gridItems
         val heroSectionEnabled = _uiState.value.heroSectionEnabled
 
-        val (displayRows, heroItems, gridItems) = withContext(Dispatchers.Default) {
+        val (displayRows, baseHeroItems, baseGridItems) = withContext(Dispatchers.Default) {
             val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
 
             val heroSourceRow = if (heroCatalogKey != null) {
@@ -430,6 +466,13 @@ class HomeViewModel @Inject constructor(
             Triple(computedDisplayRows, computedHeroItems, computedGridItems)
         }
 
+        val heroItems = enrichHeroItems(baseHeroItems)
+        val gridItems = if (currentLayout == HomeLayout.GRID) {
+            replaceGridHeroItems(baseGridItems, heroItems)
+        } else {
+            baseGridItems
+        }
+
         // Full (untruncated) rows for CatalogSeeAllScreen
         val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
 
@@ -455,6 +498,64 @@ class HomeViewModel @Inject constructor(
 
     private fun navigateToDetail(itemId: String, itemType: String) {
         _uiState.update { it.copy(selectedItemId = itemId) }
+    }
+
+    private suspend fun enrichHeroItems(items: List<MetaPreview>): List<MetaPreview> {
+        if (items.isEmpty()) return items
+
+        val settings = tmdbSettingsDataStore.settings.first()
+        if (!settings.enabled) return items
+        if (!settings.useArtwork && !settings.useBasicInfo && !settings.useDetails) return items
+
+        return items.map { item ->
+            val tmdbId = tmdbService.ensureTmdbId(item.id, item.type.toApiString()) ?: return@map item
+            val enrichment = tmdbMetadataService.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = item.type,
+                language = settings.language
+            ) ?: return@map item
+
+            var enriched = item
+
+            if (settings.useArtwork) {
+                enriched = enriched.copy(
+                    background = enrichment.backdrop ?: enriched.background,
+                    logo = enrichment.logo ?: enriched.logo,
+                    poster = enrichment.poster ?: enriched.poster
+                )
+            }
+
+            if (settings.useBasicInfo) {
+                enriched = enriched.copy(
+                    name = enrichment.localizedTitle ?: enriched.name,
+                    description = enrichment.description ?: enriched.description,
+                    genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
+                    imdbRating = enrichment.rating?.toFloat() ?: enriched.imdbRating
+                )
+            }
+
+            if (settings.useDetails) {
+                enriched = enriched.copy(
+                    releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo
+                )
+            }
+
+            enriched
+        }
+    }
+
+    private fun replaceGridHeroItems(
+        gridItems: List<GridItem>,
+        heroItems: List<MetaPreview>
+    ): List<GridItem> {
+        if (gridItems.isEmpty()) return gridItems
+        return gridItems.map { item ->
+            if (item is GridItem.Hero) {
+                item.copy(items = heroItems)
+            } else {
+                item
+            }
+        }
     }
 
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {

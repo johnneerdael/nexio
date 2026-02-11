@@ -8,8 +8,10 @@ import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
+import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,7 @@ import javax.inject.Inject
 class StreamScreenViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
+    private val metaRepository: MetaRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     savedStateHandle: SavedStateHandle
@@ -33,17 +36,17 @@ class StreamScreenViewModel @Inject constructor(
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
     private val title: String = savedStateHandle["title"] ?: ""
-    private val poster: String? = savedStateHandle["poster"]
-    private val backdrop: String? = savedStateHandle["backdrop"]
-    private val logo: String? = savedStateHandle["logo"]
+    private val poster: String? = savedStateHandle.getOptionalString("poster")
+    private val backdrop: String? = savedStateHandle.getOptionalString("backdrop")
+    private val logo: String? = savedStateHandle.getOptionalString("logo")
     private val season: Int? = savedStateHandle.get<String>("season")?.toIntOrNull()
     private val episode: Int? = savedStateHandle.get<String>("episode")?.toIntOrNull()
-    private val episodeName: String? = savedStateHandle["episodeName"]
+    private val episodeName: String? = savedStateHandle.getOptionalString("episodeName")
     private val runtime: Int? = savedStateHandle.get<String>("runtime")?.toIntOrNull()
-    private val genres: String? = savedStateHandle["genres"]
-    private val year: String? = savedStateHandle["year"]
-    private val contentId: String? = savedStateHandle["contentId"]
-    private val contentName: String? = savedStateHandle["contentName"]
+    private val genres: String? = savedStateHandle.getOptionalString("genres")
+    private val year: String? = savedStateHandle.getOptionalString("year")
+    private val contentId: String? = savedStateHandle.getOptionalString("contentId")
+    private val contentName: String? = savedStateHandle.getOptionalString("contentName")
     private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
 
     private val _uiState = MutableStateFlow(
@@ -65,7 +68,12 @@ class StreamScreenViewModel @Inject constructor(
     val uiState: StateFlow<StreamScreenUiState> = _uiState.asStateFlow()
 
     init {
+        loadMissingMetaDetailsIfNeeded()
         loadStreams()
+    }
+
+    private fun SavedStateHandle.getOptionalString(key: String): String? {
+        return get<String>(key)?.takeIf { it.isNotBlank() }
     }
 
     fun onEvent(event: StreamScreenEvent) {
@@ -183,6 +191,48 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun loadMissingMetaDetailsIfNeeded() {
+        val requiresMetadataLookup = genres.isNullOrBlank() || year.isNullOrBlank() || runtime == null
+        if (!requiresMetadataLookup) return
+
+        val metaId = contentId ?: videoId.substringBefore(":")
+        if (metaId.isBlank() || contentType.isBlank()) return
+
+        viewModelScope.launch {
+            val result = metaRepository.getMetaFromAllAddons(type = contentType, id = metaId)
+                .first { it !is NetworkResult.Loading }
+
+            if (result !is NetworkResult.Success) return@launch
+
+            val meta = result.data
+            val metaGenres = meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+            val metaYear = meta.releaseInfo
+                ?.substringBefore("-")
+                ?.takeIf { it.isNotBlank() }
+            val metaRuntime = extractRuntimeMinutes(meta)
+
+            _uiState.update { state ->
+                state.copy(
+                    poster = state.poster ?: meta.poster,
+                    backdrop = state.backdrop ?: meta.background,
+                    logo = state.logo ?: meta.logo,
+                    genres = state.genres?.takeIf { it.isNotBlank() } ?: metaGenres,
+                    year = state.year?.takeIf { it.isNotBlank() } ?: metaYear,
+                    runtime = state.runtime ?: metaRuntime
+                )
+            }
+        }
+    }
+
+    private fun extractRuntimeMinutes(meta: Meta): Int? {
+        if (season != null && episode != null) {
+            return meta.videos.firstOrNull { it.season == season && it.episode == episode }?.runtime
+        }
+        return meta.runtime
+            ?.let { Regex("(\\d+)").find(it)?.groupValues?.getOrNull(1) }
+            ?.toIntOrNull()
     }
 
     private fun filterByAddon(addonName: String?) {

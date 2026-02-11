@@ -313,63 +313,118 @@ class MetaDetailsViewModel @Inject constructor(
             return
         }
 
-        // For series, find the next episode to watch
-        val allEpisodes = meta.videos
-            .filter { it.season != null && it.episode != null }
-            .sortedWith(compareBy({ it.season }, { it.episode }))
+        viewModelScope.launch {
+            val allEpisodes = meta.videos
+                .filter { it.season != null && it.episode != null }
+                .sortedWith(compareBy({ it.season }, { it.episode }))
 
-        if (allEpisodes.isEmpty()) {
-            _uiState.update { 
-                it.copy(nextToWatch = NextToWatch(
-                    watchProgress = null,
-                    isResume = false,
-                    nextVideoId = meta.id,
-                    nextSeason = null,
-                    nextEpisode = null,
-                    displayText = "Play"
-                ))
+            if (allEpisodes.isEmpty()) {
+                _uiState.update {
+                    it.copy(nextToWatch = NextToWatch(
+                        watchProgress = null,
+                        isResume = false,
+                        nextVideoId = meta.id,
+                        nextSeason = null,
+                        nextEpisode = null,
+                        displayText = "Play"
+                    ))
+                }
+                return@launch
             }
-            return
+
+            val nonSpecialEpisodes = allEpisodes.filter { (it.season ?: 0) > 0 }
+            val episodePool = if (nonSpecialEpisodes.isNotEmpty()) nonSpecialEpisodes else allEpisodes
+            val latestSeriesProgress = watchProgressRepository.getProgress(itemId).first()
+
+            val nextToWatch = buildNextToWatchFromLatestProgress(
+                latestProgress = latestSeriesProgress,
+                episodes = episodePool,
+                fallbackProgressMap = progressMap,
+                metaId = meta.id
+            )
+
+            _uiState.update { it.copy(nextToWatch = nextToWatch) }
+        }
+    }
+
+    private fun buildNextToWatchFromLatestProgress(
+        latestProgress: WatchProgress?,
+        episodes: List<Video>,
+        fallbackProgressMap: Map<Pair<Int, Int>, WatchProgress>,
+        metaId: String
+    ): NextToWatch {
+        if (episodes.isEmpty()) {
+            return NextToWatch(
+                watchProgress = null,
+                isResume = false,
+                nextVideoId = metaId,
+                nextSeason = null,
+                nextEpisode = null,
+                displayText = "Play"
+            )
         }
 
-        val nonSpecialEpisodes = allEpisodes.filter { (it.season ?: 0) > 0 }
-        val episodePool = if (nonSpecialEpisodes.isNotEmpty()) nonSpecialEpisodes else allEpisodes
+        if (latestProgress?.season != null && latestProgress.episode != null) {
+            val season = latestProgress.season
+            val episode = latestProgress.episode
+            val matchedIndex = episodes.indexOfFirst { it.season == season && it.episode == episode }
 
-        // Find the last watched episode that's in progress or find the next unwatched
+            if (latestProgress.isInProgress()) {
+                val matchedEpisode = if (matchedIndex >= 0) episodes[matchedIndex] else null
+                return NextToWatch(
+                    watchProgress = latestProgress,
+                    isResume = true,
+                    nextVideoId = matchedEpisode?.id ?: latestProgress.videoId,
+                    nextSeason = season,
+                    nextEpisode = episode,
+                    displayText = "Resume S${season}E${episode}"
+                )
+            }
+
+            if (latestProgress.isCompleted() && matchedIndex >= 0) {
+                val next = episodes.getOrNull(matchedIndex + 1)
+                if (next != null) {
+                    return NextToWatch(
+                        watchProgress = null,
+                        isResume = false,
+                        nextVideoId = next.id,
+                        nextSeason = next.season,
+                        nextEpisode = next.episode,
+                        displayText = "Next S${next.season}E${next.episode}"
+                    )
+                }
+            }
+        }
+
         var resumeEpisode: Video? = null
         var resumeProgress: WatchProgress? = null
         var nextUnwatchedEpisode: Video? = null
 
-        for (episode in episodePool) {
+        for (episode in episodes) {
             val season = episode.season ?: continue
             val ep = episode.episode ?: continue
-            val progress = progressMap[season to ep]
+            val progress = fallbackProgressMap[season to ep]
 
             if (progress != null) {
                 if (progress.isInProgress()) {
-                    // Found an episode in progress - this is the one to resume
                     resumeEpisode = episode
                     resumeProgress = progress
                     break
                 } else if (progress.isCompleted()) {
-                    // This episode is completed, look for the next one
                     continue
                 }
             } else {
-                // No progress for this episode - it's the next unwatched
                 if (nextUnwatchedEpisode == null) {
                     nextUnwatchedEpisode = episode
                 }
-                // If we haven't found a resume episode yet and this is first unwatched
                 if (resumeEpisode == null) {
                     break
                 }
             }
         }
 
-        val nextToWatch = when {
+        return when {
             resumeEpisode != null && resumeProgress != null -> {
-                // Resume the in-progress episode
                 NextToWatch(
                     watchProgress = resumeProgress,
                     isResume = true,
@@ -380,8 +435,7 @@ class MetaDetailsViewModel @Inject constructor(
                 )
             }
             nextUnwatchedEpisode != null -> {
-                // Play the next unwatched episode
-                val hasWatchedSomething = progressMap.isNotEmpty()
+                val hasWatchedSomething = fallbackProgressMap.isNotEmpty()
                 val displayPrefix = if (hasWatchedSomething) "Next" else "Play"
                 NextToWatch(
                     watchProgress = null,
@@ -393,12 +447,11 @@ class MetaDetailsViewModel @Inject constructor(
                 )
             }
             else -> {
-                // All episodes watched or start from beginning
-                val firstEpisode = episodePool.firstOrNull()
+                val firstEpisode = episodes.firstOrNull()
                 NextToWatch(
                     watchProgress = null,
                     isResume = false,
-                    nextVideoId = firstEpisode?.id ?: meta.id,
+                    nextVideoId = firstEpisode?.id ?: metaId,
                     nextSeason = firstEpisode?.season,
                     nextEpisode = firstEpisode?.episode,
                     displayText = if (firstEpisode != null) {
@@ -409,8 +462,6 @@ class MetaDetailsViewModel @Inject constructor(
                 )
             }
         }
-
-        _uiState.update { it.copy(nextToWatch = nextToWatch) }
     }
 
     private fun toggleLibrary() {

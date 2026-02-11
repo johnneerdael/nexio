@@ -242,6 +242,8 @@ fun SearchScreen(
                         ) { index, catalogRow ->
                             CatalogRowSection(
                                 catalogRow = catalogRow,
+                                showPosterLabels = uiState.posterLabelsEnabled,
+                                showAddonName = uiState.catalogAddonNameEnabled,
                                 focusedItemIndex = if (focusResults && index == 0) 0 else -1,
                                 onItemFocused = {
                                     if (focusResults) {

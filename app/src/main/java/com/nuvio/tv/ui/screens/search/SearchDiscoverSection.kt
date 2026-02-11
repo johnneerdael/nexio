@@ -5,17 +5,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,12 +31,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
@@ -65,6 +74,11 @@ internal fun DiscoverSection(
     val selectedCatalog = uiState.discoverCatalogs.firstOrNull { it.key == uiState.selectedDiscoverCatalogKey }
     val filteredCatalogs = uiState.discoverCatalogs.filter { it.type == uiState.selectedDiscoverType }
     val genres = selectedCatalog?.genres.orEmpty()
+    var expandedPicker by remember { mutableStateOf<String?>(null) }
+
+    val selectedTypeLabel = if (uiState.selectedDiscoverType == "movie") "Movies" else "Series"
+    val selectedCatalogLabel = selectedCatalog?.catalogName ?: "Select"
+    val selectedGenreLabel = uiState.selectedDiscoverGenre ?: "Default"
 
     Column(
         modifier = Modifier
@@ -78,76 +92,60 @@ internal fun DiscoverSection(
             color = NuvioColors.TextPrimary
         )
 
-        Text(
-            text = "Type",
-            style = MaterialTheme.typography.labelLarge,
-            color = NuvioColors.TextSecondary
-        )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                DiscoverFilterChip(
-                    label = "Movies",
-                    selected = uiState.selectedDiscoverType == "movie",
-                    onClick = { onSelectType("movie") }
-                )
-            }
-            item {
-                DiscoverFilterChip(
-                    label = "TV Shows",
-                    selected = uiState.selectedDiscoverType == "series",
-                    onClick = { onSelectType("series") }
-                )
-            }
-        }
-
-        if (filteredCatalogs.isNotEmpty()) {
-            Text(
-                text = "Catalog",
-                style = MaterialTheme.typography.labelLarge,
-                color = NuvioColors.TextSecondary
+            DiscoverDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = "Type",
+                value = selectedTypeLabel,
+                expanded = expandedPicker == "type",
+                options = listOf(
+                    DiscoverOption("Movies", "movie"),
+                    DiscoverOption("Series", "series")
+                ),
+                onExpandedChange = { shouldExpand ->
+                    expandedPicker = if (shouldExpand) "type" else null
+                },
+                onSelect = { option ->
+                    onSelectType(option.value)
+                    expandedPicker = null
+                }
             )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
-            ) {
-                items(filteredCatalogs, key = { it.key }) { catalog ->
-                    DiscoverFilterChip(
-                        label = catalog.catalogName,
-                        selected = catalog.key == uiState.selectedDiscoverCatalogKey,
-                        onClick = { onSelectCatalog(catalog.key) }
-                    )
-                }
-            }
-        }
 
-        if (genres.isNotEmpty()) {
-            Text(
-                text = "Genre",
-                style = MaterialTheme.typography.labelLarge,
-                color = NuvioColors.TextSecondary
+            DiscoverDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = "Catalog",
+                value = selectedCatalogLabel,
+                expanded = expandedPicker == "catalog",
+                options = filteredCatalogs.map { DiscoverOption(it.catalogName, it.key) },
+                onExpandedChange = { shouldExpand ->
+                    expandedPicker = if (shouldExpand) "catalog" else null
+                },
+                onSelect = { option ->
+                    onSelectCatalog(option.value)
+                    expandedPicker = null
+                }
             )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
-            ) {
-                item {
-                    DiscoverFilterChip(
-                        label = "All Genres",
-                        selected = uiState.selectedDiscoverGenre == null,
-                        onClick = { onSelectGenre(null) }
-                    )
+
+            DiscoverDropdownPicker(
+                modifier = Modifier.weight(1f),
+                title = "Genre",
+                value = selectedGenreLabel,
+                expanded = expandedPicker == "genre",
+                options = buildList {
+                    add(DiscoverOption("Default", "__default__"))
+                    addAll(genres.map { DiscoverOption(it, it) })
+                },
+                onExpandedChange = { shouldExpand ->
+                    expandedPicker = if (shouldExpand) "genre" else null
+                },
+                onSelect = { option ->
+                    onSelectGenre(option.value.takeUnless { it == "__default__" })
+                    expandedPicker = null
                 }
-                items(genres, key = { it }) { genre ->
-                    DiscoverFilterChip(
-                        label = genre,
-                        selected = uiState.selectedDiscoverGenre == genre,
-                        onClick = { onSelectGenre(genre) }
-                    )
-                }
-            }
+            )
         }
 
         selectedCatalog?.let {
@@ -218,56 +216,117 @@ internal fun DiscoverSection(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun DiscoverFilterChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
+private fun DiscoverDropdownPicker(
+    modifier: Modifier = Modifier,
+    title: String,
+    value: String,
+    expanded: Boolean,
+    options: List<DiscoverOption>,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (DiscoverOption) -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var anchorSize by remember { mutableStateOf(IntSize.Zero) }
 
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .onFocusChanged { state ->
-                isFocused = state.isFocused
-            },
-        shape = CardDefaults.shape(shape = RoundedCornerShape(20.dp)),
-        colors = CardDefaults.colors(
-            containerColor = if (selected) {
-                NuvioColors.Secondary.copy(alpha = 0.25f)
-            } else {
-                NuvioColors.BackgroundCard
-            },
-            focusedContainerColor = if (selected) {
-                NuvioColors.Secondary.copy(alpha = 0.35f)
-            } else {
-                NuvioColors.BackgroundCard
-            }
-        ),
-        border = CardDefaults.border(
-            border = Border(
-                border = BorderStroke(1.dp, NuvioColors.Border),
-                shape = RoundedCornerShape(20.dp)
+    Box(modifier = modifier) {
+        Card(
+            onClick = { onExpandedChange(!expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { anchorSize = it }
+                .onFocusChanged { state ->
+                    isFocused = state.isFocused
+                },
+            shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                focusedContainerColor = NuvioColors.FocusBackground
             ),
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(20.dp)
+            border = CardDefaults.border(
+                border = Border(
+                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    shape = RoundedCornerShape(14.dp)
+                ),
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    shape = RoundedCornerShape(14.dp)
+                )
+            ),
+            scale = CardDefaults.scale(
+                focusedScale = 1.0f,
+                pressedScale = 1.0f
             )
-        ),
-        scale = CardDefaults.scale(
-            focusedScale = 1.0f,
-            pressedScale = 1.0f
-        )
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            color = if (isFocused || selected) NuvioColors.TextPrimary else NuvioColors.TextSecondary
-        )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = NuvioColors.TextTertiary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                        modifier = Modifier.size(20.dp),
+                        tint = if (isFocused) NuvioColors.FocusRing else NuvioColors.TextSecondary
+                    )
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier
+                .width(with(LocalDensity.current) { anchorSize.width.toDp() })
+                .heightIn(max = 320.dp),
+            shape = RoundedCornerShape(14.dp),
+            containerColor = NuvioColors.BackgroundCard,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, NuvioColors.Border)
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option.label,
+                            color = NuvioColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    onClick = { onSelect(option) },
+                    colors = MenuDefaults.itemColors(
+                        textColor = NuvioColors.TextPrimary,
+                        disabledTextColor = NuvioColors.TextDisabled
+                    )
+                )
+            }
+        }
     }
 }
+
+private data class DiscoverOption(
+    val label: String,
+    val value: String
+)
 
 @Composable
 private fun DiscoverGrid(

@@ -69,6 +69,16 @@ class SearchViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.posterLabelsEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(posterLabelsEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
                 _uiState.update { it.copy(posterCardHeightDp = heightDp) }
             }

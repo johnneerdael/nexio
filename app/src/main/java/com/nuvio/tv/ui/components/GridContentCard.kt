@@ -38,6 +38,7 @@ fun GridContentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
+    showLabel: Boolean = true,
     focusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {}
 ) {
@@ -92,13 +93,15 @@ fun GridContentCard(
             }
         }
 
-        Text(
-            text = item.name,
-            modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp),
-            style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        if (showLabel) {
+            Text(
+                text = item.name,
+                modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp),
+                style = MaterialTheme.typography.titleMedium,
+                color = NuvioColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

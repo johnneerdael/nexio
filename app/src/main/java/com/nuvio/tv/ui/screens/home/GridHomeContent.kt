@@ -262,6 +262,7 @@ fun GridHomeContent(
                                 item = gridItem.item,
                                 focusRequester = focusRequester,
                                 posterCardStyle = posterCardStyle,
+                                showLabel = uiState.posterLabelsEnabled,
                                 onClick = {
                                     onNavigateToDetail(
                                         gridItem.item.id,
