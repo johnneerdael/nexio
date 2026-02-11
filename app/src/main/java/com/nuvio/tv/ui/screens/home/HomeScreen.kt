@@ -1,13 +1,19 @@
 package com.nuvio.tv.ui.screens.home
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -31,6 +37,17 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val focusState by viewModel.focusState.collectAsState()
     val gridFocusState by viewModel.gridFocusState.collectAsState()
+    val hasHeroContent = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
+    val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
+    val hasPrimaryHomeContent = hasHeroContent || hasCatalogContent
+    var hasEnteredHomeContent: Boolean by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(hasPrimaryHomeContent) {
+        if (hasPrimaryHomeContent) {
+            hasEnteredHomeContent = true
+        }
+    }
+
     val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
     val posterCardStyle = PosterCardStyle(
         width = uiState.posterCardWidthDp.dp,
@@ -85,33 +102,50 @@ fun HomeScreen(
                 )
             }
             else -> {
-                when (uiState.homeLayout) {
-                    HomeLayout.CLASSIC -> ClassicHomeContent(
-                        uiState = uiState,
-                        posterCardStyle = posterCardStyle,
-                        focusState = focusState,
-                        onNavigateToDetail = onNavigateToDetail,
-                        onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                        onRemoveContinueWatching = { contentId ->
-                            viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
-                        },
-                        onSaveFocusState = { vi, vo, ri, ii, m ->
-                            viewModel.saveFocusState(vi, vo, ri, ii, m)
+                val shouldShowLoadingGate = hasEnteredHomeContent == false && hasPrimaryHomeContent == false
+
+                Crossfade(
+                    targetState = shouldShowLoadingGate,
+                    animationSpec = tween(durationMillis = 220),
+                    label = "homeLoadingGate"
+                ) { showLoading ->
+                    if (showLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            LoadingIndicator()
                         }
-                    )
-                    HomeLayout.GRID -> GridHomeContent(
-                        uiState = uiState,
-                        posterCardStyle = posterCardStyle,
-                        gridFocusState = gridFocusState,
-                        onNavigateToDetail = onNavigateToDetail,
-                        onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                        onRemoveContinueWatching = { contentId ->
-                            viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
-                        },
-                        onSaveGridFocusState = { vi, vo ->
-                            viewModel.saveGridFocusState(vi, vo)
+                    } else {
+                        when (uiState.homeLayout) {
+                            HomeLayout.CLASSIC -> ClassicHomeContent(
+                                uiState = uiState,
+                                posterCardStyle = posterCardStyle,
+                                focusState = focusState,
+                                onNavigateToDetail = onNavigateToDetail,
+                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
+                                onRemoveContinueWatching = { contentId ->
+                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
+                                },
+                                onSaveFocusState = { vi, vo, ri, ii, m ->
+                                    viewModel.saveFocusState(vi, vo, ri, ii, m)
+                                }
+                            )
+                            HomeLayout.GRID -> GridHomeContent(
+                                uiState = uiState,
+                                posterCardStyle = posterCardStyle,
+                                gridFocusState = gridFocusState,
+                                onNavigateToDetail = onNavigateToDetail,
+                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
+                                onRemoveContinueWatching = { contentId ->
+                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
+                                },
+                                onSaveGridFocusState = { vi, vo ->
+                                    viewModel.saveGridFocusState(vi, vo)
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
