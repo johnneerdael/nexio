@@ -34,7 +34,7 @@ data class SyncCodeResult(
 
 @Serializable
 data class ClaimSyncResult(
-    @SerialName("owner_id") val ownerId: String? = null,
+    @SerialName("result_owner_id") val ownerId: String? = null,
     val success: Boolean,
     val message: String
 )

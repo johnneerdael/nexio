@@ -1,13 +1,14 @@
 package com.nuvio.tv.ui.screens.account
 
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.sync.AddonSyncService
 import com.nuvio.tv.core.sync.PluginSyncService
-import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.data.repository.AddonRepositoryImpl
 import com.nuvio.tv.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,7 @@ class AccountViewModel @Inject constructor(
     private val pluginSyncService: PluginSyncService,
     private val addonSyncService: AddonSyncService,
     private val pluginManager: PluginManager,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepositoryImpl
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
@@ -171,6 +172,7 @@ class AccountViewModel @Inject constructor(
     private fun userFriendlyError(e: Throwable): String {
         val raw = e.message ?: ""
         val message = raw.lowercase()
+        Log.w("AccountViewModel", "Raw error: $raw", e)
 
         return when {
             // PIN errors (from PG RAISE EXCEPTION or any wrapper)
@@ -178,6 +180,7 @@ class AccountViewModel @Inject constructor(
 
             // Sync code errors
             message.contains("expired") -> "Sync code has expired."
+            message.contains("invalid") && message.contains("code") -> "Invalid sync code."
             message.contains("not found") || message.contains("no sync code") -> "Sync code not found."
             message.contains("already linked") -> "Device is already linked."
             message.contains("empty response") -> "Something went wrong. Please try again."
@@ -200,6 +203,10 @@ class AccountViewModel @Inject constructor(
             // Auth state
             message.contains("not authenticated") -> "Please sign in first."
 
+            // Supabase HTTP errors (e.g. 404 for missing RPC, 400 for bad params)
+            message.contains("404") || message.contains("could not find") -> "Service unavailable. Please try again later."
+            message.contains("400") || message.contains("bad request") -> "Invalid request. Please check your input."
+
             // Fallback
             else -> "An unexpected error occurred."
         }
@@ -211,13 +218,24 @@ class AccountViewModel @Inject constructor(
     }
 
     private suspend fun pullRemoteData() {
-        val newPluginUrls = pluginSyncService.getNewRemoteRepoUrls()
-        for (url in newPluginUrls) {
-            pluginManager.addRepository(url)
-        }
-        val newAddonUrls = addonSyncService.getNewRemoteAddonUrls()
-        for (url in newAddonUrls) {
-            addonRepository.addAddon(url)
+        try {
+            pluginManager.isSyncingFromRemote = true
+            val newPluginUrls = pluginSyncService.getNewRemoteRepoUrls()
+            for (url in newPluginUrls) {
+                pluginManager.addRepository(url)
+            }
+            pluginManager.isSyncingFromRemote = false
+
+            addonRepository.isSyncingFromRemote = true
+            val newAddonUrls = addonSyncService.getNewRemoteAddonUrls()
+            for (url in newAddonUrls) {
+                addonRepository.addAddon(url)
+            }
+            addonRepository.isSyncingFromRemote = false
+        } catch (e: Exception) {
+            pluginManager.isSyncingFromRemote = false
+            addonRepository.isSyncingFromRemote = false
+            throw e
         }
     }
 }

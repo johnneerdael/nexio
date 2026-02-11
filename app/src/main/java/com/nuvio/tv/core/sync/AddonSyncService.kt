@@ -8,6 +8,10 @@ import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.addJsonObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,30 +24,24 @@ class AddonSyncService @Inject constructor(
     private val addonPreferences: AddonPreferences
 ) {
     /**
-     * Push local addon URLs to Supabase.
-     * Replaces all remote entries for the effective user.
+     * Push local addon URLs to Supabase via RPC.
+     * Uses a SECURITY DEFINER function to handle RLS for linked devices.
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val effectiveUserId = authManager.getEffectiveUserId()
-                ?: return@withContext Result.failure(Exception("Not authenticated"))
-
             val localUrls = addonPreferences.installedAddonUrls.first()
 
-            postgrest.from("addons").delete {
-                filter { eq("user_id", effectiveUserId) }
+            val params = buildJsonObject {
+                put("p_addons", buildJsonArray {
+                    localUrls.forEachIndexed { index, url ->
+                        addJsonObject {
+                            put("url", url)
+                            put("sort_order", index)
+                        }
+                    }
+                })
             }
-
-            if (localUrls.isNotEmpty()) {
-                val remoteAddons = localUrls.mapIndexed { index, url ->
-                    SupabaseAddon(
-                        userId = effectiveUserId,
-                        url = url,
-                        sortOrder = index
-                    )
-                }
-                postgrest.from("addons").insert(remoteAddons)
-            }
+            postgrest.rpc("sync_push_addons", params)
 
             Log.d(TAG, "Pushed ${localUrls.size} addons to remote")
             Result.success(Unit)

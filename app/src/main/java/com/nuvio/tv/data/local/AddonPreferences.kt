@@ -52,7 +52,7 @@ class AddonPreferences @Inject constructor(
         context.dataStore.edit { preferences ->
             val current = getCurrentList(preferences)
             val normalizedUrl = url.trimEnd('/')
-           
+            if (current.any { it.trimEnd('/').equals(normalizedUrl, ignoreCase = true) }) return@edit
             preferences[orderedUrlsKey] = gson.toJson(current + normalizedUrl)
         }
     }

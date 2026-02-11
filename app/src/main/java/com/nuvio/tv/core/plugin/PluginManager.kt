@@ -83,11 +83,17 @@ class PluginManager @Inject constructor(
         kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
     )
 
+    var isSyncingFromRemote = false
+
+    private var syncJob: kotlinx.coroutines.Job? = null
+
     private fun triggerRemoteSync() {
-        if (authManager.isAuthenticated) {
-            syncScope.launch {
-                pluginSyncService.pushToRemote()
-            }
+        if (isSyncingFromRemote) return
+        if (!authManager.isAuthenticated) return
+        syncJob?.cancel()
+        syncJob = syncScope.launch {
+            kotlinx.coroutines.delay(500)
+            pluginSyncService.pushToRemote()
         }
     }
 

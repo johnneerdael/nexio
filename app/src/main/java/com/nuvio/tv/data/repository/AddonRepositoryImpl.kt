@@ -8,11 +8,13 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.repository.AddonRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -30,12 +32,16 @@ class AddonRepositoryImpl @Inject constructor(
 ) : AddonRepository {
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var syncJob: Job? = null
+    var isSyncingFromRemote = false
 
     private fun triggerRemoteSync() {
-        if (authManager.isAuthenticated) {
-            syncScope.launch {
-                addonSyncService.pushToRemote()
-            }
+        if (isSyncingFromRemote) return
+        if (!authManager.isAuthenticated) return
+        syncJob?.cancel()
+        syncJob = syncScope.launch {
+            delay(500)
+            addonSyncService.pushToRemote()
         }
     }
 
