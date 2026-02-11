@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.domain.model.HomeLayout
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -22,10 +24,13 @@ class LayoutPreferenceDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val dataStore = context.layoutDataStore
+    private val gson = Gson()
 
     private val layoutKey = stringPreferencesKey("selected_layout")
     private val hasChosenKey = booleanPreferencesKey("has_chosen_layout")
     private val heroCatalogKey = stringPreferencesKey("hero_catalog_key")
+    private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
+    private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
@@ -56,6 +61,14 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val heroCatalogSelection: Flow<String?> = dataStore.data.map { prefs ->
         prefs[heroCatalogKey]
+    }
+
+    val homeCatalogOrderKeys: Flow<List<String>> = dataStore.data.map { prefs ->
+        parseHomeCatalogOrderKeys(prefs[homeCatalogOrderKeysKey])
+    }
+
+    val disabledHomeCatalogKeys: Flow<List<String>> = dataStore.data.map { prefs ->
+        parseHomeCatalogOrderKeys(prefs[disabledHomeCatalogKeysKey])
     }
 
     val sidebarCollapsedByDefault: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -100,6 +113,28 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setHeroCatalogKey(catalogKey: String) {
         dataStore.edit { prefs ->
             prefs[heroCatalogKey] = catalogKey
+        }
+    }
+
+    suspend fun setHomeCatalogOrderKeys(keys: List<String>) {
+        val normalizedKeys = normalizeCatalogOrderKeys(keys)
+        dataStore.edit { prefs ->
+            if (normalizedKeys.isEmpty()) {
+                prefs.remove(homeCatalogOrderKeysKey)
+            } else {
+                prefs[homeCatalogOrderKeysKey] = gson.toJson(normalizedKeys)
+            }
+        }
+    }
+
+    suspend fun setDisabledHomeCatalogKeys(keys: List<String>) {
+        val normalizedKeys = normalizeCatalogOrderKeys(keys)
+        dataStore.edit { prefs ->
+            if (normalizedKeys.isEmpty()) {
+                prefs.remove(disabledHomeCatalogKeysKey)
+            } else {
+                prefs[disabledHomeCatalogKeysKey] = gson.toJson(normalizedKeys)
+            }
         }
     }
 
@@ -149,5 +184,24 @@ class LayoutPreferenceDataStore @Inject constructor(
         dataStore.edit { prefs ->
             prefs[posterCardCornerRadiusDpKey] = cornerRadiusDp
         }
+    }
+
+    private fun parseHomeCatalogOrderKeys(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<String>>() {}.type
+            val parsed = gson.fromJson<List<String>>(json, type).orEmpty()
+            normalizeCatalogOrderKeys(parsed)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun normalizeCatalogOrderKeys(keys: List<String>): List<String> {
+        return keys.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
     }
 }

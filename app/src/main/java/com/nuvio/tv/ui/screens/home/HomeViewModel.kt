@@ -63,6 +63,8 @@ class HomeViewModel @Inject constructor(
     private val catalogsMap = linkedMapOf<String, CatalogRow>()
     private val catalogOrder = mutableListOf<String>()
     private var addonsCache: List<Addon> = emptyList()
+    private var homeCatalogOrderKeys: List<String> = emptyList()
+    private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var currentHeroCatalogKey: String? = null
     private var catalogUpdateJob: Job? = null
     private val catalogLoadSemaphore = Semaphore(6)
@@ -73,6 +75,8 @@ class HomeViewModel @Inject constructor(
         loadHeroSectionPreference()
         loadPosterLabelPreference()
         loadCatalogAddonNamePreference()
+        loadHomeCatalogOrderPreference()
+        loadDisabledHomeCatalogPreference()
         loadPosterCardStylePreferences()
         observeTmdbSettings()
         loadContinueWatching()
@@ -117,6 +121,30 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadHomeCatalogOrderPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->
+                homeCatalogOrderKeys = keys
+                rebuildCatalogOrder(addonsCache)
+                scheduleUpdateCatalogRows()
+            }
+        }
+    }
+
+    private fun loadDisabledHomeCatalogPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.disabledHomeCatalogKeys.collectLatest { keys ->
+                disabledHomeCatalogKeys = keys.toSet()
+                rebuildCatalogOrder(addonsCache)
+                if (addonsCache.isNotEmpty()) {
+                    loadAllCatalogs(addonsCache)
+                } else {
+                    scheduleUpdateCatalogRows()
+                }
             }
         }
     }
@@ -275,21 +303,7 @@ class HomeViewModel @Inject constructor(
                 return
             }
 
-            // Build catalog order based on addon manifest order
-            addons.forEach { addon ->
-                addon.catalogs
-                    .filterNot { it.isSearchOnlyCatalog() }
-                    .forEach { catalog ->
-                    val key = catalogKey(
-                        addonId = addon.id,
-                        type = catalog.type.toApiString(),
-                        catalogId = catalog.id
-                    )
-                    if (key !in catalogOrder) {
-                        catalogOrder.add(key)
-                    }
-                    }
-            }
+            rebuildCatalogOrder(addons)
 
             if (catalogOrder.isEmpty()) {
                 _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
@@ -299,7 +313,15 @@ class HomeViewModel @Inject constructor(
             // Load catalogs
             addons.forEach { addon ->
                 addon.catalogs
-                    .filterNot { it.isSearchOnlyCatalog() }
+                    .filterNot {
+                        it.isSearchOnlyCatalog() || isCatalogDisabled(
+                            addonBaseUrl = addon.baseUrl,
+                            addonId = addon.id,
+                            type = it.type.toApiString(),
+                            catalogId = it.id,
+                            catalogName = it.name
+                        )
+                    }
                     .forEach { catalog ->
                         loadCatalog(addon, catalog)
                     }
@@ -560,6 +582,73 @@ class HomeViewModel @Inject constructor(
 
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {
         return "${addonId}_${type}_${catalogId}"
+    }
+
+    private fun rebuildCatalogOrder(addons: List<Addon>) {
+        val defaultOrder = buildDefaultCatalogOrder(addons)
+        val availableSet = defaultOrder.toSet()
+
+        val savedValid = homeCatalogOrderKeys
+            .asSequence()
+            .filter { it in availableSet }
+            .distinct()
+            .toList()
+
+        val savedSet = savedValid.toSet()
+        val mergedOrder = savedValid + defaultOrder.filterNot { it in savedSet }
+
+        catalogOrder.clear()
+        catalogOrder.addAll(mergedOrder)
+    }
+
+    private fun buildDefaultCatalogOrder(addons: List<Addon>): List<String> {
+        val orderedKeys = mutableListOf<String>()
+        addons.forEach { addon ->
+            addon.catalogs
+                .filterNot {
+                    it.isSearchOnlyCatalog() || isCatalogDisabled(
+                        addonBaseUrl = addon.baseUrl,
+                        addonId = addon.id,
+                        type = it.type.toApiString(),
+                        catalogId = it.id,
+                        catalogName = it.name
+                    )
+                }
+                .forEach { catalog ->
+                    val key = catalogKey(
+                        addonId = addon.id,
+                        type = catalog.type.toApiString(),
+                        catalogId = catalog.id
+                    )
+                    if (key !in orderedKeys) {
+                        orderedKeys.add(key)
+                    }
+                }
+        }
+        return orderedKeys
+    }
+
+    private fun isCatalogDisabled(
+        addonBaseUrl: String,
+        addonId: String,
+        type: String,
+        catalogId: String,
+        catalogName: String
+    ): Boolean {
+        if (disableCatalogKey(addonBaseUrl, type, catalogId, catalogName) in disabledHomeCatalogKeys) {
+            return true
+        }
+        // Backward compatibility with previously stored keys.
+        return catalogKey(addonId, type, catalogId) in disabledHomeCatalogKeys
+    }
+
+    private fun disableCatalogKey(
+        addonBaseUrl: String,
+        type: String,
+        catalogId: String,
+        catalogName: String
+    ): String {
+        return "${addonBaseUrl}_${type}_${catalogId}_${catalogName}"
     }
 
     private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {

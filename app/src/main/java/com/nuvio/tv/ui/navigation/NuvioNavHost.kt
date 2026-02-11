@@ -14,6 +14,7 @@ import com.nuvio.tv.ui.screens.LayoutSelectionScreen
 import com.nuvio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nuvio.tv.ui.screens.home.HomeScreen
 import com.nuvio.tv.ui.screens.addon.AddonManagerScreen
+import com.nuvio.tv.ui.screens.addon.CatalogOrderScreen
 import com.nuvio.tv.ui.screens.library.LibraryScreen
 import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreen
@@ -358,7 +359,15 @@ fun NuvioNavHost(
         }
 
         composable(Screen.AddonManager.route) {
-            AddonManagerScreen()
+            AddonManagerScreen(
+                onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) }
+            )
+        }
+
+        composable(Screen.CatalogOrder.route) {
+            CatalogOrderScreen(
+                onBackPress = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.Plugins.route) {

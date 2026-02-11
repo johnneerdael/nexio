@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.graphics.SolidColor
@@ -77,13 +78,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.Addon
+import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AddonManagerScreen(
-    viewModel: AddonManagerViewModel = hiltViewModel()
+    viewModel: AddonManagerViewModel = hiltViewModel(),
+    onNavigateToCatalogOrder: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -92,6 +95,11 @@ fun AddonManagerScreen(
     val installButtonFocusRequester = remember { FocusRequester() }
     val textFieldFocusRequester = remember { FocusRequester() }
     var isEditing by remember { mutableStateOf(false) }
+    val hasHomeVisibleCatalogs = remember(uiState.installedAddons) {
+        uiState.installedAddons.any { addon ->
+            addon.catalogs.any { catalog -> !catalog.isSearchOnlyCatalog() }
+        }
+    }
 
     // When isEditing changes to true, focus the text field and show keyboard
     LaunchedEffect(isEditing) {
@@ -248,6 +256,12 @@ fun AddonManagerScreen(
                 ManageFromPhoneCard(onClick = viewModel::startQrMode)
             }
 
+            if (hasHomeVisibleCatalogs) {
+                item {
+                    CatalogOrderEntryCard(onClick = onNavigateToCatalogOrder)
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -370,6 +384,67 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
             }
             Icon(
                 imageVector = Icons.Default.PhoneAndroid,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = NuvioColors.TextSecondary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun CatalogOrderEntryCard(onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused },
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(18.dp)
+            )
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Reorder,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = if (isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "Reorder home catalogs",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = NuvioColors.TextPrimary
+                    )
+                    Text(
+                        text = "Controls catalog row order on Home (Classic + Grid)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NuvioColors.TextSecondary
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.Default.ArrowDownward,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
                 tint = NuvioColors.TextSecondary
@@ -775,4 +850,8 @@ private fun AddonCard(
             )
         }
     }
+}
+
+private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
+    return extra.any { extra -> extra.name == "search" && extra.isRequired }
 }

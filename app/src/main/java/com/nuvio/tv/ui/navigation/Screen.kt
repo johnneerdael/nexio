@@ -92,6 +92,7 @@ sealed class Screen(val route: String) {
     data object PlaybackSettings : Screen("playback_settings")
     data object About : Screen("about")
     data object AddonManager : Screen("addon_manager")
+    data object CatalogOrder : Screen("catalog_order")
     data object Plugins : Screen("plugins")
     data object LayoutSelection : Screen("layout_selection")
     data object LayoutSettings : Screen("layout_settings")
