@@ -187,8 +187,8 @@ internal fun ContinueWatchingCard(
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
-    cardWidth: Dp = 320.dp,
-    imageHeight: Dp = 180.dp
+    cardWidth: Dp = 288.dp,
+    imageHeight: Dp = 162.dp
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }

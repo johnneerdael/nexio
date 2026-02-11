@@ -103,8 +103,8 @@ fun GridContinueWatchingSection(
                                 lastFocusedIndex = index
                             }
                         },
-                    cardWidth = 240.dp,
-                    imageHeight = 135.dp
+                    cardWidth = 220.dp,
+                    imageHeight = 124.dp
                 )
             }
         }

@@ -38,17 +38,24 @@ class WatchProgressPreferences @Inject constructor(
         .map { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val allItems = parseProgressMap(json)
-            
-            // Filter to keep only series-level entries (key = contentId) or movie entries
-            // This avoids duplicate entries where both episode-specific and series-level exist
-            allItems.entries
-                .filter { (key, progress) ->
-                    // Keep movies (no season/episode) OR series-level entries (key matches contentId exactly)
-                    progress.contentType == "movie" || key == progress.contentId
+
+            val contentLevelEntries = allItems.entries
+                .filter { (key, progress) -> key == progress.contentId }
+                .associate { it.value.contentId to it.value }
+                .toMutableMap()
+
+            val latestEpisodeFallbacks = allItems.values
+                .groupBy { it.contentId }
+                .mapValues { (_, items) -> items.maxByOrNull { it.lastWatched } }
+
+            latestEpisodeFallbacks.forEach { (contentId, latest) ->
+                if (contentLevelEntries[contentId] == null && latest != null) {
+                    contentLevelEntries[contentId] = latest
                 }
-                .map { it.value }
+            }
+
+            contentLevelEntries.values
                 .sortedByDescending { it.lastWatched }
-                .toList()
         }
 
     /**
@@ -103,22 +110,18 @@ class WatchProgressPreferences @Inject constructor(
             val json = preferences[watchProgressKey] ?: "{}"
             val map = parseProgressMap(json).toMutableMap()
             
-            // Use a composite key for series episodes to track each episode separately
             val key = createKey(progress)
             map[key] = progress
 
-            // Also update the series-level entry to track the latest episode
-            if (progress.contentType == "series" && progress.season != null && progress.episode != null) {
+            if (progress.season != null && progress.episode != null) {
                 val seriesKey = progress.contentId
                 val existingSeriesProgress = map[seriesKey]
                 
-                // Update series-level progress if this is a more recent watch
                 if (existingSeriesProgress == null || progress.lastWatched > existingSeriesProgress.lastWatched) {
                     map[seriesKey] = progress.copy(videoId = progress.videoId)
                 }
             }
 
-            // Prune old items if exceeds max
             val pruned = pruneOldItems(map)
             preferences[watchProgressKey] = gson.toJson(pruned)
         }
@@ -138,7 +141,9 @@ class WatchProgressPreferences @Inject constructor(
                 map.remove(key)
             } else {
                 // Remove all progress for this content
-                val keysToRemove = map.keys.filter { it.startsWith(contentId) }
+                val keysToRemove = map.keys.filter { key ->
+                    key == contentId || key.startsWith("${contentId}_s")
+                }
                 keysToRemove.forEach { map.remove(it) }
             }
             
@@ -185,12 +190,17 @@ class WatchProgressPreferences @Inject constructor(
     }
 
     private fun pruneOldItems(map: MutableMap<String, WatchProgress>): Map<String, WatchProgress> {
-        if (map.size <= maxItems) return map
-        
-        // Keep the most recently watched items
-        return map.entries
-            .sortedByDescending { it.value.lastWatched }
+        if (map.isEmpty()) return map
+
+        val keepContentIds = map.values
+            .groupBy { it.contentId }
+            .mapValues { (_, items) -> items.maxOf { it.lastWatched } }
+            .entries
+            .sortedByDescending { it.value }
             .take(maxItems)
-            .associate { it.key to it.value }
+            .map { it.key }
+            .toSet()
+
+        return map.filterValues { it.contentId in keepContentIds }
     }
 }
