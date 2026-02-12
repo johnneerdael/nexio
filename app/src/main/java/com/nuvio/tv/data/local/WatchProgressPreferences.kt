@@ -28,6 +28,10 @@ class WatchProgressPreferences @Inject constructor(
 
     // Maximum items to keep in continue watching
     private val maxItems = 50
+    
+    private val maxEpisodesPerContent = 25
+   
+    private val maxStoredEntries = 300
 
     /**
      * Get all watch progress items, sorted by last watched (most recent first)
@@ -199,8 +203,47 @@ class WatchProgressPreferences @Inject constructor(
             .sortedByDescending { it.value }
             .take(maxItems)
             .map { it.key }
-            .toSet()
+        val keepContentIdSet = keepContentIds.toSet()
 
-        return map.filterValues { it.contentId in keepContentIds }
+        val filteredByContent = map.filterValues { it.contentId in keepContentIdSet }
+        val boundedByContent = mutableMapOf<String, WatchProgress>()
+
+        keepContentIds.forEach { contentId ->
+            val entriesForContent = filteredByContent.filterValues { it.contentId == contentId }
+
+            // Keep canonical content-level record when present.
+            entriesForContent[contentId]?.let { boundedByContent[contentId] = it }
+
+            val recentEpisodeEntries = entriesForContent
+                .filterKeys { it != contentId }
+                .entries
+                .sortedByDescending { it.value.lastWatched }
+                .take(maxEpisodesPerContent)
+
+            recentEpisodeEntries.forEach { (key, value) ->
+                boundedByContent[key] = value
+            }
+        }
+
+        if (boundedByContent.size <= maxStoredEntries) return boundedByContent
+
+        val pinnedContentKeys = keepContentIds.filter { boundedByContent.containsKey(it) }.toSet()
+        val remainingSlots = (maxStoredEntries - pinnedContentKeys.size).coerceAtLeast(0)
+
+        val limited = mutableMapOf<String, WatchProgress>()
+        pinnedContentKeys.forEach { key ->
+            boundedByContent[key]?.let { limited[key] = it }
+        }
+
+        boundedByContent.entries
+            .asSequence()
+            .filter { (key, _) -> key !in pinnedContentKeys }
+            .sortedByDescending { (_, value) -> value.lastWatched }
+            .take(remainingSlots)
+            .forEach { (key, value) ->
+                limited[key] = value
+            }
+
+        return limited
     }
 }

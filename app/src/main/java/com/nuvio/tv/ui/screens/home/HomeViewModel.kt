@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -273,6 +274,15 @@ class HomeViewModel @Inject constructor(
     private fun loadContinueWatching() {
         viewModelScope.launch {
             watchProgressRepository.allProgress.collectLatest { items ->
+                val inProgressOnly = items
+                    .filter { it.isInProgress() }
+                    .sortedByDescending { it.lastWatched }
+                    .map { ContinueWatchingItem.InProgress(it) }
+
+                // Optimistic immediate render: show in-progress entries instantly.
+                _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
+
+                // Then compute NextUp enrichment (may need remote meta lookups).
                 val entries = buildContinueWatchingItems(items)
                 _uiState.update { it.copy(continueWatchingItems = entries) }
             }
@@ -333,12 +343,30 @@ class HomeViewModel @Inject constructor(
     private suspend fun findNextEpisode(progress: WatchProgress): Pair<Meta, Video>? {
         if (!isSeriesType(progress.contentType)) return null
 
-        val result = metaRepository.getMetaFromAllAddons(
-            type = progress.contentType,
-            id = progress.contentId
-        ).first { it !is NetworkResult.Loading }
+        val idCandidates = buildList {
+            add(progress.contentId)
+            if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
+            if (progress.contentId.startsWith("trakt:")) add(progress.contentId.substringAfter(':'))
+        }.distinct()
 
-        val meta = (result as? NetworkResult.Success)?.data ?: return null
+        val meta = run {
+            var resolved: Meta? = null
+            val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()
+            for (type in typeCandidates) {
+                for (candidateId in idCandidates) {
+                    val result = withTimeoutOrNull(2500) {
+                        metaRepository.getMetaFromAllAddons(
+                            type = type,
+                            id = candidateId
+                        ).first { it !is NetworkResult.Loading }
+                    } ?: continue
+                    resolved = (result as? NetworkResult.Success)?.data
+                    if (resolved != null) break
+                }
+                if (resolved != null) break
+            }
+            resolved
+        } ?: return null
 
         val episodes = meta.videos
             .filter { it.season != null && it.episode != null && it.season != 0 }

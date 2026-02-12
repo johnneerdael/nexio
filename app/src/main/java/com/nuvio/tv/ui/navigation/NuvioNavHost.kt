@@ -24,6 +24,7 @@ import com.nuvio.tv.ui.screens.settings.LayoutSettingsScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.screens.settings.SettingsScreen
 import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
+import com.nuvio.tv.ui.screens.settings.TraktScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
@@ -330,7 +331,14 @@ fun NuvioNavHost(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) }
+                onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
+                onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) }
+            )
+        }
+
+        composable(Screen.Trakt.route) {
+            TraktScreen(
+                onBackPress = { navController.popBackStack() }
             )
         }
 
