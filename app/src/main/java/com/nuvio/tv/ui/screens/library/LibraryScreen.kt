@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.focusable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -76,14 +77,40 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
+    val primaryFocusRequester = remember { FocusRequester() }
+    var pendingPrimaryFocus by remember { mutableStateOf(true) }
+
+    LaunchedEffect(uiState.isLoading) {
+        if (uiState.isLoading) {
+            pendingPrimaryFocus = true
+        }
+    }
+
+    LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size) {
+        if (!uiState.isLoading && pendingPrimaryFocus) {
+            primaryFocusRequester.requestFocus()
+            pendingPrimaryFocus = false
+        }
+    }
 
     if (uiState.isLoading) {
+        val loadingFocusRequester = remember { FocusRequester() }
+        LaunchedEffect(uiState.isLoading) {
+            loadingFocusRequester.requestFocus()
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(NuvioColors.Background),
             contentAlignment = androidx.compose.ui.Alignment.Center
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(loadingFocusRequester)
+                    .focusable()
+            )
             Column(
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -112,6 +139,7 @@ fun LibraryScreen(
                 listTabs = uiState.listTabs,
                 selectedListKey = uiState.selectedListKey,
                 selectedTypeTab = uiState.selectedTypeTab,
+                primaryFocusRequester = primaryFocusRequester,
                 expandedPicker = expandedPicker,
                 onExpandedChange = { picker, shouldExpand ->
                     expandedPicker = if (shouldExpand) picker else null
@@ -245,6 +273,7 @@ private fun LibrarySelectorsRow(
     listTabs: List<LibraryListTab>,
     selectedListKey: String?,
     selectedTypeTab: LibraryTypeTab,
+    primaryFocusRequester: FocusRequester,
     expandedPicker: String?,
     onExpandedChange: (String, Boolean) -> Unit,
     onSelectList: (String) -> Unit,
@@ -261,7 +290,8 @@ private fun LibrarySelectorsRow(
             LibraryDropdownPicker(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 48.dp),
+                    .padding(start = 48.dp)
+                    .focusRequester(primaryFocusRequester),
                 title = "List",
                 value = selectedListLabel,
                 expanded = expandedPicker == "list",
@@ -272,9 +302,16 @@ private fun LibrarySelectorsRow(
         }
 
         LibraryDropdownPicker(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 48.dp),
+            modifier = if (sourceMode == LibrarySourceMode.TRAKT) {
+                Modifier
+                    .weight(1f)
+                    .padding(end = 48.dp)
+            } else {
+                Modifier
+                    .weight(1f)
+                    .padding(end = 48.dp)
+                    .focusRequester(primaryFocusRequester)
+            },
             title = "Type",
             value = selectedTypeLabel,
             expanded = expandedPicker == "type",

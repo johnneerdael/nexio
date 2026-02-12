@@ -53,12 +53,11 @@ fun HomeScreen(
     val hasHeroContent = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
     val hasContinueWatchingContent = uiState.continueWatchingItems.isNotEmpty()
-    val hasPrimaryHomeContent = hasHeroContent || hasCatalogContent || hasContinueWatchingContent
-    var hasEnteredHomeContent: Boolean by rememberSaveable { mutableStateOf(false) }
+    var hasEnteredCatalogContent: Boolean by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(hasPrimaryHomeContent) {
-        if (hasPrimaryHomeContent) {
-            hasEnteredHomeContent = true
+    LaunchedEffect(hasCatalogContent) {
+        if (hasCatalogContent) {
+            hasEnteredCatalogContent = true
         }
     }
 
@@ -116,7 +115,7 @@ fun HomeScreen(
                 )
             }
             else -> {
-                val shouldShowLoadingGate = hasEnteredHomeContent == false && hasPrimaryHomeContent == false
+                val shouldShowLoadingGate = hasEnteredCatalogContent == false && hasCatalogContent == false
 
                 Crossfade(
                     targetState = shouldShowLoadingGate,
