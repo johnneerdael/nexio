@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    id("io.sentry.android.gradle") version "6.0.0"
 }
 
 import java.util.Properties
