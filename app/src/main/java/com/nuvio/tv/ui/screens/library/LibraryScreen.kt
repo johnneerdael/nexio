@@ -521,9 +521,15 @@ private fun ManageListsDialog(
 ) {
     val personalTabs = remember(tabs) { tabs.filter { it.type == LibraryListTab.Type.PERSONAL } }
     val firstFocusRequester = remember { FocusRequester() }
+    val closeFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
-        firstFocusRequester.requestFocus()
+    LaunchedEffect(personalTabs.size) {
+        val target = if (personalTabs.isNotEmpty()) firstFocusRequester else closeFocusRequester
+        val focused = runCatching { target.requestFocus() }.isSuccess
+        if (!focused) {
+            delay(16)
+            runCatching { target.requestFocus() }
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -635,6 +641,7 @@ private fun ManageListsDialog(
                     Button(
                         onClick = onDismiss,
                         enabled = !pending,
+                        modifier = Modifier.focusRequester(closeFocusRequester),
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,
                             contentColor = NuvioColors.TextPrimary

@@ -238,7 +238,9 @@ fun SearchScreen(
 
                         itemsIndexed(
                             items = visibleCatalogRows,
-                            key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}_${uiState.query.trim()}" }
+                            key = { index, item ->
+                                "${item.addonId}_${item.type}_${item.catalogId}_${uiState.query.trim()}_$index"
+                            }
                         ) { index, catalogRow ->
                             CatalogRowSection(
                                 catalogRow = catalogRow,

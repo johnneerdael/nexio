@@ -290,7 +290,7 @@ fun AddonManagerScreen(
             } else {
                 itemsIndexed(
                     items = uiState.installedAddons,
-                    key = { _, addon -> addon.id }
+                    key = { index, addon -> "${addon.id}:${addon.baseUrl}:$index" }
                 ) { index, addon ->
                     AddonCard(
                         addon = addon,
