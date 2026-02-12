@@ -174,22 +174,43 @@ fun PlaybackSettingsContent(
     var showStreamRegexDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
 
+    fun dismissAllDialogs() {
+        showLanguageDialog = false
+        showSecondaryLanguageDialog = false
+        showTextColorDialog = false
+        showBackgroundColorDialog = false
+        showOutlineColorDialog = false
+        showAudioLanguageDialog = false
+        showDecoderPriorityDialog = false
+        showStreamAutoPlayModeDialog = false
+        showStreamAutoPlaySourceDialog = false
+        showStreamAutoPlayAddonSelectionDialog = false
+        showStreamAutoPlayPluginSelectionDialog = false
+        showStreamRegexDialog = false
+        showReuseLastLinkCacheDialog = false
+    }
+
+    fun openDialog(setter: () -> Unit) {
+        dismissAllDialogs()
+        setter()
+    }
+
     PlaybackSettingsSections(
         playerSettings = playerSettings,
         trailerSettings = trailerSettings,
-        onShowAudioLanguageDialog = { showAudioLanguageDialog = true },
-        onShowDecoderPriorityDialog = { showDecoderPriorityDialog = true },
-        onShowLanguageDialog = { showLanguageDialog = true },
-        onShowSecondaryLanguageDialog = { showSecondaryLanguageDialog = true },
-        onShowTextColorDialog = { showTextColorDialog = true },
-        onShowBackgroundColorDialog = { showBackgroundColorDialog = true },
-        onShowOutlineColorDialog = { showOutlineColorDialog = true },
-        onShowStreamAutoPlayModeDialog = { showStreamAutoPlayModeDialog = true },
-        onShowStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = true },
-        onShowStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = true },
-        onShowStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = true },
-        onShowStreamRegexDialog = { showStreamRegexDialog = true },
-        onShowReuseLastLinkCacheDialog = { showReuseLastLinkCacheDialog = true },
+        onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
+        onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
+        onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
+        onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
+        onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
+        onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
+        onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
+        onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
+        onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
+        onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
+        onShowStreamAutoPlayPluginSelectionDialog = { openDialog { showStreamAutoPlayPluginSelectionDialog = true } },
+        onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
+        onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
         onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
         onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
         onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
@@ -264,19 +285,19 @@ fun PlaybackSettingsContent(
         onSetReuseLastLinkCacheHours = { hours ->
             coroutineScope.launch { viewModel.setStreamReuseLastLinkCacheHours(hours) }
         },
-        onDismissLanguageDialog = { showLanguageDialog = false },
-        onDismissSecondaryLanguageDialog = { showSecondaryLanguageDialog = false },
-        onDismissTextColorDialog = { showTextColorDialog = false },
-        onDismissBackgroundColorDialog = { showBackgroundColorDialog = false },
-        onDismissOutlineColorDialog = { showOutlineColorDialog = false },
-        onDismissAudioLanguageDialog = { showAudioLanguageDialog = false },
-        onDismissDecoderPriorityDialog = { showDecoderPriorityDialog = false },
-        onDismissStreamAutoPlayModeDialog = { showStreamAutoPlayModeDialog = false },
-        onDismissStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = false },
-        onDismissStreamRegexDialog = { showStreamRegexDialog = false },
-        onDismissStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = false },
-        onDismissStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = false },
-        onDismissReuseLastLinkCacheDialog = { showReuseLastLinkCacheDialog = false }
+        onDismissLanguageDialog = ::dismissAllDialogs,
+        onDismissSecondaryLanguageDialog = ::dismissAllDialogs,
+        onDismissTextColorDialog = ::dismissAllDialogs,
+        onDismissBackgroundColorDialog = ::dismissAllDialogs,
+        onDismissOutlineColorDialog = ::dismissAllDialogs,
+        onDismissAudioLanguageDialog = ::dismissAllDialogs,
+        onDismissDecoderPriorityDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlayModeDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlaySourceDialog = ::dismissAllDialogs,
+        onDismissStreamRegexDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlayAddonSelectionDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlayPluginSelectionDialog = ::dismissAllDialogs,
+        onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
 }
 
@@ -773,12 +794,10 @@ internal fun LanguageSelectionDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard
-            ),
-            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier

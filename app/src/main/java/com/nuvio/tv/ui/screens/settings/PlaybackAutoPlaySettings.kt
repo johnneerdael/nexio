@@ -4,6 +4,7 @@ package com.nuvio.tv.ui.screens.settings
 
 import android.view.KeyEvent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -292,10 +294,10 @@ private fun StreamAutoPlayModeDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -392,10 +394,10 @@ private fun StreamReuseLastLinkCacheDurationDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -490,10 +492,10 @@ private fun StreamAutoPlaySourceDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -591,10 +593,10 @@ private fun StreamAutoPlayProviderSelectionDialog(
             onDismiss()
         }
     ) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -747,10 +749,10 @@ private fun StreamRegexDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier

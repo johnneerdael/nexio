@@ -2,7 +2,9 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -247,12 +250,10 @@ private fun AudioLanguageSelectionDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard
-            ),
-            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -343,12 +344,10 @@ private fun DecoderPriorityDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard
-            ),
-            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
