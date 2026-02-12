@@ -196,6 +196,7 @@ class PlayerViewModel @Inject constructor(
     private var currentMediaSession: MediaSession? = null
     private var pauseOverlayJob: Job? = null
     private val pauseOverlayDelayMs = 5000L
+    private var pendingPreviewSeekPosition: Long? = null
 
     init {
         initializePlayer(currentStreamUrl, currentHeaders)
@@ -1423,9 +1424,10 @@ class PlayerViewModel @Inject constructor(
                     if (playerDuration > lastKnownDuration) {
                         lastKnownDuration = playerDuration
                     }
+                    val displayPosition = pendingPreviewSeekPosition ?: pos
                     _uiState.update {
                         it.copy(
-                            currentPosition = pos,
+                            currentPosition = displayPosition,
                             duration = playerDuration.coerceAtLeast(0L)
                         )
                     }
@@ -1601,6 +1603,7 @@ class PlayerViewModel @Inject constructor(
                 onEvent(PlayerEvent.OnSeekBy(deltaMs = -10_000L))
             }
             is PlayerEvent.OnSeekBy -> {
+                pendingPreviewSeekPosition = null
                 _exoPlayer?.let { player ->
                     val maxDuration = player.duration.takeIf { it >= 0 } ?: Long.MAX_VALUE
                     val target = (player.currentPosition + event.deltaMs)
@@ -1615,7 +1618,37 @@ class PlayerViewModel @Inject constructor(
                     showSeekOverlayTemporarily()
                 }
             }
+            is PlayerEvent.OnPreviewSeekBy -> {
+                _exoPlayer?.let { player ->
+                    val maxDuration = player.duration.takeIf { it >= 0 } ?: Long.MAX_VALUE
+                    val basePosition = pendingPreviewSeekPosition ?: player.currentPosition.coerceAtLeast(0L)
+                    val target = (basePosition + event.deltaMs)
+                        .coerceAtLeast(0L)
+                        .coerceAtMost(maxDuration)
+                    pendingPreviewSeekPosition = target
+                    _uiState.update { it.copy(currentPosition = target) }
+                }
+                if (_uiState.value.showControls) {
+                    showControlsTemporarily()
+                } else {
+                    showSeekOverlayTemporarily()
+                }
+            }
+            PlayerEvent.OnCommitPreviewSeek -> {
+                val target = pendingPreviewSeekPosition
+                if (target != null) {
+                    _exoPlayer?.seekTo(target)
+                    _uiState.update { it.copy(currentPosition = target) }
+                    pendingPreviewSeekPosition = null
+                    if (_uiState.value.showControls) {
+                        showControlsTemporarily()
+                    } else {
+                        showSeekOverlayTemporarily()
+                    }
+                }
+            }
             is PlayerEvent.OnSeekTo -> {
+                pendingPreviewSeekPosition = null
                 _exoPlayer?.seekTo(event.position)
                 _uiState.update { it.copy(currentPosition = event.position) }
                 if (_uiState.value.showControls) {

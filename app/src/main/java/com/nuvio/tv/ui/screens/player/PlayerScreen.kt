@@ -223,6 +223,19 @@ fun PlayerScreen(
                         uiState.showSubtitleStylePanel || uiState.showSpeedDialog
                 if (panelOrDialogOpen) return@onKeyEvent false
 
+                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT,
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (!uiState.showControls) {
+                                viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
+                                return@onKeyEvent true
+                            }
+                        }
+                    }
+                    return@onKeyEvent false
+                }
+
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     if (uiState.showPauseOverlay) {
                         viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
@@ -246,7 +259,7 @@ fun PlayerScreen(
                                     repeatCount >= 3 -> 20_000L
                                     else -> 10_000L
                                 }
-                                viewModel.onEvent(PlayerEvent.OnSeekBy(deltaMs))
+                                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(deltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible
@@ -261,7 +274,7 @@ fun PlayerScreen(
                                     repeatCount >= 3 -> -20_000L
                                     else -> -10_000L
                                 }
-                                viewModel.onEvent(PlayerEvent.OnSeekBy(deltaMs))
+                                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(deltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible
