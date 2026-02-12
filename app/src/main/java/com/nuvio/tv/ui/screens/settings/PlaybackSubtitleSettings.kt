@@ -64,7 +64,8 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
-    onSetLibassRenderType: (LibassRenderType) -> Unit
+    onSetLibassRenderType: (LibassRenderType) -> Unit,
+    onItemFocused: () -> Unit = {}
 ) {
     item {
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
@@ -89,7 +90,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             icon = Icons.Default.Language,
             title = "Preferred Language",
             subtitle = languageName,
-            onClick = onShowLanguageDialog
+            onClick = onShowLanguageDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -102,7 +104,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             icon = Icons.Default.Language,
             title = "Secondary Preferred Language",
             subtitle = secondaryLanguageName,
-            onClick = onShowSecondaryLanguageDialog
+            onClick = onShowSecondaryLanguageDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -115,7 +118,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             minValue = 50,
             maxValue = 200,
             step = 10,
-            onValueChange = onSetSubtitleSize
+            onValueChange = onSetSubtitleSize,
+            onFocused = onItemFocused
         )
     }
 
@@ -128,7 +132,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             minValue = -20,
             maxValue = 50,
             step = 1,
-            onValueChange = onSetSubtitleVerticalOffset
+            onValueChange = onSetSubtitleVerticalOffset,
+            onFocused = onItemFocused
         )
     }
 
@@ -138,7 +143,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Bold",
             subtitle = "Use bold font weight for subtitles",
             isChecked = playerSettings.subtitleStyle.bold,
-            onCheckedChange = onSetSubtitleBold
+            onCheckedChange = onSetSubtitleBold,
+            onFocused = onItemFocused
         )
     }
 
@@ -147,7 +153,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             icon = Icons.Default.Palette,
             title = "Text Color",
             currentColor = Color(playerSettings.subtitleStyle.textColor),
-            onClick = onShowTextColorDialog
+            onClick = onShowTextColorDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -157,7 +164,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Background Color",
             currentColor = Color(playerSettings.subtitleStyle.backgroundColor),
             showTransparent = playerSettings.subtitleStyle.backgroundColor == Color.Transparent.toArgb(),
-            onClick = onShowBackgroundColorDialog
+            onClick = onShowBackgroundColorDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -167,7 +175,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Outline",
             subtitle = "Add outline around subtitle text for better visibility",
             isChecked = playerSettings.subtitleStyle.outlineEnabled,
-            onCheckedChange = onSetSubtitleOutlineEnabled
+            onCheckedChange = onSetSubtitleOutlineEnabled,
+            onFocused = onItemFocused
         )
     }
 
@@ -177,7 +186,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 icon = Icons.Default.Palette,
                 title = "Outline Color",
                 currentColor = Color(playerSettings.subtitleStyle.outlineColor),
-                onClick = onShowOutlineColorDialog
+                onClick = onShowOutlineColorDialog,
+                onFocused = onItemFocused
             )
         }
     }
@@ -198,7 +208,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Use libass for ASS/SSA subtitles",
             subtitle = "Enable native libass rendering for advanced ASS/SSA subtitle features including animations, positioning, and styling",
             isChecked = playerSettings.useLibass,
-            onCheckedChange = onSetUseLibass
+            onCheckedChange = onSetUseLibass,
+            onFocused = onItemFocused
         )
     }
 
@@ -217,7 +228,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = "Overlay OpenGL (Recommended)",
                 subtitle = "Best quality with HDR support. Renders subtitles on a separate thread.",
                 isSelected = playerSettings.libassRenderType == LibassRenderType.OVERLAY_OPEN_GL,
-                onClick = { onSetLibassRenderType(LibassRenderType.OVERLAY_OPEN_GL) }
+                onClick = { onSetLibassRenderType(LibassRenderType.OVERLAY_OPEN_GL) },
+                onFocused = onItemFocused
             )
         }
 
@@ -226,7 +238,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = "Overlay Canvas",
                 subtitle = "HDR support with canvas rendering. May block UI thread.",
                 isSelected = playerSettings.libassRenderType == LibassRenderType.OVERLAY_CANVAS,
-                onClick = { onSetLibassRenderType(LibassRenderType.OVERLAY_CANVAS) }
+                onClick = { onSetLibassRenderType(LibassRenderType.OVERLAY_CANVAS) },
+                onFocused = onItemFocused
             )
         }
 
@@ -235,7 +248,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = "Effects OpenGL",
                 subtitle = "Animation support using Media3 effects. Faster than Canvas.",
                 isSelected = playerSettings.libassRenderType == LibassRenderType.EFFECTS_OPEN_GL,
-                onClick = { onSetLibassRenderType(LibassRenderType.EFFECTS_OPEN_GL) }
+                onClick = { onSetLibassRenderType(LibassRenderType.EFFECTS_OPEN_GL) },
+                onFocused = onItemFocused
             )
         }
 
@@ -244,7 +258,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = "Effects Canvas",
                 subtitle = "Animation support using Media3 effects with Canvas rendering.",
                 isSelected = playerSettings.libassRenderType == LibassRenderType.EFFECTS_CANVAS,
-                onClick = { onSetLibassRenderType(LibassRenderType.EFFECTS_CANVAS) }
+                onClick = { onSetLibassRenderType(LibassRenderType.EFFECTS_CANVAS) },
+                onFocused = onItemFocused
             )
         }
 
@@ -253,7 +268,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = "Standard Cues",
                 subtitle = "Basic subtitle rendering without animation support. Most compatible.",
                 isSelected = playerSettings.libassRenderType == LibassRenderType.CUES,
-                onClick = { onSetLibassRenderType(LibassRenderType.CUES) }
+                onClick = { onSetLibassRenderType(LibassRenderType.CUES) },
+                onFocused = onItemFocused
             )
         }
     }

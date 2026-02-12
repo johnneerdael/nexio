@@ -436,11 +436,21 @@ private fun CollapsibleSectionCard(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(NuvioColors.BackgroundCard.copy(alpha = 0.55f))
-                    .padding(12.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 content()
             }
+        }
+
+        if (expanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+                    .height(1.dp)
+                    .background(NuvioColors.Border.copy(alpha = 0.78f))
+            )
         }
     }
 }
@@ -463,7 +473,7 @@ private fun CompactToggleRow(
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -547,7 +557,7 @@ private fun LayoutCard(
         },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             border = if (isSelected) Border(
@@ -571,7 +581,7 @@ private fun LayoutCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(86.dp)
+                    .height(112.dp)
             ) {
                 when (layout) {
                     HomeLayout.CLASSIC -> ClassicLayoutPreview(modifier = Modifier.fillMaxWidth())
@@ -623,7 +633,7 @@ private fun CatalogChip(
         shape = ButtonDefaults.shape(shape = RoundedCornerShape(16.dp)),
         colors = ButtonDefaults.colors(
             containerColor = if (isSelected) NuvioColors.FocusRing.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = if (isSelected) NuvioColors.FocusRing.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f)
         ),
         border = ButtonDefaults.border(
             border = if (isSelected) Border(
@@ -703,7 +713,7 @@ private fun PosterCardStyleControls(
             shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
             colors = ButtonDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.FocusBackground
+                focusedContainerColor = NuvioColors.BackgroundCard
             ),
             border = ButtonDefaults.border(
                 focusedBorder = Border(
@@ -770,7 +780,7 @@ private fun ValueChip(
         shape = ButtonDefaults.shape(shape = RoundedCornerShape(14.dp)),
         colors = ButtonDefaults.colors(
             containerColor = if (isSelected) NuvioColors.FocusRing.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = if (isSelected) NuvioColors.FocusRing.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f)
         ),
         border = ButtonDefaults.border(
             border = if (isSelected) Border(

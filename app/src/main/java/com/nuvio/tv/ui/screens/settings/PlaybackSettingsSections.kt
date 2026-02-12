@@ -2,30 +2,58 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
+
+private enum class PlaybackSection {
+    GENERAL,
+    STREAM_SELECTION,
+    AUDIO_TRAILER,
+    SUBTITLES
+}
 
 @Composable
 internal fun PlaybackSettingsSections(
@@ -61,34 +89,60 @@ internal fun PlaybackSettingsSections(
     onSetUseLibass: (Boolean) -> Unit,
     onSetLibassRenderType: (com.nuvio.tv.data.local.LibassRenderType) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Playback",
-            style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.Secondary
-        )
+    var generalExpanded by rememberSaveable { mutableStateOf(false) }
+    var streamExpanded by rememberSaveable { mutableStateOf(false) }
+    var audioTrailerExpanded by rememberSaveable { mutableStateOf(false) }
+    var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
 
-        Spacer(modifier = Modifier.height(8.dp))
+    val generalHeaderFocus = remember { FocusRequester() }
+    val streamHeaderFocus = remember { FocusRequester() }
+    val audioTrailerHeaderFocus = remember { FocusRequester() }
+    val subtitlesHeaderFocus = remember { FocusRequester() }
 
-        Text(
-            text = "Configure video playback and subtitle options",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
-        )
+    var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
 
-        Spacer(modifier = Modifier.height(24.dp))
+    LaunchedEffect(generalExpanded, focusedSection) {
+        if (!generalExpanded && focusedSection == PlaybackSection.GENERAL) {
+            generalHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(streamExpanded, focusedSection) {
+        if (!streamExpanded && focusedSection == PlaybackSection.STREAM_SELECTION) {
+            streamHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(audioTrailerExpanded, focusedSection) {
+        if (!audioTrailerExpanded && focusedSection == PlaybackSection.AUDIO_TRAILER) {
+            audioTrailerHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(subtitlesExpanded, focusedSection) {
+        if (!subtitlesExpanded && focusedSection == PlaybackSection.SUBTITLES) {
+            subtitlesHeaderFocus.requestFocus()
+        }
+    }
 
-        LazyColumn(
-            contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    LazyColumn(
+        contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        playbackCollapsibleSection(
+            keyPrefix = "general",
+            title = "General",
+            description = "Core playback behavior.",
+            expanded = generalExpanded,
+            onToggle = { generalExpanded = !generalExpanded },
+            focusRequester = generalHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.GENERAL }
         ) {
             item {
                 ToggleSettingsItem(
                     icon = Icons.Default.Image,
                     title = "Loading Overlay",
-                    subtitle = "Show a loading screen until the first video frame appears",
+                    subtitle = "Show loading screen until first video frame appears.",
                     isChecked = playerSettings.loadingOverlayEnabled,
-                    onCheckedChange = onSetLoadingOverlayEnabled
+                    onCheckedChange = onSetLoadingOverlayEnabled,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL }
                 )
             }
 
@@ -96,9 +150,10 @@ internal fun PlaybackSettingsSections(
                 ToggleSettingsItem(
                     icon = Icons.Default.PauseCircle,
                     title = "Pause Overlay",
-                    subtitle = "Show a details overlay after 5 seconds of no input while paused",
+                    subtitle = "Show details overlay after 5 seconds while paused.",
                     isChecked = playerSettings.pauseOverlayEnabled,
-                    onCheckedChange = onSetPauseOverlayEnabled
+                    onCheckedChange = onSetPauseOverlayEnabled,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL }
                 )
             }
 
@@ -106,9 +161,10 @@ internal fun PlaybackSettingsSections(
                 ToggleSettingsItem(
                     icon = Icons.Default.History,
                     title = "Skip Intro",
-                    subtitle = "Use introdb.app to detect intros and recaps",
+                    subtitle = "Use introdb.app to detect intros and recaps.",
                     isChecked = playerSettings.skipIntroEnabled,
-                    onCheckedChange = onSetSkipIntroEnabled
+                    onCheckedChange = onSetSkipIntroEnabled,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL }
                 )
             }
 
@@ -116,22 +172,23 @@ internal fun PlaybackSettingsSections(
                 ToggleSettingsItem(
                     icon = Icons.Default.Speed,
                     title = "Auto Frame Rate",
-                    subtitle = "Switch display refresh rate to match video frame rate for judder-free playback",
+                    subtitle = "Match display refresh rate to video frame rate.",
                     isChecked = playerSettings.frameRateMatching,
-                    onCheckedChange = onSetFrameRateMatching
+                    onCheckedChange = onSetFrameRateMatching,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL }
                 )
             }
+        }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Stream Selection",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextSecondary,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-
+        playbackCollapsibleSection(
+            keyPrefix = "stream_selection",
+            title = "Stream Selection",
+            description = "Auto-play and source filtering.",
+            expanded = streamExpanded,
+            onToggle = { streamExpanded = !streamExpanded },
+            focusRequester = streamHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
+        ) {
             autoPlaySettingsItems(
                 playerSettings = playerSettings,
                 onShowModeDialog = onShowStreamAutoPlayModeDialog,
@@ -140,9 +197,20 @@ internal fun PlaybackSettingsSections(
                 onShowPluginSelectionDialog = onShowStreamAutoPlayPluginSelectionDialog,
                 onShowRegexDialog = onShowStreamRegexDialog,
                 onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
-                onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled
+                onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled,
+                onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )
+        }
 
+        playbackCollapsibleSection(
+            keyPrefix = "audio_trailer",
+            title = "Audio & Trailer",
+            description = "Trailer behavior and audio controls.",
+            expanded = audioTrailerExpanded,
+            onToggle = { audioTrailerExpanded = !audioTrailerExpanded },
+            focusRequester = audioTrailerHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER }
+        ) {
             trailerAndAudioSettingsItems(
                 playerSettings = playerSettings,
                 trailerSettings = trailerSettings,
@@ -152,9 +220,20 @@ internal fun PlaybackSettingsSections(
                 onSetTrailerDelaySeconds = onSetTrailerDelaySeconds,
                 onSetSkipSilence = onSetSkipSilence,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
-                onSetMapDV7ToHevc = onSetMapDV7ToHevc
+                onSetMapDV7ToHevc = onSetMapDV7ToHevc,
+                onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER }
             )
+        }
 
+        playbackCollapsibleSection(
+            keyPrefix = "subtitles",
+            title = "Subtitles",
+            description = "Language, style, and render mode.",
+            expanded = subtitlesExpanded,
+            onToggle = { subtitlesExpanded = !subtitlesExpanded },
+            focusRequester = subtitlesHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.SUBTITLES }
+        ) {
             subtitleSettingsItems(
                 playerSettings = playerSettings,
                 onShowLanguageDialog = onShowLanguageDialog,
@@ -167,10 +246,110 @@ internal fun PlaybackSettingsSections(
                 onSetSubtitleBold = onSetSubtitleBold,
                 onSetSubtitleOutlineEnabled = onSetSubtitleOutlineEnabled,
                 onSetUseLibass = onSetUseLibass,
-                onSetLibassRenderType = onSetLibassRenderType
+                onSetLibassRenderType = onSetLibassRenderType,
+                onItemFocused = { focusedSection = PlaybackSection.SUBTITLES }
             )
         }
     }
+}
+
+private fun LazyListScope.playbackCollapsibleSection(
+    keyPrefix: String,
+    title: String,
+    description: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    focusRequester: FocusRequester,
+    onHeaderFocused: () -> Unit,
+    content: LazyListScope.() -> Unit
+) {
+    item(key = "${keyPrefix}_header") {
+        PlaybackSectionHeader(
+            title = title,
+            description = description,
+            expanded = expanded,
+            onToggle = onToggle,
+            focusRequester = focusRequester,
+            onFocused = onHeaderFocused
+        )
+    }
+
+    if (expanded) {
+        content()
+        item(key = "${keyPrefix}_end_divider") {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+                    .height(1.dp)
+                    .background(NuvioColors.Border.copy(alpha = 0.78f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaybackSectionHeader(
+    title: String,
+    description: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    focusRequester: FocusRequester,
+    onFocused: () -> Unit
+) {
+    Card(
+        onClick = onToggle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+            .onFocusChanged {
+                if (it.isFocused) onFocused()
+            },
+        colors = CardDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+            )
+        ),
+        shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioColors.TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = NuvioColors.TextSecondary
+            )
+        }
+    }
+
 }
 
 @Composable

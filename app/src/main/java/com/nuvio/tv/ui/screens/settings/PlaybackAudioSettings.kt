@@ -60,7 +60,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
-    onSetMapDV7ToHevc: (Boolean) -> Unit
+    onSetMapDV7ToHevc: (Boolean) -> Unit,
+    onItemFocused: () -> Unit = {}
 ) {
     item {
         Text(
@@ -77,7 +78,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             title = "Auto-play Trailers",
             subtitle = "Automatically play trailers on the detail screen after a period of inactivity",
             isChecked = trailerSettings.enabled,
-            onCheckedChange = onSetTrailerEnabled
+            onCheckedChange = onSetTrailerEnabled,
+            onFocused = onItemFocused
         )
     }
 
@@ -91,7 +93,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
                 minValue = 3,
                 maxValue = 15,
                 step = 1,
-                onValueChange = onSetTrailerDelaySeconds
+                onValueChange = onSetTrailerDelaySeconds,
+                onFocused = onItemFocused
             )
         }
     }
@@ -128,7 +131,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             icon = Icons.Default.Language,
             title = "Preferred Audio Language",
             subtitle = audioLangName,
-            onClick = onShowAudioLanguageDialog
+            onClick = onShowAudioLanguageDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -138,7 +142,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             title = "Skip Silence",
             subtitle = "Skip silent portions of audio during playback",
             isChecked = playerSettings.skipSilence,
-            onCheckedChange = onSetSkipSilence
+            onCheckedChange = onSetSkipSilence,
+            onFocused = onItemFocused
         )
     }
 
@@ -173,7 +178,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             icon = Icons.Default.Tune,
             title = "Decoder Priority",
             subtitle = decoderName,
-            onClick = onShowDecoderPriorityDialog
+            onClick = onShowDecoderPriorityDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -183,7 +189,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             title = "Tunneled Playback",
             subtitle = "Hardware-level audio/video sync. May improve playback on some Android TV devices",
             isChecked = playerSettings.tunnelingEnabled,
-            onCheckedChange = onSetTunnelingEnabled
+            onCheckedChange = onSetTunnelingEnabled,
+            onFocused = onItemFocused
         )
     }
 
@@ -193,7 +200,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
             title = "DV7 → HEVC Fallback",
             subtitle = "Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support",
             isChecked = playerSettings.mapDV7ToHevc,
-            onCheckedChange = onSetMapDV7ToHevc
+            onCheckedChange = onSetMapDV7ToHevc,
+            onFocused = onItemFocused
         )
     }
 }

@@ -221,7 +221,10 @@ fun ContentCard(
                     TrailerPlayer(
                         trailerUrl = trailerPreviewUrl,
                         isPlaying = true,
-                        onEnded = {},
+                        onEnded = {
+                            trailerFirstFrameRendered = false
+                            isBackdropExpanded = false
+                        },
                         onFirstFrameRendered = {
                             trailerFirstFrameRendered = true
                         },
@@ -258,48 +261,42 @@ fun ContentCard(
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .height(96.dp)
+                            .background(logoAreaGradient)
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                             .fillMaxWidth(0.75f)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .fillMaxWidth()
-                                .height(96.dp)
-                                .background(logoAreaGradient)
-                        )
-
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
-                                .fillMaxWidth()
-                        ) {
-                            if (item.logo != null) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(item.logo)
-                                        .crossfade(false)
-                                        .size(
-                                            width = requestWidthPx,
-                                            height = with(density) { 48.dp.roundToPx() }
-                                        )
-                                        .build(),
-                                    contentDescription = item.name,
-                                    modifier = Modifier
-                                        .height(48.dp)
-                                        .fillMaxWidth(),
-                                    contentScale = ContentScale.Fit,
-                                    alignment = Alignment.CenterStart
-                                )
-                            } else {
-                                Text(
-                                    text = item.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                        if (item.logo != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(item.logo)
+                                    .crossfade(false)
+                                    .size(
+                                        width = requestWidthPx,
+                                        height = with(density) { 48.dp.roundToPx() }
+                                    )
+                                    .build(),
+                                contentDescription = item.name,
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .fillMaxWidth(),
+                                contentScale = ContentScale.Fit,
+                                alignment = Alignment.CenterStart
+                            )
+                        } else {
+                            Text(
+                                text = item.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
