@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface LibraryRepository {
     val sourceMode: Flow<LibrarySourceMode>
+    val isSyncing: Flow<Boolean>
     val libraryItems: Flow<List<LibraryEntry>>
     val listTabs: Flow<List<LibraryListTab>>
 

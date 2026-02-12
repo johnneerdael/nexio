@@ -47,6 +47,7 @@ data class LibraryUiState(
     val selectedListKey: String? = null,
     val selectedTypeTab: LibraryTypeTab = LibraryTypeTab.Movies,
     val isLoading: Boolean = true,
+    val isSyncing: Boolean = false,
     val errorMessage: String? = null,
     val transientMessage: String? = null,
     val showManageDialog: Boolean = false,
@@ -84,9 +85,12 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onRefresh() {
+        if (_uiState.value.isSyncing) return
         viewModelScope.launch {
+            setTransientMessage("Syncing Trakt library...")
             runCatching {
                 libraryRepository.refreshNow()
+                setTransientMessage("Library synced")
             }.onFailure { error ->
                 setError(error.message ?: "Failed to refresh library")
             }
@@ -247,11 +251,12 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 libraryRepository.sourceMode,
+                libraryRepository.isSyncing,
                 libraryRepository.libraryItems,
                 libraryRepository.listTabs
-            ) { sourceMode, items, listTabs ->
-                Triple(sourceMode, items, listTabs)
-            }.collectLatest { (sourceMode, items, listTabs) ->
+            ) { sourceMode, isSyncing, items, listTabs ->
+                DataBundle(sourceMode, isSyncing, items, listTabs)
+            }.collectLatest { (sourceMode, isSyncing, items, listTabs) ->
                 _uiState.update { current ->
                     val nextSelectedList = when {
                         sourceMode == LibrarySourceMode.TRAKT -> {
@@ -276,13 +281,24 @@ class LibraryViewModel @Inject constructor(
                         listTabs = listTabs,
                         selectedListKey = nextSelectedList,
                         manageSelectedListKey = nextManageSelected,
-                        isLoading = false
+                        isSyncing = sourceMode == LibrarySourceMode.TRAKT && isSyncing,
+                        isLoading = sourceMode == LibrarySourceMode.TRAKT &&
+                            isSyncing &&
+                            items.isEmpty() &&
+                            listTabs.isEmpty()
                     )
                     updated.withVisibleItems()
                 }
             }
         }
     }
+
+    private data class DataBundle(
+        val sourceMode: LibrarySourceMode,
+        val isSyncing: Boolean,
+        val items: List<LibraryEntry>,
+        val listTabs: List<LibraryListTab>
+    )
 
     private fun reorderSelectedList(moveUp: Boolean) {
         val state = _uiState.value
@@ -324,7 +340,12 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun setError(message: String) {
-        _uiState.update { it.copy(errorMessage = message) }
+        _uiState.update { it.copy(errorMessage = message, transientMessage = message) }
+        messageClearJob?.cancel()
+        messageClearJob = viewModelScope.launch {
+            delay(2800)
+            _uiState.update { it.copy(transientMessage = null) }
+        }
     }
 
     private fun setTransientMessage(message: String) {

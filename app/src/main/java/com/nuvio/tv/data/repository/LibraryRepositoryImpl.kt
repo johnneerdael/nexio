@@ -35,6 +35,16 @@ class LibraryRepositoryImpl @Inject constructor(
         }
         .distinctUntilChanged()
 
+    override val isSyncing: Flow<Boolean> = sourceMode
+        .flatMapLatest { mode ->
+            if (mode == LibrarySourceMode.TRAKT) {
+                traktLibraryService.observeIsRefreshing()
+            } else {
+                flowOf(false)
+            }
+        }
+        .distinctUntilChanged()
+
     override val libraryItems: Flow<List<LibraryEntry>> = sourceMode
         .flatMapLatest { mode ->
             if (mode == LibrarySourceMode.TRAKT) {

@@ -12,12 +12,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,16 +41,21 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.LibraryListTab
@@ -48,10 +63,9 @@ import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.TraktListPrivacy
 import com.nuvio.tv.ui.components.ContentCard
 import com.nuvio.tv.ui.components.EmptyScreenState
+import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BookmarkBorder
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -61,6 +75,29 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var expandedPicker by remember { mutableStateOf<String?>(null) }
+
+    if (uiState.isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(NuvioColors.Background),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                LoadingIndicator()
+                Text(
+                    text = "Syncing Trakt library...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+            }
+        }
+        return
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -69,26 +106,32 @@ fun LibraryScreen(
         contentPadding = PaddingValues(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        if (uiState.sourceMode == LibrarySourceMode.TRAKT) {
-            item {
-                PrimaryListTabs(
-                    tabs = uiState.listTabs,
-                    selectedKey = uiState.selectedListKey,
-                    onTabSelected = viewModel::onSelectListTab
-                )
-            }
-        }
-
         item {
-            TypeTabs(
-                selectedTab = uiState.selectedTypeTab,
-                onTabSelected = viewModel::onSelectTypeTab
+            LibrarySelectorsRow(
+                sourceMode = uiState.sourceMode,
+                listTabs = uiState.listTabs,
+                selectedListKey = uiState.selectedListKey,
+                selectedTypeTab = uiState.selectedTypeTab,
+                expandedPicker = expandedPicker,
+                onExpandedChange = { picker, shouldExpand ->
+                    expandedPicker = if (shouldExpand) picker else null
+                },
+                onSelectList = { key ->
+                    viewModel.onSelectListTab(key)
+                    expandedPicker = null
+                },
+                onSelectType = { type ->
+                    viewModel.onSelectTypeTab(type)
+                    expandedPicker = null
+                }
             )
         }
 
         if (uiState.sourceMode == LibrarySourceMode.TRAKT) {
             item {
                 LibraryActionsRow(
+                    pending = uiState.pendingOperation,
+                    isSyncing = uiState.isSyncing,
                     onManageLists = viewModel::onOpenManageLists,
                     onRefresh = viewModel::onRefresh
                 )
@@ -197,89 +240,169 @@ fun LibraryScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PrimaryListTabs(
-    tabs: List<LibraryListTab>,
-    selectedKey: String?,
-    onTabSelected: (String) -> Unit
+private fun LibrarySelectorsRow(
+    sourceMode: LibrarySourceMode,
+    listTabs: List<LibraryListTab>,
+    selectedListKey: String?,
+    selectedTypeTab: LibraryTypeTab,
+    expandedPicker: String?,
+    onExpandedChange: (String, Boolean) -> Unit,
+    onSelectList: (String) -> Unit,
+    onSelectType: (LibraryTypeTab) -> Unit
 ) {
-    LazyRow(
+    val selectedListLabel = listTabs.firstOrNull { it.key == selectedListKey }?.title ?: "Select"
+    val selectedTypeLabel = selectedTypeTab.label
+
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(tabs, key = { it.key }) { tab ->
-            ListTabPill(
-                label = tab.title,
-                selected = tab.key == selectedKey,
-                onClick = { onTabSelected(tab.key) }
+        if (sourceMode == LibrarySourceMode.TRAKT) {
+            LibraryDropdownPicker(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 48.dp),
+                title = "List",
+                value = selectedListLabel,
+                expanded = expandedPicker == "list",
+                options = listTabs.map { LibraryOption(it.title, it.key) },
+                onExpandedChange = { onExpandedChange("list", it) },
+                onSelect = { onSelectList(it.value) }
             )
         }
-    }
-}
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun TypeTabs(
-    selectedTab: LibraryTypeTab,
-    onTabSelected: (LibraryTypeTab) -> Unit
-) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(LibraryTypeTab.entries.toList(), key = { it.name }) { tab ->
-            ListTabPill(
-                label = tab.label,
-                selected = tab == selectedTab,
-                onClick = { onTabSelected(tab) }
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ListTabPill(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    Card(
-        onClick = onClick,
-        shape = CardDefaults.shape(shape = RoundedCornerShape(20.dp)),
-        colors = CardDefaults.colors(
-            containerColor = if (selected) NuvioColors.SurfaceVariant else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.Secondary
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(20.dp)
-            )
-        ),
-        scale = CardDefaults.scale(focusedScale = 1.0f),
-        modifier = Modifier.onFocusChanged { isFocused = it.isFocused }
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            color = when {
-                isFocused -> NuvioColors.OnPrimary
-                selected -> NuvioColors.TextPrimary
-                else -> NuvioTheme.extendedColors.textSecondary
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+        LibraryDropdownPicker(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 48.dp),
+            title = "Type",
+            value = selectedTypeLabel,
+            expanded = expandedPicker == "type",
+            options = LibraryTypeTab.entries.map { LibraryOption(it.label, it.name) },
+            onExpandedChange = { onExpandedChange("type", it) },
+            onSelect = { option ->
+                LibraryTypeTab.entries.firstOrNull { it.name == option.value }?.let(onSelectType)
+            }
         )
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
+private fun LibraryDropdownPicker(
+    modifier: Modifier = Modifier,
+    title: String,
+    value: String,
+    expanded: Boolean,
+    options: List<LibraryOption>,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (LibraryOption) -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    var anchorSize by remember { mutableStateOf(IntSize.Zero) }
+
+    Box(modifier = modifier) {
+        Card(
+            onClick = { onExpandedChange(!expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { anchorSize = it }
+                .onFocusChanged { isFocused = it.isFocused },
+            shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                focusedContainerColor = NuvioColors.FocusBackground
+            ),
+            border = CardDefaults.border(
+                border = androidx.tv.material3.Border(
+                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    shape = RoundedCornerShape(14.dp)
+                ),
+                focusedBorder = androidx.tv.material3.Border(
+                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    shape = RoundedCornerShape(14.dp)
+                )
+            ),
+            scale = CardDefaults.scale(
+                focusedScale = 1.0f,
+                pressedScale = 1.0f
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = NuvioColors.TextTertiary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                        tint = if (isFocused) NuvioColors.FocusRing else NuvioColors.TextSecondary
+                    )
+                }
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier
+                .width(with(LocalDensity.current) { anchorSize.width.toDp() })
+                .heightIn(max = 320.dp),
+            shape = RoundedCornerShape(14.dp),
+            containerColor = NuvioColors.BackgroundCard,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, NuvioColors.Border)
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option.label,
+                            color = NuvioColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    onClick = { onSelect(option) },
+                    colors = MenuDefaults.itemColors(
+                        textColor = NuvioColors.TextPrimary,
+                        disabledTextColor = NuvioColors.TextDisabled
+                    )
+                )
+            }
+        }
+    }
+}
+
+private data class LibraryOption(
+    val label: String,
+    val value: String
+)
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
 private fun LibraryActionsRow(
+    pending: Boolean,
+    isSyncing: Boolean,
     onManageLists: () -> Unit,
     onRefresh: () -> Unit
 ) {
@@ -291,6 +414,7 @@ private fun LibraryActionsRow(
     ) {
         Button(
             onClick = onManageLists,
+            enabled = !pending && !isSyncing,
             colors = ButtonDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
                 contentColor = NuvioColors.TextPrimary
@@ -300,12 +424,13 @@ private fun LibraryActionsRow(
         }
         Button(
             onClick = onRefresh,
+            enabled = !pending && !isSyncing,
             colors = ButtonDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
                 contentColor = NuvioColors.TextPrimary
             )
         ) {
-            Text("Sync")
+            Text(if (isSyncing) "Syncing..." else "Sync")
         }
     }
 }
@@ -327,7 +452,6 @@ private fun ManageListsDialog(
 ) {
     val personalTabs = remember(tabs) { tabs.filter { it.type == LibraryListTab.Type.PERSONAL } }
     val firstFocusRequester = remember { FocusRequester() }
-    var suppressNextKeyUp by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         firstFocusRequester.requestFocus()
@@ -339,20 +463,6 @@ private fun ManageListsDialog(
                 .width(620.dp)
                 .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
                 .padding(24.dp)
-                .onPreviewKeyEvent { event ->
-                    val native = event.nativeKeyEvent
-                    if (suppressNextKeyUp && native.action == AndroidKeyEvent.ACTION_UP) {
-                        val isSelectOrMenu = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
-                            native.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
-                            native.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER ||
-                            native.keyCode == AndroidKeyEvent.KEYCODE_MENU
-                        if (isSelectOrMenu) {
-                            suppressNextKeyUp = false
-                            return@onPreviewKeyEvent true
-                        }
-                    }
-                    false
-                }
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
@@ -478,6 +588,22 @@ private fun ListEditorDialog(
     onSave: () -> Unit,
     onCancel: () -> Unit
 ) {
+    val nameFocusRequester = remember { FocusRequester() }
+    val descriptionFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var nameEditing by remember { mutableStateOf(false) }
+    var descriptionEditing by remember { mutableStateOf(false) }
+
+    fun isSelectKey(keyCode: Int): Boolean {
+        return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+            keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+            keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+    }
+
+    LaunchedEffect(Unit) {
+        nameFocusRequester.requestFocus()
+    }
+
     Dialog(onDismissRequest = onCancel) {
         Box(
             modifier = Modifier
@@ -495,19 +621,84 @@ private fun ListEditorDialog(
                 androidx.compose.material3.OutlinedTextField(
                     value = state.name,
                     onValueChange = onNameChanged,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(nameFocusRequester)
+                        .onFocusChanged {
+                            if (!it.isFocused) {
+                                nameEditing = false
+                            }
+                        }
+                        .onPreviewKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            if (native.action == AndroidKeyEvent.ACTION_DOWN && isSelectKey(native.keyCode)) {
+                                nameEditing = true
+                                descriptionEditing = false
+                                keyboardController?.show()
+                            }
+                            false
+                        },
                     enabled = !pending,
-                    label = { androidx.compose.material3.Text("Name") }
+                    readOnly = !nameEditing,
+                    singleLine = true,
+                    maxLines = 1,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            nameEditing = false
+                            keyboardController?.hide()
+                        }
+                    ),
+                    label = { androidx.compose.material3.Text("Name") },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = NuvioColors.TextPrimary,
+                        unfocusedTextColor = NuvioColors.TextPrimary,
+                        focusedContainerColor = NuvioColors.BackgroundCard,
+                        unfocusedContainerColor = NuvioColors.BackgroundCard,
+                        focusedBorderColor = NuvioColors.FocusRing,
+                        unfocusedBorderColor = NuvioColors.Border,
+                        focusedLabelColor = NuvioColors.TextSecondary,
+                        unfocusedLabelColor = NuvioColors.TextTertiary,
+                        cursorColor = NuvioColors.FocusRing
+                    )
                 )
 
                 androidx.compose.material3.OutlinedTextField(
                     value = state.description,
                     onValueChange = onDescriptionChanged,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(descriptionFocusRequester)
+                        .onFocusChanged {
+                            if (!it.isFocused) {
+                                descriptionEditing = false
+                            }
+                        }
+                        .onPreviewKeyEvent { event ->
+                            val native = event.nativeKeyEvent
+                            if (native.action == AndroidKeyEvent.ACTION_DOWN && isSelectKey(native.keyCode)) {
+                                descriptionEditing = true
+                                nameEditing = false
+                                keyboardController?.show()
+                            }
+                            false
+                        },
                     enabled = !pending,
+                    readOnly = !descriptionEditing,
                     minLines = 3,
                     maxLines = 5,
-                    label = { androidx.compose.material3.Text("Description") }
+                    label = { androidx.compose.material3.Text("Description") },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = NuvioColors.TextPrimary,
+                        unfocusedTextColor = NuvioColors.TextPrimary,
+                        focusedContainerColor = NuvioColors.BackgroundCard,
+                        unfocusedContainerColor = NuvioColors.BackgroundCard,
+                        focusedBorderColor = NuvioColors.FocusRing,
+                        unfocusedBorderColor = NuvioColors.Border,
+                        focusedLabelColor = NuvioColors.TextSecondary,
+                        unfocusedLabelColor = NuvioColors.TextTertiary,
+                        cursorColor = NuvioColors.FocusRing
+                    )
                 )
 
                 Text(

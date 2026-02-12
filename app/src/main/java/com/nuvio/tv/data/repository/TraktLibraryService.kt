@@ -68,6 +68,7 @@ class TraktLibraryService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val snapshotState = MutableStateFlow(Snapshot())
     private val metadataState = MutableStateFlow<Map<String, LibraryMetadata>>(emptyMap())
+    private val refreshingState = MutableStateFlow(false)
     private val refreshMutex = Mutex()
     private val metadataMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
@@ -99,6 +100,10 @@ class TraktLibraryService @Inject constructor(
             .onStart { ensureFresh() }
     }
 
+    fun observeIsRefreshing(): Flow<Boolean> {
+        return refreshingState
+    }
+
     suspend fun getMembershipSnapshot(item: LibraryEntryInput): ListMembershipSnapshot {
         ensureFresh()
         val snapshot = snapshotState.value
@@ -115,13 +120,19 @@ class TraktLibraryService @Inject constructor(
         val key = contentKey(item.itemId, item.itemType)
         val currentMembership = snapshotState.value.membershipByContent[key].orEmpty()
         val isInWatchlist = currentMembership.contains(WATCHLIST_KEY)
-
         if (isInWatchlist) {
-            removeFromWatchlist(item)
+            performOptimisticMutation(
+                optimistic = { snapshot -> removeItemFromList(snapshot, item, WATCHLIST_KEY) }
+            ) {
+                removeFromWatchlist(item)
+            }
         } else {
-            addToWatchlist(item)
+            performOptimisticMutation(
+                optimistic = { snapshot -> addItemToList(snapshot, item, WATCHLIST_KEY) }
+            ) {
+                addToWatchlist(item)
+            }
         }
-        refreshNow()
     }
 
     suspend fun applyMembershipChanges(
@@ -140,21 +151,35 @@ class TraktLibraryService @Inject constructor(
 
             if (listKey == WATCHLIST_KEY) {
                 if (after) {
-                    addToWatchlist(item)
+                    performOptimisticMutation(
+                        optimistic = { snapshot -> addItemToList(snapshot, item, WATCHLIST_KEY) }
+                    ) {
+                        addToWatchlist(item)
+                    }
                 } else {
-                    removeFromWatchlist(item)
+                    performOptimisticMutation(
+                        optimistic = { snapshot -> removeItemFromList(snapshot, item, WATCHLIST_KEY) }
+                    ) {
+                        removeFromWatchlist(item)
+                    }
                 }
             } else {
                 val listId = listIdFromKey(listKey) ?: return@forEach
                 if (after) {
-                    addToPersonalList(listId, item)
+                    performOptimisticMutation(
+                        optimistic = { snapshot -> addItemToList(snapshot, item, listKey) }
+                    ) {
+                        addToPersonalList(listId, item)
+                    }
                 } else {
-                    removeFromPersonalList(listId, item)
+                    performOptimisticMutation(
+                        optimistic = { snapshot -> removeItemFromList(snapshot, item, listKey) }
+                    ) {
+                        removeFromPersonalList(listId, item)
+                    }
                 }
             }
         }
-
-        refreshNow()
     }
 
     suspend fun createPersonalList(
@@ -178,7 +203,21 @@ class TraktLibraryService @Inject constructor(
             throw IllegalStateException(errorMessageForCode(response.code(), "Failed to create list"))
         }
 
-        refreshNow()
+        val createdTab = response.body()?.let(::mapListTab)
+        if (createdTab == null) {
+            refresh(force = true)
+            return
+        }
+        val current = snapshotState.value
+        val existingTabKeys = current.listTabs.map { it.key }.toSet()
+        val nonDuplicateTabs = current.listTabs.filterNot { it.key == createdTab.key }
+        val updatedTabs = nonDuplicateTabs + createdTab
+        val updatedEntries = if (createdTab.key in existingTabKeys) {
+            current.entriesByList
+        } else {
+            current.entriesByList + (createdTab.key to emptyList())
+        }
+        snapshotState.value = rebuildSnapshot(updatedTabs, updatedEntries)
     }
 
     suspend fun updatePersonalList(
@@ -187,40 +226,61 @@ class TraktLibraryService @Inject constructor(
         description: String?,
         privacy: TraktListPrivacy
     ) {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.updateUserList(
-                authorization = authHeader,
-                id = ME_PATH,
-                listId = listId,
-                body = TraktCreateOrUpdateListRequestDto(
-                    name = name,
-                    description = description,
-                    privacy = privacy.apiValue
+        performOptimisticMutation(
+            optimistic = { snapshot ->
+                val updatedTabs = snapshot.listTabs.map { tab ->
+                    if (matchesPersonalListIdentifier(tab, listId)) {
+                        tab.copy(title = name, description = description, privacy = privacy)
+                    } else {
+                        tab
+                    }
+                }
+                rebuildSnapshot(updatedTabs, snapshot.entriesByList)
+            }
+        ) {
+            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+                traktApi.updateUserList(
+                    authorization = authHeader,
+                    id = ME_PATH,
+                    listId = listId,
+                    body = TraktCreateOrUpdateListRequestDto(
+                        name = name,
+                        description = description,
+                        privacy = privacy.apiValue
+                    )
                 )
-            )
-        } ?: throw IllegalStateException("Trakt request failed")
+            } ?: throw IllegalStateException("Trakt request failed")
 
-        if (!response.isSuccessful) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to update list"))
+            if (!response.isSuccessful) {
+                throw IllegalStateException(errorMessageForCode(response.code(), "Failed to update list"))
+            }
         }
-
-        refreshNow()
     }
 
     suspend fun deletePersonalList(listId: String) {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.deleteUserList(
-                authorization = authHeader,
-                id = ME_PATH,
-                listId = listId
-            )
-        } ?: throw IllegalStateException("Trakt request failed")
+        performOptimisticMutation(
+            optimistic = { snapshot ->
+                val removedKeys = snapshot.listTabs
+                    .filter { matchesPersonalListIdentifier(it, listId) }
+                    .map { it.key }
+                    .toSet()
+                val updatedTabs = snapshot.listTabs.filterNot { it.key in removedKeys }
+                val updatedEntries = snapshot.entriesByList.filterKeys { it !in removedKeys }
+                rebuildSnapshot(updatedTabs, updatedEntries)
+            }
+        ) {
+            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+                traktApi.deleteUserList(
+                    authorization = authHeader,
+                    id = ME_PATH,
+                    listId = listId
+                )
+            } ?: throw IllegalStateException("Trakt request failed")
 
-        if (!response.isSuccessful && response.code() != 204) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to delete list"))
+            if (!response.isSuccessful && response.code() != 204) {
+                throw IllegalStateException(errorMessageForCode(response.code(), "Failed to delete list"))
+            }
         }
-
-        refreshNow()
     }
 
     suspend fun reorderPersonalLists(orderedListIds: List<String>) {
@@ -229,19 +289,33 @@ class TraktLibraryService @Inject constructor(
         }
         if (rank.isEmpty()) return
 
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.reorderUserLists(
-                authorization = authHeader,
-                id = ME_PATH,
-                body = TraktReorderListsRequestDto(rank = rank)
-            )
-        } ?: throw IllegalStateException("Trakt request failed")
+        performOptimisticMutation(
+            optimistic = { snapshot ->
+                val personalTabs = snapshot.listTabs.filter { it.type == LibraryListTab.Type.PERSONAL }
+                val orderedTabs = orderedListIds.mapNotNull { id ->
+                    personalTabs.firstOrNull { matchesPersonalListIdentifier(it, id) }
+                }.distinctBy { it.key }
+                val remainingTabs = snapshot.listTabs.filter { tab ->
+                    tab.type != LibraryListTab.Type.PERSONAL || orderedTabs.none { it.key == tab.key }
+                }
+                rebuildSnapshot(
+                    tabs = remainingTabs + orderedTabs,
+                    rawEntriesByList = snapshot.entriesByList
+                )
+            }
+        ) {
+            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+                traktApi.reorderUserLists(
+                    authorization = authHeader,
+                    id = ME_PATH,
+                    body = TraktReorderListsRequestDto(rank = rank)
+                )
+            } ?: throw IllegalStateException("Trakt request failed")
 
-        if (!response.isSuccessful) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to reorder lists"))
+            if (!response.isSuccessful) {
+                throw IllegalStateException(errorMessageForCode(response.code(), "Failed to reorder lists"))
+            }
         }
-
-        refreshNow()
     }
 
     suspend fun refreshNow() {
@@ -252,25 +326,123 @@ class TraktLibraryService @Inject constructor(
         refresh(force = false)
     }
 
-    private suspend fun refresh(force: Boolean) {
+    private suspend fun refresh(force: Boolean): Boolean {
         val now = System.currentTimeMillis()
-        refreshMutex.withLock {
+        return refreshMutex.withLock {
             if (!force && now - lastRefreshMs <= cacheTtlMs && snapshotState.value.updatedAtMs > 0L) {
-                return
+                return@withLock true
             }
 
-            val previous = snapshotState.value
-            val refreshed = fetchSnapshot(previous)
-            snapshotState.value = refreshed
-            lastRefreshMs = now
-            hydrateMetadata(refreshed.allEntries)
+            refreshingState.value = true
+            try {
+                val previous = snapshotState.value
+                val refreshed = runCatching { fetchSnapshot() }.getOrNull()
+                val snapshotToUse = refreshed ?: previous
+                snapshotState.value = snapshotToUse
+                lastRefreshMs = now
+                hydrateMetadata(snapshotToUse.allEntries)
+                refreshed != null
+            } finally {
+                refreshingState.value = false
+            }
         }
     }
 
-    private suspend fun fetchSnapshot(previous: Snapshot): Snapshot {
-        val watchlistEntries = fetchWatchlistEntries(previous.entriesByList[WATCHLIST_KEY].orEmpty())
+    private suspend fun performOptimisticMutation(
+        optimistic: (Snapshot) -> Snapshot,
+        mutation: suspend () -> Unit
+    ) {
+        val before = snapshotState.value
+        val optimisticSnapshot = optimistic(before)
+        snapshotState.value = optimisticSnapshot
+        hydrateMetadata(optimisticSnapshot.allEntries)
+        try {
+            mutation()
+        } catch (error: Throwable) {
+            snapshotState.value = before
+            throw error
+        }
+    }
 
-        val personalLists = fetchPersonalLists(previous.listTabs.filter { it.type == LibraryListTab.Type.PERSONAL })
+    private fun addItemToList(snapshot: Snapshot, item: LibraryEntryInput, listKey: String): Snapshot {
+        val key = contentKey(item.itemId, item.itemType)
+        val normalizedType = normalizeItemType(item.itemType)
+        val normalizedId = normalizeContentId(resolveIds(item), fallback = item.itemId.trim())
+            .ifBlank { item.itemId.trim() }
+        val existing = snapshot.allEntries.firstOrNull { contentKey(it.id, it.type) == key }
+        val entry = (existing ?: LibraryEntry(
+            id = normalizedId,
+            type = normalizedType,
+            name = item.title.ifBlank { normalizedId },
+            poster = item.poster,
+            posterShape = item.posterShape,
+            background = item.background,
+            logo = item.logo,
+            description = item.description,
+            releaseInfo = item.releaseInfo ?: item.year?.toString(),
+            imdbRating = item.imdbRating,
+            genres = item.genres,
+            addonBaseUrl = item.addonBaseUrl
+        )).copy(
+            listedAt = System.currentTimeMillis(),
+            listKeys = existing?.listKeys.orEmpty() + listKey
+        )
+
+        val existingEntries = snapshot.entriesByList[listKey].orEmpty()
+        val updatedListEntries = listOf(entry) + existingEntries.filterNot { contentKey(it.id, it.type) == key }
+        val updatedEntriesByList = snapshot.entriesByList + (listKey to updatedListEntries)
+        return rebuildSnapshot(snapshot.listTabs, updatedEntriesByList)
+    }
+
+    private fun removeItemFromList(snapshot: Snapshot, item: LibraryEntryInput, listKey: String): Snapshot {
+        val key = contentKey(item.itemId, item.itemType)
+        val updatedEntriesByList = snapshot.entriesByList + (
+            listKey to snapshot.entriesByList[listKey].orEmpty()
+                .filterNot { contentKey(it.id, it.type) == key }
+        )
+        return rebuildSnapshot(snapshot.listTabs, updatedEntriesByList)
+    }
+
+    private fun rebuildSnapshot(
+        tabs: List<LibraryListTab>,
+        rawEntriesByList: Map<String, List<LibraryEntry>>
+    ): Snapshot {
+        val membership = mutableMapOf<String, MutableSet<String>>()
+        rawEntriesByList.forEach { (listKey, entries) ->
+            entries.forEach { entry ->
+                membership.getOrPut(contentKey(entry.id, entry.type)) { mutableSetOf() }
+                    .add(listKey)
+            }
+        }
+
+        val allEntriesByContent = linkedMapOf<String, LibraryEntry>()
+        rawEntriesByList.values.flatten()
+            .sortedByDescending { it.listedAt }
+            .forEach { entry ->
+                val key = contentKey(entry.id, entry.type)
+                allEntriesByContent[key] = entry.copy(listKeys = membership[key].orEmpty())
+            }
+
+        val entriesByList = rawEntriesByList.mapValues { (_, entries) ->
+            entries.map { entry ->
+                val key = contentKey(entry.id, entry.type)
+                entry.copy(listKeys = membership[key].orEmpty())
+            }
+        }
+
+        return Snapshot(
+            listTabs = tabs,
+            entriesByList = entriesByList,
+            allEntries = allEntriesByContent.values.toList(),
+            membershipByContent = membership.mapValues { it.value.toSet() },
+            updatedAtMs = System.currentTimeMillis()
+        )
+    }
+
+    private suspend fun fetchSnapshot(): Snapshot {
+        val watchlistEntries = fetchWatchlistEntries()
+
+        val personalLists = fetchPersonalLists()
         val personalTabs = personalLists.tabs
         val personalEntriesByList = personalLists.entriesByList
 
@@ -329,23 +501,23 @@ class TraktLibraryService @Inject constructor(
         )
     }
 
-    private suspend fun fetchWatchlistEntries(previous: List<LibraryEntry>): List<LibraryEntry> {
+    private suspend fun fetchWatchlistEntries(): List<LibraryEntry> {
         val moviesResponse = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getWatchlist(
                 authorization = authHeader,
                 type = "movies"
             )
-        } ?: return previous
+        } ?: throw IllegalStateException("Failed to fetch watchlist movies")
 
         val showsResponse = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getWatchlist(
                 authorization = authHeader,
                 type = "shows"
             )
-        } ?: return previous
+        } ?: throw IllegalStateException("Failed to fetch watchlist shows")
 
         if (!moviesResponse.isSuccessful || !showsResponse.isSuccessful) {
-            return previous
+            throw IllegalStateException("Failed to fetch watchlist")
         }
 
         return (moviesResponse.body().orEmpty() + showsResponse.body().orEmpty())
@@ -357,30 +529,22 @@ class TraktLibraryService @Inject constructor(
         val entriesByList: Map<String, List<LibraryEntry>>
     )
 
-    private suspend fun fetchPersonalLists(previousTabs: List<LibraryListTab>): PersonalListFetchResult {
+    private suspend fun fetchPersonalLists(): PersonalListFetchResult {
         val response = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getUserLists(
                 authorization = authHeader,
                 id = ME_PATH
             )
-        } ?: return PersonalListFetchResult(
-            tabs = previousTabs,
-            entriesByList = snapshotState.value.entriesByList.filterKeys { it.startsWith(PERSONAL_KEY_PREFIX) }
-        )
+        } ?: throw IllegalStateException("Failed to fetch personal lists")
 
         if (!response.isSuccessful) {
-            return PersonalListFetchResult(
-                tabs = previousTabs,
-                entriesByList = snapshotState.value.entriesByList.filterKeys { it.startsWith(PERSONAL_KEY_PREFIX) }
-            )
+            throw IllegalStateException("Failed to fetch personal lists (${response.code()})")
         }
 
         val personal = response.body().orEmpty()
             .filter { it.type.equals("personal", ignoreCase = true) }
 
         val tabs = personal.mapNotNull { mapListTab(it) }
-        val previousByKey = snapshotState.value.entriesByList
-
         val entriesByList = coroutineScope {
             val semaphore = Semaphore(listFetchConcurrency)
             tabs.map { tab ->
@@ -388,16 +552,11 @@ class TraktLibraryService @Inject constructor(
                     semaphore.withPermit {
                         val listIdPath = tab.traktListId?.toString() ?: tab.slug
                         if (listIdPath.isNullOrBlank()) {
-                            tab.key to previousByKey[tab.key].orEmpty()
+                            tab.key to emptyList()
                         } else {
                             val movies = fetchPersonalListItems(listIdPath, "movie", tab.key)
                             val shows = fetchPersonalListItems(listIdPath, "show", tab.key)
-                            val items = if (movies == null || shows == null) {
-                                previousByKey[tab.key].orEmpty()
-                            } else {
-                                movies + shows
-                            }
-                            tab.key to items
+                            tab.key to (movies + shows)
                         }
                     }
                 }
@@ -414,7 +573,7 @@ class TraktLibraryService @Inject constructor(
         listIdPath: String,
         type: String,
         listKey: String
-    ): List<LibraryEntry>? {
+    ): List<LibraryEntry> {
         val response = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getUserListItems(
                 authorization = authHeader,
@@ -422,9 +581,11 @@ class TraktLibraryService @Inject constructor(
                 listId = listIdPath,
                 type = type
             )
-        } ?: return null
+        } ?: throw IllegalStateException("Failed to fetch list items")
 
-        if (!response.isSuccessful) return null
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Failed to fetch list items (${response.code()})")
+        }
         return response.body().orEmpty()
             .mapNotNull { mapListItem(listKey = listKey, item = it) }
     }
@@ -615,6 +776,16 @@ class TraktLibraryService @Inject constructor(
     private fun listIdFromKey(key: String): String? {
         if (!key.startsWith(PERSONAL_KEY_PREFIX)) return null
         return key.removePrefix(PERSONAL_KEY_PREFIX).takeIf { it.isNotBlank() }
+    }
+
+    private fun matchesPersonalListIdentifier(tab: LibraryListTab, identifier: String): Boolean {
+        if (tab.type != LibraryListTab.Type.PERSONAL) return false
+        val normalized = identifier.removePrefix(PERSONAL_KEY_PREFIX)
+        val tabKeySuffix = tab.key.removePrefix(PERSONAL_KEY_PREFIX)
+        return tab.key == "$PERSONAL_KEY_PREFIX$normalized" ||
+            tabKeySuffix == normalized ||
+            tab.traktListId?.toString() == normalized ||
+            tab.slug == normalized
     }
 
     private fun contentKey(itemId: String, itemType: String): String {
