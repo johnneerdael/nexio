@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import androidx.annotation.RawRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -11,6 +12,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +53,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,22 +69,33 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
 
-private enum class SettingsCategory(val displayName: String, val icon: ImageVector) {
+private enum class SettingsCategory(
+    val displayName: String,
+    val icon: ImageVector,
+    @param:RawRes val rawIconRes: Int? = null
+) {
     APPEARANCE("Appearance", Icons.Default.Palette),
     LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
-    TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
+    TMDB("TMDB", Icons.Default.Tune),
+    TRAKT("Trakt", Icons.Default.Tune, rawIconRes = R.raw.trakt_tv_glyph),
     ABOUT("About", Icons.Default.Info)
 }
 
 @Composable
 fun SettingsScreen(
     onNavigateToPlugins: () -> Unit = {},
+    onNavigateToTrakt: () -> Unit = {}
 ) {
     var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
     var previousIndex by remember { mutableIntStateOf(0) }
@@ -151,8 +166,12 @@ fun SettingsScreen(
                     isSelected = selectedCategory == category,
                     accentColor = accentColor,
                     onClick = {
-                        previousIndex = selectedCategory.ordinal
-                        selectedCategory = category
+                        if (category == SettingsCategory.TRAKT) {
+                            onNavigateToTrakt()
+                        } else {
+                            previousIndex = selectedCategory.ordinal
+                            selectedCategory = category
+                        }
                     }
                 )
             }
@@ -220,6 +239,7 @@ fun SettingsScreen(
                         uiState = pluginUiState,
                         viewModel = pluginViewModel
                     )
+                    SettingsCategory.TRAKT -> Unit
                 }
             }
         }
@@ -234,6 +254,11 @@ private fun CategoryTab(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val iconTint = when {
+        isSelected -> accentColor
+        isFocused -> accentColor.copy(alpha = 0.8f)
+        else -> NuvioColors.TextTertiary
+    }
 
     val bottomBarWidth by animateDpAsState(
         targetValue = if (isSelected) 24.dp else 0.dp,
@@ -271,16 +296,22 @@ private fun CategoryTab(
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = category.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = when {
-                        isSelected -> accentColor
-                        isFocused -> accentColor.copy(alpha = 0.8f)
-                        else -> NuvioColors.TextTertiary
-                    }
-                )
+                if (category.rawIconRes != null) {
+                    Image(
+                        painter = rememberRawSvgPainter(category.rawIconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        contentScale = ContentScale.Fit,
+                        colorFilter = ColorFilter.tint(iconTint)
+                    )
+                } else {
+                    Icon(
+                        imageVector = category.icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = iconTint
+                    )
+                }
 
                 Spacer(modifier = Modifier.width(10.dp))
 
@@ -310,3 +341,11 @@ private fun CategoryTab(
         )
     }
 }
+
+@Composable
+private fun rememberRawSvgPainter(@RawRes iconRes: Int) = rememberAsyncImagePainter(
+    model = ImageRequest.Builder(LocalContext.current)
+        .data(iconRes)
+        .decoderFactory(SvgDecoder.Factory())
+        .build()
+)

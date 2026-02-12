@@ -43,6 +43,11 @@ import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.SubtitleStyleSettings
+import com.nuvio.tv.data.repository.TraktScrobbleItem
+import com.nuvio.tv.data.repository.TraktScrobbleService
+import com.nuvio.tv.data.repository.extractYear
+import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
@@ -81,6 +86,7 @@ class PlayerViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val parentalGuideRepository: ParentalGuideRepository,
+    private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     savedStateHandle: SavedStateHandle
@@ -200,8 +206,12 @@ class PlayerViewModel @Inject constructor(
     private var pauseOverlayJob: Job? = null
     private val pauseOverlayDelayMs = 5000L
     private var pendingPreviewSeekPosition: Long? = null
+    private var pendingResumeProgress: WatchProgress? = null
+    private var currentScrobbleItem: TraktScrobbleItem? = null
+    private var hasSentScrobbleStartForCurrentItem: Boolean = false
 
     init {
+        refreshScrobbleItem()
         initializePlayer(currentStreamUrl, currentHeaders)
         loadSavedProgressFor(currentSeason, currentEpisode)
         fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
@@ -314,6 +324,7 @@ class PlayerViewModel @Inject constructor(
         if (contentId == null) return
         
         viewModelScope.launch {
+            pendingResumeProgress = null
             val progress = if (season != null && episode != null) {
                 watchProgressRepository.getEpisodeProgress(contentId, season, episode).firstOrNull()
             } else {
@@ -323,13 +334,10 @@ class PlayerViewModel @Inject constructor(
             progress?.let { saved ->
                 
                 if (saved.isInProgress()) {
+                    pendingResumeProgress = saved
                     _exoPlayer?.let { player ->
-                        
                         if (player.playbackState == Player.STATE_READY) {
-                            player.seekTo(saved.position)
-                        } else {
-                            
-                            _uiState.update { it.copy(pendingSeekPosition = saved.position) }
+                            tryApplyPendingResumeProgress(player)
                         }
                     }
                 }
@@ -350,6 +358,22 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
             skipIntervals = intervals
+        }
+    }
+
+    private fun tryApplyPendingResumeProgress(player: Player) {
+        val saved = pendingResumeProgress ?: return
+        val duration = player.duration
+        val target = when {
+            duration > 0L -> saved.resolveResumePosition(duration)
+            saved.position > 0L -> saved.position
+            else -> 0L
+        }
+
+        if (target > 0L) {
+            player.seekTo(target)
+            _uiState.update { it.copy(pendingSeekPosition = null) }
+            pendingResumeProgress = null
         }
     }
 
@@ -674,6 +698,7 @@ class PlayerViewModel @Inject constructor(
                         
                             
                             if (playbackState == Player.STATE_READY) {
+                                tryApplyPendingResumeProgress(this@apply)
                                 _uiState.value.pendingSeekPosition?.let { position ->
                                     seekTo(position)
                                     _uiState.update { it.copy(pendingSeekPosition = null) }
@@ -684,6 +709,7 @@ class PlayerViewModel @Inject constructor(
                         
                             
                             if (playbackState == Player.STATE_ENDED) {
+                                emitScrobbleStop(progressPercent = 99.5f)
                                 saveWatchProgress()
                             }
                         }
@@ -697,6 +723,7 @@ class PlayerViewModel @Inject constructor(
                                 startWatchProgressSaving()
                                 scheduleHideControls()
                                 tryShowParentalGuide()
+                                emitScrobbleStart()
                             } else {
                                 if (userPausedManually) {
                                     schedulePauseOverlay()
@@ -705,6 +732,9 @@ class PlayerViewModel @Inject constructor(
                                 }
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
+                                if (playbackState != Player.STATE_BUFFERING) {
+                                    emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+                                }
                                 
                                 saveWatchProgress()
                             }
@@ -984,6 +1014,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
+        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1198,6 +1229,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
+        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1209,6 +1241,7 @@ class PlayerViewModel @Inject constructor(
         currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
         currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
         currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
+        refreshScrobbleItem()
 
         lastSavedPosition = 0L
         resetLoadingOverlayForNewStream()
@@ -1554,7 +1587,6 @@ class PlayerViewModel @Inject constructor(
     private fun saveWatchProgressIfNeeded() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
         val duration = getEffectiveDuration(currentPosition)
-        if (duration <= 0L) return
         
         
         if (kotlin.math.abs(currentPosition - lastSavedPosition) >= saveThresholdMs) {
@@ -1566,7 +1598,6 @@ class PlayerViewModel @Inject constructor(
     private fun saveWatchProgress() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
         val duration = getEffectiveDuration(currentPosition)
-        if (duration <= 0L) return
         saveWatchProgressInternal(currentPosition, duration)
     }
 
@@ -1585,9 +1616,9 @@ class PlayerViewModel @Inject constructor(
         
         if (contentId.isNullOrEmpty() || contentType.isNullOrEmpty()) return
         
-        if (duration <= 0) return
-        
         if (position < 1000) return
+
+        val fallbackPercent = if (duration <= 0L) 5f else null
 
         val progress = WatchProgress(
             contentId = contentId,
@@ -1602,12 +1633,80 @@ class PlayerViewModel @Inject constructor(
             episodeTitle = currentEpisodeTitle,
             position = position,
             duration = duration,
-            lastWatched = System.currentTimeMillis()
+            lastWatched = System.currentTimeMillis(),
+            progressPercent = fallbackPercent
         )
 
         viewModelScope.launch {
             watchProgressRepository.saveProgress(progress)
         }
+    }
+
+    private fun currentPlaybackProgressPercent(): Float {
+        val player = _exoPlayer ?: return 0f
+        val duration = player.duration.takeIf { it > 0 } ?: lastKnownDuration
+        if (duration <= 0L) return 0f
+        return ((player.currentPosition.toFloat() / duration.toFloat()) * 100f).coerceIn(0f, 100f)
+    }
+
+    private fun refreshScrobbleItem() {
+        currentScrobbleItem = buildScrobbleItem()
+        hasSentScrobbleStartForCurrentItem = false
+    }
+
+    private fun buildScrobbleItem(): TraktScrobbleItem? {
+        val rawContentId = contentId ?: return null
+        val parsedIds = parseContentIds(rawContentId)
+        val ids = toTraktIds(parsedIds)
+        val parsedYear = extractYear(year)
+        val normalizedType = contentType?.lowercase()
+
+        val isEpisode = normalizedType in listOf("series", "tv") &&
+            currentSeason != null && currentEpisode != null
+
+        return if (isEpisode) {
+            TraktScrobbleItem.Episode(
+                showTitle = contentName ?: title,
+                showYear = parsedYear,
+                showIds = ids,
+                season = currentSeason ?: return null,
+                number = currentEpisode ?: return null,
+                episodeTitle = currentEpisodeTitle
+            )
+        } else {
+            TraktScrobbleItem.Movie(
+                title = contentName ?: title,
+                year = parsedYear,
+                ids = ids
+            )
+        }
+    }
+
+    private fun emitScrobbleStart() {
+        val item = currentScrobbleItem ?: buildScrobbleItem().also { currentScrobbleItem = it } ?: return
+        if (hasSentScrobbleStartForCurrentItem) return
+
+        viewModelScope.launch {
+            traktScrobbleService.scrobbleStart(
+                item = item,
+                progressPercent = currentPlaybackProgressPercent()
+            )
+            hasSentScrobbleStartForCurrentItem = true
+        }
+    }
+
+    private fun emitScrobbleStop(progressPercent: Float? = null) {
+        val item = currentScrobbleItem ?: return
+        if (!hasSentScrobbleStartForCurrentItem && (progressPercent ?: 0f) < 80f) return
+
+        val percent = progressPercent ?: currentPlaybackProgressPercent()
+        viewModelScope.launch {
+            traktScrobbleService.scrobbleStop(
+                item = item,
+                progressPercent = percent
+            )
+        }
+        hasSentScrobbleStartForCurrentItem = false
     }
 
     fun scheduleHideControls() {
@@ -2134,6 +2233,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun releasePlayer() {
         
+        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         

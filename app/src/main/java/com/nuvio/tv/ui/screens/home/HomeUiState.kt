@@ -21,10 +21,14 @@ data class HomeUiState(
     val heroSectionEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
+    val focusedPosterBackdropExpandEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerMuted: Boolean = true,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
-    val gridItems: List<GridItem> = emptyList()
+    val gridItems: List<GridItem> = emptyList(),
+    val trailerPreviewUrls: Map<String, String> = emptyMap()
 )
 
 @Immutable

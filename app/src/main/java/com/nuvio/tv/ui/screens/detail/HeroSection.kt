@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
@@ -36,6 +37,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -55,6 +58,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.ui.platform.LocalContext
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -68,6 +72,10 @@ fun HeroContentSection(
     onPlayClick: () -> Unit,
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
+    onLibraryLongPress: () -> Unit,
+    isMovieWatched: Boolean,
+    isMovieWatchedPending: Boolean,
+    onToggleMovieWatched: () -> Unit,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
@@ -176,8 +184,25 @@ fun HeroContentSection(
                         ActionIconButton(
                             icon = if (isInLibrary) Icons.Default.Check else Icons.Default.Add,
                             contentDescription = if (isInLibrary) "Remove from library" else "Add to library",
-                            onClick = onToggleLibrary
+                            onClick = onToggleLibrary,
+                            onLongPress = onLibraryLongPress
                         )
+
+                        if (meta.type.toApiString() == "movie") {
+                            ActionIconButton(
+                                icon = Icons.Default.RemoveRedEye,
+                                contentDescription = if (isMovieWatched) {
+                                    "Mark as unwatched"
+                                } else {
+                                    "Mark as watched"
+                                },
+                                onClick = onToggleMovieWatched,
+                                enabled = !isMovieWatchedPending,
+                                selected = isMovieWatched,
+                                selectedContainerColor = Color.White,
+                                selectedContentColor = Color.Black
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -323,17 +348,59 @@ private fun PlayButton(
 private fun ActionIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    selectedContainerColor: Color = Color(0xFF7CFF9B),
+    selectedContentColor: Color = Color.Black
 ) {
+    var longPressTriggered by remember { mutableStateOf(false) }
+
     IconButton(
-        onClick = onClick,
+        onClick = {
+            if (longPressTriggered) {
+                longPressTriggered = false
+            } else {
+                onClick()
+            }
+        },
+        enabled = enabled,
         modifier = Modifier
             .size(48.dp)
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (onLongPress != null && native.action == AndroidKeyEvent.ACTION_DOWN) {
+                    if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                        longPressTriggered = true
+                        onLongPress()
+                        return@onPreviewKeyEvent true
+                    }
+
+                    val isSelectKey = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+                        native.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+                        native.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+                    if ((native.isLongPress || native.repeatCount > 0) && isSelectKey) {
+                        longPressTriggered = true
+                        onLongPress()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+
+                if (native.action == AndroidKeyEvent.ACTION_UP && longPressTriggered) {
+                    val isSelectKey = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+                        native.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+                        native.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER ||
+                        native.keyCode == AndroidKeyEvent.KEYCODE_MENU
+                    if (isSelectKey) return@onPreviewKeyEvent true
+                }
+                false
+            }
             .focusProperties { up = FocusRequester.Cancel },
         colors = IconButtonDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
+            containerColor = if (selected) selectedContainerColor else NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
-            contentColor = NuvioColors.TextPrimary,
+            contentColor = if (selected) selectedContentColor else NuvioColors.TextPrimary,
             focusedContentColor = NuvioColors.OnPrimary
         ),
         border = IconButtonDefaults.border(

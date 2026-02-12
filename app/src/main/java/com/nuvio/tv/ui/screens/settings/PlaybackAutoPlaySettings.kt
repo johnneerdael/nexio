@@ -70,7 +70,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowPluginSelectionDialog: () -> Unit,
     onShowRegexDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
-    onSetReuseLastLinkEnabled: (Boolean) -> Unit
+    onSetReuseLastLinkEnabled: (Boolean) -> Unit,
+    onItemFocused: () -> Unit = {}
 ) {
     item {
         ToggleSettingsItem(
@@ -78,7 +79,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
             title = "Reuse Last Link",
             subtitle = "Auto-play your last working stream for this same movie/episode when cache is still valid",
             isChecked = playerSettings.streamReuseLastLinkEnabled,
-            onCheckedChange = onSetReuseLastLinkEnabled
+            onCheckedChange = onSetReuseLastLinkEnabled,
+            onFocused = onItemFocused
         )
     }
 
@@ -88,7 +90,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 icon = Icons.Default.Tune,
                 title = "Last Link Cache Duration",
                 subtitle = formatReuseCacheDuration(playerSettings.streamReuseLastLinkCacheHours),
-                onClick = onShowReuseLastLinkCacheDialog
+                onClick = onShowReuseLastLinkCacheDialog,
+                onFocused = onItemFocused
             )
         }
     }
@@ -103,7 +106,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
             icon = Icons.Default.PlayArrow,
             title = "Auto Stream Selection",
             subtitle = modeLabel,
-            onClick = onShowModeDialog
+            onClick = onShowModeDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -118,7 +122,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 icon = Icons.Default.Tune,
                 title = "Auto-play Source Scope",
                 subtitle = sourceLabel,
-                onClick = onShowSourceDialog
+                onClick = onShowSourceDialog,
+                onFocused = onItemFocused
             )
         }
 
@@ -133,7 +138,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                     icon = Icons.Default.Language,
                     title = "Allowed Addons",
                     subtitle = addonSubtitle,
-                    onClick = onShowAddonSelectionDialog
+                    onClick = onShowAddonSelectionDialog,
+                    onFocused = onItemFocused
                 )
             }
         }
@@ -149,7 +155,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                     icon = Icons.Default.Extension,
                     title = "Allowed Plugins",
                     subtitle = pluginSubtitle,
-                    onClick = onShowPluginSelectionDialog
+                    onClick = onShowPluginSelectionDialog,
+                    onFocused = onItemFocused
                 )
             }
         }
@@ -164,7 +171,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 icon = Icons.Default.Tune,
                 title = "Regex Pattern",
                 subtitle = regexSubtitle,
-                onClick = onShowRegexDialog
+                onClick = onShowRegexDialog,
+                onFocused = onItemFocused
             )
         }
     }

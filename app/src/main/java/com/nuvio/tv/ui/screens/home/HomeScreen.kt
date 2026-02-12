@@ -52,12 +52,12 @@ fun HomeScreen(
     val gridFocusState by viewModel.gridFocusState.collectAsState()
     val hasHeroContent = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
-    val hasPrimaryHomeContent = hasHeroContent || hasCatalogContent
-    var hasEnteredHomeContent: Boolean by rememberSaveable { mutableStateOf(false) }
+    val hasContinueWatchingContent = uiState.continueWatchingItems.isNotEmpty()
+    var hasEnteredCatalogContent: Boolean by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(hasPrimaryHomeContent) {
-        if (hasPrimaryHomeContent) {
-            hasEnteredHomeContent = true
+    LaunchedEffect(hasCatalogContent) {
+        if (hasCatalogContent) {
+            hasEnteredCatalogContent = true
         }
     }
 
@@ -115,7 +115,7 @@ fun HomeScreen(
                 )
             }
             else -> {
-                val shouldShowLoadingGate = hasEnteredHomeContent == false && hasPrimaryHomeContent == false
+                val shouldShowLoadingGate = hasEnteredCatalogContent == false && hasCatalogContent == false
 
                 Crossfade(
                     targetState = shouldShowLoadingGate,
@@ -140,6 +140,9 @@ fun HomeScreen(
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
                                 onRemoveContinueWatching = { contentId ->
                                     viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
+                                },
+                                onRequestTrailerPreview = { item ->
+                                    viewModel.requestTrailerPreview(item)
                                 },
                                 onSaveFocusState = { vi, vo, ri, ii, m ->
                                     viewModel.saveFocusState(vi, vo, ri, ii, m)

@@ -1,10 +1,12 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +37,10 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
@@ -54,6 +58,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.compose.ui.window.Dialog
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -128,7 +135,9 @@ fun SeasonTabs(
 fun EpisodesRow(
     episodes: List<Video>,
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
+    episodeWatchedPendingKeys: Set<String> = emptySet(),
     onEpisodeClick: (Video) -> Unit,
+    onToggleEpisodeWatched: (Video) -> Unit,
     upFocusRequester: FocusRequester,
     restoreEpisodeId: String? = null,
     restoreFocusToken: Int = 0,
@@ -136,6 +145,7 @@ fun EpisodesRow(
 ) {
     val restoreFocusRequester = remember { FocusRequester() }
     var focusedEpisodeId by remember { mutableStateOf<String?>(null) }
+    var optionsEpisode by remember { mutableStateOf<Video?>(null) }
 
     LaunchedEffect(restoreFocusToken, restoreEpisodeId, episodes) {
         if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
@@ -159,6 +169,7 @@ fun EpisodesRow(
                 episode = episode,
                 watchProgress = progress,
                 onClick = { onEpisodeClick(episode) },
+                onLongPress = { optionsEpisode = episode },
                 upFocusRequester = upFocusRequester,
                 dimmed = focusedEpisodeId != null && focusedEpisodeId != episode.id,
                 onFocused = { focusedEpisodeId = episode.id },
@@ -170,6 +181,30 @@ fun EpisodesRow(
             )
         }
     }
+
+    optionsEpisode?.let { selectedEpisode ->
+        val selectedWatched = selectedEpisode.season?.let { season ->
+            selectedEpisode.episode?.let { episode ->
+                episodeProgressMap[season to episode]?.isCompleted() == true
+            }
+        } ?: false
+        val isPending = episodeWatchedPendingKeys.contains(episodePendingKey(selectedEpisode))
+
+        EpisodeOptionsDialog(
+            episode = selectedEpisode,
+            isWatched = selectedWatched,
+            isPending = isPending,
+            onDismiss = { optionsEpisode = null },
+            onPlay = {
+                onEpisodeClick(selectedEpisode)
+                optionsEpisode = null
+            },
+            onToggleWatched = {
+                onToggleEpisodeWatched(selectedEpisode)
+                optionsEpisode = null
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -178,6 +213,7 @@ private fun EpisodeCard(
     episode: Video,
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
     onClick: () -> Unit,
+    onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
     dimmed: Boolean = false,
     onFocused: () -> Unit = {},
@@ -191,6 +227,7 @@ private fun EpisodeCard(
         episode.released?.let { formatReleaseDate(it) } ?: ""
     }
     var isFocused by remember { mutableStateOf(false) }
+    var longPressTriggered by remember { mutableStateOf(false) }
     val thumbnailWidth by animateDpAsState(
         targetValue = if (isFocused) 268.dp else 280.dp,
         animationSpec = tween(durationMillis = 180),
@@ -264,7 +301,13 @@ private fun EpisodeCard(
     }
 
     Card(
-        onClick = onClick,
+        onClick = {
+            if (longPressTriggered) {
+                longPressTriggered = false
+            } else {
+                onClick()
+            }
+        },
         modifier = Modifier
             .width(cardWidth)
             .alpha(cardAlpha)
@@ -277,6 +320,29 @@ private fun EpisodeCard(
                 } else {
                     onFocusCleared()
                 }
+            }
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action == AndroidKeyEvent.ACTION_DOWN) {
+                    if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                        longPressTriggered = true
+                        onLongPress()
+                        return@onPreviewKeyEvent true
+                    }
+                    val isLongPress = native.isLongPress || native.repeatCount > 0
+                    if (isLongPress && isSelectKey(native.keyCode)) {
+                        longPressTriggered = true
+                        onLongPress()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                if (native.action == AndroidKeyEvent.ACTION_UP &&
+                    longPressTriggered &&
+                    isSelectKey(native.keyCode)
+                ) {
+                    return@onPreviewKeyEvent true
+                }
+                false
             }
             .focusProperties { up = upFocusRequester },
         shape = CardDefaults.shape(
@@ -457,4 +523,110 @@ private fun EpisodeCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun EpisodeOptionsDialog(
+    episode: Video,
+    isWatched: Boolean,
+    isPending: Boolean,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onToggleWatched: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+    var suppressNextKeyUp by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .width(520.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
+                .padding(24.dp)
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (suppressNextKeyUp && native.action == AndroidKeyEvent.ACTION_UP) {
+                        if (isSelectKey(native.keyCode) || native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                            suppressNextKeyUp = false
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    false
+                }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = episode.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = "Episode actions",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+
+                Button(
+                    onClick = onToggleWatched,
+                    enabled = !isPending,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(primaryFocusRequester),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text(if (isWatched) "Mark as unwatched" else "Mark as watched")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onPlay,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(240.dp)
+                    ) {
+                        Text("Play")
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(240.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun isSelectKey(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+}
+
+private fun episodePendingKey(video: Video): String {
+    return "${video.id}:${video.season ?: -1}:${video.episode ?: -1}"
 }
