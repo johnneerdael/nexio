@@ -185,7 +185,10 @@ class PlayerViewModel @Inject constructor(
     private var skipIntroFetchedKey: String? = null
     private var lastActiveSkipType: String? = null
     private var autoSubtitleSelected: Boolean = false
+    private var lastSubtitlePreferredLanguage: String? = null
+    private var lastSubtitleSecondaryLanguage: String? = null
     private var pendingAddonSubtitleLanguage: String? = null
+    private var hasScannedTextTracksOnce: Boolean = false
 
     
     private var okHttpClient: OkHttpClient? = null
@@ -234,6 +237,7 @@ class PlayerViewModel @Inject constructor(
                         isLoadingAddonSubtitles = false
                     ) 
                 }
+                tryAutoSelectPreferredSubtitleFromAvailableTracks()
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(
@@ -278,6 +282,15 @@ class PlayerViewModel @Inject constructor(
                     settings.subtitleStyle.preferredLanguage,
                     settings.subtitleStyle.secondaryPreferredLanguage
                 )
+                val subtitlePreferenceChanged =
+                    lastSubtitlePreferredLanguage != settings.subtitleStyle.preferredLanguage ||
+                        lastSubtitleSecondaryLanguage != settings.subtitleStyle.secondaryPreferredLanguage
+                if (subtitlePreferenceChanged) {
+                    autoSubtitleSelected = false
+                    lastSubtitlePreferredLanguage = settings.subtitleStyle.preferredLanguage
+                    lastSubtitleSecondaryLanguage = settings.subtitleStyle.secondaryPreferredLanguage
+                    tryAutoSelectPreferredSubtitleFromAvailableTracks()
+                }
 
                 val wasEnabled = skipIntroEnabled
                 skipIntroEnabled = settings.skipIntroEnabled
@@ -496,6 +509,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 autoSubtitleSelected = false
+                hasScannedTextTracksOnce = false
                 resetLoadingOverlayForNewStream()
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val useLibass = playerSettings.useLibass
@@ -664,6 +678,8 @@ class PlayerViewModel @Inject constructor(
                                     seekTo(position)
                                     _uiState.update { it.copy(pendingSeekPosition = null) }
                                 }
+                                // Re-evaluate subtitle auto-selection once player is ready.
+                                tryAutoSelectPreferredSubtitleFromAvailableTracks()
                             }
                         
                             
@@ -1326,6 +1342,13 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
+        hasScannedTextTracksOnce = true
+        Log.d(
+            TAG,
+            "TRACKS updated: internalSubs=${subtitleTracks.size}, selectedInternalIndex=$selectedSubtitleIndex, " +
+                "selectedAddon=${_uiState.value.selectedAddonSubtitle?.lang}, pendingAddonLang=$pendingAddonSubtitleLanguage"
+        )
+
         fun matchesLanguage(track: TrackInfo, target: String): Boolean {
             val lang = track.language?.lowercase() ?: return false
             return lang == target || lang.startsWith(target) || lang.contains(target)
@@ -1339,33 +1362,6 @@ class PlayerViewModel @Inject constructor(
             selectSubtitleTrack(fallbackIndex)
             selectedSubtitleIndex = if (_uiState.value.selectedAddonSubtitle != null) -1 else fallbackIndex
             pendingAddonSubtitleLanguage = null
-        } else if (selectedSubtitleIndex == -1 && subtitleTracks.isNotEmpty() && !autoSubtitleSelected) {
-            val preferred = _uiState.value.subtitleStyle.preferredLanguage.lowercase()
-
-            
-            if (preferred == "none") {
-                autoSubtitleSelected = true
-                // Leave selectedSubtitleIndex as -1 (no subtitle)
-            } else {
-                val secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage?.lowercase()
-
-                val preferredMatch = subtitleTracks.indexOfFirst { matchesLanguage(it, preferred) }
-                val secondaryMatch = secondary?.let { target ->
-                    subtitleTracks.indexOfFirst { matchesLanguage(it, target) }
-                } ?: -1
-
-                val autoIndex = when {
-                    preferredMatch >= 0 -> preferredMatch
-                    secondaryMatch >= 0 -> secondaryMatch
-                    else -> -1
-                }
-
-                autoSubtitleSelected = true
-                if (autoIndex >= 0) {
-                    selectSubtitleTrack(autoIndex)
-                    selectedSubtitleIndex = autoIndex
-                }
-            }
         }
 
         _uiState.update {
@@ -1375,6 +1371,89 @@ class PlayerViewModel @Inject constructor(
                 selectedAudioTrackIndex = selectedAudioIndex,
                 selectedSubtitleTrackIndex = selectedSubtitleIndex
             )
+        }
+        tryAutoSelectPreferredSubtitleFromAvailableTracks()
+    }
+
+    private fun subtitleLanguageTargets(): List<String> {
+        val preferred = _uiState.value.subtitleStyle.preferredLanguage.lowercase()
+        if (preferred == "none") return emptyList()
+        val secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage?.lowercase()
+        return listOfNotNull(preferred, secondary)
+    }
+
+    private fun matchesLanguageCode(language: String?, target: String): Boolean {
+        if (language.isNullOrBlank()) return false
+        val normalizedLanguage = normalizeLanguageCode(language)
+        val normalizedTarget = normalizeLanguageCode(target)
+        return normalizedLanguage == normalizedTarget ||
+            normalizedLanguage.startsWith("$normalizedTarget-") ||
+            normalizedLanguage.startsWith("${normalizedTarget}_")
+    }
+
+    private fun tryAutoSelectPreferredSubtitleFromAvailableTracks() {
+        if (autoSubtitleSelected) return
+
+        val state = _uiState.value
+        val targets = subtitleLanguageTargets()
+        Log.d(
+            TAG,
+            "AUTO_SUB eval: targets=$targets, scannedText=$hasScannedTextTracksOnce, " +
+                "internalCount=${state.subtitleTracks.size}, selectedInternal=${state.selectedSubtitleTrackIndex}, " +
+                "addonCount=${state.addonSubtitles.size}, selectedAddon=${state.selectedAddonSubtitle?.lang}"
+        )
+        if (targets.isEmpty()) {
+            autoSubtitleSelected = true
+            Log.d(TAG, "AUTO_SUB stop: preferred=none")
+            return
+        }
+
+        val internalIndex = state.subtitleTracks.indexOfFirst { track ->
+            targets.any { target -> matchesLanguageCode(track.language, target) }
+        }
+        if (internalIndex >= 0) {
+            autoSubtitleSelected = true
+            val currentInternal = state.selectedSubtitleTrackIndex
+            val currentAddon = state.selectedAddonSubtitle
+            if (currentInternal != internalIndex || currentAddon != null) {
+                Log.d(TAG, "AUTO_SUB pick internal index=$internalIndex lang=${state.subtitleTracks[internalIndex].language}")
+                selectSubtitleTrack(internalIndex)
+                _uiState.update { it.copy(selectedSubtitleTrackIndex = internalIndex, selectedAddonSubtitle = null) }
+            } else {
+                Log.d(TAG, "AUTO_SUB stop: preferred internal already selected")
+            }
+            return
+        }
+
+        val selectedAddonMatchesTarget = state.selectedAddonSubtitle != null &&
+            targets.any { target -> matchesLanguageCode(state.selectedAddonSubtitle.lang, target) }
+        if (selectedAddonMatchesTarget) {
+            autoSubtitleSelected = true
+            Log.d(TAG, "AUTO_SUB stop: matching addon already selected (no internal match)")
+            return
+        }
+
+        // Wait until we have at least one full text-track scan to avoid choosing addon too early.
+        if (!hasScannedTextTracksOnce) {
+            Log.d(TAG, "AUTO_SUB defer addon fallback: text tracks not scanned yet")
+            return
+        }
+
+        val playerReady = _exoPlayer?.playbackState == Player.STATE_READY
+        if (!playerReady) {
+            Log.d(TAG, "AUTO_SUB defer addon fallback: player not ready")
+            return
+        }
+
+        val addonMatch = state.addonSubtitles.firstOrNull { subtitle ->
+            targets.any { target -> matchesLanguageCode(subtitle.lang, target) }
+        }
+        if (addonMatch != null) {
+            autoSubtitleSelected = true
+            Log.d(TAG, "AUTO_SUB pick addon lang=${addonMatch.lang} id=${addonMatch.id}")
+            selectAddonSubtitle(addonMatch)
+        } else {
+            Log.d(TAG, "AUTO_SUB no addon match for targets=$targets")
         }
     }
 
@@ -1921,6 +2000,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun selectSubtitleTrack(trackIndex: Int) {
         _exoPlayer?.let { player ->
+            Log.d(TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex")
             val tracks = player.currentTracks
             var currentSubIndex = 0
             
@@ -1957,6 +2037,7 @@ class PlayerViewModel @Inject constructor(
             if (_uiState.value.selectedAddonSubtitle?.id == subtitle.id) {
                 return@let
             }
+            Log.d(TAG, "Selecting ADDON subtitle lang=${subtitle.lang} id=${subtitle.id}")
 
             val normalizedLang = normalizeLanguageCode(subtitle.lang)
             pendingAddonSubtitleLanguage = normalizedLang
