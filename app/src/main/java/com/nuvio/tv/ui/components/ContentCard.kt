@@ -104,12 +104,11 @@ fun ContentCard(
     LaunchedEffect(
         item.id,
         isFocused,
-        isBackdropExpanded,
         focusedPosterBackdropTrailerEnabled,
         trailerPreviewUrl
     ) {
         if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
-        if (!isFocused || !isBackdropExpanded) return@LaunchedEffect
+        if (!isFocused) return@LaunchedEffect
         if (trailerPreviewUrl != null) return@LaunchedEffect
         onRequestTrailerPreview(item)
     }

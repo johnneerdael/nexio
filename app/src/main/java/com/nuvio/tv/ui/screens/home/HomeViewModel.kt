@@ -72,6 +72,8 @@ class HomeViewModel @Inject constructor(
     private val catalogLoadSemaphore = Semaphore(6)
     private val trailerPreviewLoadingIds = mutableSetOf<String>()
     private val trailerPreviewNegativeCache = mutableSetOf<String>()
+    private var activeTrailerPreviewItemId: String? = null
+    private var trailerPreviewRequestVersion: Long = 0L
 
     init {
         loadLayoutPreference()
@@ -157,9 +159,25 @@ class HomeViewModel @Inject constructor(
     }
 
     fun requestTrailerPreview(item: MetaPreview) {
-        if (trailerPreviewNegativeCache.contains(item.id)) return
-        if (_uiState.value.trailerPreviewUrls.containsKey(item.id)) return
-        if (!trailerPreviewLoadingIds.add(item.id)) return
+        val itemId = item.id
+        if (activeTrailerPreviewItemId != itemId) {
+            activeTrailerPreviewItemId = itemId
+            trailerPreviewRequestVersion++
+            _uiState.update { state ->
+                val retainedUrl = state.trailerPreviewUrls[itemId]
+                if (retainedUrl != null) {
+                    state.copy(trailerPreviewUrls = mapOf(itemId to retainedUrl))
+                } else {
+                    state.copy(trailerPreviewUrls = emptyMap())
+                }
+            }
+        }
+
+        if (trailerPreviewNegativeCache.contains(itemId)) return
+        if (_uiState.value.trailerPreviewUrls.containsKey(itemId)) return
+        if (!trailerPreviewLoadingIds.add(itemId)) return
+
+        val requestVersion = trailerPreviewRequestVersion
 
         viewModelScope.launch {
             val trailerUrl = trailerService.getTrailerUrl(
@@ -169,18 +187,25 @@ class HomeViewModel @Inject constructor(
                 type = item.type.toApiString()
             )
 
+            val isLatestFocusedItem =
+                activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
+            if (!isLatestFocusedItem) {
+                trailerPreviewLoadingIds.remove(itemId)
+                return@launch
+            }
+
             if (trailerUrl.isNullOrBlank()) {
-                trailerPreviewNegativeCache.add(item.id)
+                trailerPreviewNegativeCache.add(itemId)
             } else {
                 _uiState.update { state ->
-                    if (state.trailerPreviewUrls[item.id] == trailerUrl) state
+                    if (state.trailerPreviewUrls[itemId] == trailerUrl) state
                     else state.copy(
-                        trailerPreviewUrls = state.trailerPreviewUrls + (item.id to trailerUrl)
+                        trailerPreviewUrls = mapOf(itemId to trailerUrl)
                     )
                 }
             }
 
-            trailerPreviewLoadingIds.remove(item.id)
+            trailerPreviewLoadingIds.remove(itemId)
         }
     }
 
