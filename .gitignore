@@ -21,3 +21,4 @@ build_and_install.sh
 android-tv-samples
 JustPlayer
 TODO.local.md
+local.dev.properties
