@@ -25,6 +25,8 @@ data class LayoutSettingsUiState(
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerMuted: Boolean = true,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12
@@ -45,6 +47,8 @@ sealed class LayoutSettingsEvent {
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetCatalogAddonNameEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetFocusedPosterBackdropTrailerEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetFocusedPosterBackdropTrailerMuted(val muted: Boolean) : LayoutSettingsEvent()
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
@@ -106,6 +110,16 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(focusedPosterBackdropTrailerEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted.collectLatest { muted ->
+                _uiState.update { it.copy(focusedPosterBackdropTrailerMuted = muted) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
                 _uiState.update { it.copy(posterCardWidthDp = widthDp) }
             }
@@ -133,6 +147,8 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
             is LayoutSettingsEvent.SetCatalogAddonNameEnabled -> setCatalogAddonNameEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandEnabled -> setFocusedPosterBackdropExpandEnabled(event.enabled)
+            is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled -> setFocusedPosterBackdropTrailerEnabled(event.enabled)
+            is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted -> setFocusedPosterBackdropTrailerMuted(event.muted)
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
@@ -184,6 +200,18 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setFocusedPosterBackdropExpandEnabled(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setFocusedPosterBackdropExpandEnabled(enabled)
+        }
+    }
+
+    private fun setFocusedPosterBackdropTrailerEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerEnabled(enabled)
+        }
+    }
+
+    private fun setFocusedPosterBackdropTrailerMuted(muted: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerMuted(muted)
         }
     }
 

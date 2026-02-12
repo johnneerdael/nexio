@@ -23,6 +23,7 @@ import com.nuvio.tv.ui.components.CatalogRowSection
 import com.nuvio.tv.ui.components.ContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.PosterCardStyle
+import com.nuvio.tv.domain.model.MetaPreview
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -34,6 +35,7 @@ fun ClassicHomeContent(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String) -> Unit,
+    onRequestTrailerPreview: (MetaPreview) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
@@ -183,6 +185,10 @@ fun ClassicHomeContent(
                 showPosterLabels = uiState.posterLabelsEnabled,
                 showAddonName = uiState.catalogAddonNameEnabled,
                 focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
+                focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
+                focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
+                trailerPreviewUrls = uiState.trailerPreviewUrls,
+                onRequestTrailerPreview = onRequestTrailerPreview,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },

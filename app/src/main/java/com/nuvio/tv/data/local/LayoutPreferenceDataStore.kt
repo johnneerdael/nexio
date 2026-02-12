@@ -37,6 +37,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
     private val catalogAddonNameEnabledKey = booleanPreferencesKey("catalog_addon_name_enabled")
     private val focusedPosterBackdropExpandEnabledKey = booleanPreferencesKey("focused_poster_backdrop_expand_enabled")
+    private val focusedPosterBackdropTrailerEnabledKey = booleanPreferencesKey("focused_poster_backdrop_trailer_enabled")
+    private val focusedPosterBackdropTrailerMutedKey = booleanPreferencesKey("focused_poster_backdrop_trailer_muted")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
@@ -94,6 +96,14 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val focusedPosterBackdropExpandEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[focusedPosterBackdropExpandEnabledKey] ?: false
+    }
+
+    val focusedPosterBackdropTrailerEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[focusedPosterBackdropTrailerEnabledKey] ?: false
+    }
+
+    val focusedPosterBackdropTrailerMuted: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[focusedPosterBackdropTrailerMutedKey] ?: true
     }
 
     val posterCardWidthDp: Flow<Int> = dataStore.data.map { prefs ->
@@ -176,6 +186,25 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setFocusedPosterBackdropExpandEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[focusedPosterBackdropExpandEnabledKey] = enabled
+            if (!enabled) {
+                prefs[focusedPosterBackdropTrailerEnabledKey] = false
+                prefs[focusedPosterBackdropTrailerMutedKey] = true
+            }
+        }
+    }
+
+    suspend fun setFocusedPosterBackdropTrailerEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[focusedPosterBackdropTrailerEnabledKey] = enabled
+            if (!enabled) {
+                prefs[focusedPosterBackdropTrailerMutedKey] = true
+            }
+        }
+    }
+
+    suspend fun setFocusedPosterBackdropTrailerMuted(muted: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[focusedPosterBackdropTrailerMutedKey] = muted
         }
     }
 

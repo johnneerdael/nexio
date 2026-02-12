@@ -24,6 +24,7 @@ fun TrailerPlayer(
     trailerUrl: String?,
     isPlaying: Boolean,
     onEnded: () -> Unit,
+    muted: Boolean = false,
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
@@ -35,7 +36,7 @@ fun TrailerPlayer(
                 .build()
                 .apply {
                     repeatMode = Player.REPEAT_MODE_OFF
-                    volume = 1f
+                    volume = if (muted) 0f else 1f
                 }
         } else {
             null
@@ -50,8 +51,9 @@ fun TrailerPlayer(
         }
     }
 
-    LaunchedEffect(isPlaying, trailerUrl) {
+    LaunchedEffect(isPlaying, trailerUrl, muted) {
         val player = trailerPlayer ?: return@LaunchedEffect
+        player.volume = if (muted) 0f else 1f
         if (isPlaying && trailerUrl != null) {
             player.setMediaItem(MediaItem.fromUri(trailerUrl))
             player.prepare()

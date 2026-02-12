@@ -7,6 +7,7 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
@@ -45,7 +46,8 @@ class HomeViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
-    private val tmdbMetadataService: TmdbMetadataService
+    private val tmdbMetadataService: TmdbMetadataService,
+    private val trailerService: TrailerService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -68,6 +70,8 @@ class HomeViewModel @Inject constructor(
     private var currentHeroCatalogKey: String? = null
     private var catalogUpdateJob: Job? = null
     private val catalogLoadSemaphore = Semaphore(6)
+    private val trailerPreviewLoadingIds = mutableSetOf<String>()
+    private val trailerPreviewNegativeCache = mutableSetOf<String>()
 
     init {
         loadLayoutPreference()
@@ -76,6 +80,8 @@ class HomeViewModel @Inject constructor(
         loadPosterLabelPreference()
         loadCatalogAddonNamePreference()
         loadFocusedPosterBackdropExpandPreference()
+        loadFocusedPosterBackdropTrailerPreference()
+        loadFocusedPosterBackdropTrailerMutedPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
         loadPosterCardStylePreferences()
@@ -131,6 +137,50 @@ class HomeViewModel @Inject constructor(
             layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
             }
+        }
+    }
+
+    private fun loadFocusedPosterBackdropTrailerPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(focusedPosterBackdropTrailerEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadFocusedPosterBackdropTrailerMutedPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted.collectLatest { muted ->
+                _uiState.update { it.copy(focusedPosterBackdropTrailerMuted = muted) }
+            }
+        }
+    }
+
+    fun requestTrailerPreview(item: MetaPreview) {
+        if (trailerPreviewNegativeCache.contains(item.id)) return
+        if (_uiState.value.trailerPreviewUrls.containsKey(item.id)) return
+        if (!trailerPreviewLoadingIds.add(item.id)) return
+
+        viewModelScope.launch {
+            val trailerUrl = trailerService.getTrailerUrl(
+                title = item.name,
+                year = extractYear(item.releaseInfo),
+                tmdbId = null,
+                type = item.type.toApiString()
+            )
+
+            if (trailerUrl.isNullOrBlank()) {
+                trailerPreviewNegativeCache.add(item.id)
+            } else {
+                _uiState.update { state ->
+                    if (state.trailerPreviewUrls[item.id] == trailerUrl) state
+                    else state.copy(
+                        trailerPreviewUrls = state.trailerPreviewUrls + (item.id to trailerUrl)
+                    )
+                }
+            }
+
+            trailerPreviewLoadingIds.remove(item.id)
         }
     }
 
@@ -662,6 +712,11 @@ class HomeViewModel @Inject constructor(
 
     private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
         return extra.any { extra -> extra.name == "search" && extra.isRequired }
+    }
+
+    private fun extractYear(releaseInfo: String?): String? {
+        if (releaseInfo.isNullOrBlank()) return null
+        return Regex("\\b(19|20)\\d{2}\\b").find(releaseInfo)?.value
     }
 
     /**

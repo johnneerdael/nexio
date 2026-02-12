@@ -141,6 +141,9 @@ fun HomeScreen(
                                 onRemoveContinueWatching = { contentId ->
                                     viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId))
                                 },
+                                onRequestTrailerPreview = { item ->
+                                    viewModel.requestTrailerPreview(item)
+                                },
                                 onSaveFocusState = { vi, vo, ri, ii, m ->
                                     viewModel.saveFocusState(vi, vo, ri, ii, m)
                                 }

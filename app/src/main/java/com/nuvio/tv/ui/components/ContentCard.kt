@@ -61,6 +61,10 @@ fun ContentCard(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showLabels: Boolean = true,
     focusedPosterBackdropExpandEnabled: Boolean = false,
+    focusedPosterBackdropTrailerEnabled: Boolean = false,
+    focusedPosterBackdropTrailerMuted: Boolean = true,
+    trailerPreviewUrl: String? = null,
+    onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     onClick: () -> Unit = {}
 ) {
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
@@ -91,6 +95,19 @@ fun ContentCard(
         if (isFocused && focusedPosterBackdropExpandEnabled) {
             isBackdropExpanded = true
         }
+    }
+
+    LaunchedEffect(
+        item.id,
+        isFocused,
+        isBackdropExpanded,
+        focusedPosterBackdropTrailerEnabled,
+        trailerPreviewUrl
+    ) {
+        if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
+        if (!isFocused || !isBackdropExpanded) return@LaunchedEffect
+        if (trailerPreviewUrl != null) return@LaunchedEffect
+        onRequestTrailerPreview(item)
     }
 
     val targetCardWidth = if (isBackdropExpanded) expandedCardWidth else baseCardWidth
@@ -179,7 +196,21 @@ fun ContentCard(
                     contentScale = ContentScale.Crop
                 )
 
-                if (isBackdropExpanded) {
+                val shouldPlayTrailerPreview = isBackdropExpanded &&
+                    focusedPosterBackdropTrailerEnabled &&
+                    isFocused &&
+                    trailerPreviewUrl != null
+                if (shouldPlayTrailerPreview) {
+                    TrailerPlayer(
+                        trailerUrl = trailerPreviewUrl,
+                        isPlaying = true,
+                        onEnded = {},
+                        modifier = Modifier.fillMaxSize(),
+                        muted = focusedPosterBackdropTrailerMuted
+                    )
+                }
+
+                if (isBackdropExpanded && !shouldPlayTrailerPreview) {
                     val bottomGradient = remember {
                         Brush.verticalGradient(
                             colors = listOf(
