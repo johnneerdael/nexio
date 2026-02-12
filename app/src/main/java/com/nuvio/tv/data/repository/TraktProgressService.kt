@@ -4,9 +4,15 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeRemoveDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistorySeasonRemoveDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistorySeasonAddDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowRemoveDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowAddDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryMovieAddDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
@@ -34,6 +40,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -177,6 +187,50 @@ class TraktProgressService @Inject constructor(
         return refreshEvents()
             .mapLatest { fetchEpisodeProgressSnapshot(contentId) }
             .distinctUntilChanged()
+    }
+
+    fun observeMovieWatched(contentId: String): Flow<Boolean> {
+        return refreshEvents()
+            .mapLatest {
+                isMovieWatched(contentId)
+            }
+            .distinctUntilChanged()
+    }
+
+    suspend fun markAsWatched(
+        progress: WatchProgress,
+        title: String?,
+        year: Int?
+    ) {
+        val body = buildHistoryAddRequest(progress, title, year)
+            ?: throw IllegalStateException("Insufficient Trakt IDs to mark watched")
+
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.addHistory(authHeader, body)
+        } ?: throw IllegalStateException("Trakt request failed")
+
+        if (!response.isSuccessful || !hasSuccessfulHistoryAdd(response.body())) {
+            throw IllegalStateException("Failed to mark watched on Trakt (${response.code()})")
+        }
+
+        refreshNow()
+    }
+
+    suspend fun isMovieWatched(contentId: String): Boolean {
+        val key = contentId.trim()
+        val optimistic = optimisticProgress.value[key]?.progress
+        if (optimistic?.isCompleted() == true) return true
+
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getHistoryById(
+                authorization = authHeader,
+                type = "movies",
+                id = toTraktPathId(contentId)
+            )
+        } ?: return false
+
+        if (!response.isSuccessful) return false
+        return response.body().orEmpty().isNotEmpty()
     }
 
     suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
@@ -487,6 +541,71 @@ class TraktProgressService @Inject constructor(
         } else {
             progress.contentId
         }
+    }
+
+    private fun hasSuccessfulHistoryAdd(body: TraktHistoryAddResponseDto?): Boolean {
+        val added = body?.added ?: return false
+        val addedCount = (added.movies ?: 0) +
+            (added.episodes ?: 0) +
+            (added.shows ?: 0) +
+            (added.seasons ?: 0)
+        return addedCount > 0
+    }
+
+    private fun buildHistoryAddRequest(
+        progress: WatchProgress,
+        title: String?,
+        year: Int?
+    ): TraktHistoryAddRequestDto? {
+        val ids = toTraktIds(parseContentIds(progress.contentId))
+        if (!ids.hasAnyId()) return null
+        val watchedAt = toTraktUtcDateTime(progress.lastWatched)
+
+        val normalizedType = progress.contentType.lowercase()
+        val isEpisode = normalizedType in listOf("series", "tv") &&
+            progress.season != null && progress.episode != null
+
+        return if (isEpisode) {
+            TraktHistoryAddRequestDto(
+                shows = listOf(
+                    TraktHistoryShowAddDto(
+                        title = title,
+                        year = year,
+                        ids = ids,
+                        seasons = listOf(
+                            TraktHistorySeasonAddDto(
+                                number = progress.season,
+                                episodes = listOf(
+                                    TraktHistoryEpisodeAddDto(
+                                        number = progress.episode,
+                                        watchedAt = watchedAt
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        } else {
+            TraktHistoryAddRequestDto(
+                movies = listOf(
+                    TraktHistoryMovieAddDto(
+                        title = title,
+                        year = year,
+                        ids = ids,
+                        watchedAt = watchedAt
+                    )
+                )
+            )
+        }
+    }
+
+    private fun toTraktUtcDateTime(lastWatchedMs: Long): String {
+        val safeMs = if (lastWatchedMs > 0L) lastWatchedMs else System.currentTimeMillis()
+        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        return formatter.format(Date(safeMs))
     }
 
     private fun enrichWithMetadata(

@@ -7,9 +7,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,6 +24,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Brush
@@ -38,6 +41,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Text
+import androidx.tv.material3.MaterialTheme
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +58,7 @@ import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlinx.coroutines.delay
 
 private enum class RestoreTarget {
     HERO,
@@ -91,6 +97,13 @@ fun MetaDetailsScreen(
     }
 
     val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
+
+    LaunchedEffect(uiState.userMessage) {
+        if (uiState.userMessage != null) {
+            delay(2500)
+            viewModel.onEvent(MetaDetailsEvent.OnClearMessage)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -136,6 +149,9 @@ fun MetaDetailsScreen(
                     isInLibrary = uiState.isInLibrary,
                     nextToWatch = uiState.nextToWatch,
                     episodeProgressMap = uiState.episodeProgressMap,
+                    episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
+                    isMovieWatched = uiState.isMovieWatched,
+                    isMovieWatchedPending = uiState.isMovieWatchedPending,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                     onEpisodeClick = { video ->
                         onPlayClick(
@@ -173,9 +189,37 @@ fun MetaDetailsScreen(
                     },
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
+                    onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
+                    onToggleEpisodeWatched = { video ->
+                        viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
+                    },
                     trailerUrl = uiState.trailerUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) }
+                )
+            }
+        }
+
+        val message = uiState.userMessage
+        if (!message.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp)
+                    .background(
+                        color = if (uiState.userMessageIsError) {
+                            Color(0xFF5A1C1C)
+                        } else {
+                            NuvioColors.BackgroundElevated
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextPrimary
                 )
             }
         }
@@ -193,11 +237,16 @@ private fun MetaDetailsContent(
     isInLibrary: Boolean,
     nextToWatch: NextToWatch?,
     episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
+    episodeWatchedPendingKeys: Set<String>,
+    isMovieWatched: Boolean,
+    isMovieWatchedPending: Boolean,
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
+    onToggleMovieWatched: () -> Unit,
+    onToggleEpisodeWatched: (Video) -> Unit,
     trailerUrl: String?,
     isTrailerPlaying: Boolean,
     onTrailerEnded: () -> Unit
@@ -439,6 +488,9 @@ private fun MetaDetailsContent(
                         onPlayClick = heroPlayClick,
                         isInLibrary = isInLibrary,
                         onToggleLibrary = onToggleLibrary,
+                        isMovieWatched = isMovieWatched,
+                        isMovieWatchedPending = isMovieWatchedPending,
+                        onToggleMovieWatched = onToggleMovieWatched,
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         restorePlayFocusToken = if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0,
@@ -465,7 +517,9 @@ private fun MetaDetailsContent(
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
+                        episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                         onEpisodeClick = episodeClick,
+                        onToggleEpisodeWatched = onToggleEpisodeWatched,
                         upFocusRequester = selectedSeasonFocusRequester,
                         restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,

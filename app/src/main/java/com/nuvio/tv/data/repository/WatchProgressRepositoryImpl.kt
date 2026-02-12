@@ -93,6 +93,32 @@ class WatchProgressRepositoryImpl @Inject constructor(
             }
     }
 
+    override fun isWatched(contentId: String, season: Int?, episode: Int?): Flow<Boolean> {
+        return traktAuthDataStore.isAuthenticated
+            .distinctUntilChanged()
+            .flatMapLatest { isAuthenticated ->
+                if (!isAuthenticated) {
+                    return@flatMapLatest if (season != null && episode != null) {
+                        watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
+                            .map { it?.isCompleted() == true }
+                    } else {
+                        watchProgressPreferences.getProgress(contentId)
+                            .map { it?.isCompleted() == true }
+                    }
+                }
+
+                if (season != null && episode != null) {
+                    traktProgressService.observeEpisodeProgress(contentId)
+                        .map { progressMap ->
+                            progressMap[season to episode]?.isCompleted() == true
+                        }
+                        .distinctUntilChanged()
+                } else {
+                    traktProgressService.observeMovieWatched(contentId)
+                }
+            }
+    }
+
     override suspend fun saveProgress(progress: WatchProgress) {
         if (traktAuthDataStore.isAuthenticated.first()) {
             traktProgressService.applyOptimisticProgress(progress)
@@ -112,13 +138,29 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     override suspend fun markAsCompleted(progress: WatchProgress) {
         if (traktAuthDataStore.isAuthenticated.first()) {
-            traktProgressService.applyOptimisticProgress(
-                progress.copy(
-                    position = progress.duration,
-                    progressPercent = 100f,
-                    lastWatched = System.currentTimeMillis()
-                )
+            val now = System.currentTimeMillis()
+            val duration = progress.duration.takeIf { it > 0L } ?: 1L
+            val completed = progress.copy(
+                position = duration,
+                duration = duration,
+                progressPercent = 100f,
+                lastWatched = now
             )
+            traktProgressService.applyOptimisticProgress(completed)
+            runCatching {
+                traktProgressService.markAsWatched(
+                    progress = completed,
+                    title = completed.name.takeIf { it.isNotBlank() },
+                    year = null
+                )
+            }.onFailure {
+                traktProgressService.applyOptimisticRemoval(
+                    contentId = completed.contentId,
+                    season = completed.season,
+                    episode = completed.episode
+                )
+                throw it
+            }
             return
         }
         watchProgressPreferences.markAsCompleted(progress)

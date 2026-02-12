@@ -49,6 +49,8 @@ class TraktViewModel @Inject constructor(
     val uiState: StateFlow<TraktUiState> = _uiState.asStateFlow()
 
     private var pollJob: Job? = null
+    private var lastMode: TraktConnectionMode = TraktConnectionMode.DISCONNECTED
+    private var lastAutoSyncAtMs: Long = 0L
 
     init {
         _uiState.update {
@@ -168,11 +170,33 @@ class TraktViewModel @Inject constructor(
             )
         }
 
+        if (mode == TraktConnectionMode.CONNECTED &&
+            (lastMode != TraktConnectionMode.CONNECTED || shouldAutoSyncNow())
+        ) {
+            autoSyncAfterConnected()
+        }
+        lastMode = mode
+
         if (mode == TraktConnectionMode.AWAITING_APPROVAL) {
             startPollingIfNeeded(force = false)
         } else {
             pollJob?.cancel()
             pollJob = null
+        }
+    }
+
+    private fun shouldAutoSyncNow(): Boolean {
+        val now = System.currentTimeMillis()
+        return now - lastAutoSyncAtMs >= 15_000L
+    }
+
+    private fun autoSyncAfterConnected() {
+        lastAutoSyncAtMs = System.currentTimeMillis()
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, statusMessage = "Syncing...") }
+            traktProgressService.refreshNow()
+            traktAuthService.fetchUserSettings()
+            _uiState.update { it.copy(isLoading = false, statusMessage = "Connected and synced") }
         }
     }
 
@@ -269,4 +293,3 @@ class TraktViewModel @Inject constructor(
         }
     }
 }
-

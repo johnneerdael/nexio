@@ -41,7 +41,6 @@ class MetaDetailsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
-
     private val itemId: String = savedStateHandle["itemId"] ?: ""
     private val itemType: String = savedStateHandle["itemType"] ?: ""
     private val preferredAddonBaseUrl: String? = savedStateHandle["addonBaseUrl"]
@@ -59,6 +58,7 @@ class MetaDetailsViewModel @Inject constructor(
     init {
         observeLibraryState()
         observeWatchProgress()
+        observeMovieWatched()
         loadMeta()
     }
 
@@ -73,6 +73,9 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
             MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
             MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
+            MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
+            is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
+            MetaDetailsEvent.OnClearMessage -> clearMessage()
         }
     }
 
@@ -91,6 +94,15 @@ class MetaDetailsViewModel @Inject constructor(
                 _uiState.update { it.copy(episodeProgressMap = progressMap) }
                 // Recalculate next to watch when progress changes
                 calculateNextToWatch()
+            }
+        }
+    }
+
+    private fun observeMovieWatched() {
+        if (itemType.lowercase() != "movie") return
+        viewModelScope.launch {
+            watchProgressRepository.isWatched(itemId).collectLatest { watched ->
+                _uiState.update { it.copy(isMovieWatched = watched) }
             }
         }
     }
@@ -477,6 +489,121 @@ class MetaDetailsViewModel @Inject constructor(
                 libraryPreferences.addItem(meta.toSavedLibraryItem(preferredAddonBaseUrl))
             }
         }
+    }
+
+    private fun toggleMovieWatched() {
+        val meta = _uiState.value.meta ?: return
+        if (meta.type.toApiString() != "movie") return
+        if (_uiState.value.isMovieWatchedPending) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMovieWatchedPending = true) }
+            runCatching {
+                if (_uiState.value.isMovieWatched) {
+                    watchProgressRepository.removeProgress(itemId)
+                    showMessage("Marked as unwatched")
+                } else {
+                    watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta))
+                    showMessage("Marked as watched")
+                }
+            }.onFailure { error ->
+                showMessage(
+                    message = error.message ?: "Failed to update watched status",
+                    isError = true
+                )
+            }
+            _uiState.update { it.copy(isMovieWatchedPending = false) }
+        }
+    }
+
+    private fun toggleEpisodeWatched(video: Video) {
+        val meta = _uiState.value.meta ?: return
+        val season = video.season ?: return
+        val episode = video.episode ?: return
+        val pendingKey = episodePendingKey(video)
+        if (_uiState.value.episodeWatchedPendingKeys.contains(pendingKey)) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKey)
+            }
+
+            val isWatched = _uiState.value.episodeProgressMap[season to episode]?.isCompleted() == true
+            runCatching {
+                if (isWatched) {
+                    watchProgressRepository.removeProgress(itemId, season, episode)
+                    showMessage("Episode marked as unwatched")
+                } else {
+                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
+                    showMessage("Episode marked as watched")
+                }
+            }.onFailure { error ->
+                showMessage(
+                    message = error.message ?: "Failed to update episode watched status",
+                    isError = true
+                )
+            }
+
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - pendingKey)
+            }
+        }
+    }
+
+    private fun buildCompletedMovieProgress(meta: Meta): WatchProgress {
+        return WatchProgress(
+            contentId = itemId,
+            contentType = meta.type.toApiString(),
+            name = meta.name,
+            poster = meta.poster,
+            backdrop = meta.background,
+            logo = meta.logo,
+            videoId = meta.id,
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 1L,
+            duration = 1L,
+            lastWatched = System.currentTimeMillis(),
+            progressPercent = 100f
+        )
+    }
+
+    private fun buildCompletedEpisodeProgress(meta: Meta, video: Video): WatchProgress {
+        val runtimeMs = video.runtime?.toLong()?.times(60_000L) ?: 1L
+        return WatchProgress(
+            contentId = itemId,
+            contentType = meta.type.toApiString(),
+            name = meta.name,
+            poster = meta.poster,
+            backdrop = video.thumbnail ?: meta.background,
+            logo = meta.logo,
+            videoId = video.id,
+            season = video.season,
+            episode = video.episode,
+            episodeTitle = video.title,
+            position = runtimeMs,
+            duration = runtimeMs,
+            lastWatched = System.currentTimeMillis(),
+            progressPercent = 100f
+        )
+    }
+
+    private fun episodePendingKey(video: Video): String {
+        return "${video.id}:${video.season ?: -1}:${video.episode ?: -1}"
+    }
+
+    private fun showMessage(message: String, isError: Boolean = false) {
+        _uiState.update {
+            it.copy(
+                userMessage = message,
+                userMessageIsError = isError
+            )
+        }
+    }
+
+    private fun clearMessage() {
+        _uiState.update { it.copy(userMessage = null, userMessageIsError = false) }
     }
 
     private fun Meta.toSavedLibraryItem(addonBaseUrl: String?): SavedLibraryItem {

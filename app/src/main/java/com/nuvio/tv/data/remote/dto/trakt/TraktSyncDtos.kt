@@ -70,7 +70,7 @@ data class TraktHistoryEpisodeRemoveDto(
 @JsonClass(generateAdapter = true)
 data class TraktHistoryRemoveResponseDto(
     @Json(name = "deleted") val deleted: TraktHistoryRemoveCountDto? = null,
-    @Json(name = "not_found") val notFound: TraktHistoryRemoveCountDto? = null
+    @Json(name = "not_found") val notFound: TraktHistoryRemoveNotFoundDto? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -81,3 +81,75 @@ data class TraktHistoryRemoveCountDto(
     @Json(name = "seasons") val seasons: Int? = null
 )
 
+@JsonClass(generateAdapter = true)
+data class TraktHistoryRemoveNotFoundDto(
+    @Json(name = "movies") val movies: List<TraktMovieDto>? = null,
+    @Json(name = "shows") val shows: List<TraktShowDto>? = null,
+    @Json(name = "seasons") val seasons: List<Map<String, Any?>>? = null,
+    @Json(name = "episodes") val episodes: List<TraktEpisodeDto>? = null,
+    @Json(name = "ids") val ids: List<Long>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryAddRequestDto(
+    @Json(name = "movies") val movies: List<TraktHistoryMovieAddDto>? = null,
+    @Json(name = "shows") val shows: List<TraktHistoryShowAddDto>? = null,
+    @Json(name = "seasons") val seasons: List<TraktHistorySeasonAddDto>? = null,
+    @Json(name = "episodes") val episodes: List<TraktHistoryEpisodeAddDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryMovieAddDto(
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "year") val year: Int? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null,
+    @Json(name = "watched_at") val watchedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryShowAddDto(
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "year") val year: Int? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null,
+    @Json(name = "seasons") val seasons: List<TraktHistorySeasonAddDto>? = null,
+    @Json(name = "watched_at") val watchedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistorySeasonAddDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null,
+    @Json(name = "episodes") val episodes: List<TraktHistoryEpisodeAddDto>? = null,
+    @Json(name = "watched_at") val watchedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryEpisodeAddDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null,
+    @Json(name = "watched_at") val watchedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryAddResponseDto(
+    @Json(name = "added") val added: TraktHistoryRemoveCountDto? = null,
+    @Json(name = "not_found") val notFound: TraktHistoryAddNotFoundDto? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryAddNotFoundDto(
+    @Json(name = "movies") val movies: List<TraktMovieDto>? = null,
+    @Json(name = "shows") val shows: List<TraktShowDto>? = null,
+    @Json(name = "seasons") val seasons: List<TraktHistorySeasonAddDto>? = null,
+    @Json(name = "episodes") val episodes: List<TraktEpisodeDto>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHistoryItemDto(
+    @Json(name = "id") val id: Long? = null,
+    @Json(name = "watched_at") val watchedAt: String? = null,
+    @Json(name = "action") val action: String? = null,
+    @Json(name = "movie") val movie: TraktMovieDto? = null,
+    @Json(name = "show") val show: TraktShowDto? = null,
+    @Json(name = "episode") val episode: TraktEpisodeDto? = null
+)

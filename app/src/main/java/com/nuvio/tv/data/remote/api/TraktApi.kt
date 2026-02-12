@@ -5,6 +5,9 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveResponseDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
@@ -75,6 +78,19 @@ interface TraktApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 100
     ): Response<List<TraktUserEpisodeHistoryItemDto>>
+
+    @POST("sync/history")
+    suspend fun addHistory(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktHistoryAddRequestDto
+    ): Response<TraktHistoryAddResponseDto>
+
+    @GET("sync/history/{type}/{id}")
+    suspend fun getHistoryById(
+        @Header("Authorization") authorization: String,
+        @Path("type") type: String,
+        @Path("id") id: String
+    ): Response<List<TraktHistoryItemDto>>
 
     @GET("shows/{id}/progress/watched")
     suspend fun getShowProgressWatched(

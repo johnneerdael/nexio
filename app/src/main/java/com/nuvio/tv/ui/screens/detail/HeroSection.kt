@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.ui.platform.LocalContext
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -68,6 +70,9 @@ fun HeroContentSection(
     onPlayClick: () -> Unit,
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
+    isMovieWatched: Boolean,
+    isMovieWatchedPending: Boolean,
+    onToggleMovieWatched: () -> Unit,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
@@ -178,6 +183,22 @@ fun HeroContentSection(
                             contentDescription = if (isInLibrary) "Remove from library" else "Add to library",
                             onClick = onToggleLibrary
                         )
+
+                        if (meta.type.toApiString() == "movie") {
+                            ActionIconButton(
+                                icon = Icons.Default.RemoveRedEye,
+                                contentDescription = if (isMovieWatched) {
+                                    "Mark as unwatched"
+                                } else {
+                                    "Mark as watched"
+                                },
+                                onClick = onToggleMovieWatched,
+                                enabled = !isMovieWatchedPending,
+                                selected = isMovieWatched,
+                                selectedContainerColor = Color.White,
+                                selectedContentColor = Color.Black
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -323,17 +344,22 @@ private fun PlayButton(
 private fun ActionIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    selectedContainerColor: Color = Color(0xFF7CFF9B),
+    selectedContentColor: Color = Color.Black
 ) {
     IconButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .size(48.dp)
             .focusProperties { up = FocusRequester.Cancel },
         colors = IconButtonDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
+            containerColor = if (selected) selectedContainerColor else NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
-            contentColor = NuvioColors.TextPrimary,
+            contentColor = if (selected) selectedContentColor else NuvioColors.TextPrimary,
             focusedContentColor = NuvioColors.OnPrimary
         ),
         border = IconButtonDefaults.border(
