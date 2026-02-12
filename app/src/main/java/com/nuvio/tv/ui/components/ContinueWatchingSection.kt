@@ -197,7 +197,13 @@ internal fun ContinueWatchingCard(
     val nextUp = (item as? ContinueWatchingItem.NextUp)?.info
     val episodeStr = progress?.episodeDisplayString ?: nextUp?.let { "S${it.season}E${it.episode}" }
     val remainingText = progress?.let {
-        remember(it.position, it.duration) { formatRemainingTime(it.remainingTime) }
+        remember(it.position, it.duration, it.progressPercent) {
+            when {
+                it.duration > 0L -> formatRemainingTime(it.remainingTime)
+                it.progressPercent != null -> "${it.progressPercent.toInt().coerceIn(0, 100)}% watched"
+                else -> "Resume"
+            }
+        }
     }
     val progressFraction = progress?.progressPercentage ?: 0f
     val imageModel = nextUp?.thumbnail ?: progress?.backdrop ?: progress?.poster ?: nextUp?.backdrop ?: nextUp?.poster

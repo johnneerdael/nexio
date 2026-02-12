@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
@@ -73,6 +74,7 @@ private enum class SettingsCategory(val displayName: String, val icon: ImageVect
     APPEARANCE("Appearance", Icons.Default.Palette),
     LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
+    TRAKT("Trakt", Icons.Default.Link),
     TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
     ABOUT("About", Icons.Default.Info)
@@ -81,6 +83,7 @@ private enum class SettingsCategory(val displayName: String, val icon: ImageVect
 @Composable
 fun SettingsScreen(
     onNavigateToPlugins: () -> Unit = {},
+    onNavigateToTrakt: () -> Unit = {}
 ) {
     var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
     var previousIndex by remember { mutableIntStateOf(0) }
@@ -151,8 +154,12 @@ fun SettingsScreen(
                     isSelected = selectedCategory == category,
                     accentColor = accentColor,
                     onClick = {
-                        previousIndex = selectedCategory.ordinal
-                        selectedCategory = category
+                        if (category == SettingsCategory.TRAKT) {
+                            onNavigateToTrakt()
+                        } else {
+                            previousIndex = selectedCategory.ordinal
+                            selectedCategory = category
+                        }
                     }
                 )
             }
@@ -220,6 +227,7 @@ fun SettingsScreen(
                         uiState = pluginUiState,
                         viewModel = pluginViewModel
                     )
+                    SettingsCategory.TRAKT -> Unit
                 }
             }
         }

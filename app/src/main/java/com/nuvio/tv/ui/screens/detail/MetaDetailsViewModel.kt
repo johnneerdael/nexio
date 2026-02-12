@@ -465,7 +465,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun shouldResumeProgress(progress: WatchProgress): Boolean {
-        return progress.position >= 1000L && !progress.isCompleted()
+        return progress.progressPercentage >= 0.02f && !progress.isCompleted()
     }
 
     private fun toggleLibrary() {
