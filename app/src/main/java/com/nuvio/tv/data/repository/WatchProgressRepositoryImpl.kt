@@ -6,6 +6,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -72,7 +73,20 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
-                    traktProgressService.observeEpisodeProgress(contentId)
+                    combine(
+                        traktProgressService.observeEpisodeProgress(contentId),
+                        allProgress.map { items ->
+                            items.filter { it.contentId == contentId && it.season != null && it.episode != null }
+                        }
+                    ) { remoteMap, liveEpisodes ->
+                        val merged = remoteMap.toMutableMap()
+                        liveEpisodes.forEach { episodeProgress ->
+                            val season = episodeProgress.season ?: return@forEach
+                            val episode = episodeProgress.episode ?: return@forEach
+                            merged[season to episode] = episodeProgress
+                        }
+                        merged
+                    }.distinctUntilChanged()
                 } else {
                     watchProgressPreferences.getAllEpisodeProgress(contentId)
                 }
@@ -80,12 +94,16 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveProgress(progress: WatchProgress) {
-        if (traktAuthDataStore.isAuthenticated.first()) return
+        if (traktAuthDataStore.isAuthenticated.first()) {
+            traktProgressService.applyOptimisticProgress(progress)
+            return
+        }
         watchProgressPreferences.saveProgress(progress)
     }
 
     override suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
         if (traktAuthDataStore.isAuthenticated.first()) {
+            traktProgressService.applyOptimisticRemoval(contentId, season, episode)
             traktProgressService.removeProgress(contentId, season, episode)
             return
         }
@@ -93,12 +111,24 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markAsCompleted(progress: WatchProgress) {
-        if (traktAuthDataStore.isAuthenticated.first()) return
+        if (traktAuthDataStore.isAuthenticated.first()) {
+            traktProgressService.applyOptimisticProgress(
+                progress.copy(
+                    position = progress.duration,
+                    progressPercent = 100f,
+                    lastWatched = System.currentTimeMillis()
+                )
+            )
+            return
+        }
         watchProgressPreferences.markAsCompleted(progress)
     }
 
     override suspend fun clearAll() {
-        if (traktAuthDataStore.isAuthenticated.first()) return
+        if (traktAuthDataStore.isAuthenticated.first()) {
+            traktProgressService.clearOptimistic()
+            return
+        }
         watchProgressPreferences.clearAll()
     }
 }

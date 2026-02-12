@@ -1587,7 +1587,6 @@ class PlayerViewModel @Inject constructor(
     private fun saveWatchProgressIfNeeded() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
         val duration = getEffectiveDuration(currentPosition)
-        if (duration <= 0L) return
         
         
         if (kotlin.math.abs(currentPosition - lastSavedPosition) >= saveThresholdMs) {
@@ -1599,7 +1598,6 @@ class PlayerViewModel @Inject constructor(
     private fun saveWatchProgress() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
         val duration = getEffectiveDuration(currentPosition)
-        if (duration <= 0L) return
         saveWatchProgressInternal(currentPosition, duration)
     }
 
@@ -1618,9 +1616,9 @@ class PlayerViewModel @Inject constructor(
         
         if (contentId.isNullOrEmpty() || contentType.isNullOrEmpty()) return
         
-        if (duration <= 0) return
-        
         if (position < 1000) return
+
+        val fallbackPercent = if (duration <= 0L) 5f else null
 
         val progress = WatchProgress(
             contentId = contentId,
@@ -1635,7 +1633,8 @@ class PlayerViewModel @Inject constructor(
             episodeTitle = currentEpisodeTitle,
             position = position,
             duration = duration,
-            lastWatched = System.currentTimeMillis()
+            lastWatched = System.currentTimeMillis(),
+            progressPercent = fallbackPercent
         )
 
         viewModelScope.launch {

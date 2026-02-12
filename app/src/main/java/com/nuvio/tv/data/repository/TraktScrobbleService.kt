@@ -39,7 +39,8 @@ sealed interface TraktScrobbleItem {
 @Singleton
 class TraktScrobbleService @Inject constructor(
     private val traktApi: TraktApi,
-    private val traktAuthService: TraktAuthService
+    private val traktAuthService: TraktAuthService,
+    private val traktProgressService: TraktProgressService
 ) {
     private data class ScrobbleStamp(
         val action: String,
@@ -87,6 +88,9 @@ class TraktScrobbleService @Inject constructor(
                 progress = clampedProgress,
                 timestampMs = System.currentTimeMillis()
             )
+            if (action == "stop") {
+                traktProgressService.refreshNow()
+            }
         }
     }
 
