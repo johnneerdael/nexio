@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -543,9 +545,10 @@ private fun EpisodeOptionsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .width(360.dp)
+                .width(520.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated)
+                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
                 .padding(24.dp)
                 .onPreviewKeyEvent { event ->
                     val native = event.nativeKeyEvent
@@ -561,42 +564,57 @@ private fun EpisodeOptionsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     text = episode.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = NuvioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
+                Text(
+                    text = "Episode actions",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+
                 Button(
                     onClick = onToggleWatched,
                     enabled = !isPending,
-                    modifier = Modifier.focusRequester(primaryFocusRequester),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(primaryFocusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.FocusBackground,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = Color.White,
+                        contentColor = Color.Black
                     )
                 ) {
                     Text(if (isWatched) "Mark as unwatched" else "Mark as watched")
                 }
 
-                Button(
-                    onClick = onPlay,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Play")
-                }
+                    Button(
+                        onClick = onPlay,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(240.dp)
+                    ) {
+                        Text("Play")
+                    }
 
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
-                ) {
-                    Text("Cancel")
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(240.dp)
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

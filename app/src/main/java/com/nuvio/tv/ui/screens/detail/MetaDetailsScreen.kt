@@ -6,9 +6,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -620,6 +623,7 @@ private fun LibraryListPickerDialog(
             modifier = Modifier
                 .width(500.dp)
                 .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
                 .padding(24.dp)
                 .onPreviewKeyEvent { event ->
                     val native = event.nativeKeyEvent
@@ -643,6 +647,12 @@ private fun LibraryListPickerDialog(
                     color = NuvioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = "Select which lists should include this title.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
                 )
 
                 if (!error.isNullOrBlank()) {
@@ -686,26 +696,33 @@ private fun LibraryListPickerDialog(
                     }
                 }
 
-                Button(
-                    onClick = onSave,
-                    enabled = !isPending,
-                    colors = ButtonDefaults.colors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(if (isPending) "Saving..." else "Save")
-                }
+                    Button(
+                        onClick = onSave,
+                        enabled = !isPending,
+                        colors = ButtonDefaults.colors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        modifier = Modifier.width(244.dp)
+                    ) {
+                        Text(if (isPending) "Saving..." else "Save")
+                    }
 
-                Button(
-                    onClick = onDismiss,
-                    enabled = !isPending,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
-                ) {
-                    Text("Cancel")
+                    Button(
+                        onClick = onDismiss,
+                        enabled = !isPending,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(244.dp)
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

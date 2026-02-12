@@ -24,6 +24,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktShowProgressResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktUserStatsResponseDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -61,6 +62,12 @@ interface TraktApi {
     suspend fun getUserSettings(
         @Header("Authorization") authorization: String
     ): Response<TraktUserSettingsResponseDto>
+
+    @GET("users/{id}/stats")
+    suspend fun getUserStats(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String
+    ): Response<TraktUserStatsResponseDto>
 
     @POST("scrobble/start")
     suspend fun scrobbleStart(

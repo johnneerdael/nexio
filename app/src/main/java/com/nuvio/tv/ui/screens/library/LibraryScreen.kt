@@ -45,9 +45,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -67,6 +69,7 @@ import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -88,7 +91,11 @@ fun LibraryScreen(
 
     LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size) {
         if (!uiState.isLoading && pendingPrimaryFocus) {
-            primaryFocusRequester.requestFocus()
+            val focused = runCatching { primaryFocusRequester.requestFocus() }.isSuccess
+            if (!focused) {
+                delay(16)
+                runCatching { primaryFocusRequester.requestFocus() }
+            }
             pendingPrimaryFocus = false
         }
     }
@@ -133,6 +140,31 @@ fun LibraryScreen(
         contentPadding = PaddingValues(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 48.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Library",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = NuvioColors.TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
+                )
+                Text(
+                    text = if (uiState.sourceMode == LibrarySourceMode.TRAKT) "TRAKT" else "LOCAL",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = NuvioColors.TextTertiary,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 2.sp
+                )
+            }
+        }
+
         item {
             LibrarySelectorsRow(
                 sourceMode = uiState.sourceMode,
@@ -308,8 +340,8 @@ private fun LibrarySelectorsRow(
                     .padding(end = 48.dp)
             } else {
                 Modifier
-                    .weight(1f)
-                    .padding(end = 48.dp)
+                    .width(420.dp)
+                    .padding(start = 48.dp, end = 48.dp)
                     .focusRequester(primaryFocusRequester)
             },
             title = "Type",

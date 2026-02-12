@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.components
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -391,9 +392,10 @@ internal fun ContinueWatchingOptionsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .width(360.dp)
+                .width(520.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated)
+                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
                 .padding(24.dp)
                 .onPreviewKeyEvent { event ->
                     val native = event.nativeKeyEvent
@@ -409,31 +411,56 @@ internal fun ContinueWatchingOptionsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = NuvioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
+                Text(
+                    text = "Choose what you want to do with this item.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+
                 Button(
                     onClick = onDetails,
-                    modifier = Modifier.focusRequester(detailsFocusRequester),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(detailsFocusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.FocusBackground,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = Color.White,
+                        contentColor = Color.Black
                     )
                 ) {
                     Text("Go to details")
                 }
 
-                Button(
-                    onClick = onRemove,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Remove from Continue Watching")
+                    Button(
+                        onClick = onRemove,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(240.dp)
+                    ) {
+                        Text("Remove")
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        ),
+                        modifier = Modifier.width(240.dp)
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

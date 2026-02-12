@@ -55,8 +55,20 @@ data class TraktUserSettingsResponseDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class TraktUserStatsResponseDto(
+    @Json(name = "movies") val movies: TraktUserStatsCategoryDto? = null,
+    @Json(name = "shows") val shows: TraktUserStatsCategoryDto? = null,
+    @Json(name = "episodes") val episodes: TraktUserStatsCategoryDto? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktUserStatsCategoryDto(
+    @Json(name = "watched") val watched: Int? = null,
+    @Json(name = "minutes") val minutes: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class TraktUserDto(
     @Json(name = "username") val username: String? = null,
     @Json(name = "ids") val ids: TraktIdsDto? = null
 )
-

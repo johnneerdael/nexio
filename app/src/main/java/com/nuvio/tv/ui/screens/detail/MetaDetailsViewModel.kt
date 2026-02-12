@@ -522,12 +522,14 @@ class MetaDetailsViewModel @Inject constructor(
         val meta = _uiState.value.meta ?: return
         viewModelScope.launch {
             val input = meta.toLibraryEntryInput()
+            val wasInWatchlist = _uiState.value.isInWatchlist
+            val wasInLibrary = _uiState.value.isInLibrary
             runCatching {
                 libraryRepository.toggleDefault(input)
                 val message = if (_uiState.value.librarySourceMode == LibrarySourceMode.TRAKT) {
-                    if (_uiState.value.isInWatchlist) "Removed from watchlist" else "Added to watchlist"
+                    if (wasInWatchlist) "Removed from watchlist" else "Added to watchlist"
                 } else {
-                    if (_uiState.value.isInLibrary) "Removed from library" else "Added to library"
+                    if (wasInLibrary) "Removed from library" else "Added to library"
                 }
                 showMessage(message)
             }.onFailure { error ->

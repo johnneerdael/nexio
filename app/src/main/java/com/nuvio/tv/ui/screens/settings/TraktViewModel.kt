@@ -28,6 +28,7 @@ data class TraktUiState(
     val mode: TraktConnectionMode = TraktConnectionMode.DISCONNECTED,
     val credentialsConfigured: Boolean = true,
     val isLoading: Boolean = false,
+    val isStatsLoading: Boolean = false,
     val isPolling: Boolean = false,
     val username: String? = null,
     val tokenExpiresAtMillis: Long? = null,
@@ -35,6 +36,7 @@ data class TraktUiState(
     val verificationUrl: String? = null,
     val pollIntervalSeconds: Int = 5,
     val deviceCodeExpiresAtMillis: Long? = null,
+    val connectedStats: TraktProgressService.TraktCachedStats? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -118,6 +120,8 @@ class TraktViewModel @Inject constructor(
                     isLoading = false,
                     mode = TraktConnectionMode.DISCONNECTED,
                     isPolling = false,
+                    isStatsLoading = false,
+                    connectedStats = null,
                     statusMessage = "Disconnected from Trakt"
                 )
             }
@@ -129,9 +133,12 @@ class TraktViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null, statusMessage = "Syncing...") }
             traktProgressService.refreshNow()
             traktAuthService.fetchUserSettings()
+            val stats = traktProgressService.getCachedStats(forceRefresh = true)
             _uiState.update {
                 it.copy(
                     isLoading = false,
+                    isStatsLoading = false,
+                    connectedStats = stats ?: it.connectedStats,
                     statusMessage = "Sync completed"
                 )
             }
@@ -166,7 +173,9 @@ class TraktViewModel @Inject constructor(
                 pollIntervalSeconds = authState.pollInterval ?: 5,
                 deviceCodeExpiresAtMillis = authState.expiresAt,
                 credentialsConfigured = traktAuthService.hasRequiredCredentials(),
-                isPolling = if (mode == TraktConnectionMode.CONNECTED) false else current.isPolling
+                isPolling = if (mode == TraktConnectionMode.CONNECTED) false else current.isPolling,
+                connectedStats = if (mode == TraktConnectionMode.CONNECTED) current.connectedStats else null,
+                isStatsLoading = if (mode == TraktConnectionMode.CONNECTED) current.isStatsLoading else false
             )
         }
 
@@ -174,6 +183,8 @@ class TraktViewModel @Inject constructor(
             (lastMode != TraktConnectionMode.CONNECTED || shouldAutoSyncNow())
         ) {
             autoSyncAfterConnected()
+        } else if (mode == TraktConnectionMode.CONNECTED && _uiState.value.connectedStats == null) {
+            loadConnectedStats(forceRefresh = false)
         }
         lastMode = mode
 
@@ -193,10 +204,31 @@ class TraktViewModel @Inject constructor(
     private fun autoSyncAfterConnected() {
         lastAutoSyncAtMs = System.currentTimeMillis()
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null, statusMessage = "Syncing...") }
+            _uiState.update { it.copy(isLoading = true, isStatsLoading = true, errorMessage = null, statusMessage = null) }
             traktProgressService.refreshNow()
             traktAuthService.fetchUserSettings()
-            _uiState.update { it.copy(isLoading = false, statusMessage = "Connected and synced") }
+            val stats = traktProgressService.getCachedStats(forceRefresh = true)
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    isStatsLoading = false,
+                    connectedStats = stats ?: it.connectedStats,
+                    statusMessage = null
+                )
+            }
+        }
+    }
+
+    private fun loadConnectedStats(forceRefresh: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isStatsLoading = true) }
+            val stats = traktProgressService.getCachedStats(forceRefresh = forceRefresh)
+            _uiState.update { current ->
+                current.copy(
+                    isStatsLoading = false,
+                    connectedStats = stats ?: current.connectedStats
+                )
+            }
         }
     }
 

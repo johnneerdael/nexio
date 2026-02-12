@@ -55,6 +55,13 @@ class TraktProgressService @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository
 ) {
+    data class TraktCachedStats(
+        val moviesWatched: Int = 0,
+        val showsWatched: Int = 0,
+        val episodesWatched: Int = 0,
+        val totalWatchedHours: Int = 0
+    )
+
     private data class TimedCache<T>(
         val value: T,
         val updatedAtMs: Long
@@ -90,11 +97,13 @@ class TraktProgressService @Inject constructor(
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private var cachedMoviesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null
     private var cachedEpisodesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null
+    private var cachedUserStats: TimedCache<TraktCachedStats>? = null
     private var forceRefreshUntilMs: Long = 0L
     @Volatile
     private var lastFastSyncRequestMs: Long = 0L
 
     private val playbackCacheTtlMs = 2_000L
+    private val userStatsCacheTtlMs = 60_000L
     private val optimisticTtlMs = 3 * 60_000L
     private val metadataHydrationLimit = 30
     private val fastSyncThrottleMs = 3_000L
@@ -110,6 +119,36 @@ class TraktProgressService @Inject constructor(
     suspend fun refreshNow() {
         forceRefreshUntilMs = System.currentTimeMillis() + 30_000L
         refreshSignals.emit(Unit)
+    }
+
+    suspend fun getCachedStats(forceRefresh: Boolean = false): TraktCachedStats? {
+        val now = System.currentTimeMillis()
+        cacheMutex.withLock {
+            val cached = cachedUserStats
+            if (!forceRefresh && cached != null && now - cached.updatedAtMs <= userStatsCacheTtlMs) {
+                return cached.value
+            }
+        }
+
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getUserStats(authorization = authHeader, id = "me")
+        } ?: return null
+
+        if (!response.isSuccessful) return null
+        val body = response.body() ?: return null
+
+        val totalMinutes = (body.movies?.minutes ?: 0) + (body.episodes?.minutes ?: 0)
+        val stats = TraktCachedStats(
+            moviesWatched = body.movies?.watched ?: 0,
+            showsWatched = body.shows?.watched ?: 0,
+            episodesWatched = body.episodes?.watched ?: 0,
+            totalWatchedHours = totalMinutes / 60
+        )
+
+        cacheMutex.withLock {
+            cachedUserStats = TimedCache(value = stats, updatedAtMs = now)
+        }
+        return stats
     }
 
     fun applyOptimisticProgress(progress: WatchProgress) {
