@@ -6,13 +6,16 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
-import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.domain.model.LibraryEntryInput
+import com.nuvio.tv.domain.model.LibrarySourceMode
+import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.NextToWatch
-import com.nuvio.tv.domain.model.SavedLibraryItem
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
@@ -35,7 +38,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
-    private val libraryPreferences: LibraryPreferences,
+    private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
@@ -75,15 +78,50 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
             MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
             is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
+            MetaDetailsEvent.OnLibraryLongPress -> openListPicker()
+            is MetaDetailsEvent.OnPickerMembershipToggled -> togglePickerMembership(event.listKey)
+            MetaDetailsEvent.OnPickerSave -> savePickerMembership()
+            MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
         }
     }
 
     private fun observeLibraryState() {
         viewModelScope.launch {
-            libraryPreferences.isInLibrary(itemId = itemId, itemType = itemType)
+            libraryRepository.sourceMode
+                .collectLatest { sourceMode ->
+                    _uiState.update { it.copy(librarySourceMode = sourceMode) }
+                }
+        }
+
+        viewModelScope.launch {
+            libraryRepository.listTabs.collectLatest { tabs ->
+                _uiState.update { state ->
+                    val selectedMembership = state.pickerMembership
+                    val filteredMembership = if (selectedMembership.isEmpty()) {
+                        selectedMembership
+                    } else {
+                        tabs.associate { tab -> tab.key to (selectedMembership[tab.key] == true) }
+                    }
+                    state.copy(
+                        libraryListTabs = tabs,
+                        pickerMembership = filteredMembership
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            libraryRepository.isInLibrary(itemId = itemId, itemType = itemType)
                 .collectLatest { inLibrary ->
                     _uiState.update { it.copy(isInLibrary = inLibrary) }
+                }
+        }
+
+        viewModelScope.launch {
+            libraryRepository.isInWatchlist(itemId = itemId, itemType = itemType)
+                .collectLatest { inWatchlist ->
+                    _uiState.update { it.copy(isInWatchlist = inWatchlist) }
                 }
         }
     }
@@ -483,11 +521,106 @@ class MetaDetailsViewModel @Inject constructor(
     private fun toggleLibrary() {
         val meta = _uiState.value.meta ?: return
         viewModelScope.launch {
-            if (_uiState.value.isInLibrary) {
-                libraryPreferences.removeItem(itemId = meta.id, itemType = meta.type.toApiString())
-            } else {
-                libraryPreferences.addItem(meta.toSavedLibraryItem(preferredAddonBaseUrl))
+            val input = meta.toLibraryEntryInput()
+            runCatching {
+                libraryRepository.toggleDefault(input)
+                val message = if (_uiState.value.librarySourceMode == LibrarySourceMode.TRAKT) {
+                    if (_uiState.value.isInWatchlist) "Removed from watchlist" else "Added to watchlist"
+                } else {
+                    if (_uiState.value.isInLibrary) "Removed from library" else "Added to library"
+                }
+                showMessage(message)
+            }.onFailure { error ->
+                showMessage(
+                    message = error.message ?: "Failed to update library",
+                    isError = true
+                )
             }
+        }
+    }
+
+    private fun openListPicker() {
+        if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+        val meta = _uiState.value.meta ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(pickerPending = true, pickerError = null) }
+            runCatching {
+                val snapshot = libraryRepository.getMembershipSnapshot(meta.toLibraryEntryInput())
+                _uiState.update {
+                    it.copy(
+                        showListPicker = true,
+                        pickerMembership = snapshot.listMembership,
+                        pickerPending = false,
+                        pickerError = null
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        pickerPending = false,
+                        pickerError = error.message ?: "Failed to load lists",
+                        showListPicker = false
+                    )
+                }
+                showMessage(error.message ?: "Failed to load lists", isError = true)
+            }
+        }
+    }
+
+    private fun togglePickerMembership(listKey: String) {
+        val current = _uiState.value.pickerMembership[listKey] == true
+        _uiState.update {
+            it.copy(
+                pickerMembership = it.pickerMembership.toMutableMap().apply {
+                    this[listKey] = !current
+                },
+                pickerError = null
+            )
+        }
+    }
+
+    private fun savePickerMembership() {
+        if (_uiState.value.pickerPending) return
+        if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+        val meta = _uiState.value.meta ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(pickerPending = true, pickerError = null) }
+            runCatching {
+                libraryRepository.applyMembershipChanges(
+                    item = meta.toLibraryEntryInput(),
+                    changes = ListMembershipChanges(
+                        desiredMembership = _uiState.value.pickerMembership
+                    )
+                )
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        pickerPending = false,
+                        showListPicker = false,
+                        pickerError = null
+                    )
+                }
+                showMessage("Lists updated")
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        pickerPending = false,
+                        pickerError = error.message ?: "Failed to update lists"
+                    )
+                }
+                showMessage(error.message ?: "Failed to update lists", isError = true)
+            }
+        }
+    }
+
+    private fun dismissListPicker() {
+        _uiState.update {
+            it.copy(
+                showListPicker = false,
+                pickerPending = false,
+                pickerError = null
+            )
         }
     }
 
@@ -606,19 +739,29 @@ class MetaDetailsViewModel @Inject constructor(
         _uiState.update { it.copy(userMessage = null, userMessageIsError = false) }
     }
 
-    private fun Meta.toSavedLibraryItem(addonBaseUrl: String?): SavedLibraryItem {
-        return SavedLibraryItem(
-            id = id,
-            type = type.toApiString(),
-            name = name,
+    private fun Meta.toLibraryEntryInput(): LibraryEntryInput {
+        val year = Regex("(\\d{4})").find(releaseInfo ?: "")
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+        val parsedIds = parseContentIds(id)
+        return LibraryEntryInput(
+            itemId = id,
+            itemType = type.toApiString(),
+            title = name,
+            year = year,
+            traktId = parsedIds.trakt,
+            imdbId = parsedIds.imdb,
+            tmdbId = parsedIds.tmdb,
             poster = poster,
             posterShape = posterShape,
             background = background,
+            logo = logo,
             description = description,
             releaseInfo = releaseInfo,
             imdbRating = imdbRating,
             genres = genres,
-            addonBaseUrl = addonBaseUrl
+            addonBaseUrl = preferredAddonBaseUrl
         )
     }
 

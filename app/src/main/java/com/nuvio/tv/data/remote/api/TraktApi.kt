@@ -8,7 +8,14 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryItemDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktListItemDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktReorderListsRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktReorderListsResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
@@ -25,6 +32,7 @@ import retrofit2.http.Header
 import retrofit2.http.HTTP
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.PUT
 import retrofit2.http.Query
 
 interface TraktApi {
@@ -112,4 +120,81 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktHistoryRemoveRequestDto
     ): Response<TraktHistoryRemoveResponseDto>
+
+    @GET("users/{id}/lists")
+    suspend fun getUserLists(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String
+    ): Response<List<TraktListSummaryDto>>
+
+    @POST("users/{id}/lists")
+    suspend fun createUserList(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Body body: TraktCreateOrUpdateListRequestDto
+    ): Response<TraktListSummaryDto>
+
+    @PUT("users/{id}/lists/{list_id}")
+    suspend fun updateUserList(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("list_id") listId: String,
+        @Body body: TraktCreateOrUpdateListRequestDto
+    ): Response<TraktListSummaryDto>
+
+    @DELETE("users/{id}/lists/{list_id}")
+    suspend fun deleteUserList(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("list_id") listId: String
+    ): Response<Unit>
+
+    @POST("users/{id}/lists/reorder")
+    suspend fun reorderUserLists(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Body body: TraktReorderListsRequestDto
+    ): Response<TraktReorderListsResponseDto>
+
+    @GET("users/{id}/lists/{list_id}/items/{type}")
+    suspend fun getUserListItems(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("list_id") listId: String,
+        @Path("type") type: String
+    ): Response<List<TraktListItemDto>>
+
+    @POST("users/{id}/lists/{list_id}/items")
+    suspend fun addUserListItems(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("list_id") listId: String,
+        @Body body: TraktListItemsMutationRequestDto
+    ): Response<TraktListItemsMutationResponseDto>
+
+    @POST("users/{id}/lists/{list_id}/items/remove")
+    suspend fun removeUserListItems(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("list_id") listId: String,
+        @Body body: TraktListItemsMutationRequestDto
+    ): Response<TraktListItemsMutationResponseDto>
+
+    @GET("sync/watchlist/{type}")
+    suspend fun getWatchlist(
+        @Header("Authorization") authorization: String,
+        @Path("type") type: String
+    ): Response<List<TraktListItemDto>>
+
+    @POST("sync/watchlist")
+    suspend fun addToWatchlist(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktListItemsMutationRequestDto
+    ): Response<TraktListItemsMutationResponseDto>
+
+    @POST("sync/watchlist/remove")
+    suspend fun removeFromWatchlist(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktListItemsMutationRequestDto
+    ): Response<TraktListItemsMutationResponseDto>
 }

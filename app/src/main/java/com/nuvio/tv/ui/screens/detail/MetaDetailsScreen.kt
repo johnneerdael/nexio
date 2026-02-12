@@ -6,9 +6,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,16 +45,23 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Text
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.LibraryListTab
+import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.NextToWatch
@@ -59,6 +72,7 @@ import com.nuvio.tv.ui.components.MetaDetailsSkeleton
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
+import androidx.compose.ui.window.Dialog
 
 private enum class RestoreTarget {
     HERO,
@@ -147,6 +161,7 @@ fun MetaDetailsScreen(
                     selectedSeason = uiState.selectedSeason,
                     episodesForSeason = uiState.episodesForSeason,
                     isInLibrary = uiState.isInLibrary,
+                    librarySourceMode = uiState.librarySourceMode,
                     nextToWatch = uiState.nextToWatch,
                     episodeProgressMap = uiState.episodeProgressMap,
                     episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
@@ -189,6 +204,7 @@ fun MetaDetailsScreen(
                     },
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
+                    onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
                     onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
@@ -198,6 +214,21 @@ fun MetaDetailsScreen(
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) }
                 )
             }
+        }
+
+        if (uiState.showListPicker) {
+            LibraryListPickerDialog(
+                title = uiState.meta?.name ?: "Lists",
+                tabs = uiState.libraryListTabs,
+                membership = uiState.pickerMembership,
+                isPending = uiState.pickerPending,
+                error = uiState.pickerError,
+                onToggle = { key ->
+                    viewModel.onEvent(MetaDetailsEvent.OnPickerMembershipToggled(key))
+                },
+                onSave = { viewModel.onEvent(MetaDetailsEvent.OnPickerSave) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnPickerDismiss) }
+            )
         }
 
         val message = uiState.userMessage
@@ -235,6 +266,7 @@ private fun MetaDetailsContent(
     selectedSeason: Int,
     episodesForSeason: List<Video>,
     isInLibrary: Boolean,
+    librarySourceMode: LibrarySourceMode,
     nextToWatch: NextToWatch?,
     episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
     episodeWatchedPendingKeys: Set<String>,
@@ -245,6 +277,7 @@ private fun MetaDetailsContent(
     onPlayClick: (String) -> Unit,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
+    onLibraryLongPress: () -> Unit,
     onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     trailerUrl: String?,
@@ -488,6 +521,11 @@ private fun MetaDetailsContent(
                         onPlayClick = heroPlayClick,
                         isInLibrary = isInLibrary,
                         onToggleLibrary = onToggleLibrary,
+                        onLibraryLongPress = {
+                            if (librarySourceMode == LibrarySourceMode.TRAKT) {
+                                onLibraryLongPress()
+                            }
+                        },
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,
@@ -552,6 +590,122 @@ private fun MetaDetailsContent(
                         title = "Network",
                         companies = meta.networks
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun LibraryListPickerDialog(
+    title: String,
+    tabs: List<LibraryListTab>,
+    membership: Map<String, Boolean>,
+    isPending: Boolean,
+    error: String?,
+    onToggle: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+    var suppressNextKeyUp by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .width(500.dp)
+                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .padding(24.dp)
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (suppressNextKeyUp && native.action == KeyEvent.ACTION_UP) {
+                        val isSelectOrMenu = native.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                            native.keyCode == KeyEvent.KEYCODE_ENTER ||
+                            native.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+                            native.keyCode == KeyEvent.KEYCODE_MENU
+                        if (isSelectOrMenu) {
+                            suppressNextKeyUp = false
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    false
+                }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (!error.isNullOrBlank()) {
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFFFB6B6)
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(tabs, key = { it.key }) { tab ->
+                        val selected = membership[tab.key] == true
+                        val titleText = if (selected) "✓ ${tab.title}" else tab.title
+                        Button(
+                            onClick = { onToggle(tab.key) },
+                            enabled = !isPending,
+                            modifier = if (tab.key == tabs.firstOrNull()?.key) {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(primaryFocusRequester)
+                            } else {
+                                Modifier.fillMaxWidth()
+                            },
+                            colors = ButtonDefaults.colors(
+                                containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+                                contentColor = NuvioColors.TextPrimary
+                            )
+                        ) {
+                            Text(
+                                text = titleText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onSave,
+                    enabled = !isPending,
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text(if (isPending) "Saving..." else "Save")
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    enabled = !isPending,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
+                    Text("Cancel")
                 }
             }
         }
