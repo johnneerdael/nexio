@@ -306,6 +306,42 @@ fun GridHomeContent(
                     }
                 }
             }
+
+            if (!continueWatchingInserted && uiState.continueWatchingItems.isNotEmpty()) {
+                item(
+                    key = "continue_watching_fallback",
+                    span = { TvGridItemSpan(maxLineSpan) },
+                    contentType = "continue_watching"
+                ) {
+                    GridContinueWatchingSection(
+                        items = uiState.continueWatchingItems,
+                        focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
+                        onItemClick = { item ->
+                            onContinueWatchingClick(item)
+                        },
+                        onDetailsClick = { item ->
+                            onNavigateToDetail(
+                                when (item) {
+                                    is ContinueWatchingItem.InProgress -> item.progress.contentId
+                                    is ContinueWatchingItem.NextUp -> item.info.contentId
+                                },
+                                when (item) {
+                                    is ContinueWatchingItem.InProgress -> item.progress.contentType
+                                    is ContinueWatchingItem.NextUp -> item.info.contentType
+                                },
+                                ""
+                            )
+                        },
+                        onRemoveItem = { item ->
+                            val contentId = when (item) {
+                                is ContinueWatchingItem.InProgress -> item.progress.contentId
+                                is ContinueWatchingItem.NextUp -> item.info.contentId
+                            }
+                            onRemoveContinueWatching(contentId)
+                        }
+                    )
+                }
+            }
         }
 
         // Sticky header overlay

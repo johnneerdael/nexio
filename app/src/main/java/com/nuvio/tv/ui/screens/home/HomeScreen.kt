@@ -52,7 +52,8 @@ fun HomeScreen(
     val gridFocusState by viewModel.gridFocusState.collectAsState()
     val hasHeroContent = uiState.heroSectionEnabled && uiState.heroItems.isNotEmpty()
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
-    val hasPrimaryHomeContent = hasHeroContent || hasCatalogContent
+    val hasContinueWatchingContent = uiState.continueWatchingItems.isNotEmpty()
+    val hasPrimaryHomeContent = hasHeroContent || hasCatalogContent || hasContinueWatchingContent
     var hasEnteredHomeContent: Boolean by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(hasPrimaryHomeContent) {
