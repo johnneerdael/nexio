@@ -171,7 +171,15 @@ fun PlayerScreen(
     }
 
     // Request focus for key events when controls visibility or panel state changes
-    LaunchedEffect(uiState.showControls, uiState.showEpisodesPanel, uiState.showSourcesPanel, uiState.showSubtitleStylePanel) {
+    LaunchedEffect(
+        uiState.showControls,
+        uiState.showEpisodesPanel,
+        uiState.showSourcesPanel,
+        uiState.showSubtitleStylePanel,
+        uiState.showAudioDialog,
+        uiState.showSubtitleDialog,
+        uiState.showSpeedDialog
+    ) {
         if (uiState.showControls && !uiState.showEpisodesPanel && !uiState.showSourcesPanel &&
             !uiState.showAudioDialog && !uiState.showSubtitleDialog &&
             !uiState.showSubtitleStylePanel && !uiState.showSpeedDialog
@@ -440,7 +448,12 @@ fun PlayerScreen(
         AnimatedVisibility(
             visible = uiState.showControls && uiState.error == null &&
                 !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
-                !uiState.showSubtitleStylePanel,
+                !uiState.showSubtitleStylePanel &&
+                !uiState.showEpisodesPanel &&
+                !uiState.showSourcesPanel &&
+                !uiState.showAudioDialog &&
+                !uiState.showSubtitleDialog &&
+                !uiState.showSpeedDialog,
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
