@@ -29,14 +29,14 @@ data class WatchProgress(
         get() = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
 
     /**
-     * Returns true if the content has been watched past the threshold (typically 90%)
+     * Returns true if the content has been watched past the threshold (default 85%)
      */
-    fun isCompleted(threshold: Float = 0.90f): Boolean = progressPercentage >= threshold
+    fun isCompleted(threshold: Float = 0.85f): Boolean = progressPercentage >= threshold
 
     /**
      * Returns true if the content has been started but not completed
      */
-    fun isInProgress(startThreshold: Float = 0.02f, endThreshold: Float = 0.90f): Boolean =
+    fun isInProgress(startThreshold: Float = 0.02f, endThreshold: Float = 0.85f): Boolean =
         progressPercentage >= startThreshold && progressPercentage < endThreshold
 
     /**

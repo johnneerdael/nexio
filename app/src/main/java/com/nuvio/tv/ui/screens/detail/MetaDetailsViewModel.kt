@@ -289,7 +289,7 @@ class MetaDetailsViewModel @Inject constructor(
             // For movies, check if there's an in-progress watch
             viewModelScope.launch {
                 val progress = watchProgressRepository.getProgress(itemId).first()
-                val nextToWatch = if (progress != null && progress.isInProgress()) {
+                val nextToWatch = if (progress != null && shouldResumeProgress(progress)) {
                     NextToWatch(
                         watchProgress = progress,
                         isResume = true,
@@ -369,7 +369,7 @@ class MetaDetailsViewModel @Inject constructor(
             val episode = latestProgress.episode
             val matchedIndex = episodes.indexOfFirst { it.season == season && it.episode == episode }
 
-            if (latestProgress.isInProgress()) {
+            if (shouldResumeProgress(latestProgress)) {
                 val matchedEpisode = if (matchedIndex >= 0) episodes[matchedIndex] else null
                 return NextToWatch(
                     watchProgress = latestProgress,
@@ -406,7 +406,7 @@ class MetaDetailsViewModel @Inject constructor(
             val progress = fallbackProgressMap[season to ep]
 
             if (progress != null) {
-                if (progress.isInProgress()) {
+                if (shouldResumeProgress(progress)) {
                     resumeEpisode = episode
                     resumeProgress = progress
                     break
@@ -462,6 +462,10 @@ class MetaDetailsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun shouldResumeProgress(progress: WatchProgress): Boolean {
+        return progress.position >= 1000L && !progress.isCompleted()
     }
 
     private fun toggleLibrary() {
