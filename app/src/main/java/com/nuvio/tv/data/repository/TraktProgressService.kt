@@ -3,16 +3,16 @@ package com.nuvio.tv.data.repository
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.dto.trakt.TraktEpisodeDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktHistorySeasonRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistorySeasonAddDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowAddDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryMovieAddDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeRemoveDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistorySeasonRemoveDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
@@ -306,6 +306,12 @@ class TraktProgressService @Inject constructor(
                 }
             }
 
+        refreshNow()
+    }
+
+    suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
+        applyOptimisticRemoval(contentId, season, episode)
+
         val parsed = parseContentIds(contentId)
         val ids = toTraktIds(parsed)
         if (!ids.hasAnyId()) {
@@ -313,34 +319,25 @@ class TraktProgressService @Inject constructor(
             return
         }
 
-        val likelySeries = season != null && episode != null || playbackEpisodes.any {
-            normalizeContentId(it.show?.ids) == target
-        }
+        val likelySeries = season != null && episode != null
 
         val removeBody = if (likelySeries) {
-            val seasons = if (season != null && episode != null) {
-                listOf(
-                    TraktHistorySeasonRemoveDto(
-                        number = season,
-                        episodes = listOf(TraktHistoryEpisodeRemoveDto(number = episode))
-                    )
-                )
-            } else {
-                null
-            }
             TraktHistoryRemoveRequestDto(
                 shows = listOf(
                     TraktHistoryShowRemoveDto(
                         ids = ids,
-                        seasons = seasons
+                        seasons = listOf(
+                            TraktHistorySeasonRemoveDto(
+                                number = season,
+                                episodes = listOf(TraktHistoryEpisodeRemoveDto(number = episode))
+                            )
+                        )
                     )
                 )
             )
         } else {
             TraktHistoryRemoveRequestDto(
-                movies = listOf(
-                    TraktMovieDto(ids = ids)
-                )
+                movies = listOf(TraktMovieDto(ids = ids))
             )
         }
 

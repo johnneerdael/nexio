@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
@@ -46,7 +47,6 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
-import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
@@ -132,14 +132,22 @@ fun ContentCard(
     Column(
         modifier = modifier.width(animatedCardWidth)
     ) {
+        val context = LocalContext.current
         val density = LocalDensity.current
-        val requestWidthPx = remember(animatedCardWidth, density) {
-            with(density) { animatedCardWidth.roundToPx() }
+        val requestWidthPx = remember(targetCardWidth, density) {
+            with(density) { targetCardWidth.roundToPx() }
         }
         val requestHeightPx = remember(baseCardHeight, density) {
             with(density) { baseCardHeight.roundToPx() }
         }
         val imageUrl = if (isBackdropExpanded) item.background ?: item.poster else item.poster
+        val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
+            ImageRequest.Builder(context)
+                .data(imageUrl)
+                .crossfade(false)
+                .size(width = requestWidthPx, height = requestHeightPx)
+                .build()
+        }
 
         Card(
             onClick = onClick,
@@ -189,11 +197,7 @@ fun ContentCard(
                     .clip(cardShape)
             ) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(imageUrl)
-                        .crossfade(false)
-                        .size(width = requestWidthPx, height = requestHeightPx)
-                        .build(),
+                    model = imageModel,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -234,11 +238,7 @@ fun ContentCard(
 
                 if (shouldPlayTrailerPreview) {
                     AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(imageUrl)
-                            .crossfade(false)
-                            .size(width = requestWidthPx, height = requestHeightPx)
-                            .build(),
+                        model = imageModel,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()

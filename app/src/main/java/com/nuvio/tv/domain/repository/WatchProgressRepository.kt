@@ -45,10 +45,15 @@ interface WatchProgressRepository {
     suspend fun saveProgress(progress: WatchProgress)
     
     /**
-     * Remove watch progress
+     * Remove watch progress (playback only, does not affect Trakt history)
      */
     suspend fun removeProgress(contentId: String, season: Int? = null, episode: Int? = null)
-    
+
+    /**
+     * Remove from watch history (marks as unwatched on Trakt)
+     */
+    suspend fun removeFromHistory(contentId: String, season: Int? = null, episode: Int? = null)
+
     /**
      * Mark content as completed
      */

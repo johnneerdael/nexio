@@ -136,6 +136,14 @@ class WatchProgressRepositoryImpl @Inject constructor(
         watchProgressPreferences.removeProgress(contentId, season, episode)
     }
 
+    override suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
+        if (traktAuthDataStore.isAuthenticated.first()) {
+            traktProgressService.removeFromHistory(contentId, season, episode)
+            return
+        }
+        watchProgressPreferences.removeProgress(contentId, season, episode)
+    }
+
     override suspend fun markAsCompleted(progress: WatchProgress) {
         if (traktAuthDataStore.isAuthenticated.first()) {
             val now = System.currentTimeMillis()

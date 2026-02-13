@@ -164,14 +164,6 @@ class HomeViewModel @Inject constructor(
         if (activeTrailerPreviewItemId != itemId) {
             activeTrailerPreviewItemId = itemId
             trailerPreviewRequestVersion++
-            _uiState.update { state ->
-                val retainedUrl = state.trailerPreviewUrls[itemId]
-                if (retainedUrl != null) {
-                    state.copy(trailerPreviewUrls = mapOf(itemId to retainedUrl))
-                } else {
-                    state.copy(trailerPreviewUrls = emptyMap())
-                }
-            }
         }
 
         if (trailerPreviewNegativeCache.contains(itemId)) return
@@ -201,7 +193,7 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { state ->
                     if (state.trailerPreviewUrls[itemId] == trailerUrl) state
                     else state.copy(
-                        trailerPreviewUrls = mapOf(itemId to trailerUrl)
+                        trailerPreviewUrls = state.trailerPreviewUrls + (itemId to trailerUrl)
                     )
                 }
             }
@@ -266,7 +258,7 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
-            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId)
+            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId, event.season, event.episode)
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
         }
     }
@@ -385,9 +377,9 @@ class HomeViewModel @Inject constructor(
         return type == "series" || type == "tv"
     }
 
-    private fun removeContinueWatching(contentId: String) {
+    private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
         viewModelScope.launch {
-            watchProgressRepository.removeProgress(contentId)
+            watchProgressRepository.removeProgress(contentId, season, episode)
         }
     }
 

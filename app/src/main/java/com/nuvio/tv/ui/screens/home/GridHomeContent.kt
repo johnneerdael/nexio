@@ -65,7 +65,7 @@ fun GridHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
-    onRemoveContinueWatching: (String) -> Unit,
+    onRemoveContinueWatching: (String, Int?, Int?) -> Unit,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
@@ -224,7 +224,15 @@ fun GridHomeContent(
                                             is ContinueWatchingItem.InProgress -> item.progress.contentId
                                             is ContinueWatchingItem.NextUp -> item.info.contentId
                                         }
-                                        onRemoveContinueWatching(contentId)
+                                        val season = when (item) {
+                                            is ContinueWatchingItem.InProgress -> item.progress.season
+                                            is ContinueWatchingItem.NextUp -> item.info.season
+                                        }
+                                        val episode = when (item) {
+                                            is ContinueWatchingItem.InProgress -> item.progress.episode
+                                            is ContinueWatchingItem.NextUp -> item.info.episode
+                                        }
+                                        onRemoveContinueWatching(contentId, season, episode)
                                     }
                                 )
                             }
@@ -337,7 +345,15 @@ fun GridHomeContent(
                                 is ContinueWatchingItem.InProgress -> item.progress.contentId
                                 is ContinueWatchingItem.NextUp -> item.info.contentId
                             }
-                            onRemoveContinueWatching(contentId)
+                            val season = when (item) {
+                                is ContinueWatchingItem.InProgress -> item.progress.season
+                                is ContinueWatchingItem.NextUp -> item.info.season
+                            }
+                            val episode = when (item) {
+                                is ContinueWatchingItem.InProgress -> item.progress.episode
+                                is ContinueWatchingItem.NextUp -> item.info.episode
+                            }
+                            onRemoveContinueWatching(contentId, season, episode)
                         }
                     )
                 }

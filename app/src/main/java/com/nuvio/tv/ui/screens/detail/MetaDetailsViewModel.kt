@@ -635,7 +635,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { it.copy(isMovieWatchedPending = true) }
             runCatching {
                 if (_uiState.value.isMovieWatched) {
-                    watchProgressRepository.removeProgress(itemId)
+                    watchProgressRepository.removeFromHistory(itemId)
                     showMessage("Marked as unwatched")
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta))
@@ -666,7 +666,7 @@ class MetaDetailsViewModel @Inject constructor(
             val isWatched = _uiState.value.episodeProgressMap[season to episode]?.isCompleted() == true
             runCatching {
                 if (isWatched) {
-                    watchProgressRepository.removeProgress(itemId, season, episode)
+                    watchProgressRepository.removeFromHistory(itemId, season, episode)
                     showMessage("Episode marked as unwatched")
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
