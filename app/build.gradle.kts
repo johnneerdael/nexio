@@ -166,6 +166,10 @@ dependencies {
 
     // libass-android for ASS/SSA subtitle support (from Maven Central)
     implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
+    implementation("dev.chrisbanes.haze:haze-android:0.7.3") {
+        exclude(group = "org.jetbrains.compose.ui")
+        exclude(group = "org.jetbrains.compose.foundation")
+    }
 
     // Local Plugin System
     implementation(libs.quickjs.kt)
