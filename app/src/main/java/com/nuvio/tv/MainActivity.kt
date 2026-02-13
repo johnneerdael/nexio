@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -296,24 +297,26 @@ private fun LegacySidebarScaffold(
                             }
                         }
                 ) {
+                    val sidebarLogoTopPadding = 20.dp
+
                     if (drawerValue == DrawerValue.Open) {
                         Image(
-                            painter = painterResource(id = R.drawable.nuviotv_logo),
+                            painter = painterResource(id = R.drawable.app_logo_wordmark),
                             contentDescription = "NuvioTV",
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .padding(top = 12.dp),
+                                .fillMaxWidth(0.9f)
+                                .aspectRatio(1214f / 408f)
+                                .padding(top = sidebarLogoTopPadding),
                             contentScale = ContentScale.Fit
                         )
                     } else {
                         Image(
-                            painter = painterResource(id = R.drawable.nuvio_n),
+                            painter = painterResource(id = R.drawable.app_logo_mark),
                             contentDescription = "Nuvio",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)
-                                .padding(top = 12.dp),
+                                .padding(top = sidebarLogoTopPadding),
                             contentScale = ContentScale.Fit
                         )
                     }

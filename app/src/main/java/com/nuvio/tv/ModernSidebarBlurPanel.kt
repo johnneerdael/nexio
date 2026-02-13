@@ -124,12 +124,16 @@ internal fun ModernSidebarBlurPanel(
             )
             .padding(horizontal = 12.dp, vertical = 14.dp)
     ) {
+        val headerLogoRes = if (isSidebarExpanded) R.drawable.app_logo_wordmark else R.drawable.app_logo_mark
+        val headerLogoHeight = if (isSidebarExpanded) 42.dp else 34.dp
+        val headerLogoContentDescription = if (isSidebarExpanded) "NuvioTV" else "Nuvio"
+
         Image(
-            painter = painterResource(id = R.drawable.nuviotv_logo),
-            contentDescription = "NuvioTV",
+            painter = painterResource(id = headerLogoRes),
+            contentDescription = headerLogoContentDescription,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(42.dp)
+                .height(headerLogoHeight)
                 .padding(top = 2.dp),
             contentScale = ContentScale.Fit
         )

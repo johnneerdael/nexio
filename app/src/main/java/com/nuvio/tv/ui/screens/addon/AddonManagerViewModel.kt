@@ -47,7 +47,7 @@ class AddonManagerViewModel @Inject constructor(
 
     private fun loadLogoBytes() {
         try {
-            val inputStream = context.resources.openRawResource(R.drawable.nuviotv_logo)
+            val inputStream = context.resources.openRawResource(R.drawable.app_logo_wordmark)
             logoBytes = inputStream.use { it.readBytes() }
         } catch (_: Exception) { }
     }
