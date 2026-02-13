@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -128,6 +129,7 @@ class MainActivity : ComponentActivity() {
 
                     val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
                     val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = true)
+                    val modernSidebarBlurEnabled by layoutPreferenceDataStore.modernSidebarBlurEnabled.collectAsState(initial = false)
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
@@ -192,6 +194,7 @@ class MainActivity : ComponentActivity() {
                             selectedDrawerRoute = selectedDrawerRoute,
                             selectedDrawerItem = selectedDrawerItem,
                             sidebarCollapsed = sidebarCollapsed,
+                            modernSidebarBlurEnabled = modernSidebarBlurEnabled,
                             hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill
                         )
                     } else {
@@ -386,6 +389,7 @@ private fun ModernSidebarScaffold(
     selectedDrawerRoute: String?,
     selectedDrawerItem: DrawerItem,
     sidebarCollapsed: Boolean,
+    modernSidebarBlurEnabled: Boolean,
     hideBuiltInHeaders: Boolean
 ) {
     val showSidebar = currentRoute in rootRoutes
@@ -402,6 +406,7 @@ private fun ModernSidebarScaffold(
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
     var focusedDrawerIndex by remember { mutableStateOf(-1) }
+    var isCollapsedPillIconOnly by remember { mutableStateOf(false) }
     val keepSidebarFocusDuringCollapse =
         isSidebarExpanded || sidebarCollapsePending || pendingContentFocusTransfer
 
@@ -411,6 +416,7 @@ private fun ModernSidebarScaffold(
             sidebarCollapsePending = false
             pendingContentFocusTransfer = false
             pendingSidebarFocusRequest = false
+            isCollapsedPillIconOnly = false
         }
     }
 
@@ -422,6 +428,7 @@ private fun ModernSidebarScaffold(
             isSidebarExpanded = true
             sidebarCollapsePending = false
             pendingSidebarFocusRequest = true
+            isCollapsedPillIconOnly = false
         }
     }
 
@@ -551,6 +558,18 @@ private fun ModernSidebarScaffold(
                 .haze(sidebarHazeState)
                 .onPreviewKeyEvent { keyEvent ->
                     if (
+                        showSidebar &&
+                        !sidebarCollapsed &&
+                        !isSidebarExpanded &&
+                        keyEvent.type == KeyEventType.KeyDown
+                    ) {
+                        when (keyEvent.key) {
+                            Key.DirectionDown -> isCollapsedPillIconOnly = true
+                            Key.DirectionUp -> isCollapsedPillIconOnly = false
+                            else -> Unit
+                        }
+                    }
+                    if (
                         isSidebarExpanded &&
                         !sidebarCollapsePending &&
                         sidebarExpandProgress > 0.2f &&
@@ -570,6 +589,7 @@ private fun ModernSidebarScaffold(
                             isSidebarExpanded = true
                             sidebarCollapsePending = false
                             pendingSidebarFocusRequest = true
+                            isCollapsedPillIconOnly = false
                             true
                         }
                     } else {
@@ -634,6 +654,7 @@ private fun ModernSidebarScaffold(
                         sidebarExpandProgress = sidebarExpandProgress,
                         isSidebarExpanded = isSidebarExpanded,
                         sidebarCollapsePending = sidebarCollapsePending,
+                        blurEnabled = modernSidebarBlurEnabled,
                         sidebarHazeState = sidebarHazeState,
                         panelShape = panelShape,
                         drawerItemFocusRequesters = drawerItemFocusRequesters,
@@ -656,6 +677,8 @@ private fun ModernSidebarScaffold(
                     label = selectedDrawerItem.label,
                     icon = selectedDrawerItem.icon,
                     hazeState = sidebarHazeState,
+                    blurEnabled = modernSidebarBlurEnabled,
+                    iconOnly = isCollapsedPillIconOnly,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(
@@ -672,6 +695,7 @@ private fun ModernSidebarScaffold(
                         isSidebarExpanded = true
                         sidebarCollapsePending = false
                         pendingSidebarFocusRequest = true
+                        isCollapsedPillIconOnly = false
                     }
                 )
             }
@@ -684,6 +708,8 @@ private fun CollapsedSidebarPill(
     label: String,
     icon: ImageVector,
     hazeState: HazeState,
+    blurEnabled: Boolean,
+    iconOnly: Boolean,
     modifier: Modifier = Modifier,
     onExpand: () -> Unit
 ) {
@@ -693,6 +719,7 @@ private fun CollapsedSidebarPill(
     Row(
         modifier = modifier
             .focusProperties { canFocus = false }
+            .animateContentSize()
             .clickable(onClick = onExpand)
             .padding(horizontal = 1.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -717,17 +744,30 @@ private fun CollapsedSidebarPill(
                 }
                 .clip(pillShape)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xD1424851),
-                            Color(0xC73B4149)
+                    brush = if (blurEnabled) {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xD1424851),
+                                Color(0xC73B4149)
+                            )
                         )
-                    ),
+                    } else {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                NuvioColors.BackgroundElevated,
+                                NuvioColors.BackgroundCard
+                            )
+                        )
+                    },
                     shape = pillShape
                 )
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.14f),
+                    color = if (blurEnabled) {
+                        Color.White.copy(alpha = 0.14f)
+                    } else {
+                        NuvioColors.Border.copy(alpha = 0.9f)
+                    },
                     shape = pillShape
                 )
         ) {
@@ -741,12 +781,18 @@ private fun CollapsedSidebarPill(
                         compositingStrategy = CompositingStrategy.Offscreen
                     }
                     .clip(innerBlurShape)
-                    .hazeChild(
-                        state = hazeState,
-                        shape = innerBlurShape,
-                        tint = Color.Unspecified,
-                        blurRadius = 3.dp,
-                        noiseFactor = 0f
+                    .then(
+                        if (blurEnabled) {
+                            Modifier.hazeChild(
+                                state = hazeState,
+                                shape = innerBlurShape,
+                                tint = Color.Unspecified,
+                                blurRadius = 3.dp,
+                                noiseFactor = 0f
+                            )
+                        } else {
+                            Modifier
+                        }
                     )
             )
 
@@ -754,9 +800,9 @@ private fun CollapsedSidebarPill(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .padding(start = 5.dp, end = 12.dp),
+                    .padding(start = 5.dp, end = if (iconOnly) 6.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (iconOnly) 0.dp else 9.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -775,15 +821,17 @@ private fun CollapsedSidebarPill(
                     )
                 }
 
-                Text(
-                    text = label,
-                    color = Color.White,
-                    style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
-                        lineHeight = 30.sp
-                    ),
-                    modifier = Modifier.offset(y = (-0.5).dp),
-                    maxLines = 1
-                )
+                if (!iconOnly) {
+                    Text(
+                        text = label,
+                        color = Color.White,
+                        style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
+                            lineHeight = 30.sp
+                        ),
+                        modifier = Modifier.offset(y = (-0.5).dp),
+                        maxLines = 1
+                    )
+                }
             }
         }
     }

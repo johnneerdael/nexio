@@ -34,6 +34,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
     private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
     private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
+    private val modernSidebarBlurEnabledKey = booleanPreferencesKey("modern_sidebar_blur_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
@@ -88,6 +89,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val modernSidebarEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: true
+    }
+
+    val modernSidebarBlurEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[modernSidebarBlurEnabledKey] ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -180,6 +185,12 @@ class LayoutPreferenceDataStore @Inject constructor(
             if (enabled) {
                 prefs[sidebarCollapsedKey] = false
             }
+        }
+    }
+
+    suspend fun setModernSidebarBlurEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[modernSidebarBlurEnabledKey] = enabled
         }
     }
 

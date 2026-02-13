@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
@@ -116,6 +119,31 @@ fun SearchScreen(
             contentPadding = PaddingValues(vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 48.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Search",
+                        style = androidx.tv.material3.MaterialTheme.typography.headlineMedium,
+                        color = if (showBuiltInHeader) NuvioColors.TextPrimary else NuvioColors.TextPrimary.copy(alpha = 0f),
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = if (isDiscoverMode) "DISCOVER" else "RESULTS",
+                        style = androidx.tv.material3.MaterialTheme.typography.labelLarge,
+                        color = if (showBuiltInHeader) NuvioColors.TextTertiary else NuvioColors.TextTertiary.copy(alpha = 0f),
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 2.sp
+                    )
+                }
+            }
+
             item {
                 OutlinedTextField(
                     value = uiState.query,

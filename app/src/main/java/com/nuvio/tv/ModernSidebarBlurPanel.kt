@@ -42,6 +42,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
+import com.nuvio.tv.ui.theme.NuvioColors
 
 @Composable
 internal fun ModernSidebarBlurPanel(
@@ -53,6 +54,7 @@ internal fun ModernSidebarBlurPanel(
     sidebarExpandProgress: Float,
     isSidebarExpanded: Boolean,
     sidebarCollapsePending: Boolean,
+    blurEnabled: Boolean,
     sidebarHazeState: HazeState,
     panelShape: RoundedCornerShape,
     drawerItemFocusRequesters: Map<String, FocusRequester>,
@@ -61,7 +63,8 @@ internal fun ModernSidebarBlurPanel(
 ) {
     val delayedBlurProgress =
         ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
-    val showPanelBlur = isSidebarExpanded &&
+    val showPanelBlur = blurEnabled &&
+        isSidebarExpanded &&
         !sidebarCollapsePending &&
         delayedBlurProgress > 0f
     val expandedPanelBlurModifier = if (showPanelBlur) {
@@ -92,18 +95,31 @@ internal fun ModernSidebarBlurPanel(
             }
             .clip(panelShape)
             .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xD64A4F59),
-                        Color(0xCC3F454F),
-                        Color(0xC640474F)
+                brush = if (blurEnabled) {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xD64A4F59),
+                            Color(0xCC3F454F),
+                            Color(0xC640474F)
+                        )
                     )
-                ),
+                } else {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            NuvioColors.BackgroundElevated,
+                            NuvioColors.BackgroundCard
+                        )
+                    )
+                },
                 shape = panelShape
             )
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.14f),
+                color = if (blurEnabled) {
+                    Color.White.copy(alpha = 0.14f)
+                } else {
+                    NuvioColors.Border.copy(alpha = 0.9f)
+                },
                 shape = panelShape
             )
             .padding(horizontal = 12.dp, vertical = 14.dp)
