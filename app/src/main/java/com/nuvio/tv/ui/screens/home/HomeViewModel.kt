@@ -83,6 +83,7 @@ class HomeViewModel @Inject constructor(
         loadPosterLabelPreference()
         loadCatalogAddonNamePreference()
         loadFocusedPosterBackdropExpandPreference()
+        loadFocusedPosterBackdropExpandDelayPreference()
         loadFocusedPosterBackdropTrailerPreference()
         loadFocusedPosterBackdropTrailerMutedPreference()
         loadHomeCatalogOrderPreference()
@@ -140,6 +141,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadFocusedPosterBackdropExpandDelayPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds.collectLatest { seconds ->
+                _uiState.update { it.copy(focusedPosterBackdropExpandDelaySeconds = seconds) }
             }
         }
     }

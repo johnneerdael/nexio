@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -284,7 +285,7 @@ fun LayoutSettingsContent(
             ) {
                 CompactToggleRow(
                     title = "Expand Focused Poster to Backdrop",
-                    subtitle = "Expand focused poster after 3 seconds idle.",
+                    subtitle = "Expand focused poster after idle delay.",
                     checked = uiState.focusedPosterBackdropExpandEnabled,
                     onToggle = {
                         viewModel.onEvent(
@@ -297,6 +298,23 @@ fun LayoutSettingsContent(
                 )
 
                 if (uiState.focusedPosterBackdropExpandEnabled) {
+                    SliderSettingsItem(
+                        icon = Icons.Default.Timer,
+                        title = "Backdrop Expand Delay",
+                        subtitle = "How long to wait before expanding focused cards.",
+                        value = uiState.focusedPosterBackdropExpandDelaySeconds,
+                        valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
+                        minValue = 1,
+                        maxValue = 10,
+                        step = 1,
+                        onValueChange = { seconds ->
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds(seconds)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                    )
+
                     CompactToggleRow(
                         title = "Autoplay Trailer in Expanded Card",
                         subtitle = "Play trailer inside expanded backdrop when available.",

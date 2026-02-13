@@ -37,6 +37,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
     private val catalogAddonNameEnabledKey = booleanPreferencesKey("catalog_addon_name_enabled")
     private val focusedPosterBackdropExpandEnabledKey = booleanPreferencesKey("focused_poster_backdrop_expand_enabled")
+    private val focusedPosterBackdropExpandDelaySecondsKey = intPreferencesKey("focused_poster_backdrop_expand_delay_seconds")
     private val focusedPosterBackdropTrailerEnabledKey = booleanPreferencesKey("focused_poster_backdrop_trailer_enabled")
     private val focusedPosterBackdropTrailerMutedKey = booleanPreferencesKey("focused_poster_backdrop_trailer_muted")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
@@ -47,6 +48,8 @@ class LayoutPreferenceDataStore @Inject constructor(
         const val DEFAULT_POSTER_CARD_WIDTH_DP = 126
         const val DEFAULT_POSTER_CARD_HEIGHT_DP = 189
         const val DEFAULT_POSTER_CARD_CORNER_RADIUS_DP = 12
+        const val DEFAULT_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 3
+        const val MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 1
     }
 
     val selectedLayout: Flow<HomeLayout> = dataStore.data.map { prefs ->
@@ -96,6 +99,12 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val focusedPosterBackdropExpandEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[focusedPosterBackdropExpandEnabledKey] ?: true
+    }
+
+    val focusedPosterBackdropExpandDelaySeconds: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[focusedPosterBackdropExpandDelaySecondsKey]
+            ?: DEFAULT_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
+            .coerceAtLeast(MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
     }
 
     val focusedPosterBackdropTrailerEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -190,6 +199,13 @@ class LayoutPreferenceDataStore @Inject constructor(
                 prefs[focusedPosterBackdropTrailerEnabledKey] = false
                 prefs[focusedPosterBackdropTrailerMutedKey] = true
             }
+        }
+    }
+
+    suspend fun setFocusedPosterBackdropExpandDelaySeconds(seconds: Int) {
+        dataStore.edit { prefs ->
+            prefs[focusedPosterBackdropExpandDelaySecondsKey] =
+                seconds.coerceAtLeast(MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
         }
     }
 
