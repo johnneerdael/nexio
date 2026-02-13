@@ -20,6 +20,8 @@ data class LayoutSettingsUiState(
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKey: String? = null,
     val sidebarCollapsedByDefault: Boolean = false,
+    val modernSidebarEnabled: Boolean = true,
+    val modernSidebarBlurEnabled: Boolean = false,
     val heroSectionEnabled: Boolean = true,
     val searchDiscoverEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
@@ -43,6 +45,8 @@ sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SelectHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
+    data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -84,6 +88,16 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.sidebarCollapsedByDefault.collectLatest { collapsed ->
                 _uiState.update { it.copy(sidebarCollapsedByDefault = collapsed) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.modernSidebarEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(modernSidebarEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.modernSidebarBlurEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(modernSidebarBlurEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -149,6 +163,8 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SelectHeroCatalog -> selectHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
+            is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
+            is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
             is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
@@ -178,6 +194,18 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setSidebarCollapsed(collapsed: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setSidebarCollapsedByDefault(collapsed)
+        }
+    }
+
+    private fun setModernSidebarEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setModernSidebarEnabled(enabled)
+        }
+    }
+
+    private fun setModernSidebarBlurEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setModernSidebarBlurEnabled(enabled)
         }
     }
 
