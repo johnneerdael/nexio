@@ -339,7 +339,7 @@ fun NuvioNavHost(
                 onNavigateToAccount = { navController.navigate(Screen.Account.route) },
                 onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
                 onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
-                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) }
+                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) },
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) }
             )
         }

@@ -93,7 +93,6 @@ private enum class SettingsCategory(
     ACCOUNT("Account", Icons.Default.Person),
     TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
-    TMDB("TMDB", Icons.Default.Tune),
     TRAKT("Trakt", Icons.Default.Tune, rawIconRes = R.raw.trakt_tv_glyph),
     ABOUT("About", Icons.Default.Info)
 }
