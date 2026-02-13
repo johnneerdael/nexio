@@ -142,9 +142,11 @@ class WatchProgressPreferences @Inject constructor(
             val map = parseProgressMap(json).toMutableMap()
             
             if (season != null && episode != null) {
-                // Remove specific episode progress
+                // Remove specific episode progress + the series-level entry
+                // so the item disappears from continue watching
                 val key = "${contentId}_s${season}e${episode}"
                 map.remove(key)
+                map.remove(contentId)
             } else {
                 // Remove all progress for this content
                 val keysToRemove = map.keys.filter { key ->
