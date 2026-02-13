@@ -101,6 +101,8 @@ class TraktProgressService @Inject constructor(
     private var forceRefreshUntilMs: Long = 0L
     @Volatile
     private var lastFastSyncRequestMs: Long = 0L
+    @Volatile
+    private var lastKnownActivityFingerprint: String? = null
 
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = 60_000L
@@ -361,11 +363,33 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun refreshRemoteSnapshot() {
         val force = System.currentTimeMillis() < forceRefreshUntilMs
+
+        if (!force && !hasActivityChanged()) return
+
         val snapshot = fetchAllProgressSnapshot(force = force)
         remoteProgress.value = snapshot
         hasLoadedRemoteProgress.value = true
         reconcileOptimistic(snapshot)
         hydrateMetadata(snapshot)
+    }
+
+    private suspend fun hasActivityChanged(): Boolean {
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getLastActivities(authHeader)
+        } ?: return true
+        if (!response.isSuccessful) return true
+
+        val activities = response.body() ?: return true
+        val fingerprint = listOfNotNull(
+            activities.movies?.pausedAt,
+            activities.movies?.watchedAt,
+            activities.episodes?.pausedAt,
+            activities.episodes?.watchedAt
+        ).joinToString("|")
+
+        val changed = fingerprint != lastKnownActivityFingerprint
+        lastKnownActivityFingerprint = fingerprint
+        return changed
     }
 
     private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {

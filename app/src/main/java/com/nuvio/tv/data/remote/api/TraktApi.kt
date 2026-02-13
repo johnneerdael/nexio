@@ -3,6 +3,7 @@ package com.nuvio.tv.data.remote.api
 import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceCodeRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
@@ -80,6 +81,11 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktScrobbleRequestDto
     ): Response<TraktScrobbleResponseDto>
+
+    @GET("sync/last_activities")
+    suspend fun getLastActivities(
+        @Header("Authorization") authorization: String
+    ): Response<TraktLastActivitiesResponseDto>
 
     @GET("sync/playback/{type}")
     suspend fun getPlayback(

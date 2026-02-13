@@ -4,6 +4,19 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
+data class TraktLastActivitiesResponseDto(
+    @Json(name = "all") val all: String? = null,
+    @Json(name = "movies") val movies: TraktLastActivitiesMediaDto? = null,
+    @Json(name = "episodes") val episodes: TraktLastActivitiesMediaDto? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktLastActivitiesMediaDto(
+    @Json(name = "watched_at") val watchedAt: String? = null,
+    @Json(name = "paused_at") val pausedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class TraktPlaybackItemDto(
     @Json(name = "id") val id: Long? = null,
     @Json(name = "type") val type: String? = null,
