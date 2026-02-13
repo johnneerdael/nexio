@@ -266,10 +266,9 @@ class HomeViewModel @Inject constructor(
     private fun loadContinueWatching() {
         viewModelScope.launch {
             watchProgressRepository.allProgress.collectLatest { items ->
-                val inProgressOnly = items
-                    .filter { it.isInProgress() }
-                    .sortedByDescending { it.lastWatched }
-                    .map { ContinueWatchingItem.InProgress(it) }
+                val inProgressOnly = deduplicateInProgress(
+                    items.filter { it.isInProgress() }
+                ).map { ContinueWatchingItem.InProgress(it) }
 
                 // Optimistic immediate render: show in-progress entries instantly.
                 _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
@@ -281,12 +280,20 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun deduplicateInProgress(items: List<WatchProgress>): List<WatchProgress> {
+        val (series, nonSeries) = items.partition { isSeriesType(it.contentType) }
+        val latestPerShow = series
+            .sortedByDescending { it.lastWatched }
+            .distinctBy { it.contentId }
+        return (nonSeries + latestPerShow).sortedByDescending { it.lastWatched }
+    }
+
     private suspend fun buildContinueWatchingItems(
         allProgress: List<WatchProgress>
     ): List<ContinueWatchingItem> = withContext(Dispatchers.IO) {
-        val inProgressItems = allProgress
-            .filter { it.isInProgress() }
-            .map { ContinueWatchingItem.InProgress(it) }
+        val inProgressItems = deduplicateInProgress(
+            allProgress.filter { it.isInProgress() }
+        ).map { ContinueWatchingItem.InProgress(it) }
 
         val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
 
