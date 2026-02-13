@@ -47,3 +47,18 @@ data class SupabaseLinkedDevice(
     @SerialName("device_name") val deviceName: String? = null,
     @SerialName("linked_at") val linkedAt: String? = null
 )
+
+@Serializable
+data class SupabaseWatchProgress(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String,
+    @SerialName("content_id") val contentId: String,
+    @SerialName("content_type") val contentType: String,
+    @SerialName("video_id") val videoId: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val position: Long,
+    val duration: Long,
+    @SerialName("last_watched") val lastWatched: Long,
+    @SerialName("progress_key") val progressKey: String
+)

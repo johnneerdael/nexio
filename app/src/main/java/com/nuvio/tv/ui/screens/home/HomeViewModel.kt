@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
@@ -266,15 +267,23 @@ class HomeViewModel @Inject constructor(
     private fun loadContinueWatching() {
         viewModelScope.launch {
             watchProgressRepository.allProgress.collectLatest { items ->
+                Log.d("HomeViewModel", "allProgress emitted ${items.size} items")
+                items.forEach { p ->
+                    Log.d("HomeViewModel", "  item: id=${p.contentId} type=${p.contentType} pos=${p.position} dur=${p.duration} pct=${p.progressPercentage} inProgress=${p.isInProgress()} name='${p.name}'")
+                }
+
                 val inProgressOnly = deduplicateInProgress(
                     items.filter { it.isInProgress() }
                 ).map { ContinueWatchingItem.InProgress(it) }
+
+                Log.d("HomeViewModel", "inProgressOnly: ${inProgressOnly.size} items after filter+dedup")
 
                 // Optimistic immediate render: show in-progress entries instantly.
                 _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
 
                 // Then compute NextUp enrichment (may need remote meta lookups).
                 val entries = buildContinueWatchingItems(items)
+                Log.d("HomeViewModel", "buildContinueWatchingItems: ${entries.size} final items")
                 _uiState.update { it.copy(continueWatchingItems = entries) }
             }
         }

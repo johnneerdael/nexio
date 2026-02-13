@@ -8,12 +8,17 @@ import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.sync.AddonSyncService
 import com.nuvio.tv.core.sync.PluginSyncService
+import com.nuvio.tv.core.sync.WatchProgressSyncService
+import com.nuvio.tv.data.local.TraktAuthDataStore
+import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
+import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nuvio.tv.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,8 +29,12 @@ class AccountViewModel @Inject constructor(
     private val syncRepository: SyncRepository,
     private val pluginSyncService: PluginSyncService,
     private val addonSyncService: AddonSyncService,
+    private val watchProgressSyncService: WatchProgressSyncService,
     private val pluginManager: PluginManager,
-    private val addonRepository: AddonRepositoryImpl
+    private val addonRepository: AddonRepositoryImpl,
+    private val watchProgressRepository: WatchProgressRepositoryImpl,
+    private val watchProgressPreferences: WatchProgressPreferences,
+    private val traktAuthDataStore: TraktAuthDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
@@ -215,6 +224,7 @@ class AccountViewModel @Inject constructor(
     private suspend fun pushLocalDataToRemote() {
         pluginSyncService.pushToRemote()
         addonSyncService.pushToRemote()
+        watchProgressSyncService.pushToRemote()
     }
 
     private suspend fun pullRemoteData() {
@@ -232,9 +242,25 @@ class AccountViewModel @Inject constructor(
                 addonRepository.addAddon(url)
             }
             addonRepository.isSyncingFromRemote = false
+
+            val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
+            Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected")
+            if (!isTraktConnected) {
+                watchProgressRepository.isSyncingFromRemote = true
+                val remoteEntries = watchProgressSyncService.pullFromRemote()
+                Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteEntries.size} watch progress entries")
+                if (remoteEntries.isNotEmpty()) {
+                    watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
+                    Log.d("AccountViewModel", "pullRemoteData: merged ${remoteEntries.size} entries into local")
+                } else {
+                    Log.d("AccountViewModel", "pullRemoteData: no remote watch progress to merge")
+                }
+                watchProgressRepository.isSyncingFromRemote = false
+            }
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
+            watchProgressRepository.isSyncingFromRemote = false
             throw e
         }
     }

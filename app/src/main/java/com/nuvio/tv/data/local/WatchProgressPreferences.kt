@@ -1,5 +1,6 @@
 package com.nuvio.tv.data.local
 
+import android.util.Log
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -11,6 +12,7 @@ import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.domain.model.WatchProgress
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -164,6 +166,42 @@ class WatchProgressPreferences @Inject constructor(
             lastWatched = System.currentTimeMillis()
         )
         saveProgress(completedProgress)
+    }
+
+    /**
+     * Returns the raw key→WatchProgress map from DataStore (for sync push).
+     */
+    suspend fun getAllRawEntries(): Map<String, WatchProgress> {
+        val preferences = context.watchProgressDataStore.data.first()
+        val json = preferences[watchProgressKey] ?: "{}"
+        return parseProgressMap(json)
+    }
+
+    /**
+     * Merges remote entries into local storage. Newer lastWatched wins per key.
+     */
+    suspend fun mergeRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
+        Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries")
+        if (remoteEntries.isEmpty()) return
+        context.watchProgressDataStore.edit { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            val local = parseProgressMap(json).toMutableMap()
+            Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${local.size} existing local entries")
+
+            for ((key, remote) in remoteEntries) {
+                val existing = local[key]
+                if (existing == null || remote.lastWatched > existing.lastWatched) {
+                    local[key] = remote
+                    Log.d("WatchProgressPrefs", "  merged key=$key (existing=${existing != null})")
+                } else {
+                    Log.d("WatchProgressPrefs", "  skipped key=$key (local is newer)")
+                }
+            }
+
+            val pruned = pruneOldItems(local)
+            Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${pruned.size} entries after prune, writing to DataStore")
+            preferences[watchProgressKey] = gson.toJson(pruned)
+        }
     }
 
     /**
