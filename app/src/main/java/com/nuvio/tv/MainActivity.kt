@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
                     val layoutChosen = hasChosenLayout ?: return@Surface
 
                     val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
-                    val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = true)
+                    val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = false)
                     val modernSidebarBlurEnabled by layoutPreferenceDataStore.modernSidebarBlurEnabled.collectAsState(initial = false)
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 

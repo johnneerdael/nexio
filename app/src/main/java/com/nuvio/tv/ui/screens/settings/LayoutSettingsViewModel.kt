@@ -20,7 +20,7 @@ data class LayoutSettingsUiState(
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKey: String? = null,
     val sidebarCollapsedByDefault: Boolean = false,
-    val modernSidebarEnabled: Boolean = true,
+    val modernSidebarEnabled: Boolean = false,
     val modernSidebarBlurEnabled: Boolean = false,
     val heroSectionEnabled: Boolean = true,
     val searchDiscoverEnabled: Boolean = true,
