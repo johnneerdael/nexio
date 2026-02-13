@@ -32,6 +32,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
+    private val glassSidepanelEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
@@ -76,6 +77,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val sidebarCollapsedByDefault: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[sidebarCollapsedKey] ?: false
+    }
+
+    val glassSidepanelEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[glassSidepanelEnabledKey] ?: true
     }
 
     val heroSectionEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -156,6 +161,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
         dataStore.edit { prefs ->
             prefs[sidebarCollapsedKey] = collapsed
+        }
+    }
+
+    suspend fun setGlassSidepanelEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[glassSidepanelEnabledKey] = enabled
         }
     }
 
