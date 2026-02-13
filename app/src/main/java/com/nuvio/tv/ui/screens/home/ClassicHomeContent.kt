@@ -200,6 +200,7 @@ fun ClassicHomeContent(
                 showPosterLabels = uiState.posterLabelsEnabled,
                 showAddonName = uiState.catalogAddonNameEnabled,
                 focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
+                focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
                 focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
                 focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
                 trailerPreviewUrls = uiState.trailerPreviewUrls,

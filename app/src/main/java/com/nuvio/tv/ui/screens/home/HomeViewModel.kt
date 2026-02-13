@@ -84,6 +84,7 @@ class HomeViewModel @Inject constructor(
         loadPosterLabelPreference()
         loadCatalogAddonNamePreference()
         loadFocusedPosterBackdropExpandPreference()
+        loadFocusedPosterBackdropExpandDelayPreference()
         loadFocusedPosterBackdropTrailerPreference()
         loadFocusedPosterBackdropTrailerMutedPreference()
         loadHomeCatalogOrderPreference()
@@ -116,6 +117,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.heroSectionEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(heroSectionEnabled = enabled) }
+                scheduleUpdateCatalogRows()
             }
         }
     }
@@ -140,6 +142,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadFocusedPosterBackdropExpandDelayPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds.collectLatest { seconds ->
+                _uiState.update { it.copy(focusedPosterBackdropExpandDelaySeconds = seconds) }
             }
         }
     }
@@ -552,12 +562,26 @@ class HomeViewModel @Inject constructor(
             val heroSourceRow = if (heroCatalogKey != null) {
                 catalogSnapshot[heroCatalogKey]
             } else {
-                orderedRows.firstOrNull { row -> row.items.any { it.background != null } }
+                orderedRows.firstOrNull { row -> row.items.any { it.hasHeroArtwork() } }
             }
-            val computedHeroItems = heroSourceRow?.items
-                ?.filter { it.background != null || it.poster != null }
-                ?.take(7)
-                ?: orderedRows.flatMap { it.items }.take(7)
+
+            val heroItemsFromSelectedCatalog = heroSourceRow
+                ?.items
+                .orEmpty()
+                .filter { it.hasHeroArtwork() }
+
+            val fallbackHeroItemsWithArtwork = orderedRows
+                .asSequence()
+                .flatMap { it.items.asSequence() }
+                .filter { it.hasHeroArtwork() }
+                .take(7)
+                .toList()
+
+            val computedHeroItems = when {
+                heroItemsFromSelectedCatalog.isNotEmpty() -> heroItemsFromSelectedCatalog.take(7)
+                fallbackHeroItemsWithArtwork.isNotEmpty() -> fallbackHeroItemsWithArtwork
+                else -> orderedRows.flatMap { it.items }.take(7)
+            }
 
             val computedDisplayRows = orderedRows.map { row ->
                 if (row.items.size > 25) row.copy(items = row.items.take(25)) else row
@@ -773,6 +797,10 @@ class HomeViewModel @Inject constructor(
 
     private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
         return extra.any { extra -> extra.name == "search" && extra.isRequired }
+    }
+
+    private fun MetaPreview.hasHeroArtwork(): Boolean {
+        return !background.isNullOrBlank() || !poster.isNullOrBlank()
     }
 
     private fun extractYear(releaseInfo: String?): String? {
