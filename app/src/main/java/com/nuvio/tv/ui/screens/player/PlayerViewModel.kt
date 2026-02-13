@@ -43,6 +43,11 @@ import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.SubtitleStyleSettings
+import com.nuvio.tv.data.repository.TraktScrobbleItem
+import com.nuvio.tv.data.repository.TraktScrobbleService
+import com.nuvio.tv.data.repository.extractYear
+import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
@@ -81,6 +86,7 @@ class PlayerViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val parentalGuideRepository: ParentalGuideRepository,
+    private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     savedStateHandle: SavedStateHandle
@@ -185,7 +191,10 @@ class PlayerViewModel @Inject constructor(
     private var skipIntroFetchedKey: String? = null
     private var lastActiveSkipType: String? = null
     private var autoSubtitleSelected: Boolean = false
+    private var lastSubtitlePreferredLanguage: String? = null
+    private var lastSubtitleSecondaryLanguage: String? = null
     private var pendingAddonSubtitleLanguage: String? = null
+    private var hasScannedTextTracksOnce: Boolean = false
 
     
     private var okHttpClient: OkHttpClient? = null
@@ -196,8 +205,13 @@ class PlayerViewModel @Inject constructor(
     private var currentMediaSession: MediaSession? = null
     private var pauseOverlayJob: Job? = null
     private val pauseOverlayDelayMs = 5000L
+    private var pendingPreviewSeekPosition: Long? = null
+    private var pendingResumeProgress: WatchProgress? = null
+    private var currentScrobbleItem: TraktScrobbleItem? = null
+    private var hasSentScrobbleStartForCurrentItem: Boolean = false
 
     init {
+        refreshScrobbleItem()
         initializePlayer(currentStreamUrl, currentHeaders)
         loadSavedProgressFor(currentSeason, currentEpisode)
         fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
@@ -233,6 +247,7 @@ class PlayerViewModel @Inject constructor(
                         isLoadingAddonSubtitles = false
                     ) 
                 }
+                tryAutoSelectPreferredSubtitleFromAvailableTracks()
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(
@@ -277,6 +292,15 @@ class PlayerViewModel @Inject constructor(
                     settings.subtitleStyle.preferredLanguage,
                     settings.subtitleStyle.secondaryPreferredLanguage
                 )
+                val subtitlePreferenceChanged =
+                    lastSubtitlePreferredLanguage != settings.subtitleStyle.preferredLanguage ||
+                        lastSubtitleSecondaryLanguage != settings.subtitleStyle.secondaryPreferredLanguage
+                if (subtitlePreferenceChanged) {
+                    autoSubtitleSelected = false
+                    lastSubtitlePreferredLanguage = settings.subtitleStyle.preferredLanguage
+                    lastSubtitleSecondaryLanguage = settings.subtitleStyle.secondaryPreferredLanguage
+                    tryAutoSelectPreferredSubtitleFromAvailableTracks()
+                }
 
                 val wasEnabled = skipIntroEnabled
                 skipIntroEnabled = settings.skipIntroEnabled
@@ -300,6 +324,7 @@ class PlayerViewModel @Inject constructor(
         if (contentId == null) return
         
         viewModelScope.launch {
+            pendingResumeProgress = null
             val progress = if (season != null && episode != null) {
                 watchProgressRepository.getEpisodeProgress(contentId, season, episode).firstOrNull()
             } else {
@@ -309,13 +334,10 @@ class PlayerViewModel @Inject constructor(
             progress?.let { saved ->
                 
                 if (saved.isInProgress()) {
+                    pendingResumeProgress = saved
                     _exoPlayer?.let { player ->
-                        
                         if (player.playbackState == Player.STATE_READY) {
-                            player.seekTo(saved.position)
-                        } else {
-                            
-                            _uiState.update { it.copy(pendingSeekPosition = saved.position) }
+                            tryApplyPendingResumeProgress(player)
                         }
                     }
                 }
@@ -336,6 +358,22 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
             skipIntervals = intervals
+        }
+    }
+
+    private fun tryApplyPendingResumeProgress(player: Player) {
+        val saved = pendingResumeProgress ?: return
+        val duration = player.duration
+        val target = when {
+            duration > 0L -> saved.resolveResumePosition(duration)
+            saved.position > 0L -> saved.position
+            else -> 0L
+        }
+
+        if (target > 0L) {
+            player.seekTo(target)
+            _uiState.update { it.copy(pendingSeekPosition = null) }
+            pendingResumeProgress = null
         }
     }
 
@@ -495,6 +533,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 autoSubtitleSelected = false
+                hasScannedTextTracksOnce = false
                 resetLoadingOverlayForNewStream()
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val useLibass = playerSettings.useLibass
@@ -659,14 +698,18 @@ class PlayerViewModel @Inject constructor(
                         
                             
                             if (playbackState == Player.STATE_READY) {
+                                tryApplyPendingResumeProgress(this@apply)
                                 _uiState.value.pendingSeekPosition?.let { position ->
                                     seekTo(position)
                                     _uiState.update { it.copy(pendingSeekPosition = null) }
                                 }
+                                // Re-evaluate subtitle auto-selection once player is ready.
+                                tryAutoSelectPreferredSubtitleFromAvailableTracks()
                             }
                         
                             
                             if (playbackState == Player.STATE_ENDED) {
+                                emitScrobbleStop(progressPercent = 99.5f)
                                 saveWatchProgress()
                             }
                         }
@@ -680,6 +723,7 @@ class PlayerViewModel @Inject constructor(
                                 startWatchProgressSaving()
                                 scheduleHideControls()
                                 tryShowParentalGuide()
+                                emitScrobbleStart()
                             } else {
                                 if (userPausedManually) {
                                     schedulePauseOverlay()
@@ -688,6 +732,9 @@ class PlayerViewModel @Inject constructor(
                                 }
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
+                                if (playbackState != Player.STATE_BUFFERING) {
+                                    emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+                                }
                                 
                                 saveWatchProgress()
                             }
@@ -967,6 +1014,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
+        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1181,6 +1229,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
+        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1192,6 +1241,7 @@ class PlayerViewModel @Inject constructor(
         currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
         currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
         currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
+        refreshScrobbleItem()
 
         lastSavedPosition = 0L
         resetLoadingOverlayForNewStream()
@@ -1325,6 +1375,13 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
+        hasScannedTextTracksOnce = true
+        Log.d(
+            TAG,
+            "TRACKS updated: internalSubs=${subtitleTracks.size}, selectedInternalIndex=$selectedSubtitleIndex, " +
+                "selectedAddon=${_uiState.value.selectedAddonSubtitle?.lang}, pendingAddonLang=$pendingAddonSubtitleLanguage"
+        )
+
         fun matchesLanguage(track: TrackInfo, target: String): Boolean {
             val lang = track.language?.lowercase() ?: return false
             return lang == target || lang.startsWith(target) || lang.contains(target)
@@ -1338,33 +1395,6 @@ class PlayerViewModel @Inject constructor(
             selectSubtitleTrack(fallbackIndex)
             selectedSubtitleIndex = if (_uiState.value.selectedAddonSubtitle != null) -1 else fallbackIndex
             pendingAddonSubtitleLanguage = null
-        } else if (selectedSubtitleIndex == -1 && subtitleTracks.isNotEmpty() && !autoSubtitleSelected) {
-            val preferred = _uiState.value.subtitleStyle.preferredLanguage.lowercase()
-
-            
-            if (preferred == "none") {
-                autoSubtitleSelected = true
-                // Leave selectedSubtitleIndex as -1 (no subtitle)
-            } else {
-                val secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage?.lowercase()
-
-                val preferredMatch = subtitleTracks.indexOfFirst { matchesLanguage(it, preferred) }
-                val secondaryMatch = secondary?.let { target ->
-                    subtitleTracks.indexOfFirst { matchesLanguage(it, target) }
-                } ?: -1
-
-                val autoIndex = when {
-                    preferredMatch >= 0 -> preferredMatch
-                    secondaryMatch >= 0 -> secondaryMatch
-                    else -> -1
-                }
-
-                autoSubtitleSelected = true
-                if (autoIndex >= 0) {
-                    selectSubtitleTrack(autoIndex)
-                    selectedSubtitleIndex = autoIndex
-                }
-            }
         }
 
         _uiState.update {
@@ -1374,6 +1404,89 @@ class PlayerViewModel @Inject constructor(
                 selectedAudioTrackIndex = selectedAudioIndex,
                 selectedSubtitleTrackIndex = selectedSubtitleIndex
             )
+        }
+        tryAutoSelectPreferredSubtitleFromAvailableTracks()
+    }
+
+    private fun subtitleLanguageTargets(): List<String> {
+        val preferred = _uiState.value.subtitleStyle.preferredLanguage.lowercase()
+        if (preferred == "none") return emptyList()
+        val secondary = _uiState.value.subtitleStyle.secondaryPreferredLanguage?.lowercase()
+        return listOfNotNull(preferred, secondary)
+    }
+
+    private fun matchesLanguageCode(language: String?, target: String): Boolean {
+        if (language.isNullOrBlank()) return false
+        val normalizedLanguage = normalizeLanguageCode(language)
+        val normalizedTarget = normalizeLanguageCode(target)
+        return normalizedLanguage == normalizedTarget ||
+            normalizedLanguage.startsWith("$normalizedTarget-") ||
+            normalizedLanguage.startsWith("${normalizedTarget}_")
+    }
+
+    private fun tryAutoSelectPreferredSubtitleFromAvailableTracks() {
+        if (autoSubtitleSelected) return
+
+        val state = _uiState.value
+        val targets = subtitleLanguageTargets()
+        Log.d(
+            TAG,
+            "AUTO_SUB eval: targets=$targets, scannedText=$hasScannedTextTracksOnce, " +
+                "internalCount=${state.subtitleTracks.size}, selectedInternal=${state.selectedSubtitleTrackIndex}, " +
+                "addonCount=${state.addonSubtitles.size}, selectedAddon=${state.selectedAddonSubtitle?.lang}"
+        )
+        if (targets.isEmpty()) {
+            autoSubtitleSelected = true
+            Log.d(TAG, "AUTO_SUB stop: preferred=none")
+            return
+        }
+
+        val internalIndex = state.subtitleTracks.indexOfFirst { track ->
+            targets.any { target -> matchesLanguageCode(track.language, target) }
+        }
+        if (internalIndex >= 0) {
+            autoSubtitleSelected = true
+            val currentInternal = state.selectedSubtitleTrackIndex
+            val currentAddon = state.selectedAddonSubtitle
+            if (currentInternal != internalIndex || currentAddon != null) {
+                Log.d(TAG, "AUTO_SUB pick internal index=$internalIndex lang=${state.subtitleTracks[internalIndex].language}")
+                selectSubtitleTrack(internalIndex)
+                _uiState.update { it.copy(selectedSubtitleTrackIndex = internalIndex, selectedAddonSubtitle = null) }
+            } else {
+                Log.d(TAG, "AUTO_SUB stop: preferred internal already selected")
+            }
+            return
+        }
+
+        val selectedAddonMatchesTarget = state.selectedAddonSubtitle != null &&
+            targets.any { target -> matchesLanguageCode(state.selectedAddonSubtitle.lang, target) }
+        if (selectedAddonMatchesTarget) {
+            autoSubtitleSelected = true
+            Log.d(TAG, "AUTO_SUB stop: matching addon already selected (no internal match)")
+            return
+        }
+
+        // Wait until we have at least one full text-track scan to avoid choosing addon too early.
+        if (!hasScannedTextTracksOnce) {
+            Log.d(TAG, "AUTO_SUB defer addon fallback: text tracks not scanned yet")
+            return
+        }
+
+        val playerReady = _exoPlayer?.playbackState == Player.STATE_READY
+        if (!playerReady) {
+            Log.d(TAG, "AUTO_SUB defer addon fallback: player not ready")
+            return
+        }
+
+        val addonMatch = state.addonSubtitles.firstOrNull { subtitle ->
+            targets.any { target -> matchesLanguageCode(subtitle.lang, target) }
+        }
+        if (addonMatch != null) {
+            autoSubtitleSelected = true
+            Log.d(TAG, "AUTO_SUB pick addon lang=${addonMatch.lang} id=${addonMatch.id}")
+            selectAddonSubtitle(addonMatch)
+        } else {
+            Log.d(TAG, "AUTO_SUB no addon match for targets=$targets")
         }
     }
 
@@ -1423,9 +1536,10 @@ class PlayerViewModel @Inject constructor(
                     if (playerDuration > lastKnownDuration) {
                         lastKnownDuration = playerDuration
                     }
+                    val displayPosition = pendingPreviewSeekPosition ?: pos
                     _uiState.update {
                         it.copy(
-                            currentPosition = pos,
+                            currentPosition = displayPosition,
                             duration = playerDuration.coerceAtLeast(0L)
                         )
                     }
@@ -1473,7 +1587,6 @@ class PlayerViewModel @Inject constructor(
     private fun saveWatchProgressIfNeeded() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
         val duration = getEffectiveDuration(currentPosition)
-        if (duration <= 0L) return
         
         
         if (kotlin.math.abs(currentPosition - lastSavedPosition) >= saveThresholdMs) {
@@ -1485,7 +1598,6 @@ class PlayerViewModel @Inject constructor(
     private fun saveWatchProgress() {
         val currentPosition = _exoPlayer?.currentPosition ?: return
         val duration = getEffectiveDuration(currentPosition)
-        if (duration <= 0L) return
         saveWatchProgressInternal(currentPosition, duration)
     }
 
@@ -1504,9 +1616,9 @@ class PlayerViewModel @Inject constructor(
         
         if (contentId.isNullOrEmpty() || contentType.isNullOrEmpty()) return
         
-        if (duration <= 0) return
-        
         if (position < 1000) return
+
+        val fallbackPercent = if (duration <= 0L) 5f else null
 
         val progress = WatchProgress(
             contentId = contentId,
@@ -1521,12 +1633,80 @@ class PlayerViewModel @Inject constructor(
             episodeTitle = currentEpisodeTitle,
             position = position,
             duration = duration,
-            lastWatched = System.currentTimeMillis()
+            lastWatched = System.currentTimeMillis(),
+            progressPercent = fallbackPercent
         )
 
         viewModelScope.launch {
             watchProgressRepository.saveProgress(progress)
         }
+    }
+
+    private fun currentPlaybackProgressPercent(): Float {
+        val player = _exoPlayer ?: return 0f
+        val duration = player.duration.takeIf { it > 0 } ?: lastKnownDuration
+        if (duration <= 0L) return 0f
+        return ((player.currentPosition.toFloat() / duration.toFloat()) * 100f).coerceIn(0f, 100f)
+    }
+
+    private fun refreshScrobbleItem() {
+        currentScrobbleItem = buildScrobbleItem()
+        hasSentScrobbleStartForCurrentItem = false
+    }
+
+    private fun buildScrobbleItem(): TraktScrobbleItem? {
+        val rawContentId = contentId ?: return null
+        val parsedIds = parseContentIds(rawContentId)
+        val ids = toTraktIds(parsedIds)
+        val parsedYear = extractYear(year)
+        val normalizedType = contentType?.lowercase()
+
+        val isEpisode = normalizedType in listOf("series", "tv") &&
+            currentSeason != null && currentEpisode != null
+
+        return if (isEpisode) {
+            TraktScrobbleItem.Episode(
+                showTitle = contentName ?: title,
+                showYear = parsedYear,
+                showIds = ids,
+                season = currentSeason ?: return null,
+                number = currentEpisode ?: return null,
+                episodeTitle = currentEpisodeTitle
+            )
+        } else {
+            TraktScrobbleItem.Movie(
+                title = contentName ?: title,
+                year = parsedYear,
+                ids = ids
+            )
+        }
+    }
+
+    private fun emitScrobbleStart() {
+        val item = currentScrobbleItem ?: buildScrobbleItem().also { currentScrobbleItem = it } ?: return
+        if (hasSentScrobbleStartForCurrentItem) return
+
+        viewModelScope.launch {
+            traktScrobbleService.scrobbleStart(
+                item = item,
+                progressPercent = currentPlaybackProgressPercent()
+            )
+            hasSentScrobbleStartForCurrentItem = true
+        }
+    }
+
+    private fun emitScrobbleStop(progressPercent: Float? = null) {
+        val item = currentScrobbleItem ?: return
+        if (!hasSentScrobbleStartForCurrentItem && (progressPercent ?: 0f) < 80f) return
+
+        val percent = progressPercent ?: currentPlaybackProgressPercent()
+        viewModelScope.launch {
+            traktScrobbleService.scrobbleStop(
+                item = item,
+                progressPercent = percent
+            )
+        }
+        hasSentScrobbleStartForCurrentItem = false
     }
 
     fun scheduleHideControls() {
@@ -1601,6 +1781,7 @@ class PlayerViewModel @Inject constructor(
                 onEvent(PlayerEvent.OnSeekBy(deltaMs = -10_000L))
             }
             is PlayerEvent.OnSeekBy -> {
+                pendingPreviewSeekPosition = null
                 _exoPlayer?.let { player ->
                     val maxDuration = player.duration.takeIf { it >= 0 } ?: Long.MAX_VALUE
                     val target = (player.currentPosition + event.deltaMs)
@@ -1615,7 +1796,37 @@ class PlayerViewModel @Inject constructor(
                     showSeekOverlayTemporarily()
                 }
             }
+            is PlayerEvent.OnPreviewSeekBy -> {
+                _exoPlayer?.let { player ->
+                    val maxDuration = player.duration.takeIf { it >= 0 } ?: Long.MAX_VALUE
+                    val basePosition = pendingPreviewSeekPosition ?: player.currentPosition.coerceAtLeast(0L)
+                    val target = (basePosition + event.deltaMs)
+                        .coerceAtLeast(0L)
+                        .coerceAtMost(maxDuration)
+                    pendingPreviewSeekPosition = target
+                    _uiState.update { it.copy(currentPosition = target) }
+                }
+                if (_uiState.value.showControls) {
+                    showControlsTemporarily()
+                } else {
+                    showSeekOverlayTemporarily()
+                }
+            }
+            PlayerEvent.OnCommitPreviewSeek -> {
+                val target = pendingPreviewSeekPosition
+                if (target != null) {
+                    _exoPlayer?.seekTo(target)
+                    _uiState.update { it.copy(currentPosition = target) }
+                    pendingPreviewSeekPosition = null
+                    if (_uiState.value.showControls) {
+                        showControlsTemporarily()
+                    } else {
+                        showSeekOverlayTemporarily()
+                    }
+                }
+            }
             is PlayerEvent.OnSeekTo -> {
+                pendingPreviewSeekPosition = null
                 _exoPlayer?.seekTo(event.position)
                 _uiState.update { it.copy(currentPosition = event.position) }
                 if (_uiState.value.showControls) {
@@ -1888,6 +2099,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun selectSubtitleTrack(trackIndex: Int) {
         _exoPlayer?.let { player ->
+            Log.d(TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex")
             val tracks = player.currentTracks
             var currentSubIndex = 0
             
@@ -1924,6 +2136,7 @@ class PlayerViewModel @Inject constructor(
             if (_uiState.value.selectedAddonSubtitle?.id == subtitle.id) {
                 return@let
             }
+            Log.d(TAG, "Selecting ADDON subtitle lang=${subtitle.lang} id=${subtitle.id}")
 
             val normalizedLang = normalizeLanguageCode(subtitle.lang)
             pendingAddonSubtitleLanguage = normalizedLang
@@ -2020,6 +2233,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun releasePlayer() {
         
+        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         

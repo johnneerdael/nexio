@@ -30,8 +30,6 @@ object RepositoryWebPage {
     margin: 0 auto;
     padding: 0 1.5rem 6rem;
   }
-
-  /* Header */
   .header {
     text-align: center;
     padding: 3rem 0 2.5rem;
@@ -51,8 +49,6 @@ object RepositoryWebPage {
     color: rgba(255, 255, 255, 0.4);
     letter-spacing: 0.02em;
   }
-
-  /* Add Section */
   .add-section {
     margin-bottom: 2.5rem;
   }
@@ -94,8 +90,6 @@ object RepositoryWebPage {
     display: none;
     padding-left: 1.25rem;
   }
-
-  /* Buttons */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -143,8 +137,6 @@ object RepositoryWebPage {
     border-color: rgba(207, 102, 121, 0.5);
     color: #CF6679;
   }
-
-  /* Section Title */
   .section-label {
     font-size: 0.75rem;
     font-weight: 500;
@@ -153,8 +145,6 @@ object RepositoryWebPage {
     text-transform: uppercase;
     margin-bottom: 1rem;
   }
-
-  /* Repo List */
   .repo-list {
     list-style: none;
   }
@@ -220,8 +210,6 @@ object RepositoryWebPage {
     font-weight: 300;
     display: none;
   }
-
-  /* Status Overlay */
   .status-overlay {
     position: fixed;
     top: 0;
@@ -288,8 +276,6 @@ object RepositoryWebPage {
     width: 40px;
     height: 40px;
   }
-
-  /* Connection lost bar */
   .connection-bar {
     position: fixed;
     top: 0;
@@ -308,8 +294,6 @@ object RepositoryWebPage {
   .connection-bar.visible {
     display: block;
   }
-
-  /* Mobile */
   @media (max-width: 480px) {
     .page { padding: 0 1rem 5rem; }
     .header { padding: 2rem 0 2rem; }
@@ -356,9 +340,21 @@ var POLL_INTERVAL = 1500;
 var connectionLost = false;
 var consecutiveErrors = 0;
 
+async function fetchWithTimeout(url, options, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+  try {
+    var opts = options || {};
+    opts.signal = controller.signal;
+    return await fetch(url, opts);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function loadRepos() {
   try {
-    var res = await fetch('/api/repositories');
+    var res = await fetchWithTimeout('/api/repositories', {}, 5000);
     repos = await res.json();
     originalRepos = JSON.parse(JSON.stringify(repos));
     setConnectionLost(false);
@@ -424,17 +420,16 @@ async function addRepo() {
     return;
   }
 
-  // Validate and fetch repo info from the TV
   addBtn.disabled = true;
   addBtn.textContent = '...';
   errorEl.style.display = 'none';
 
   try {
-    const res = await fetch('/api/validate', {
+    const res = await fetchWithTimeout('/api/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: url })
-    });
+    }, 8000);
     const data = await res.json();
 
     if (data.error) {
@@ -467,11 +462,11 @@ async function saveChanges() {
 
   var urls = repos.map(function(r) { return r.url; });
   try {
-    var res = await fetch('/api/repositories', {
+    var res = await fetchWithTimeout('/api/repositories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ urls: urls })
-    });
+    }, 8000);
     var data = await res.json();
 
     if (data.status === 'pending_confirmation') {
@@ -576,7 +571,7 @@ async function pollStatus(changeId) {
     }
 
     try {
-      var res = await fetch('/api/status/' + changeId);
+      var res = await fetchWithTimeout('/api/status/' + changeId, {}, 4000);
       var data = await res.json();
       consecutiveErrors = 0;
 

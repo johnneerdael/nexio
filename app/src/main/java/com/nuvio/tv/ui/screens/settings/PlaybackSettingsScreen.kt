@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import android.view.KeyEvent
@@ -174,22 +175,43 @@ fun PlaybackSettingsContent(
     var showStreamRegexDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
 
+    fun dismissAllDialogs() {
+        showLanguageDialog = false
+        showSecondaryLanguageDialog = false
+        showTextColorDialog = false
+        showBackgroundColorDialog = false
+        showOutlineColorDialog = false
+        showAudioLanguageDialog = false
+        showDecoderPriorityDialog = false
+        showStreamAutoPlayModeDialog = false
+        showStreamAutoPlaySourceDialog = false
+        showStreamAutoPlayAddonSelectionDialog = false
+        showStreamAutoPlayPluginSelectionDialog = false
+        showStreamRegexDialog = false
+        showReuseLastLinkCacheDialog = false
+    }
+
+    fun openDialog(setter: () -> Unit) {
+        dismissAllDialogs()
+        setter()
+    }
+
     PlaybackSettingsSections(
         playerSettings = playerSettings,
         trailerSettings = trailerSettings,
-        onShowAudioLanguageDialog = { showAudioLanguageDialog = true },
-        onShowDecoderPriorityDialog = { showDecoderPriorityDialog = true },
-        onShowLanguageDialog = { showLanguageDialog = true },
-        onShowSecondaryLanguageDialog = { showSecondaryLanguageDialog = true },
-        onShowTextColorDialog = { showTextColorDialog = true },
-        onShowBackgroundColorDialog = { showBackgroundColorDialog = true },
-        onShowOutlineColorDialog = { showOutlineColorDialog = true },
-        onShowStreamAutoPlayModeDialog = { showStreamAutoPlayModeDialog = true },
-        onShowStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = true },
-        onShowStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = true },
-        onShowStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = true },
-        onShowStreamRegexDialog = { showStreamRegexDialog = true },
-        onShowReuseLastLinkCacheDialog = { showReuseLastLinkCacheDialog = true },
+        onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
+        onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
+        onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
+        onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
+        onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
+        onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
+        onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
+        onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
+        onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
+        onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
+        onShowStreamAutoPlayPluginSelectionDialog = { openDialog { showStreamAutoPlayPluginSelectionDialog = true } },
+        onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
+        onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
         onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
         onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
         onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
@@ -264,19 +286,19 @@ fun PlaybackSettingsContent(
         onSetReuseLastLinkCacheHours = { hours ->
             coroutineScope.launch { viewModel.setStreamReuseLastLinkCacheHours(hours) }
         },
-        onDismissLanguageDialog = { showLanguageDialog = false },
-        onDismissSecondaryLanguageDialog = { showSecondaryLanguageDialog = false },
-        onDismissTextColorDialog = { showTextColorDialog = false },
-        onDismissBackgroundColorDialog = { showBackgroundColorDialog = false },
-        onDismissOutlineColorDialog = { showOutlineColorDialog = false },
-        onDismissAudioLanguageDialog = { showAudioLanguageDialog = false },
-        onDismissDecoderPriorityDialog = { showDecoderPriorityDialog = false },
-        onDismissStreamAutoPlayModeDialog = { showStreamAutoPlayModeDialog = false },
-        onDismissStreamAutoPlaySourceDialog = { showStreamAutoPlaySourceDialog = false },
-        onDismissStreamRegexDialog = { showStreamRegexDialog = false },
-        onDismissStreamAutoPlayAddonSelectionDialog = { showStreamAutoPlayAddonSelectionDialog = false },
-        onDismissStreamAutoPlayPluginSelectionDialog = { showStreamAutoPlayPluginSelectionDialog = false },
-        onDismissReuseLastLinkCacheDialog = { showReuseLastLinkCacheDialog = false }
+        onDismissLanguageDialog = ::dismissAllDialogs,
+        onDismissSecondaryLanguageDialog = ::dismissAllDialogs,
+        onDismissTextColorDialog = ::dismissAllDialogs,
+        onDismissBackgroundColorDialog = ::dismissAllDialogs,
+        onDismissOutlineColorDialog = ::dismissAllDialogs,
+        onDismissAudioLanguageDialog = ::dismissAllDialogs,
+        onDismissDecoderPriorityDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlayModeDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlaySourceDialog = ::dismissAllDialogs,
+        onDismissStreamRegexDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlayAddonSelectionDialog = ::dismissAllDialogs,
+        onDismissStreamAutoPlayPluginSelectionDialog = ::dismissAllDialogs,
+        onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
 }
 
@@ -286,7 +308,8 @@ internal fun ToggleSettingsItem(
     title: String,
     subtitle: String,
     isChecked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    onFocused: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -294,10 +317,13 @@ internal fun ToggleSettingsItem(
         onClick = { onCheckedChange(!isChecked) },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -306,19 +332,19 @@ internal fun ToggleSettingsItem(
             )
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (isFocused) NuvioColors.Primary else NuvioColors.TextSecondary,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(22.dp)
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -326,14 +352,18 @@ internal fun ToggleSettingsItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -358,7 +388,8 @@ internal fun RenderTypeSettingsItem(
     title: String,
     subtitle: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFocused: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -366,10 +397,13 @@ internal fun RenderTypeSettingsItem(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
         colors = CardDefaults.colors(
             containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.15f) else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.15f) else NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -382,25 +416,29 @@ internal fun RenderTypeSettingsItem(
             ) else Border.None
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             
@@ -422,7 +460,8 @@ internal fun NavigationSettingsItem(
     icon: ImageVector,
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFocused: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -430,10 +469,13 @@ internal fun NavigationSettingsItem(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -442,19 +484,19 @@ internal fun NavigationSettingsItem(
             )
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (isFocused) NuvioColors.Primary else NuvioColors.TextSecondary,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(22.dp)
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -462,14 +504,18 @@ internal fun NavigationSettingsItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -477,7 +523,7 @@ internal fun NavigationSettingsItem(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = NuvioColors.TextSecondary,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -493,7 +539,8 @@ internal fun SliderSettingsItem(
     maxValue: Int,
     step: Int,
     onValueChange: (Int) -> Unit,
-    subtitle: String? = null
+    subtitle: String? = null,
+    onFocused: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -501,7 +548,10 @@ internal fun SliderSettingsItem(
         onClick = { },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
@@ -520,7 +570,7 @@ internal fun SliderSettingsItem(
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -529,12 +579,12 @@ internal fun SliderSettingsItem(
             )
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -544,7 +594,7 @@ internal fun SliderSettingsItem(
                     imageVector = icon,
                     contentDescription = null,
                     tint = if (isFocused) NuvioColors.Primary else NuvioColors.TextSecondary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(22.dp)
                 )
 
                 Spacer(modifier = Modifier.width(16.dp))
@@ -552,15 +602,19 @@ internal fun SliderSettingsItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextPrimary
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = NuvioColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (subtitle != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = subtitle,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextSecondary
+                            color = NuvioColors.TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -569,12 +623,12 @@ internal fun SliderSettingsItem(
 
                 Text(
                     text = valueText,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = NuvioColors.Primary
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Custom slider controls for TV - use Row with focusable buttons
             Row(
@@ -590,10 +644,13 @@ internal fun SliderSettingsItem(
                         onValueChange(newValue)
                     },
                     modifier = Modifier
-                        .onFocusChanged { decreaseFocused = it.isFocused },
+                        .onFocusChanged {
+                            decreaseFocused = it.isFocused
+                            if (it.isFocused) onFocused()
+                        },
                     colors = CardDefaults.colors(
                         containerColor = NuvioColors.BackgroundElevated,
-                        focusedContainerColor = NuvioColors.Primary
+                        focusedContainerColor = NuvioColors.BackgroundElevated
                     ),
                     border = CardDefaults.border(
                         focusedBorder = Border(
@@ -602,17 +659,17 @@ internal fun SliderSettingsItem(
                         )
                     ),
                     shape = CardDefaults.shape(shape = CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.15f)
+                    scale = CardDefaults.scale(focusedScale = 1.1f)
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Remove,
                             contentDescription = "Decrease",
                             tint = if (decreaseFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -643,10 +700,13 @@ internal fun SliderSettingsItem(
                         onValueChange(newValue)
                     },
                     modifier = Modifier
-                        .onFocusChanged { increaseFocused = it.isFocused },
+                        .onFocusChanged {
+                            increaseFocused = it.isFocused
+                            if (it.isFocused) onFocused()
+                        },
                     colors = CardDefaults.colors(
                         containerColor = NuvioColors.BackgroundElevated,
-                        focusedContainerColor = NuvioColors.Primary
+                        focusedContainerColor = NuvioColors.BackgroundElevated
                     ),
                     border = CardDefaults.border(
                         focusedBorder = Border(
@@ -655,17 +715,17 @@ internal fun SliderSettingsItem(
                         )
                     ),
                     shape = CardDefaults.shape(shape = CircleShape),
-                    scale = CardDefaults.scale(focusedScale = 1.15f)
+                    scale = CardDefaults.scale(focusedScale = 1.1f)
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Increase",
                             tint = if (increaseFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -680,7 +740,8 @@ internal fun ColorSettingsItem(
     title: String,
     currentColor: Color,
     showTransparent: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFocused: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
     
@@ -688,10 +749,13 @@ internal fun ColorSettingsItem(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -700,27 +764,29 @@ internal fun ColorSettingsItem(
             )
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (isFocused) NuvioColors.Primary else NuvioColors.TextSecondary,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(22.dp)
             )
 
             Spacer(modifier = Modifier.width(16.dp))
 
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = NuvioColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
@@ -729,7 +795,7 @@ internal fun ColorSettingsItem(
                 // Transparent indicator (checkered pattern simulation)
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(Color.Gray)
                         .border(2.dp, NuvioColors.Border, CircleShape)
@@ -748,7 +814,7 @@ internal fun ColorSettingsItem(
             } else {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(currentColor)
                         .border(2.dp, NuvioColors.Border, CircleShape)
@@ -773,12 +839,10 @@ internal fun LanguageSelectionDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard
-            ),
-            shape = CardDefaults.shape(shape = RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier

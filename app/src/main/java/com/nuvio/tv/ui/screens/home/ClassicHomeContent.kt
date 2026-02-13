@@ -19,10 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.CatalogRowSection
 import com.nuvio.tv.ui.components.ContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.PosterCardStyle
+
+private class FocusSnapshot(
+    var rowIndex: Int,
+    var itemIndex: Int
+)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -33,7 +39,8 @@ fun ClassicHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
-    onRemoveContinueWatching: (String) -> Unit,
+    onRemoveContinueWatching: (String, Int?, Int?) -> Unit,
+    onRequestTrailerPreview: (MetaPreview) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
@@ -48,14 +55,17 @@ fun ClassicHomeContent(
         }
     }
 
-    var currentFocusedRowIndex by remember { mutableStateOf(focusState.focusedRowIndex) }
-    var currentFocusedItemIndex by remember { mutableStateOf(focusState.focusedItemIndex) }
-    
+    val currentFocusSnapshot = remember {
+        FocusSnapshot(
+            rowIndex = focusState.focusedRowIndex,
+            itemIndex = focusState.focusedItemIndex
+        )
+    }
+
     // Store scroll state for each row to persist position during recycling
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
-    
+
     val catalogRowScrollStates = remember { mutableMapOf<String, Int>() }
-    val perCatalogFocusedItem = remember { mutableMapOf<String, Int>() }
     var restoringFocus by remember { mutableStateOf(focusState.hasSavedFocus) }
     val heroFocusRequester = remember { FocusRequester() }
     val shouldRequestInitialFocus = remember(focusState) {
@@ -69,12 +79,11 @@ fun ClassicHomeContent(
 
     DisposableEffect(Unit) {
         onDispose {
-
             onSaveFocusState(
                 columnListState.firstVisibleItemIndex,
                 columnListState.firstVisibleItemScrollOffset,
-                currentFocusedRowIndex,
-                currentFocusedItemIndex,
+                currentFocusSnapshot.rowIndex,
+                currentFocusSnapshot.itemIndex,
                 focusState.catalogRowScrollStates + rowStates.mapValues { it.value.firstVisibleItemIndex }
             )
         }
@@ -138,7 +147,15 @@ fun ClassicHomeContent(
                             is ContinueWatchingItem.InProgress -> item.progress.contentId
                             is ContinueWatchingItem.NextUp -> item.info.contentId
                         }
-                        onRemoveContinueWatching(contentId)
+                        val season = when (item) {
+                            is ContinueWatchingItem.InProgress -> item.progress.season
+                            is ContinueWatchingItem.NextUp -> item.info.season
+                        }
+                        val episode = when (item) {
+                            is ContinueWatchingItem.InProgress -> item.progress.episode
+                            is ContinueWatchingItem.NextUp -> item.info.episode
+                        }
+                        onRemoveContinueWatching(contentId, season, episode)
                     },
                     focusedItemIndex = when {
                         focusState.hasSavedFocus && focusState.focusedRowIndex == -1 -> focusState.focusedItemIndex
@@ -146,8 +163,8 @@ fun ClassicHomeContent(
                         else -> -1
                     },
                     onItemFocused = { itemIndex ->
-                        currentFocusedRowIndex = -1
-                        currentFocusedItemIndex = itemIndex
+                        currentFocusSnapshot.rowIndex = -1
+                        currentFocusSnapshot.itemIndex = itemIndex
                     }
                 )
             }
@@ -182,6 +199,11 @@ fun ClassicHomeContent(
                 posterCardStyle = posterCardStyle,
                 showPosterLabels = uiState.posterLabelsEnabled,
                 showAddonName = uiState.catalogAddonNameEnabled,
+                focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
+                focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
+                focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
+                trailerPreviewUrls = uiState.trailerPreviewUrls,
+                onRequestTrailerPreview = onRequestTrailerPreview,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },
@@ -197,9 +219,8 @@ fun ClassicHomeContent(
                 focusedItemIndex = focusedItemIndex,
                 onItemFocused = { itemIndex ->
                     restoringFocus = false
-                    currentFocusedRowIndex = index
-                    currentFocusedItemIndex = itemIndex
-                    perCatalogFocusedItem[catalogKey] = itemIndex
+                    currentFocusSnapshot.rowIndex = index
+                    currentFocusSnapshot.itemIndex = itemIndex
                     catalogRowScrollStates[catalogKey] = itemIndex
                     // Update the state as well, though getOrPut handles creation
                     // rowStates[catalogKey] already holds the live state object

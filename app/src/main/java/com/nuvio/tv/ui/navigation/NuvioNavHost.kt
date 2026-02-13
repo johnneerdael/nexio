@@ -14,6 +14,7 @@ import com.nuvio.tv.ui.screens.LayoutSelectionScreen
 import com.nuvio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nuvio.tv.ui.screens.home.HomeScreen
 import com.nuvio.tv.ui.screens.addon.AddonManagerScreen
+import com.nuvio.tv.ui.screens.addon.CatalogOrderScreen
 import com.nuvio.tv.ui.screens.library.LibraryScreen
 import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreen
@@ -23,6 +24,7 @@ import com.nuvio.tv.ui.screens.settings.LayoutSettingsScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.screens.settings.SettingsScreen
 import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
+import com.nuvio.tv.ui.screens.settings.TraktScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
@@ -338,6 +340,13 @@ fun NuvioNavHost(
                 onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
                 onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
                 onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) }
+                onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) }
+            )
+        }
+
+        composable(Screen.Trakt.route) {
+            TraktScreen(
+                onBackPress = { navController.popBackStack() }
             )
         }
 
@@ -366,7 +375,15 @@ fun NuvioNavHost(
         }
 
         composable(Screen.AddonManager.route) {
-            AddonManagerScreen()
+            AddonManagerScreen(
+                onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) }
+            )
+        }
+
+        composable(Screen.CatalogOrder.route) {
+            CatalogOrderScreen(
+                onBackPress = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.Plugins.route) {

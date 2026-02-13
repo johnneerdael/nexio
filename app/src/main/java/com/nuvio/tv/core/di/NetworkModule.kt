@@ -6,6 +6,7 @@ import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.data.remote.api.AniSkipApi
 import com.nuvio.tv.data.remote.api.ArmApi
 import com.nuvio.tv.data.remote.api.GitHubReleaseApi
+import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.api.TrailerApi
 import com.nuvio.tv.data.remote.api.IntroDbApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
@@ -51,6 +52,25 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("trakt")
+    fun provideTraktOkHttpClient(
+        okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .addInterceptor { chain ->
+            val request = chain.request()
+            val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
+            val newRequest = request.newBuilder()
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "NuvioTV/$version")
+                .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
+                .header("trakt-api-version", "2")
+                .build()
+            chain.proceed(newRequest)
+        }
+        .build()
+
+    @Provides
+    @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl("https://placeholder.nuvio.tv/")
@@ -70,6 +90,19 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("trakt")
+    fun provideTraktRetrofit(
+        @Named("trakt") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.TRAKT_API_URL.ifBlank { "https://api.trakt.tv/" })
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
     fun provideAddonApi(retrofit: Retrofit): AddonApi =
         retrofit.create(AddonApi::class.java)
 
@@ -77,6 +110,11 @@ object NetworkModule {
     @Singleton
     fun provideTmdbApi(@Named("tmdb") retrofit: Retrofit): TmdbApi =
         retrofit.create(TmdbApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideTraktApi(@Named("trakt") retrofit: Retrofit): TraktApi =
+        retrofit.create(TraktApi::class.java)
 
     @Provides
     @Singleton

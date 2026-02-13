@@ -41,9 +41,7 @@ class PluginViewModel @Inject constructor(
         try {
             val inputStream = context.resources.openRawResource(R.drawable.nuviotv_logo)
             logoBytes = inputStream.use { it.readBytes() }
-        } catch (_: Exception) {
-            // Logo is optional, page will fall back to text
-        }
+        } catch (_: Exception) { }
     }
 
     private fun observePluginData() {
@@ -191,8 +189,6 @@ class PluginViewModel @Inject constructor(
         return url.trim().trimEnd('/').lowercase()
     }
 
-    // --- QR Mode ---
-
     private fun startQrMode() {
         val ip = DeviceIpAddress.get(context)
         if (ip == null) {
@@ -252,7 +248,6 @@ class PluginViewModel @Inject constructor(
         return try {
             val result = runBlocking { pluginManager.addRepository(url) }
             result.getOrNull()?.let { repo ->
-                // Remove the repo we just added for validation
                 runBlocking { pluginManager.removeRepository(repo.id) }
                 RepositoryConfigServer.RepositoryInfo(
                     url = url,
@@ -297,12 +292,10 @@ class PluginViewModel @Inject constructor(
         _uiState.update { it.copy(pendingRepoChange = pending.copy(isApplying = true)) }
 
         viewModelScope.launch {
-            // Add new repositories
             for (url in pending.addedUrls) {
                 pluginManager.addRepository(url)
             }
 
-            // Remove repositories
             val currentRepos = _uiState.value.repositories
             for (url in pending.removedUrls) {
                 val repo = currentRepos.find { normalizeUrlForComparison(it.url) == normalizeUrlForComparison(url) }
@@ -313,13 +306,10 @@ class PluginViewModel @Inject constructor(
 
             repoServer?.confirmChange(pending.changeId)
 
-            // Dismiss confirmation dialog first so focus returns to QR overlay
             _uiState.update { it.copy(pendingRepoChange = null) }
 
-            // Allow recomposition frame for focus to settle before dismissing QR overlay
-            delay(100)
+            delay(2500)
 
-            // Now close QR mode and stop server
             stopRepoServerInternal()
             _uiState.update {
                 it.copy(

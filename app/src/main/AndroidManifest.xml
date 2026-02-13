@@ -20,8 +20,36 @@
         android:icon="@drawable/tv_banner"
         android:label="Nuvio"
         android:largeHeap="true"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+        <meta-data
+            android:name="io.sentry.dsn"
+            android:value="https://fb3eb21fc3c09b22c9986c14fbf69214@o4509536317276160.ingest.de.sentry.io/4510874743734352" />
+        <meta-data
+            android:name="io.sentry.send-default-pii"
+            android:value="true" />
+        <meta-data
+            android:name="io.sentry.traces.user-interaction.enable"
+            android:value="true" />
+        <meta-data
+            android:name="io.sentry.attach-screenshot"
+            android:value="true" />
+        <meta-data
+            android:name="io.sentry.attach-view-hierarchy"
+            android:value="true" />
+        <meta-data
+            android:name="io.sentry.traces.sample-rate"
+            android:value="1.0" />
+        <meta-data
+            android:name="io.sentry.traces.profiling.session-sample-rate"
+            android:value="1.0" />
+        <meta-data
+            android:name="io.sentry.traces.profiling.lifecycle"
+            android:value="trace" />
+        <meta-data
+            android:name="io.sentry.traces.profiling.start-on-app-start"
+            android:value="true" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

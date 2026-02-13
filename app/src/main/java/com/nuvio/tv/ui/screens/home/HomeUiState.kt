@@ -21,10 +21,14 @@ data class HomeUiState(
     val heroSectionEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
+    val focusedPosterBackdropExpandEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerMuted: Boolean = true,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
-    val gridItems: List<GridItem> = emptyList()
+    val gridItems: List<GridItem> = emptyList(),
+    val trailerPreviewUrls: Map<String, String> = emptyMap()
 )
 
 @Immutable
@@ -82,6 +86,6 @@ sealed class GridItem {
 sealed class HomeEvent {
     data class OnItemClick(val itemId: String, val itemType: String) : HomeEvent()
     data class OnLoadMoreCatalog(val catalogId: String, val addonId: String, val type: String) : HomeEvent()
-    data class OnRemoveContinueWatching(val contentId: String) : HomeEvent()
+    data class OnRemoveContinueWatching(val contentId: String, val season: Int? = null, val episode: Int? = null) : HomeEvent()
     data object OnRetry : HomeEvent()
 }

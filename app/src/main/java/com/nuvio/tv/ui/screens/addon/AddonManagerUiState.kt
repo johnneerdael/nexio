@@ -20,8 +20,13 @@ data class AddonManagerUiState(
 data class PendingChangeInfo(
     val changeId: String,
     val proposedUrls: List<String>,
+    val proposedCatalogOrderKeys: List<String> = emptyList(),
+    val proposedDisabledCatalogKeys: List<String> = emptyList(),
     val addedUrls: List<String>,
     val removedUrls: List<String>,
+    val catalogsReordered: Boolean = false,
+    val disabledCatalogNames: List<String> = emptyList(),
+    val enabledCatalogNames: List<String> = emptyList(),
     val addedNames: Map<String, String> = emptyMap(),
     val removedNames: Map<String, String> = emptyMap(),
     val isApplying: Boolean = false

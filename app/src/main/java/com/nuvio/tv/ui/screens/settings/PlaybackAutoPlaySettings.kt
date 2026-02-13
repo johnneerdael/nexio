@@ -4,6 +4,7 @@ package com.nuvio.tv.ui.screens.settings
 
 import android.view.KeyEvent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -68,7 +70,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowPluginSelectionDialog: () -> Unit,
     onShowRegexDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
-    onSetReuseLastLinkEnabled: (Boolean) -> Unit
+    onSetReuseLastLinkEnabled: (Boolean) -> Unit,
+    onItemFocused: () -> Unit = {}
 ) {
     item {
         ToggleSettingsItem(
@@ -76,7 +79,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
             title = "Reuse Last Link",
             subtitle = "Auto-play your last working stream for this same movie/episode when cache is still valid",
             isChecked = playerSettings.streamReuseLastLinkEnabled,
-            onCheckedChange = onSetReuseLastLinkEnabled
+            onCheckedChange = onSetReuseLastLinkEnabled,
+            onFocused = onItemFocused
         )
     }
 
@@ -86,7 +90,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 icon = Icons.Default.Tune,
                 title = "Last Link Cache Duration",
                 subtitle = formatReuseCacheDuration(playerSettings.streamReuseLastLinkCacheHours),
-                onClick = onShowReuseLastLinkCacheDialog
+                onClick = onShowReuseLastLinkCacheDialog,
+                onFocused = onItemFocused
             )
         }
     }
@@ -101,7 +106,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
             icon = Icons.Default.PlayArrow,
             title = "Auto Stream Selection",
             subtitle = modeLabel,
-            onClick = onShowModeDialog
+            onClick = onShowModeDialog,
+            onFocused = onItemFocused
         )
     }
 
@@ -116,7 +122,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 icon = Icons.Default.Tune,
                 title = "Auto-play Source Scope",
                 subtitle = sourceLabel,
-                onClick = onShowSourceDialog
+                onClick = onShowSourceDialog,
+                onFocused = onItemFocused
             )
         }
 
@@ -131,7 +138,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                     icon = Icons.Default.Language,
                     title = "Allowed Addons",
                     subtitle = addonSubtitle,
-                    onClick = onShowAddonSelectionDialog
+                    onClick = onShowAddonSelectionDialog,
+                    onFocused = onItemFocused
                 )
             }
         }
@@ -147,7 +155,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                     icon = Icons.Default.Extension,
                     title = "Allowed Plugins",
                     subtitle = pluginSubtitle,
-                    onClick = onShowPluginSelectionDialog
+                    onClick = onShowPluginSelectionDialog,
+                    onFocused = onItemFocused
                 )
             }
         }
@@ -162,7 +171,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 icon = Icons.Default.Tune,
                 title = "Regex Pattern",
                 subtitle = regexSubtitle,
-                onClick = onShowRegexDialog
+                onClick = onShowRegexDialog,
+                onFocused = onItemFocused
             )
         }
     }
@@ -292,10 +302,10 @@ private fun StreamAutoPlayModeDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -392,10 +402,10 @@ private fun StreamReuseLastLinkCacheDurationDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -490,10 +500,10 @@ private fun StreamAutoPlaySourceDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -591,10 +601,10 @@ private fun StreamAutoPlayProviderSelectionDialog(
             onDismiss()
         }
     ) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -747,10 +757,10 @@ private fun StreamRegexDialog(
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            onClick = { },
-            colors = CardDefaults.colors(containerColor = NuvioColors.BackgroundCard),
-            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier

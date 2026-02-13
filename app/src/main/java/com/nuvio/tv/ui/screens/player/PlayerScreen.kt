@@ -171,7 +171,15 @@ fun PlayerScreen(
     }
 
     // Request focus for key events when controls visibility or panel state changes
-    LaunchedEffect(uiState.showControls, uiState.showEpisodesPanel, uiState.showSourcesPanel, uiState.showSubtitleStylePanel) {
+    LaunchedEffect(
+        uiState.showControls,
+        uiState.showEpisodesPanel,
+        uiState.showSourcesPanel,
+        uiState.showSubtitleStylePanel,
+        uiState.showAudioDialog,
+        uiState.showSubtitleDialog,
+        uiState.showSpeedDialog
+    ) {
         if (uiState.showControls && !uiState.showEpisodesPanel && !uiState.showSourcesPanel &&
             !uiState.showAudioDialog && !uiState.showSubtitleDialog &&
             !uiState.showSubtitleStylePanel && !uiState.showSpeedDialog
@@ -215,6 +223,19 @@ fun PlayerScreen(
                         uiState.showSubtitleStylePanel || uiState.showSpeedDialog
                 if (panelOrDialogOpen) return@onKeyEvent false
 
+                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT,
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (!uiState.showControls) {
+                                viewModel.onEvent(PlayerEvent.OnCommitPreviewSeek)
+                                return@onKeyEvent true
+                            }
+                        }
+                    }
+                    return@onKeyEvent false
+                }
+
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     if (uiState.showPauseOverlay) {
                         viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
@@ -238,7 +259,7 @@ fun PlayerScreen(
                                     repeatCount >= 3 -> 20_000L
                                     else -> 10_000L
                                 }
-                                viewModel.onEvent(PlayerEvent.OnSeekBy(deltaMs))
+                                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(deltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible
@@ -253,7 +274,7 @@ fun PlayerScreen(
                                     repeatCount >= 3 -> -20_000L
                                     else -> -10_000L
                                 }
-                                viewModel.onEvent(PlayerEvent.OnSeekBy(deltaMs))
+                                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(deltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible
@@ -440,7 +461,12 @@ fun PlayerScreen(
         AnimatedVisibility(
             visible = uiState.showControls && uiState.error == null &&
                 !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
-                !uiState.showSubtitleStylePanel,
+                !uiState.showSubtitleStylePanel &&
+                !uiState.showEpisodesPanel &&
+                !uiState.showSourcesPanel &&
+                !uiState.showAudioDialog &&
+                !uiState.showSubtitleDialog &&
+                !uiState.showSpeedDialog,
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
@@ -666,6 +692,7 @@ private fun PlayerControlsOverlay(
     val customAudioPainter = rememberRawSvgPainter(R.raw.ic_player_audio_filled)
     val customSourcePainter = rememberRawSvgPainter(R.raw.ic_player_source)
     val customAspectPainter = rememberRawSvgPainter(R.raw.ic_player_aspect_ratio)
+    val customEpisodesPainter = rememberRawSvgPainter(R.raw.ic_player_episodes)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Top gradient
@@ -852,6 +879,7 @@ private fun PlayerControlsOverlay(
                     if (uiState.currentSeason != null && uiState.currentEpisode != null) {
                         ControlButton(
                             icon = Icons.AutoMirrored.Filled.List,
+                            iconPainter = customEpisodesPainter,
                             contentDescription = "Episodes",
                             onClick = onShowEpisodesPanel,
                             onFocused = onResetHideTimer

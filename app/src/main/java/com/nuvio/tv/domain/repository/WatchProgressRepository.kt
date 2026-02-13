@@ -32,6 +32,12 @@ interface WatchProgressRepository {
      * Get all episode progress for a series as a map of (season, episode) to progress
      */
     fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>>
+
+    /**
+     * Returns whether the item is marked as watched/completed.
+     * For series episodes pass both [season] and [episode].
+     */
+    fun isWatched(contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean>
     
     /**
      * Save or update watch progress
@@ -39,10 +45,15 @@ interface WatchProgressRepository {
     suspend fun saveProgress(progress: WatchProgress)
     
     /**
-     * Remove watch progress
+     * Remove watch progress (playback only, does not affect Trakt history)
      */
     suspend fun removeProgress(contentId: String, season: Int? = null, episode: Int? = null)
-    
+
+    /**
+     * Remove from watch history (marks as unwatched on Trakt)
+     */
+    suspend fun removeFromHistory(contentId: String, season: Int? = null, episode: Int? = null)
+
     /**
      * Mark content as completed
      */

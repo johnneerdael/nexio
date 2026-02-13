@@ -7,6 +7,7 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
@@ -34,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -45,7 +47,8 @@ class HomeViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
-    private val tmdbMetadataService: TmdbMetadataService
+    private val tmdbMetadataService: TmdbMetadataService,
+    private val trailerService: TrailerService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -63,9 +66,15 @@ class HomeViewModel @Inject constructor(
     private val catalogsMap = linkedMapOf<String, CatalogRow>()
     private val catalogOrder = mutableListOf<String>()
     private var addonsCache: List<Addon> = emptyList()
+    private var homeCatalogOrderKeys: List<String> = emptyList()
+    private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var currentHeroCatalogKey: String? = null
     private var catalogUpdateJob: Job? = null
     private val catalogLoadSemaphore = Semaphore(6)
+    private val trailerPreviewLoadingIds = mutableSetOf<String>()
+    private val trailerPreviewNegativeCache = mutableSetOf<String>()
+    private var activeTrailerPreviewItemId: String? = null
+    private var trailerPreviewRequestVersion: Long = 0L
 
     init {
         loadLayoutPreference()
@@ -73,6 +82,11 @@ class HomeViewModel @Inject constructor(
         loadHeroSectionPreference()
         loadPosterLabelPreference()
         loadCatalogAddonNamePreference()
+        loadFocusedPosterBackdropExpandPreference()
+        loadFocusedPosterBackdropTrailerPreference()
+        loadFocusedPosterBackdropTrailerMutedPreference()
+        loadHomeCatalogOrderPreference()
+        loadDisabledHomeCatalogPreference()
         loadPosterCardStylePreferences()
         observeTmdbSettings()
         loadContinueWatching()
@@ -121,6 +135,97 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun loadFocusedPosterBackdropExpandPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadFocusedPosterBackdropTrailerPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(focusedPosterBackdropTrailerEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadFocusedPosterBackdropTrailerMutedPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted.collectLatest { muted ->
+                _uiState.update { it.copy(focusedPosterBackdropTrailerMuted = muted) }
+            }
+        }
+    }
+
+    fun requestTrailerPreview(item: MetaPreview) {
+        val itemId = item.id
+        if (activeTrailerPreviewItemId != itemId) {
+            activeTrailerPreviewItemId = itemId
+            trailerPreviewRequestVersion++
+        }
+
+        if (trailerPreviewNegativeCache.contains(itemId)) return
+        if (_uiState.value.trailerPreviewUrls.containsKey(itemId)) return
+        if (!trailerPreviewLoadingIds.add(itemId)) return
+
+        val requestVersion = trailerPreviewRequestVersion
+
+        viewModelScope.launch {
+            val trailerUrl = trailerService.getTrailerUrl(
+                title = item.name,
+                year = extractYear(item.releaseInfo),
+                tmdbId = null,
+                type = item.type.toApiString()
+            )
+
+            val isLatestFocusedItem =
+                activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
+            if (!isLatestFocusedItem) {
+                trailerPreviewLoadingIds.remove(itemId)
+                return@launch
+            }
+
+            if (trailerUrl.isNullOrBlank()) {
+                trailerPreviewNegativeCache.add(itemId)
+            } else {
+                _uiState.update { state ->
+                    if (state.trailerPreviewUrls[itemId] == trailerUrl) state
+                    else state.copy(
+                        trailerPreviewUrls = state.trailerPreviewUrls + (itemId to trailerUrl)
+                    )
+                }
+            }
+
+            trailerPreviewLoadingIds.remove(itemId)
+        }
+    }
+
+    private fun loadHomeCatalogOrderPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->
+                homeCatalogOrderKeys = keys
+                rebuildCatalogOrder(addonsCache)
+                scheduleUpdateCatalogRows()
+            }
+        }
+    }
+
+    private fun loadDisabledHomeCatalogPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.disabledHomeCatalogKeys.collectLatest { keys ->
+                disabledHomeCatalogKeys = keys.toSet()
+                rebuildCatalogOrder(addonsCache)
+                if (addonsCache.isNotEmpty()) {
+                    loadAllCatalogs(addonsCache)
+                } else {
+                    scheduleUpdateCatalogRows()
+                }
+            }
+        }
+    }
+
     private fun loadPosterCardStylePreferences() {
         viewModelScope.launch {
             layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
@@ -153,7 +258,7 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
-            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId)
+            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId, event.season, event.episode)
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
         }
     }
@@ -161,18 +266,34 @@ class HomeViewModel @Inject constructor(
     private fun loadContinueWatching() {
         viewModelScope.launch {
             watchProgressRepository.allProgress.collectLatest { items ->
+                val inProgressOnly = deduplicateInProgress(
+                    items.filter { it.isInProgress() }
+                ).map { ContinueWatchingItem.InProgress(it) }
+
+                // Optimistic immediate render: show in-progress entries instantly.
+                _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
+
+                // Then compute NextUp enrichment (may need remote meta lookups).
                 val entries = buildContinueWatchingItems(items)
                 _uiState.update { it.copy(continueWatchingItems = entries) }
             }
         }
     }
 
+    private fun deduplicateInProgress(items: List<WatchProgress>): List<WatchProgress> {
+        val (series, nonSeries) = items.partition { isSeriesType(it.contentType) }
+        val latestPerShow = series
+            .sortedByDescending { it.lastWatched }
+            .distinctBy { it.contentId }
+        return (nonSeries + latestPerShow).sortedByDescending { it.lastWatched }
+    }
+
     private suspend fun buildContinueWatchingItems(
         allProgress: List<WatchProgress>
     ): List<ContinueWatchingItem> = withContext(Dispatchers.IO) {
-        val inProgressItems = allProgress
-            .filter { it.isInProgress() }
-            .map { ContinueWatchingItem.InProgress(it) }
+        val inProgressItems = deduplicateInProgress(
+            allProgress.filter { it.isInProgress() }
+        ).map { ContinueWatchingItem.InProgress(it) }
 
         val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
 
@@ -221,12 +342,30 @@ class HomeViewModel @Inject constructor(
     private suspend fun findNextEpisode(progress: WatchProgress): Pair<Meta, Video>? {
         if (!isSeriesType(progress.contentType)) return null
 
-        val result = metaRepository.getMetaFromAllAddons(
-            type = progress.contentType,
-            id = progress.contentId
-        ).first { it !is NetworkResult.Loading }
+        val idCandidates = buildList {
+            add(progress.contentId)
+            if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
+            if (progress.contentId.startsWith("trakt:")) add(progress.contentId.substringAfter(':'))
+        }.distinct()
 
-        val meta = (result as? NetworkResult.Success)?.data ?: return null
+        val meta = run {
+            var resolved: Meta? = null
+            val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()
+            for (type in typeCandidates) {
+                for (candidateId in idCandidates) {
+                    val result = withTimeoutOrNull(2500) {
+                        metaRepository.getMetaFromAllAddons(
+                            type = type,
+                            id = candidateId
+                        ).first { it !is NetworkResult.Loading }
+                    } ?: continue
+                    resolved = (result as? NetworkResult.Success)?.data
+                    if (resolved != null) break
+                }
+                if (resolved != null) break
+            }
+            resolved
+        } ?: return null
 
         val episodes = meta.videos
             .filter { it.season != null && it.episode != null && it.season != 0 }
@@ -245,9 +384,9 @@ class HomeViewModel @Inject constructor(
         return type == "series" || type == "tv"
     }
 
-    private fun removeContinueWatching(contentId: String) {
+    private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
         viewModelScope.launch {
-            watchProgressRepository.removeProgress(contentId)
+            watchProgressRepository.removeProgress(contentId, season, episode)
         }
     }
 
@@ -275,21 +414,7 @@ class HomeViewModel @Inject constructor(
                 return
             }
 
-            // Build catalog order based on addon manifest order
-            addons.forEach { addon ->
-                addon.catalogs
-                    .filterNot { it.isSearchOnlyCatalog() }
-                    .forEach { catalog ->
-                    val key = catalogKey(
-                        addonId = addon.id,
-                        type = catalog.type.toApiString(),
-                        catalogId = catalog.id
-                    )
-                    if (key !in catalogOrder) {
-                        catalogOrder.add(key)
-                    }
-                    }
-            }
+            rebuildCatalogOrder(addons)
 
             if (catalogOrder.isEmpty()) {
                 _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
@@ -299,7 +424,15 @@ class HomeViewModel @Inject constructor(
             // Load catalogs
             addons.forEach { addon ->
                 addon.catalogs
-                    .filterNot { it.isSearchOnlyCatalog() }
+                    .filterNot {
+                        it.isSearchOnlyCatalog() || isCatalogDisabled(
+                            addonBaseUrl = addon.baseUrl,
+                            addonId = addon.id,
+                            type = it.type.toApiString(),
+                            catalogId = it.id,
+                            catalogName = it.name
+                        )
+                    }
                     .forEach { catalog ->
                         loadCatalog(addon, catalog)
                     }
@@ -562,8 +695,80 @@ class HomeViewModel @Inject constructor(
         return "${addonId}_${type}_${catalogId}"
     }
 
+    private fun rebuildCatalogOrder(addons: List<Addon>) {
+        val defaultOrder = buildDefaultCatalogOrder(addons)
+        val availableSet = defaultOrder.toSet()
+
+        val savedValid = homeCatalogOrderKeys
+            .asSequence()
+            .filter { it in availableSet }
+            .distinct()
+            .toList()
+
+        val savedSet = savedValid.toSet()
+        val mergedOrder = savedValid + defaultOrder.filterNot { it in savedSet }
+
+        catalogOrder.clear()
+        catalogOrder.addAll(mergedOrder)
+    }
+
+    private fun buildDefaultCatalogOrder(addons: List<Addon>): List<String> {
+        val orderedKeys = mutableListOf<String>()
+        addons.forEach { addon ->
+            addon.catalogs
+                .filterNot {
+                    it.isSearchOnlyCatalog() || isCatalogDisabled(
+                        addonBaseUrl = addon.baseUrl,
+                        addonId = addon.id,
+                        type = it.type.toApiString(),
+                        catalogId = it.id,
+                        catalogName = it.name
+                    )
+                }
+                .forEach { catalog ->
+                    val key = catalogKey(
+                        addonId = addon.id,
+                        type = catalog.type.toApiString(),
+                        catalogId = catalog.id
+                    )
+                    if (key !in orderedKeys) {
+                        orderedKeys.add(key)
+                    }
+                }
+        }
+        return orderedKeys
+    }
+
+    private fun isCatalogDisabled(
+        addonBaseUrl: String,
+        addonId: String,
+        type: String,
+        catalogId: String,
+        catalogName: String
+    ): Boolean {
+        if (disableCatalogKey(addonBaseUrl, type, catalogId, catalogName) in disabledHomeCatalogKeys) {
+            return true
+        }
+        // Backward compatibility with previously stored keys.
+        return catalogKey(addonId, type, catalogId) in disabledHomeCatalogKeys
+    }
+
+    private fun disableCatalogKey(
+        addonBaseUrl: String,
+        type: String,
+        catalogId: String,
+        catalogName: String
+    ): String {
+        return "${addonBaseUrl}_${type}_${catalogId}_${catalogName}"
+    }
+
     private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
         return extra.any { extra -> extra.name == "search" && extra.isRequired }
+    }
+
+    private fun extractYear(releaseInfo: String?): String? {
+        if (releaseInfo.isNullOrBlank()) return null
+        return Regex("\\b(19|20)\\d{2}\\b").find(releaseInfo)?.value
     }
 
     /**

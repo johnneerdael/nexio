@@ -41,6 +41,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -52,6 +53,11 @@ fun CatalogRowSection(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showPosterLabels: Boolean = true,
     showAddonName: Boolean = true,
+    focusedPosterBackdropExpandEnabled: Boolean = false,
+    focusedPosterBackdropTrailerEnabled: Boolean = false,
+    focusedPosterBackdropTrailerMuted: Boolean = true,
+    trailerPreviewUrls: Map<String, String> = emptyMap(),
+    onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     modifier: Modifier = Modifier,
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
@@ -112,13 +118,20 @@ fun CatalogRowSection(
         ) {
             itemsIndexed(
                 items = catalogRow.items,
-                key = { _, item -> "${catalogRow.type}_${catalogRow.catalogId}_${item.id}" },
+                key = { index, item ->
+                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}_$index"
+                },
                 contentType = { _, _ -> "content_card" }
             ) { index, item ->
                 ContentCard(
                     item = item,
                     posterCardStyle = posterCardStyle,
                     showLabels = showPosterLabels,
+                    focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
+                    focusedPosterBackdropTrailerEnabled = focusedPosterBackdropTrailerEnabled,
+                    focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
+                    trailerPreviewUrl = trailerPreviewUrls[item.id],
+                    onRequestTrailerPreview = onRequestTrailerPreview,
                     onClick = { onItemClick(item.id, item.type.toApiString(), catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
