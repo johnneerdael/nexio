@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -577,7 +578,12 @@ private fun ModernSidebarScaffold(
                         isBlockedContentKey(keyEvent.key)
                     ) {
                         true
-                    } else if (
+                    } else {
+                        false
+                    }
+                }
+                .onKeyEvent { keyEvent ->
+                    if (
                         showSidebar &&
                         !isSidebarExpanded &&
                         keyEvent.type == KeyEventType.KeyDown &&
