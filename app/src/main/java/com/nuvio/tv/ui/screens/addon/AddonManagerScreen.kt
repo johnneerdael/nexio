@@ -86,6 +86,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 @Composable
 fun AddonManagerScreen(
     viewModel: AddonManagerViewModel = hiltViewModel(),
+    showBuiltInHeader: Boolean = true,
     onNavigateToCatalogOrder: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -127,7 +128,7 @@ fun AddonManagerScreen(
                 Text(
                     text = "Addons",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = NuvioColors.TextPrimary
+                    color = if (showBuiltInHeader) NuvioColors.TextPrimary else Color.Transparent
                 )
             }
 

@@ -32,7 +32,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
-    private val glassSidepanelEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
+    private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
+    private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
@@ -76,11 +77,17 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val sidebarCollapsedByDefault: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[sidebarCollapsedKey] ?: false
+        val modernSidebarEnabled =
+            prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: true
+        if (modernSidebarEnabled) {
+            false
+        } else {
+            prefs[sidebarCollapsedKey] ?: false
+        }
     }
 
-    val glassSidepanelEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[glassSidepanelEnabledKey] ?: true
+    val modernSidebarEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: true
     }
 
     val heroSectionEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -160,13 +167,19 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
         dataStore.edit { prefs ->
-            prefs[sidebarCollapsedKey] = collapsed
+            val modernSidebarEnabled =
+                prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: true
+            prefs[sidebarCollapsedKey] = if (modernSidebarEnabled) false else collapsed
         }
     }
 
-    suspend fun setGlassSidepanelEnabled(enabled: Boolean) {
+    suspend fun setModernSidebarEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
-            prefs[glassSidepanelEnabledKey] = enabled
+            prefs[modernSidebarEnabledKey] = enabled
+            prefs.remove(legacyModernSidebarEnabledKey)
+            if (enabled) {
+                prefs[sidebarCollapsedKey] = false
+            }
         }
     }
 

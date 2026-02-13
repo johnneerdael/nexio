@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -15,7 +14,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,7 +51,6 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -69,7 +66,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -101,7 +97,7 @@ import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 
-private data class DrawerItem(
+data class DrawerItem(
     val route: String,
     val label: String,
     val icon: ImageVector
@@ -131,7 +127,8 @@ class MainActivity : ComponentActivity() {
                     val layoutChosen = hasChosenLayout ?: return@Surface
 
                     val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
-                    val glassSidepanelEnabled by layoutPreferenceDataStore.glassSidepanelEnabled.collectAsState(initial = true)
+                    val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = true)
+                    val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
                     val updateState by updateViewModel.uiState.collectAsState()
@@ -185,15 +182,17 @@ class MainActivity : ComponentActivity() {
                     }?.route
                     val selectedDrawerItem = drawerItems.firstOrNull { it.route == selectedDrawerRoute } ?: drawerItems.first()
 
-                    if (glassSidepanelEnabled) {
-                        GlassSidebarScaffold(
+                    if (modernSidebarEnabled) {
+                        ModernSidebarScaffold(
                             navController = navController,
                             startDestination = startDestination,
                             currentRoute = currentRoute,
                             rootRoutes = rootRoutes,
                             drawerItems = drawerItems,
+                            selectedDrawerRoute = selectedDrawerRoute,
                             selectedDrawerItem = selectedDrawerItem,
-                            sidebarCollapsed = sidebarCollapsed
+                            sidebarCollapsed = sidebarCollapsed,
+                            hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill
                         )
                     } else {
                         LegacySidebarScaffold(
@@ -203,7 +202,8 @@ class MainActivity : ComponentActivity() {
                             rootRoutes = rootRoutes,
                             drawerItems = drawerItems,
                             selectedDrawerRoute = selectedDrawerRoute,
-                            sidebarCollapsed = sidebarCollapsed
+                            sidebarCollapsed = sidebarCollapsed,
+                            hideBuiltInHeaders = false
                         )
                     }
 
@@ -230,7 +230,8 @@ private fun LegacySidebarScaffold(
     rootRoutes: Set<String>,
     drawerItems: List<DrawerItem>,
     selectedDrawerRoute: String?,
-    sidebarCollapsed: Boolean
+    sidebarCollapsed: Boolean,
+    hideBuiltInHeaders: Boolean
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val drawerItemFocusRequesters = remember(drawerItems) {
@@ -366,32 +367,41 @@ private fun LegacySidebarScaffold(
                 .fillMaxSize()
                 .padding(start = contentStartPadding)
         ) {
-            NuvioNavHost(navController = navController, startDestination = startDestination)
+            NuvioNavHost(
+                navController = navController,
+                startDestination = startDestination,
+                hideBuiltInHeaders = hideBuiltInHeaders
+            )
         }
     }
 }
 
 @Composable
-private fun GlassSidebarScaffold(
+private fun ModernSidebarScaffold(
     navController: NavHostController,
     startDestination: String,
     currentRoute: String?,
     rootRoutes: Set<String>,
     drawerItems: List<DrawerItem>,
+    selectedDrawerRoute: String?,
     selectedDrawerItem: DrawerItem,
-    sidebarCollapsed: Boolean
+    sidebarCollapsed: Boolean,
+    hideBuiltInHeaders: Boolean
 ) {
     val showSidebar = currentRoute in rootRoutes
     val collapsedSidebarWidth = if (sidebarCollapsed) 0.dp else 184.dp
     val openSidebarWidth = 262.dp
 
     val focusManager = LocalFocusManager.current
-    val homeDrawerItemFocusRequester = remember { FocusRequester() }
+    val drawerItemFocusRequesters = remember(drawerItems) {
+        drawerItems.associate { item -> item.route to FocusRequester() }
+    }
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
     var sidebarCollapsePending by remember { mutableStateOf(false) }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+    var focusedDrawerIndex by remember { mutableStateOf(-1) }
     val keepSidebarFocusDuringCollapse =
         isSidebarExpanded || sidebarCollapsePending || pendingContentFocusTransfer
 
@@ -512,22 +522,25 @@ private fun GlassSidebarScaffold(
         if (!showSidebar || !pendingContentFocusTransfer || isSidebarExpanded || sidebarCollapsePending) {
             return@LaunchedEffect
         }
-        delay(120L)
-        for (attempt in 0 until 10) {
-            if (focusManager.moveFocus(FocusDirection.Right)) {
-                break
-            }
-            withFrameNanos { }
-        }
+        repeat(2) { withFrameNanos { } }
+        focusManager.moveFocus(FocusDirection.Right)
         pendingContentFocusTransfer = false
     }
 
-    LaunchedEffect(isSidebarExpanded, pendingSidebarFocusRequest, showSidebar) {
+    LaunchedEffect(isSidebarExpanded, pendingSidebarFocusRequest, showSidebar, selectedDrawerRoute) {
         if (!showSidebar || !pendingSidebarFocusRequest || !isSidebarExpanded) {
             return@LaunchedEffect
         }
+        val targetRoute = selectedDrawerRoute ?: run {
+            pendingSidebarFocusRequest = false
+            return@LaunchedEffect
+        }
+        val requester = drawerItemFocusRequesters[targetRoute] ?: run {
+            pendingSidebarFocusRequest = false
+            return@LaunchedEffect
+        }
         repeat(2) { withFrameNanos { } }
-        runCatching { homeDrawerItemFocusRequester.requestFocus() }
+        runCatching { requester.requestFocus() }
         pendingSidebarFocusRequest = false
     }
 
@@ -537,14 +550,38 @@ private fun GlassSidebarScaffold(
                 .fillMaxSize()
                 .haze(sidebarHazeState)
                 .onPreviewKeyEvent { keyEvent ->
-                    isSidebarExpanded &&
+                    if (
+                        isSidebarExpanded &&
                         !sidebarCollapsePending &&
                         sidebarExpandProgress > 0.2f &&
                         keyEvent.type == KeyEventType.KeyDown &&
                         isBlockedContentKey(keyEvent.key)
+                    ) {
+                        true
+                    } else if (
+                        showSidebar &&
+                        !isSidebarExpanded &&
+                        keyEvent.type == KeyEventType.KeyDown &&
+                        keyEvent.key == Key.DirectionLeft
+                    ) {
+                        if (focusManager.moveFocus(FocusDirection.Left)) {
+                            true
+                        } else {
+                            isSidebarExpanded = true
+                            sidebarCollapsePending = false
+                            pendingSidebarFocusRequest = true
+                            true
+                        }
+                    } else {
+                        false
+                    }
                 }
         ) {
-            NuvioNavHost(navController = navController, startDestination = startDestination)
+            NuvioNavHost(
+                navController = navController,
+                startDestination = startDestination,
+                hideBuiltInHeaders = hideBuiltInHeaders
+            )
         }
 
         if (showSidebar && (sidebarVisible || sidebarWidth > 0.dp)) {
@@ -569,6 +606,14 @@ private fun GlassSidebarScaffold(
                             return@onPreviewKeyEvent false
                         }
                         when (keyEvent.key) {
+                            Key.DirectionUp -> {
+                                focusedDrawerIndex == 0
+                            }
+
+                            Key.DirectionDown -> {
+                                focusedDrawerIndex == drawerItems.lastIndex
+                            }
+
                             Key.DirectionRight, Key.Back -> {
                                 pendingContentFocusTransfer = true
                                 sidebarCollapsePending = true
@@ -580,203 +625,57 @@ private fun GlassSidebarScaffold(
                     }
             ) {
                 if (showExpandedPanel) {
-                    val delayedBlurProgress =
-                        ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
-                    val showPanelBlur = isSidebarExpanded &&
-                        !sidebarCollapsePending &&
-                        delayedBlurProgress > 0f
-                    val expandedPanelBlurModifier = if (showPanelBlur) {
-                        Modifier.hazeChild(
-                            state = sidebarHazeState,
-                            shape = panelShape,
-                            tint = Color.Unspecified,
-                            blurRadius = (26f * delayedBlurProgress).dp,
-                            noiseFactor = 0.04f * delayedBlurProgress
-                        )
-                    } else {
-                        Modifier
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .graphicsLayer(
-                                alpha = sidebarExpandProgress,
-                                scaleX = 0.97f + (0.03f * sidebarExpandProgress),
-                                scaleY = 0.97f + (0.03f * sidebarExpandProgress),
-                                transformOrigin = TransformOrigin(0f, 0f)
+                    ModernSidebarBlurPanel(
+                        drawerItems = drawerItems,
+                        selectedDrawerRoute = selectedDrawerRoute,
+                        keepSidebarFocusDuringCollapse = keepSidebarFocusDuringCollapse,
+                        sidebarLabelAlpha = sidebarLabelAlpha,
+                        sidebarIconScale = sidebarIconScale,
+                        sidebarExpandProgress = sidebarExpandProgress,
+                        isSidebarExpanded = isSidebarExpanded,
+                        sidebarCollapsePending = sidebarCollapsePending,
+                        sidebarHazeState = sidebarHazeState,
+                        panelShape = panelShape,
+                        drawerItemFocusRequesters = drawerItemFocusRequesters,
+                        onDrawerItemFocused = { focusedDrawerIndex = it },
+                        onDrawerItemClick = { targetRoute ->
+                            navigateToDrawerRoute(
+                                navController = navController,
+                                currentRoute = currentRoute,
+                                targetRoute = targetRoute
                             )
-                            .then(expandedPanelBlurModifier)
-                            .graphicsLayer {
-                                shape = panelShape
-                                clip = true
-                            }
-                            .clip(panelShape)
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xD64A4F59),
-                                        Color(0xCC3F454F),
-                                        Color(0xC640474F)
-                                    )
-                                ),
-                                shape = panelShape
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = Color.White.copy(alpha = 0.14f),
-                                shape = panelShape
-                            )
-                            .padding(horizontal = 12.dp, vertical = 14.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.nuviotv_logo),
-                            contentDescription = "NuvioTV",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                                .padding(top = 2.dp),
-                            contentScale = ContentScale.Fit
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            drawerItems.forEach { item ->
-                                SidebarNavigationItem(
-                                    label = item.label,
-                                    icon = item.icon,
-                                    selected = selectedDrawerItem.route == item.route,
-                                    focusEnabled = keepSidebarFocusDuringCollapse,
-                                    labelAlpha = sidebarLabelAlpha,
-                                    iconScale = sidebarIconScale,
-                                    onClick = {
-                                        navigateToDrawerRoute(
-                                            navController = navController,
-                                            currentRoute = currentRoute,
-                                            targetRoute = item.route
-                                        )
-                                        pendingContentFocusTransfer = true
-                                        sidebarCollapsePending = true
-                                    },
-                                    modifier = if (item.route == Screen.Home.route) {
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .focusRequester(homeDrawerItemFocusRequester)
-                                    } else {
-                                        Modifier.fillMaxWidth()
-                                    }
-                                )
-                            }
+                            pendingContentFocusTransfer = true
+                            sidebarCollapsePending = true
                         }
-                    }
-                }
-            }
-
-            CollapsedSidebarPill(
-                label = selectedDrawerItem.label,
-                icon = selectedDrawerItem.icon,
-                hazeState = sidebarHazeState,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset(
-                        x = 40.dp + sidebarSlideX + sidebarDeflateOffsetX,
-                        y = 16.dp + sidebarDeflateOffsetY
                     )
-                    .graphicsLayer(
-                        alpha = 1f - sidebarExpandProgress,
-                        scaleX = 0.9f + (0.1f * (1f - sidebarExpandProgress)),
-                        scaleY = 0.9f + (0.1f * (1f - sidebarExpandProgress)),
-                        transformOrigin = TransformOrigin(0f, 0f)
-                    ),
-                onExpand = {
-                    isSidebarExpanded = true
-                    sidebarCollapsePending = false
-                    pendingSidebarFocusRequest = true
                 }
-            )
-        }
-    }
-}
-
-@Composable
-private fun SidebarNavigationItem(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    focusEnabled: Boolean,
-    labelAlpha: Float,
-    iconScale: Float,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(999.dp)
-    val backgroundColor by animateColorAsState(
-        targetValue = when {
-            selected -> Color.White
-            isFocused -> Color.White.copy(alpha = 0.18f)
-            else -> Color.Transparent
-        },
-        animationSpec = tween(durationMillis = 180),
-        label = "sidebarItemBackground"
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (isFocused) Color.White.copy(alpha = 0.4f) else Color.Transparent,
-        animationSpec = tween(durationMillis = 180),
-        label = "sidebarItemBorder"
-    )
-
-    val contentColor = if (selected) Color(0xFF10151F) else Color.White
-    val iconCircleColor = if (selected) Color(0xFFE7E2EF) else Color(0xFF6A6A74)
-
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(backgroundColor)
-            .border(width = 1.5.dp, color = borderColor, shape = shape)
-            .onFocusChanged {
-                isFocused = it.isFocused
             }
-            .focusable(enabled = focusEnabled)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(iconCircleColor)
-                .padding(8.dp)
-                .graphicsLayer(
-                    scaleX = iconScale,
-                    scaleY = iconScale
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(18.dp)
-            )
-        }
 
-        Text(
-            text = label,
-            color = contentColor,
-            modifier = Modifier.graphicsLayer(alpha = labelAlpha),
-            style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+            if (!sidebarCollapsed) {
+                CollapsedSidebarPill(
+                    label = selectedDrawerItem.label,
+                    icon = selectedDrawerItem.icon,
+                    hazeState = sidebarHazeState,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .offset(
+                            x = 40.dp + sidebarSlideX + sidebarDeflateOffsetX,
+                            y = 16.dp + sidebarDeflateOffsetY
+                        )
+                        .graphicsLayer(
+                            alpha = 1f - sidebarExpandProgress,
+                            scaleX = 0.9f + (0.1f * (1f - sidebarExpandProgress)),
+                            scaleY = 0.9f + (0.1f * (1f - sidebarExpandProgress)),
+                            transformOrigin = TransformOrigin(0f, 0f)
+                        ),
+                    onExpand = {
+                        isSidebarExpanded = true
+                        sidebarCollapsePending = false
+                        pendingSidebarFocusRequest = true
+                    }
+                )
+            }
+        }
     }
 }
 

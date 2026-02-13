@@ -49,6 +49,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
+    showBuiltInHeader: Boolean = true,
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> }
 ) {

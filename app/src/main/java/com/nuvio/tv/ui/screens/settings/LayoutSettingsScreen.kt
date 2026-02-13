@@ -215,24 +215,26 @@ fun LayoutSettingsContent(
                 focusRequester = homeContentHeaderFocus,
                 onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
             ) {
+                if (!uiState.modernSidebarEnabled) {
+                    CompactToggleRow(
+                        title = "Collapse Sidebar",
+                        subtitle = "Hide sidebar by default; show when focused.",
+                        checked = uiState.sidebarCollapsedByDefault,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    )
+                }
                 CompactToggleRow(
-                    title = "Collapse Sidebar",
-                    subtitle = "Hide sidebar by default; show when focused.",
-                    checked = uiState.sidebarCollapsedByDefault,
+                    title = "Modern Sidebar ON/OFF",
+                    subtitle = "Enable floating frosted sidebar navigation.",
+                    checked = uiState.modernSidebarEnabled,
                     onToggle = {
                         viewModel.onEvent(
-                            LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)
-                        )
-                    },
-                    onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
-                )
-                CompactToggleRow(
-                    title = "Glass Sidepanel ON/OFF",
-                    subtitle = "Enable floating frosted sidepanel navigation.",
-                    checked = uiState.glassSidepanelEnabled,
-                    onToggle = {
-                        viewModel.onEvent(
-                            LayoutSettingsEvent.SetGlassSidepanelEnabled(!uiState.glassSidepanelEnabled)
+                            LayoutSettingsEvent.SetModernSidebarEnabled(!uiState.modernSidebarEnabled)
                         )
                     },
                     onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }

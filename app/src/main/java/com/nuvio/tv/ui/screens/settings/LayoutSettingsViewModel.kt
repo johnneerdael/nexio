@@ -20,7 +20,7 @@ data class LayoutSettingsUiState(
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKey: String? = null,
     val sidebarCollapsedByDefault: Boolean = false,
-    val glassSidepanelEnabled: Boolean = true,
+    val modernSidebarEnabled: Boolean = true,
     val heroSectionEnabled: Boolean = true,
     val searchDiscoverEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
@@ -43,7 +43,7 @@ sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
     data class SelectHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
-    data class SetGlassSidepanelEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHeroSectionEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -87,8 +87,8 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.glassSidepanelEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(glassSidepanelEnabled = enabled) }
+            layoutPreferenceDataStore.modernSidebarEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(modernSidebarEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -149,7 +149,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
             is LayoutSettingsEvent.SelectHeroCatalog -> selectHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
-            is LayoutSettingsEvent.SetGlassSidepanelEnabled -> setGlassSidepanelEnabled(event.enabled)
+            is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
             is LayoutSettingsEvent.SetHeroSectionEnabled -> setHeroSectionEnabled(event.enabled)
             is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
@@ -181,9 +181,9 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
-    private fun setGlassSidepanelEnabled(enabled: Boolean) {
+    private fun setModernSidebarEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            layoutPreferenceDataStore.setGlassSidepanelEnabled(enabled)
+            layoutPreferenceDataStore.setModernSidebarEnabled(enabled)
         }
     }
 
