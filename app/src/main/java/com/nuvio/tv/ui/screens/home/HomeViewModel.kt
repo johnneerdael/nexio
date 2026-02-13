@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
@@ -50,6 +51,9 @@ class HomeViewModel @Inject constructor(
     private val tmdbMetadataService: TmdbMetadataService,
     private val trailerService: TrailerService
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "HomeViewModel"
+    }
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -396,7 +400,11 @@ class HomeViewModel @Inject constructor(
 
     private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
         viewModelScope.launch {
-            watchProgressRepository.removeProgress(contentId, season, episode)
+            Log.d(
+                TAG,
+                "removeContinueWatching requested contentId=$contentId season=$season episode=$episode; removing all progress for content"
+            )
+            watchProgressRepository.removeProgress(contentId = contentId, season = null, episode = null)
         }
     }
 
