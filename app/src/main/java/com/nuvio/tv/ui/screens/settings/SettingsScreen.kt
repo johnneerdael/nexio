@@ -87,10 +87,10 @@ private enum class SettingsCategory(
     val icon: ImageVector,
     @param:RawRes val rawIconRes: Int? = null
 ) {
+    ACCOUNT("Account", Icons.Default.Person),
     APPEARANCE("Appearance", Icons.Default.Palette),
     LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
-    ACCOUNT("Account", Icons.Default.Person),
     TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
     TRAKT("Trakt", Icons.Default.Tune, rawIconRes = R.raw.trakt_tv_glyph),
