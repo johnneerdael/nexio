@@ -125,7 +125,7 @@ fun ContentCard(
     val metaTokens = remember(item.type, item.genres, item.releaseInfo, item.imdbRating) {
         buildList {
             add(
-                item.type.toApiString()
+                item.apiType
                     .replaceFirstChar { ch -> ch.uppercase() }
             )
             item.genres.firstOrNull()?.let { add(it) }

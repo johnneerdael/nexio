@@ -912,7 +912,7 @@ private fun AddonCard(
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Catalogs: ${addon.catalogs.size} • Types: ${addon.types.joinToString { it.toApiString() }}",
+                text = "Catalogs: ${addon.catalogs.size} • Types: ${addon.rawTypes.joinToString()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextTertiary
             )

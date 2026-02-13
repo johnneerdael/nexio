@@ -188,7 +188,7 @@ fun HeroContentSection(
                             onLongPress = onLibraryLongPress
                         )
 
-                        if (meta.type.toApiString() == "movie") {
+                        if (meta.apiType == "movie") {
                             ActionIconButton(
                                 icon = Icons.Default.RemoveRedEye,
                                 contentDescription = if (isMovieWatched) {

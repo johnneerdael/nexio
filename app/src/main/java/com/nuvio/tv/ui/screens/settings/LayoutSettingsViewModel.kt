@@ -288,7 +288,7 @@ class LayoutSettingsViewModel @Inject constructor(
                         }
                         .map { catalog ->
                             CatalogInfo(
-                                key = "${addon.id}_${catalog.type.toApiString()}_${catalog.id}",
+                                key = "${addon.id}_${catalog.apiType}_${catalog.id}",
                                 name = catalog.name,
                                 addonName = addon.name
                             )

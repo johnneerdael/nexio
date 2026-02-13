@@ -191,7 +191,7 @@ class HomeViewModel @Inject constructor(
                 title = item.name,
                 year = extractYear(item.releaseInfo),
                 tmdbId = null,
-                type = item.type.toApiString()
+                type = item.apiType
             )
 
             val isLatestFocusedItem =
@@ -446,7 +446,7 @@ class HomeViewModel @Inject constructor(
                         it.isSearchOnlyCatalog() || isCatalogDisabled(
                             addonBaseUrl = addon.baseUrl,
                             addonId = addon.id,
-                            type = it.type.toApiString(),
+                            type = it.apiType,
                             catalogId = it.id,
                             catalogName = it.name
                         )
@@ -470,7 +470,7 @@ class HomeViewModel @Inject constructor(
                     addonName = addon.name,
                     catalogId = catalog.id,
                     catalogName = catalog.name,
-                    type = catalog.type.toApiString(),
+                    type = catalog.apiType,
                     skip = 0,
                     supportsSkip = supportsSkip
                 ).collect { result ->
@@ -478,7 +478,7 @@ class HomeViewModel @Inject constructor(
                         is NetworkResult.Success -> {
                             val key = catalogKey(
                                 addonId = addon.id,
-                                type = catalog.type.toApiString(),
+                                type = catalog.apiType,
                                 catalogId = catalog.id
                             )
                             catalogsMap[key] = result.data
@@ -516,7 +516,7 @@ class HomeViewModel @Inject constructor(
                 addonName = addon.name,
                 catalogId = catalogId,
                 catalogName = currentRow.catalogName,
-                type = currentRow.type.toApiString(),
+                type = currentRow.apiType,
                 skip = nextSkip,
                 supportsSkip = currentRow.supportsSkip
             ).collect { result ->
@@ -598,7 +598,7 @@ class HomeViewModel @Inject constructor(
                                 catalogId = row.catalogId,
                                 addonBaseUrl = row.addonBaseUrl,
                                 addonId = row.addonId,
-                                type = row.type.toApiString()
+                                type = row.apiType
                             )
                         )
                         val hasEnoughForSeeAll = row.items.size >= 15
@@ -618,7 +618,7 @@ class HomeViewModel @Inject constructor(
                                 GridItem.SeeAll(
                                     catalogId = row.catalogId,
                                     addonId = row.addonId,
-                                    type = row.type.toApiString()
+                                    type = row.apiType
                                 )
                             )
                         }
@@ -673,7 +673,7 @@ class HomeViewModel @Inject constructor(
         if (!settings.useArtwork && !settings.useBasicInfo && !settings.useDetails) return items
 
         return items.map { item ->
-            val tmdbId = tmdbService.ensureTmdbId(item.id, item.type.toApiString()) ?: return@map item
+            val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@map item
             val enrichment = tmdbMetadataService.fetchEnrichment(
                 tmdbId = tmdbId,
                 contentType = item.type,
@@ -752,7 +752,7 @@ class HomeViewModel @Inject constructor(
                     it.isSearchOnlyCatalog() || isCatalogDisabled(
                         addonBaseUrl = addon.baseUrl,
                         addonId = addon.id,
-                        type = it.type.toApiString(),
+                        type = it.apiType,
                         catalogId = it.id,
                         catalogName = it.name
                     )
@@ -760,7 +760,7 @@ class HomeViewModel @Inject constructor(
                 .forEach { catalog ->
                     val key = catalogKey(
                         addonId = addon.id,
-                        type = catalog.type.toApiString(),
+                        type = catalog.apiType,
                         catalogId = catalog.id
                     )
                     if (key !in orderedKeys) {

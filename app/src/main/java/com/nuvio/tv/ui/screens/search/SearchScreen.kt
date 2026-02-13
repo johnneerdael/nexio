@@ -289,7 +289,7 @@ fun SearchScreen(
                                     onNavigateToSeeAll(
                                         catalogRow.catalogId,
                                         catalogRow.addonId,
-                                        catalogRow.type.toApiString()
+                                        catalogRow.apiType
                                     )
                                 }
                             )

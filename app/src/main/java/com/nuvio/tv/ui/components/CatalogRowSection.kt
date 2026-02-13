@@ -94,7 +94,7 @@ fun CatalogRowSection(
         ) {
             Column {
                 Text(
-                    text = "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.type.toApiString().replaceFirstChar { it.uppercase() }}",
+                    text = "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}",
                     style = MaterialTheme.typography.headlineMedium,
                     color = NuvioColors.TextPrimary,
                     maxLines = 3,
@@ -134,7 +134,7 @@ fun CatalogRowSection(
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrl = trailerPreviewUrls[item.id],
                     onRequestTrailerPreview = onRequestTrailerPreview,
-                    onClick = { onItemClick(item.id, item.type.toApiString(), catalogRow.addonBaseUrl) },
+                    onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) {
