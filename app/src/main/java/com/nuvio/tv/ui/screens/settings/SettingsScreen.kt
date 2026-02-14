@@ -48,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -109,6 +111,10 @@ fun SettingsScreen(
 ) {
     var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
     var previousIndex by remember { mutableIntStateOf(0) }
+    val tabFocusRequesters = remember {
+        SettingsCategory.entries.associateWith { FocusRequester() }
+    }
+    var tabRowHasFocus by remember { mutableStateOf(false) }
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
     val accountViewModel: AccountViewModel = hiltViewModel()
@@ -170,13 +176,21 @@ fun SettingsScreen(
         TvLazyRow(
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { state ->
+                    if (!tabRowHasFocus && state.hasFocus) {
+                        tabFocusRequesters[selectedCategory]?.requestFocus()
+                    }
+                    tabRowHasFocus = state.hasFocus
+                }
         ) {
             itemsIndexed(SettingsCategory.entries.toList()) { index, category ->
                 CategoryTab(
                     category = category,
                     isSelected = selectedCategory == category,
                     accentColor = accentColor,
+                    focusRequester = tabFocusRequesters.getValue(category),
                     onClick = {
                         if (category == SettingsCategory.TRAKT) {
                             onNavigateToTrakt()
@@ -269,6 +283,7 @@ private fun CategoryTab(
     category: SettingsCategory,
     isSelected: Boolean,
     accentColor: Color,
+    focusRequester: FocusRequester,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -288,6 +303,7 @@ private fun CategoryTab(
         Card(
             onClick = onClick,
             modifier = Modifier
+                .focusRequester(focusRequester)
                 .onFocusChanged { isFocused = it.isFocused },
             colors = CardDefaults.colors(
                 containerColor = when {

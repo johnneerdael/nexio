@@ -401,7 +401,6 @@ private fun ModernSidebarScaffold(
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
     var focusedDrawerIndex by remember { mutableStateOf(-1) }
-    var isCollapsedPillIconOnly by remember { mutableStateOf(false) }
     val keepSidebarFocusDuringCollapse =
         isSidebarExpanded || sidebarCollapsePending || pendingContentFocusTransfer
 
@@ -411,7 +410,6 @@ private fun ModernSidebarScaffold(
             sidebarCollapsePending = false
             pendingContentFocusTransfer = false
             pendingSidebarFocusRequest = false
-            isCollapsedPillIconOnly = false
         }
     }
 
@@ -419,7 +417,6 @@ private fun ModernSidebarScaffold(
         isSidebarExpanded = true
         sidebarCollapsePending = false
         pendingSidebarFocusRequest = true
-        isCollapsedPillIconOnly = false
     }
 
     LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
@@ -548,18 +545,6 @@ private fun ModernSidebarScaffold(
                 .haze(sidebarHazeState)
                 .onPreviewKeyEvent { keyEvent ->
                     if (
-                        showSidebar &&
-                        !sidebarCollapsed &&
-                        !isSidebarExpanded &&
-                        keyEvent.type == KeyEventType.KeyDown
-                    ) {
-                        when (keyEvent.key) {
-                            Key.DirectionDown -> isCollapsedPillIconOnly = true
-                            Key.DirectionUp -> isCollapsedPillIconOnly = false
-                            else -> Unit
-                        }
-                    }
-                    if (
                         isSidebarExpanded &&
                         !sidebarCollapsePending &&
                         sidebarExpandProgress > 0.2f &&
@@ -584,7 +569,6 @@ private fun ModernSidebarScaffold(
                             isSidebarExpanded = true
                             sidebarCollapsePending = false
                             pendingSidebarFocusRequest = true
-                            isCollapsedPillIconOnly = false
                             true
                         }
                     } else {
@@ -673,7 +657,6 @@ private fun ModernSidebarScaffold(
                     icon = selectedDrawerItem.icon,
                     hazeState = sidebarHazeState,
                     blurEnabled = modernSidebarBlurEnabled,
-                    iconOnly = isCollapsedPillIconOnly,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(
@@ -690,7 +673,6 @@ private fun ModernSidebarScaffold(
                         isSidebarExpanded = true
                         sidebarCollapsePending = false
                         pendingSidebarFocusRequest = true
-                        isCollapsedPillIconOnly = false
                     }
                 )
             }
@@ -704,7 +686,6 @@ private fun CollapsedSidebarPill(
     icon: ImageVector,
     hazeState: HazeState,
     blurEnabled: Boolean,
-    iconOnly: Boolean,
     modifier: Modifier = Modifier,
     onExpand: () -> Unit
 ) {
@@ -795,9 +776,9 @@ private fun CollapsedSidebarPill(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .padding(start = 5.dp, end = if (iconOnly) 6.dp else 12.dp),
+                    .padding(start = 5.dp, end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (iconOnly) 0.dp else 9.dp)
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -816,17 +797,15 @@ private fun CollapsedSidebarPill(
                     )
                 }
 
-                if (!iconOnly) {
-                    Text(
-                        text = label,
-                        color = Color.White,
-                        style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
-                            lineHeight = 30.sp
-                        ),
-                        modifier = Modifier.offset(y = (-0.5).dp),
-                        maxLines = 1
-                    )
-                }
+                Text(
+                    text = label,
+                    color = Color.White,
+                    style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
+                        lineHeight = 30.sp
+                    ),
+                    modifier = Modifier.offset(y = (-0.5).dp),
+                    maxLines = 1
+                )
             }
         }
     }
