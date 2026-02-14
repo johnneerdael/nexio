@@ -144,6 +144,14 @@ class PlayerViewModel @Inject constructor(
 
     private var currentStreamUrl: String = initialStreamUrl
     private var currentHeaders: Map<String, String> = parseHeaders(headersJson)
+
+    fun getCurrentStreamUrl(): String = currentStreamUrl
+    fun getCurrentHeaders(): Map<String, String> = currentHeaders
+
+    fun stopAndRelease() {
+        releasePlayer()
+    }
+
     private var currentVideoId: String? = videoId
     private var currentSeason: Int? = initialSeason
     private var currentEpisode: Int? = initialEpisode

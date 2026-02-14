@@ -65,7 +65,8 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
     onSetLibassRenderType: (LibassRenderType) -> Unit,
-    onItemFocused: () -> Unit = {}
+    onItemFocused: () -> Unit = {},
+    enabled: Boolean = true
 ) {
     item {
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
@@ -91,7 +92,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Preferred Language",
             subtitle = languageName,
             onClick = onShowLanguageDialog,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -105,7 +107,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Secondary Preferred Language",
             subtitle = secondaryLanguageName,
             onClick = onShowSecondaryLanguageDialog,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -119,7 +122,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             maxValue = 200,
             step = 10,
             onValueChange = onSetSubtitleSize,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -133,7 +137,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             maxValue = 50,
             step = 1,
             onValueChange = onSetSubtitleVerticalOffset,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -144,7 +149,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             subtitle = "Use bold font weight for subtitles",
             isChecked = playerSettings.subtitleStyle.bold,
             onCheckedChange = onSetSubtitleBold,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -154,7 +160,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             title = "Text Color",
             currentColor = Color(playerSettings.subtitleStyle.textColor),
             onClick = onShowTextColorDialog,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -165,7 +172,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             currentColor = Color(playerSettings.subtitleStyle.backgroundColor),
             showTransparent = playerSettings.subtitleStyle.backgroundColor == Color.Transparent.toArgb(),
             onClick = onShowBackgroundColorDialog,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -176,7 +184,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             subtitle = "Add outline around subtitle text for better visibility",
             isChecked = playerSettings.subtitleStyle.outlineEnabled,
             onCheckedChange = onSetSubtitleOutlineEnabled,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 
@@ -187,7 +196,8 @@ internal fun LazyListScope.subtitleSettingsItems(
                 title = "Outline Color",
                 currentColor = Color(playerSettings.subtitleStyle.outlineColor),
                 onClick = onShowOutlineColorDialog,
-                onFocused = onItemFocused
+                onFocused = onItemFocused,
+                enabled = enabled
             )
         }
     }
@@ -209,7 +219,8 @@ internal fun LazyListScope.subtitleSettingsItems(
             subtitle = "Enable native libass rendering for advanced ASS/SSA subtitle features including animations, positioning, and styling",
             isChecked = playerSettings.useLibass,
             onCheckedChange = onSetUseLibass,
-            onFocused = onItemFocused
+            onFocused = onItemFocused,
+            enabled = enabled
         )
     }
 

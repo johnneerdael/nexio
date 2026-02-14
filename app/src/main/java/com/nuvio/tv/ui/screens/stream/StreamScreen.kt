@@ -68,6 +68,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.nuvio.tv.core.player.ExternalPlayerLauncher
+import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.components.StreamsSkeletonList
@@ -84,10 +86,36 @@ fun StreamScreen(
     onStreamSelected: (StreamPlaybackInfo) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val playerPreference by viewModel.playerPreference.collectAsState(initial = PlayerPreference.INTERNAL)
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
     var focusedStreamIndex by rememberSaveable { mutableStateOf(0) }
     var restoreFocusedStream by rememberSaveable { mutableStateOf(false) }
     var pendingRestoreOnResume by rememberSaveable { mutableStateOf(false) }
+    var showPlayerChoiceDialog by remember { mutableStateOf(false) }
+    var pendingPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
+
+    fun routePlayback(playbackInfo: StreamPlaybackInfo) {
+        when (playerPreference) {
+            PlayerPreference.INTERNAL -> {
+                onStreamSelected(playbackInfo)
+            }
+            PlayerPreference.EXTERNAL -> {
+                playbackInfo.url?.let { url ->
+                    ExternalPlayerLauncher.launch(
+                        context = context,
+                        url = url,
+                        title = playbackInfo.title,
+                        headers = playbackInfo.headers
+                    )
+                }
+            }
+            PlayerPreference.ASK_EVERY_TIME -> {
+                pendingPlaybackInfo = playbackInfo
+                showPlayerChoiceDialog = true
+            }
+        }
+    }
 
     BackHandler {
         onBackPress()
@@ -98,7 +126,7 @@ fun StreamScreen(
         val playbackInfo = viewModel.getStreamForPlayback(stream)
         if (playbackInfo.url != null) {
             pendingRestoreOnResume = true
-            onStreamSelected(playbackInfo)
+            routePlayback(playbackInfo)
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
         }
     }
@@ -107,7 +135,7 @@ fun StreamScreen(
         val playbackInfo = uiState.autoPlayPlaybackInfo ?: return@LaunchedEffect
         if (playbackInfo.url != null) {
             pendingRestoreOnResume = true
-            onStreamSelected(playbackInfo)
+            routePlayback(playbackInfo)
             viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
         }
     }
@@ -175,9 +203,9 @@ fun StreamScreen(
                         focusedStreamIndex = currentIndex
                     }
                     val playbackInfo = viewModel.getStreamForPlayback(stream)
-                    onStreamSelected(playbackInfo)
                     pendingRestoreOnResume = true
                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                    routePlayback(playbackInfo)
                 },
                 focusedStreamIndex = focusedStreamIndex,
                 shouldRestoreFocusedStream = restoreFocusedStream,
@@ -187,6 +215,35 @@ fun StreamScreen(
                 modifier = Modifier
                     .weight(0.6f)
                     .fillMaxHeight()
+            )
+        }
+
+        // Player choice dialog for "Ask every time" preference
+        if (showPlayerChoiceDialog && pendingPlaybackInfo != null) {
+            PlayerChoiceDialog(
+                onInternalSelected = {
+                    showPlayerChoiceDialog = false
+                    pendingPlaybackInfo?.let { onStreamSelected(it) }
+                    pendingPlaybackInfo = null
+                },
+                onExternalSelected = {
+                    showPlayerChoiceDialog = false
+                    pendingPlaybackInfo?.let { info ->
+                        info.url?.let { url ->
+                            ExternalPlayerLauncher.launch(
+                                context = context,
+                                url = url,
+                                title = info.title,
+                                headers = info.headers
+                            )
+                        }
+                    }
+                    pendingPlaybackInfo = null
+                },
+                onDismiss = {
+                    showPlayerChoiceDialog = false
+                    pendingPlaybackInfo = null
+                }
             )
         }
     }
@@ -812,5 +869,108 @@ private fun StreamTypeChip(
             style = MaterialTheme.typography.labelSmall,
             color = color
         )
+    }
+}
+
+@Composable
+private fun PlayerChoiceDialog(
+    onInternalSelected: () -> Unit,
+    onExternalSelected: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(400.dp)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "What player should be used?",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    var internalFocused by remember { mutableStateOf(false) }
+                    Card(
+                        onClick = onInternalSelected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { internalFocused = it.isFocused },
+                        colors = CardDefaults.colors(
+                            containerColor = NuvioColors.BackgroundElevated,
+                            focusedContainerColor = NuvioColors.Secondary
+                        ),
+                        border = CardDefaults.border(
+                            focusedBorder = Border(
+                                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                        scale = CardDefaults.scale(focusedScale = 1.05f)
+                    ) {
+                        Text(
+                            text = "Internal",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (internalFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                                .fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    var externalFocused by remember { mutableStateOf(false) }
+                    Card(
+                        onClick = onExternalSelected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .onFocusChanged { externalFocused = it.isFocused },
+                        colors = CardDefaults.colors(
+                            containerColor = NuvioColors.BackgroundElevated,
+                            focusedContainerColor = NuvioColors.Secondary
+                        ),
+                        border = CardDefaults.border(
+                            focusedBorder = Border(
+                                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                        scale = CardDefaults.scale(focusedScale = 1.05f)
+                    ) {
+                        Text(
+                            text = "External",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (externalFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                                .fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
     }
 }
