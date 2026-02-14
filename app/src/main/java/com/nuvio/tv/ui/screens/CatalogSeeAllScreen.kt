@@ -31,10 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.tv.foundation.lazy.grid.TvGridCells
-import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
-import androidx.tv.foundation.lazy.grid.itemsIndexed
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -80,7 +80,7 @@ fun CatalogSeeAllScreen(
         "${it.addonId}_${it.apiType}_${it.catalogId}" == catalogKey
     }
 
-    val gridState = rememberTvLazyGridState()
+    val gridState = rememberLazyGridState()
     val restoreFocusRequester = remember { FocusRequester() }
     var focusedItemIndex by rememberSaveable(catalogKey) { mutableStateOf(0) }
     var shouldRestoreFocus by rememberSaveable(catalogKey) { mutableStateOf(true) }
@@ -171,9 +171,9 @@ fun CatalogSeeAllScreen(
 
         if (hasItems) {
             Box(modifier = Modifier.fillMaxSize()) {
-                TvLazyVerticalGrid(
+                LazyVerticalGrid(
                     state = gridState,
-                    columns = TvGridCells.Adaptive(minSize = posterCardStyle.width),
+                    columns = GridCells.Adaptive(minSize = posterCardStyle.width),
                     contentPadding = PaddingValues(
                         top = 12.dp,
                         bottom = if (catalogRow.isLoading) 80.dp else 32.dp
