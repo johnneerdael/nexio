@@ -309,16 +309,6 @@ private fun LegacySidebarScaffold(
                                 .padding(top = sidebarLogoTopPadding),
                             contentScale = ContentScale.Fit
                         )
-                    } else {
-                        Image(
-                            painter = painterResource(id = R.drawable.app_logo_mark),
-                            contentDescription = "Nuvio",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .padding(top = sidebarLogoTopPadding),
-                            contentScale = ContentScale.Fit
-                        )
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
