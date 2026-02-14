@@ -30,6 +30,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,8 @@ fun CatalogRowSection(
     val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
+
+    val firstItemFocusRequester = remember { FocusRequester() }
 
     // Only allocate FocusRequester when actually restoring focus
     val itemFocusRequester = if (focusedItemIndex >= 0) {
@@ -113,7 +116,8 @@ fun CatalogRowSection(
         LazyRow(
             state = listState,
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .focusRestorer { firstItemFocusRequester },
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -148,7 +152,11 @@ fun CatalogRowSection(
                                 Modifier
                             }
                         ),
-                    focusRequester = if (index == focusedItemIndex) itemFocusRequester else null
+                    focusRequester = when {
+                        index == focusedItemIndex && itemFocusRequester != null -> itemFocusRequester
+                        index == 0 -> firstItemFocusRequester
+                        else -> null
+                    }
                 )
             }
 
