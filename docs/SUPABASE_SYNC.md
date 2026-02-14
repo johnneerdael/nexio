@@ -71,6 +71,13 @@ CREATE TABLE sync_codes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at TIMESTAMPTZ DEFAULT 'infinity'::TIMESTAMPTZ
 );
+
+ALTER TABLE sync_codes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own sync codes"
+    ON sync_codes FOR ALL
+    USING (auth.uid() = owner_id)
+    WITH CHECK (auth.uid() = owner_id);
 ```
 
 #### `linked_devices`
@@ -86,6 +93,16 @@ CREATE TABLE linked_devices (
     linked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(owner_id, device_user_id)
 );
+
+ALTER TABLE linked_devices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Owners can read their linked devices"
+    ON linked_devices FOR SELECT
+    USING (auth.uid() = owner_id);
+
+CREATE POLICY "Devices can read their own link"
+    ON linked_devices FOR SELECT
+    USING (auth.uid() = device_user_id);
 ```
 
 #### `plugins`
