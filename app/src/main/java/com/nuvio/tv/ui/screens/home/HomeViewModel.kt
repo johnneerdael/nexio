@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
 import android.util.Log
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
@@ -77,8 +78,11 @@ class HomeViewModel @Inject constructor(
     private val catalogLoadSemaphore = Semaphore(6)
     private val trailerPreviewLoadingIds = mutableSetOf<String>()
     private val trailerPreviewNegativeCache = mutableSetOf<String>()
+    private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     private var activeTrailerPreviewItemId: String? = null
     private var trailerPreviewRequestVersion: Long = 0L
+    val trailerPreviewUrls: Map<String, String>
+        get() = trailerPreviewUrlsState
 
     init {
         loadLayoutPreference()
@@ -181,7 +185,7 @@ class HomeViewModel @Inject constructor(
         }
 
         if (trailerPreviewNegativeCache.contains(itemId)) return
-        if (_uiState.value.trailerPreviewUrls.containsKey(itemId)) return
+        if (trailerPreviewUrlsState.containsKey(itemId)) return
         if (!trailerPreviewLoadingIds.add(itemId)) return
 
         val requestVersion = trailerPreviewRequestVersion
@@ -204,11 +208,8 @@ class HomeViewModel @Inject constructor(
             if (trailerUrl.isNullOrBlank()) {
                 trailerPreviewNegativeCache.add(itemId)
             } else {
-                _uiState.update { state ->
-                    if (state.trailerPreviewUrls[itemId] == trailerUrl) state
-                    else state.copy(
-                        trailerPreviewUrls = state.trailerPreviewUrls + (itemId to trailerUrl)
-                    )
+                if (trailerPreviewUrlsState[itemId] != trailerUrl) {
+                    trailerPreviewUrlsState[itemId] = trailerUrl
                 }
             }
 
@@ -425,6 +426,11 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
+        trailerPreviewLoadingIds.clear()
+        trailerPreviewNegativeCache.clear()
+        trailerPreviewUrlsState.clear()
+        activeTrailerPreviewItemId = null
+        trailerPreviewRequestVersion = 0L
 
         try {
             if (addons.isEmpty()) {

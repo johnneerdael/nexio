@@ -1,8 +1,10 @@
 package com.nuvio.tv.ui.components
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+@Immutable
 data class PosterCardStyle(
     val width: Dp = 126.dp,
     val height: Dp = 189.dp,

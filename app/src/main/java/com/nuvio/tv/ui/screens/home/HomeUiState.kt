@@ -28,8 +28,7 @@ data class HomeUiState(
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
-    val gridItems: List<GridItem> = emptyList(),
-    val trailerPreviewUrls: Map<String, String> = emptyMap()
+    val gridItems: List<GridItem> = emptyList()
 )
 
 @Immutable

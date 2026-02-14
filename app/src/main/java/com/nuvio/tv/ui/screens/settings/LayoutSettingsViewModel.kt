@@ -26,7 +26,7 @@ data class LayoutSettingsUiState(
     val searchDiscoverEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
-    val focusedPosterBackdropExpandEnabled: Boolean = true,
+    val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
     val focusedPosterBackdropTrailerEnabled: Boolean = false,
     val focusedPosterBackdropTrailerMuted: Boolean = true,

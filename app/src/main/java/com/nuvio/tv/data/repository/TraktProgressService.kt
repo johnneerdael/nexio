@@ -19,6 +19,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -90,7 +91,10 @@ class TraktProgressService @Inject constructor(
         val episodes: Map<Pair<Int, Int>, EpisodeMetadata>
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Uncaught exception in TraktProgressService scope", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private val refreshSignals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val episodeVideoIdCache = mutableMapOf<String, String>()
     private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
@@ -118,7 +122,11 @@ class TraktProgressService @Inject constructor(
     init {
         scope.launch {
             refreshEvents().collectLatest {
-                refreshRemoteSnapshot()
+                try {
+                    refreshRemoteSnapshot()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to refresh remote snapshot", e)
+                }
             }
         }
     }

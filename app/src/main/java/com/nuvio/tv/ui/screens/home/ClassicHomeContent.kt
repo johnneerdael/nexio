@@ -36,6 +36,7 @@ fun ClassicHomeContent(
     uiState: HomeUiState,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
+    trailerPreviewUrls: Map<String, String>,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
@@ -203,7 +204,7 @@ fun ClassicHomeContent(
                 focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
                 focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
                 focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
-                trailerPreviewUrls = uiState.trailerPreviewUrls,
+                trailerPreviewUrls = trailerPreviewUrls,
                 onRequestTrailerPreview = onRequestTrailerPreview,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)

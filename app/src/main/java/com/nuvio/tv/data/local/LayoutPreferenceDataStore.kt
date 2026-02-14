@@ -115,7 +115,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val focusedPosterBackdropExpandEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[focusedPosterBackdropExpandEnabledKey] ?: true
+        prefs[focusedPosterBackdropExpandEnabledKey] ?: false
     }
 
     val focusedPosterBackdropExpandDelaySeconds: Flow<Int> = dataStore.data.map { prefs ->
