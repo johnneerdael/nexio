@@ -80,3 +80,15 @@ data class SupabaseLibraryItem(
     @SerialName("addon_base_url") val addonBaseUrl: String? = null,
     @SerialName("added_at") val addedAt: Long = 0
 )
+
+@Serializable
+data class SupabaseWatchedItem(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("content_id") val contentId: String,
+    @SerialName("content_type") val contentType: String,
+    val title: String = "",
+    val season: Int? = null,
+    val episode: Int? = null,
+    @SerialName("watched_at") val watchedAt: Long
+)

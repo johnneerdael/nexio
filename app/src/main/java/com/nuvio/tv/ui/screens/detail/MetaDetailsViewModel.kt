@@ -18,6 +18,7 @@ import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
+import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +41,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbMetadataService: TmdbMetadataService,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val watchedItemsPreferences: WatchedItemsPreferences,
     private val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     savedStateHandle: SavedStateHandle
@@ -61,6 +63,7 @@ class MetaDetailsViewModel @Inject constructor(
     init {
         observeLibraryState()
         observeWatchProgress()
+        observeWatchedEpisodes()
         observeMovieWatched()
         loadMeta()
     }
@@ -132,6 +135,16 @@ class MetaDetailsViewModel @Inject constructor(
             watchProgressRepository.getAllEpisodeProgress(itemId).collectLatest { progressMap ->
                 _uiState.update { it.copy(episodeProgressMap = progressMap) }
                 // Recalculate next to watch when progress changes
+                calculateNextToWatch()
+            }
+        }
+    }
+
+    private fun observeWatchedEpisodes() {
+        if (itemType.lowercase() == "movie") return
+        viewModelScope.launch {
+            watchedItemsPreferences.getWatchedEpisodesForContent(itemId).collectLatest { watchedSet ->
+                _uiState.update { it.copy(watchedEpisodes = watchedSet) }
                 calculateNextToWatch()
             }
         }
@@ -665,6 +678,7 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val isWatched = _uiState.value.episodeProgressMap[season to episode]?.isCompleted() == true
+                || _uiState.value.watchedEpisodes.contains(season to episode)
             runCatching {
                 if (isWatched) {
                     watchProgressRepository.removeFromHistory(itemId, season, episode)

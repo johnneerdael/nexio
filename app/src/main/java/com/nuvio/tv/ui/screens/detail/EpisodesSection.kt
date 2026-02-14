@@ -135,6 +135,7 @@ fun SeasonTabs(
 fun EpisodesRow(
     episodes: List<Video>,
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
+    watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     onEpisodeClick: (Video) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
@@ -165,9 +166,15 @@ fun EpisodesRow(
                     episodeProgressMap[s to e]
                 }
             }
+            val isMarkedWatched = episode.season?.let { s ->
+                episode.episode?.let { e ->
+                    watchedEpisodes.contains(s to e)
+                }
+            } ?: false
             EpisodeCard(
                 episode = episode,
                 watchProgress = progress,
+                isMarkedWatched = isMarkedWatched,
                 onClick = { onEpisodeClick(episode) },
                 onLongPress = { optionsEpisode = episode },
                 upFocusRequester = upFocusRequester,
@@ -186,6 +193,7 @@ fun EpisodesRow(
         val selectedWatched = selectedEpisode.season?.let { season ->
             selectedEpisode.episode?.let { episode ->
                 episodeProgressMap[season to episode]?.isCompleted() == true
+                    || watchedEpisodes.contains(season to episode)
             }
         } ?: false
         val isPending = episodeWatchedPendingKeys.contains(episodePendingKey(selectedEpisode))
@@ -212,6 +220,7 @@ fun EpisodesRow(
 private fun EpisodeCard(
     episode: Video,
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
+    isMarkedWatched: Boolean = false,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
@@ -391,7 +400,7 @@ private fun EpisodeCard(
                 }
 
                 // Watched indicator
-                if (watchProgress?.isCompleted() == true) {
+                if (watchProgress?.isCompleted() == true || isMarkedWatched) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)

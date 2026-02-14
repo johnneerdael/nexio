@@ -27,6 +27,8 @@ NuvioTV syncs the following data to Supabase so linked devices share the same st
 | **Addons** | Stremio-compatible addon manifest URLs | No (always syncs) |
 | **Watch Progress** | Per-movie/episode playback position | Yes (skipped when Trakt connected) |
 | **Library** | Saved movies & TV shows | Yes (skipped when Trakt connected) |
+| **Watched Items** | Permanent watched history (movies & episodes) | Yes (skipped when Trakt connected) |
+
 ### Authentication Model
 
 - **Anonymous**: Auto-created account, can generate/claim sync codes
@@ -197,6 +199,38 @@ CREATE POLICY "Users can manage own library items"
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 ```
+
+#### `watched_items`
+
+Permanent watched history. Unlike `watch_progress` (which is capped and stores playback position), this table is a permanent record of everything the user has watched or marked as watched. Used to determine if a movie or episode should show a "watched" checkmark.
+
+```sql
+CREATE TABLE watched_items (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    content_id TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    season INTEGER,
+    episode INTEGER,
+    watched_at BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX idx_watched_items_unique
+    ON watched_items (user_id, content_id, COALESCE(season, -1), COALESCE(episode, -1));
+
+CREATE INDEX idx_watched_items_user_id ON watched_items(user_id);
+
+ALTER TABLE watched_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own watched items"
+    ON watched_items FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+```
+
+> **Note:** The unique index uses `COALESCE(season, -1)` and `COALESCE(episode, -1)` because PostgreSQL treats NULLs as distinct in unique constraints. Movies have `NULL` season/episode, so without COALESCE, multiple entries for the same movie would be allowed.
 
 ### Triggers
 
@@ -634,6 +668,58 @@ $$;
 GRANT EXECUTE ON FUNCTION sync_pull_library() TO authenticated;
 ```
 
+### Sync: `sync_push_watched_items(p_items JSONB)`
+
+Full-replace push of watched items (permanent watched history).
+
+```sql
+CREATE OR REPLACE FUNCTION sync_push_watched_items(p_items JSONB)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_effective_user_id UUID;
+BEGIN
+    v_effective_user_id := get_sync_owner();
+    DELETE FROM watched_items WHERE user_id = v_effective_user_id;
+    INSERT INTO watched_items (user_id, content_id, content_type, title, season, episode, watched_at)
+    SELECT
+        v_effective_user_id,
+        (item->>'content_id'),
+        (item->>'content_type'),
+        COALESCE(item->>'title', ''),
+        (item->>'season')::INTEGER,
+        (item->>'episode')::INTEGER,
+        (item->>'watched_at')::BIGINT
+    FROM jsonb_array_elements(p_items) AS item;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION sync_push_watched_items(JSONB) TO authenticated;
+```
+
+### Sync: `sync_pull_watched_items()`
+
+Returns all watched items for the effective user.
+
+```sql
+CREATE OR REPLACE FUNCTION sync_pull_watched_items()
+RETURNS SETOF watched_items
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_effective_user_id UUID;
+BEGIN
+    v_effective_user_id := get_sync_owner();
+    RETURN QUERY SELECT * FROM watched_items WHERE user_id = v_effective_user_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION sync_pull_watched_items() TO authenticated;
+```
+
 ---
 
 ## Integration Guide
@@ -847,6 +933,41 @@ All push RPCs use a **full-replace** strategy: existing data for the effective u
 | `addon_base_url` | string | No | Source addon base URL |
 | `added_at` | long | No | Timestamp in ms (defaults to current time) |
 
+#### Push Watched Items
+
+```json
+// POST /rest/v1/rpc/sync_push_watched_items
+{
+  "p_items": [
+    {
+      "content_id": "tt1234567",
+      "content_type": "movie",
+      "title": "Example Movie",
+      "season": null,
+      "episode": null,
+      "watched_at": 1700000000000
+    },
+    {
+      "content_id": "tt7654321",
+      "content_type": "series",
+      "title": "Example Series",
+      "season": 2,
+      "episode": 5,
+      "watched_at": 1700000000000
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `content_id` | string | Yes | IMDB ID or content identifier |
+| `content_type` | string | Yes | `"movie"` or `"series"` |
+| `title` | string | No | Display name (defaults to `""`) |
+| `season` | int/null | No | Season number (null for movies) |
+| `episode` | int/null | No | Episode number (null for movies) |
+| `watched_at` | long | Yes | Unix timestamp in milliseconds |
+
 ### 5. Pulling Data
 
 #### Pull Watch Progress
@@ -898,6 +1019,28 @@ All push RPCs use a **full-replace** strategy: existing data for the effective u
     "added_at": 1700000000000,
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z"
+  }
+]
+```
+
+#### Pull Watched Items
+
+```json
+// POST /rest/v1/rpc/sync_pull_watched_items
+{}
+
+// Response: array of watched_items rows
+[
+  {
+    "id": "uuid",
+    "user_id": "uuid",
+    "content_id": "tt1234567",
+    "content_type": "movie",
+    "title": "Example Movie",
+    "season": null,
+    "episode": null,
+    "watched_at": 1700000000000,
+    "created_at": "2024-01-01T00:00:00Z"
   }
 ]
 ```
@@ -976,6 +1119,19 @@ GET /rest/v1/plugins?select=*&user_id=eq.{effective_user_id}&order=sort_order
 }
 ```
 
+### Watched Item
+
+```json
+{
+  "content_id": "string (required)",
+  "content_type": "string (required) - 'movie' | 'series'",
+  "title": "string (default: '') - display name",
+  "season": "integer (optional, null for movies)",
+  "episode": "integer (optional, null for movies)",
+  "watched_at": "long (required) - unix timestamp in ms"
+}
+```
+
 ### Linked Device
 
 ```json
@@ -1014,22 +1170,25 @@ When the app starts and the user is authenticated (anonymous or full account):
    - **Push watch progress** → so linked devices can pull
    - **Pull library items** → merge into local (additive)
    - **Push library items** → so linked devices can pull
+   - **Pull watched items** → merge into local (additive)
+   - **Push watched items** → so linked devices can pull
 
 ### On-Demand Sync
 
 - **Plugins/Addons**: Pushed to remote immediately when added or removed
 - **Watch Progress**: Pushed with a 2-second debounce after any playback position update
 - **Library Items**: Pushed with a 2-second debounce after add or remove
+- **Watched Items**: Pushed with a 2-second debounce after mark/unmark as watched
 
 ### Merge Strategy
 
 - **Push**: Full-replace. The entire local dataset replaces the remote dataset.
-- **Pull (merge)**: Additive. Remote items not already present locally (matched by `content_id` + `content_type`) are added. Existing local items are preserved.
+- **Pull (merge)**: Additive. Remote items not already present locally are added. Existing local items are preserved. Match keys vary by data type: `content_id` + `content_type` for library, `content_id` + `season` + `episode` for watched items.
 
 ### Trakt Override
 
 When Trakt is connected:
-- **Watch progress** and **library** sync via Supabase is **completely skipped**
+- **Watch progress**, **library**, and **watched items** sync via Supabase is **completely skipped**
 - Trakt becomes the source of truth for these data types
 - **Plugins** and **addons** always sync regardless of Trakt status
 

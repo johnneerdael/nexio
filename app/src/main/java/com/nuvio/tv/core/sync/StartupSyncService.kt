@@ -6,6 +6,7 @@ import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
+import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
 import com.nuvio.tv.data.repository.LibraryRepositoryImpl
 import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
@@ -27,13 +28,15 @@ class StartupSyncService @Inject constructor(
     private val addonSyncService: AddonSyncService,
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
+    private val watchedItemsSyncService: WatchedItemsSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val watchProgressPreferences: WatchProgressPreferences,
-    private val libraryPreferences: LibraryPreferences
+    private val libraryPreferences: LibraryPreferences,
+    private val watchedItemsPreferences: WatchedItemsPreferences
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -93,6 +96,15 @@ class StartupSyncService @Inject constructor(
                 }
                 libraryRepository.isSyncingFromRemote = false
                 librarySyncService.pushToRemote()
+
+                // Sync watched items
+                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote()
+                Log.d(TAG, "Pulled ${remoteWatchedItems.size} watched items from remote")
+                if (remoteWatchedItems.isNotEmpty()) {
+                    watchedItemsPreferences.mergeRemoteItems(remoteWatchedItems)
+                    Log.d(TAG, "Merged ${remoteWatchedItems.size} watched items into local")
+                }
+                watchedItemsSyncService.pushToRemote()
             } else {
                 Log.d(TAG, "Skipping watch progress & library sync (Trakt connected)")
             }

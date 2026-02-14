@@ -10,7 +10,9 @@ import com.nuvio.tv.core.sync.AddonSyncService
 import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.core.sync.PluginSyncService
 import com.nuvio.tv.core.sync.WatchProgressSyncService
+import com.nuvio.tv.core.sync.WatchedItemsSyncService
 import com.nuvio.tv.data.local.LibraryPreferences
+import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
@@ -34,12 +36,14 @@ class AccountViewModel @Inject constructor(
     private val addonSyncService: AddonSyncService,
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
+    private val watchedItemsSyncService: WatchedItemsSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
     private val watchProgressPreferences: WatchProgressPreferences,
     private val libraryPreferences: LibraryPreferences,
+    private val watchedItemsPreferences: WatchedItemsPreferences,
     private val traktAuthDataStore: TraktAuthDataStore
 ) : ViewModel() {
 
@@ -232,6 +236,7 @@ class AccountViewModel @Inject constructor(
         addonSyncService.pushToRemote()
         watchProgressSyncService.pushToRemote()
         librarySyncService.pushToRemote()
+        watchedItemsSyncService.pushToRemote()
     }
 
     private suspend fun pullRemoteData() {
@@ -272,6 +277,13 @@ class AccountViewModel @Inject constructor(
                     Log.d("AccountViewModel", "pullRemoteData: merged ${remoteLibraryItems.size} library items into local")
                 }
                 libraryRepository.isSyncingFromRemote = false
+
+                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote()
+                Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteWatchedItems.size} watched items")
+                if (remoteWatchedItems.isNotEmpty()) {
+                    watchedItemsPreferences.mergeRemoteItems(remoteWatchedItems)
+                    Log.d("AccountViewModel", "pullRemoteData: merged ${remoteWatchedItems.size} watched items into local")
+                }
             }
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false

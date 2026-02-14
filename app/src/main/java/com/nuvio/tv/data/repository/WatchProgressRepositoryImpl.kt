@@ -3,10 +3,13 @@ package com.nuvio.tv.data.repository
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.sync.WatchProgressSyncService
+import com.nuvio.tv.core.sync.WatchedItemsSyncService
 import android.util.Log
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
+import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.domain.model.WatchedItem
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +40,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
     private val watchProgressSyncService: WatchProgressSyncService,
+    private val watchedItemsPreferences: WatchedItemsPreferences,
+    private val watchedItemsSyncService: WatchedItemsSyncService,
     private val authManager: AuthManager,
     private val metaRepository: MetaRepository
 ) : WatchProgressRepository {
@@ -59,6 +64,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
+    private var watchedItemsSyncJob: Job? = null
     var isSyncingFromRemote = false
 
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
@@ -73,6 +79,16 @@ class WatchProgressRepositoryImpl @Inject constructor(
         syncJob = syncScope.launch {
             delay(2000)
             watchProgressSyncService.pushToRemote()
+        }
+    }
+
+    private fun triggerWatchedItemsSync() {
+        if (isSyncingFromRemote) return
+        if (!authManager.isAuthenticated) return
+        watchedItemsSyncJob?.cancel()
+        watchedItemsSyncJob = syncScope.launch {
+            delay(2000)
+            watchedItemsSyncService.pushToRemote()
         }
     }
 
@@ -274,13 +290,17 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (!isAuthenticated) {
-                    return@flatMapLatest if (season != null && episode != null) {
+                    val progressFlow = if (season != null && episode != null) {
                         watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
                             .map { it?.isCompleted() == true }
                     } else {
                         watchProgressPreferences.getProgress(contentId)
                             .map { it?.isCompleted() == true }
                     }
+                    return@flatMapLatest combine(
+                        progressFlow,
+                        watchedItemsPreferences.isWatched(contentId, season, episode)
+                    ) { progressWatched, itemWatched -> progressWatched || itemWatched }
                 }
 
                 if (season != null && episode != null) {
@@ -302,6 +322,19 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
         watchProgressPreferences.saveProgress(progress)
         triggerRemoteSync()
+        if (progress.isCompleted()) {
+            watchedItemsPreferences.markAsWatched(
+                WatchedItem(
+                    contentId = progress.contentId,
+                    contentType = progress.contentType,
+                    title = progress.name,
+                    season = progress.season,
+                    episode = progress.episode,
+                    watchedAt = System.currentTimeMillis()
+                )
+            )
+            triggerWatchedItemsSync()
+        }
     }
 
     override suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
@@ -325,7 +358,9 @@ class WatchProgressRepositoryImpl @Inject constructor(
             return
         }
         watchProgressPreferences.removeProgress(contentId, season, episode)
+        watchedItemsPreferences.unmarkAsWatched(contentId, season, episode)
         triggerRemoteSync()
+        triggerWatchedItemsSync()
     }
 
     override suspend fun markAsCompleted(progress: WatchProgress) {
@@ -356,7 +391,18 @@ class WatchProgressRepositoryImpl @Inject constructor(
             return
         }
         watchProgressPreferences.markAsCompleted(progress)
+        watchedItemsPreferences.markAsWatched(
+            WatchedItem(
+                contentId = progress.contentId,
+                contentType = progress.contentType,
+                title = progress.name,
+                season = progress.season,
+                episode = progress.episode,
+                watchedAt = System.currentTimeMillis()
+            )
+        )
         triggerRemoteSync()
+        triggerWatchedItemsSync()
     }
 
     override suspend fun clearAll() {

@@ -169,6 +169,7 @@ fun MetaDetailsScreen(
                     librarySourceMode = uiState.librarySourceMode,
                     nextToWatch = uiState.nextToWatch,
                     episodeProgressMap = uiState.episodeProgressMap,
+                    watchedEpisodes = uiState.watchedEpisodes,
                     episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
@@ -275,6 +276,7 @@ private fun MetaDetailsContent(
     librarySourceMode: LibrarySourceMode,
     nextToWatch: NextToWatch?,
     episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
+    watchedEpisodes: Set<Pair<Int, Int>>,
     episodeWatchedPendingKeys: Set<String>,
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
@@ -563,6 +565,7 @@ private fun MetaDetailsContent(
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
+                        watchedEpisodes = watchedEpisodes,
                         episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                         onEpisodeClick = episodeClick,
                         onToggleEpisodeWatched = onToggleEpisodeWatched,
