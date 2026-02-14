@@ -82,7 +82,7 @@ fun AccountSettingsContent(
             is AuthState.SignedOut -> {
                 item {
                     Text(
-                        text = "Sync your addons and plugins across devices.",
+                        text = "Sync your library, watch progress, addons, and plugins across devices. Library and watch progress sync only when Trakt is not connected.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = NuvioColors.TextSecondary
                     )
