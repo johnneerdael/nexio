@@ -495,11 +495,16 @@ fun PlayerScreen(
                     viewModel.onEvent(PlayerEvent.OnToggleAspectRatio)
                 },
                 onOpenInExternalPlayer = {
+                    val url = viewModel.getCurrentStreamUrl()
+                    val title = uiState.title
+                    val headers = viewModel.getCurrentHeaders()
+                    viewModel.stopAndRelease()
+                    onBackPress()
                     ExternalPlayerLauncher.launch(
                         context = context,
-                        url = viewModel.getCurrentStreamUrl(),
-                        title = uiState.title,
-                        headers = viewModel.getCurrentHeaders()
+                        url = url,
+                        title = title,
+                        headers = headers
                     )
                 },
                 onResetHideTimer = { viewModel.scheduleHideControls() },

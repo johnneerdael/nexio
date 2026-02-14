@@ -32,9 +32,7 @@ object ExternalPlayerLauncher {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            val chooser = Intent.createChooser(intent, "Open with...")
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(chooser)
+            context.startActivity(intent)
             true
         } catch (e: Exception) {
             Toast.makeText(
