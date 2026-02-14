@@ -282,22 +282,24 @@ private fun EpisodeCard(
     }
     val edgeFadeBrush = remember(backgroundCard) {
         Brush.horizontalGradient(
-            colors = listOf(
-                androidx.compose.ui.graphics.Color.Transparent,
-                backgroundCard.copy(alpha = 0.62f),
-                backgroundCard.copy(alpha = 0.92f),
-                backgroundCard
-            )
+            0.0f to androidx.compose.ui.graphics.Color.Transparent,
+            0.15f to backgroundCard.copy(alpha = 0.08f),
+            0.35f to backgroundCard.copy(alpha = 0.25f),
+            0.55f to backgroundCard.copy(alpha = 0.50f),
+            0.72f to backgroundCard.copy(alpha = 0.72f),
+            0.85f to backgroundCard.copy(alpha = 0.88f),
+            1.0f to backgroundCard
         )
     }
     val detailsGradientBrush = remember(backgroundCard) {
         Brush.horizontalGradient(
-            colors = listOf(
-                backgroundCard.copy(alpha = 0f),
-                backgroundCard.copy(alpha = 0.5f),
-                backgroundCard.copy(alpha = 0.9f),
-                backgroundCard
-            )
+            0.0f to backgroundCard.copy(alpha = 0f),
+            0.12f to backgroundCard.copy(alpha = 0.15f),
+            0.3f to backgroundCard.copy(alpha = 0.40f),
+            0.5f to backgroundCard.copy(alpha = 0.65f),
+            0.7f to backgroundCard.copy(alpha = 0.85f),
+            0.85f to backgroundCard.copy(alpha = 0.95f),
+            1.0f to backgroundCard
         )
     }
     val thumbnailWidthPx = remember(thumbnailWidth, density) {
