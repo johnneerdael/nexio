@@ -137,6 +137,7 @@ fun EpisodesRow(
     episodeProgressMap: Map<Pair<Int, Int>, com.nuvio.tv.domain.model.WatchProgress> = emptyMap(),
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     episodeWatchedPendingKeys: Set<String> = emptySet(),
+    blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     upFocusRequester: FocusRequester,
@@ -175,6 +176,7 @@ fun EpisodesRow(
                 episode = episode,
                 watchProgress = progress,
                 isMarkedWatched = isMarkedWatched,
+                blurUnwatched = blurUnwatchedEpisodes,
                 onClick = { onEpisodeClick(episode) },
                 onLongPress = { optionsEpisode = episode },
                 upFocusRequester = upFocusRequester,
@@ -221,6 +223,7 @@ private fun EpisodeCard(
     episode: Video,
     watchProgress: com.nuvio.tv.domain.model.WatchProgress? = null,
     isMarkedWatched: Boolean = false,
+    blurUnwatched: Boolean = false,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
@@ -235,6 +238,8 @@ private fun EpisodeCard(
     val formattedDate = remember(episode.released) {
         episode.released?.let { formatReleaseDate(it) } ?: ""
     }
+    val isWatched = watchProgress?.isCompleted() == true || isMarkedWatched
+    val shouldBlur = blurUnwatched && !isWatched
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val thumbnailWidth by animateDpAsState(
@@ -301,11 +306,16 @@ private fun EpisodeCard(
     val thumbnailHeightPx = remember(density) {
         with(density) { 158.dp.roundToPx() }
     }
-    val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx) {
+    val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(episode.thumbnail)
             .crossfade(true)
             .size(width = thumbnailWidthPx, height = thumbnailHeightPx)
+            .apply {
+                if (shouldBlur) {
+                    transformations(com.nuvio.tv.ui.util.BlurTransformation())
+                }
+            }
             .build()
     }
 

@@ -351,9 +351,18 @@ private fun EpisodesListView(
                             currentEpisodeIndex >= 0 -> isCurrent
                             else -> index == 0
                         }
+                        val episodeKey = episode.season?.let { s ->
+                            episode.episode?.let { e -> s to e }
+                        }
+                        val isWatched = episodeKey != null && (
+                            uiState.episodeWatchProgressMap[episodeKey]?.isCompleted() == true ||
+                            uiState.watchedEpisodeKeys.contains(episodeKey)
+                        )
                         EpisodeItem(
                             episode = episode,
                             isCurrent = isCurrent,
+                            isWatched = isWatched,
+                            blurUnwatched = uiState.blurUnwatchedEpisodes,
                             focusRequester = episodesFocusRequester,
                             requestInitialFocus = requestInitialFocus,
                             onClick = { onEpisodeSelected(episode) }
@@ -431,10 +440,13 @@ private fun EpisodesSeasonTabs(
 private fun EpisodeItem(
     episode: Video,
     isCurrent: Boolean,
+    isWatched: Boolean = false,
+    blurUnwatched: Boolean = false,
     focusRequester: FocusRequester,
     requestInitialFocus: Boolean,
     onClick: () -> Unit
 ) {
+    val shouldBlur = blurUnwatched && !isWatched && !isCurrent
     val formattedDate = remember(episode.released) {
         episode.released?.let { formatReleaseDate(it) }?.takeIf { it.isNotBlank() }
     }
@@ -485,6 +497,11 @@ private fun EpisodeItem(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(episode.thumbnail)
                         .crossfade(true)
+                        .apply {
+                            if (shouldBlur) {
+                                transformations(com.nuvio.tv.ui.util.BlurTransformation())
+                            }
+                        }
                         .build(),
                     contentDescription = episode.title,
                     modifier = Modifier.fillMaxSize(),

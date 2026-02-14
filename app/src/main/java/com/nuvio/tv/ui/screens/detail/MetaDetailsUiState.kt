@@ -31,6 +31,7 @@ data class MetaDetailsUiState(
     val isMovieWatchedPending: Boolean = false,
     val watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
+    val blurUnwatchedEpisodes: Boolean = false,
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )

@@ -9,6 +9,7 @@ import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.WatchProgress
 
 data class PlayerUiState(
     val isPlaying: Boolean = false,
@@ -57,6 +58,9 @@ data class PlayerUiState(
     val currentSeason: Int? = null,
     val currentEpisode: Int? = null,
     val currentEpisodeTitle: String? = null,
+    val blurUnwatchedEpisodes: Boolean = false,
+    val episodeWatchProgressMap: Map<Pair<Int, Int>, WatchProgress> = emptyMap(),
+    val watchedEpisodeKeys: Set<Pair<Int, Int>> = emptySet(),
     val showEpisodeStreams: Boolean = false,
     val isLoadingEpisodeStreams: Boolean = false,
     val episodeStreamsError: String? = null,

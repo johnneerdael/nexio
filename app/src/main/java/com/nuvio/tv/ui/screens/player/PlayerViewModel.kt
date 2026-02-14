@@ -69,6 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
@@ -91,6 +92,8 @@ class PlayerViewModel @Inject constructor(
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
+    private val layoutPreferenceDataStore: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
+    private val watchedItemsPreferences: com.nuvio.tv.data.local.WatchedItemsPreferences,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -241,6 +244,8 @@ class PlayerViewModel @Inject constructor(
         observeSubtitleSettings()
         fetchAddonSubtitles()
         fetchMetaDetails(contentId, contentType)
+        observeBlurUnwatchedEpisodes()
+        observeEpisodeWatchProgress()
     }
     
     private fun fetchAddonSubtitles() {
@@ -282,6 +287,31 @@ class PlayerViewModel @Inject constructor(
         }
     }
     
+    private fun observeBlurUnwatchedEpisodes() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.blurUnwatchedEpisodes.collectLatest { enabled ->
+                _uiState.update { it.copy(blurUnwatchedEpisodes = enabled) }
+            }
+        }
+    }
+
+    private fun observeEpisodeWatchProgress() {
+        val id = contentId ?: return
+        val type = contentType ?: return
+        if (type.lowercase() != "series") return
+        val baseId = id.split(":").firstOrNull() ?: id
+        viewModelScope.launch {
+            watchProgressRepository.getAllEpisodeProgress(baseId).collectLatest { progressMap ->
+                _uiState.update { it.copy(episodeWatchProgressMap = progressMap) }
+            }
+        }
+        viewModelScope.launch {
+            watchedItemsPreferences.getWatchedEpisodesForContent(baseId).collectLatest { watchedSet ->
+                _uiState.update { it.copy(watchedEpisodeKeys = watchedSet) }
+            }
+        }
+    }
+
     private fun observeSubtitleSettings() {
         viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collect { settings ->

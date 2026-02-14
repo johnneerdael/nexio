@@ -32,7 +32,8 @@ data class LayoutSettingsUiState(
     val focusedPosterBackdropTrailerMuted: Boolean = true,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
-    val posterCardCornerRadiusDp: Int = 12
+    val posterCardCornerRadiusDp: Int = 12,
+    val blurUnwatchedEpisodes: Boolean = false
 )
 
 data class CatalogInfo(
@@ -57,6 +58,7 @@ sealed class LayoutSettingsEvent {
     data class SetFocusedPosterBackdropTrailerMuted(val muted: Boolean) : LayoutSettingsEvent()
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
+    data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
@@ -155,6 +157,11 @@ class LayoutSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.blurUnwatchedEpisodes.collectLatest { enabled ->
+                _uiState.update { it.copy(blurUnwatchedEpisodes = enabled) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
@@ -175,6 +182,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted -> setFocusedPosterBackdropTrailerMuted(event.muted)
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
+            is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
@@ -267,6 +275,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setPosterCardCornerRadius(cornerRadiusDp: Int) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setPosterCardCornerRadiusDp(cornerRadiusDp)
+        }
+    }
+
+    private fun setBlurUnwatchedEpisodes(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setBlurUnwatchedEpisodes(enabled)
         }
     }
 

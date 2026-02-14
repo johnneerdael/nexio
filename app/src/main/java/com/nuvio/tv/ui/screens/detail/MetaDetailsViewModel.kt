@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
+import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.LibraryEntryInput
@@ -44,6 +45,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchedItemsPreferences: WatchedItemsPreferences,
     private val trailerService: TrailerService,
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -65,6 +67,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeWatchProgress()
         observeWatchedEpisodes()
         observeMovieWatched()
+        observeBlurUnwatchedEpisodes()
         loadMeta()
     }
 
@@ -155,6 +158,14 @@ class MetaDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             watchProgressRepository.isWatched(itemId).collectLatest { watched ->
                 _uiState.update { it.copy(isMovieWatched = watched) }
+            }
+        }
+    }
+
+    private fun observeBlurUnwatchedEpisodes() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.blurUnwatchedEpisodes.collectLatest { enabled ->
+                _uiState.update { it.copy(blurUnwatchedEpisodes = enabled) }
             }
         }
     }
