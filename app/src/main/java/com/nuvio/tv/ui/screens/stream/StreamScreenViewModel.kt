@@ -357,7 +357,7 @@ class StreamScreenViewModel @Inject constructor(
                         append(' ')
                         append(stream.getStreamUrl().orEmpty())
                     }
-                    stream.getStreamUrl() != null && regex.containsMatchIn(searchableText)
+                    stream.getStreamUrl() != null && regex.matches(searchableText)
                 }
             }
         }
