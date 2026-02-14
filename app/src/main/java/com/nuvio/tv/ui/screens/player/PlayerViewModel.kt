@@ -42,6 +42,7 @@ import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.TraktScrobbleItem
 import com.nuvio.tv.data.repository.TraktScrobbleService
@@ -89,6 +90,7 @@ class PlayerViewModel @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -135,6 +137,12 @@ class PlayerViewModel @Inject constructor(
     private val initialSeason: Int? = savedStateHandle.get<String>("season")?.toIntOrNull()
     private val initialEpisode: Int? = savedStateHandle.get<String>("episode")?.toIntOrNull()
     private val initialEpisodeTitle: String? = savedStateHandle.get<String>("episodeTitle")?.let {
+        if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
+    }
+    private val rememberedAudioLanguage: String? = savedStateHandle.get<String>("rememberedAudioLanguage")?.let {
+        if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
+    }
+    private val rememberedAudioName: String? = savedStateHandle.get<String>("rememberedAudioName")?.let {
         if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
     }
 
@@ -195,6 +203,8 @@ class PlayerViewModel @Inject constructor(
     private var lastSubtitleSecondaryLanguage: String? = null
     private var pendingAddonSubtitleLanguage: String? = null
     private var hasScannedTextTracksOnce: Boolean = false
+    private var streamReuseLastLinkEnabled: Boolean = false
+    private var hasAppliedRememberedAudioSelection: Boolean = false
 
     
     private var okHttpClient: OkHttpClient? = null
@@ -209,6 +219,11 @@ class PlayerViewModel @Inject constructor(
     private var pendingResumeProgress: WatchProgress? = null
     private var currentScrobbleItem: TraktScrobbleItem? = null
     private var hasSentScrobbleStartForCurrentItem: Boolean = false
+    private val streamCacheKey: String? by lazy {
+        val type = contentType?.lowercase()
+        val vid = currentVideoId
+        if (type.isNullOrBlank() || vid.isNullOrBlank()) null else "$type|$vid"
+    }
 
     init {
         refreshScrobbleItem()
@@ -287,6 +302,7 @@ class PlayerViewModel @Inject constructor(
                 ) {
                     schedulePauseOverlay()
                 }
+                streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
 
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
@@ -1397,6 +1413,8 @@ class PlayerViewModel @Inject constructor(
             pendingAddonSubtitleLanguage = null
         }
 
+        maybeApplyRememberedAudioSelection(audioTracks)
+
         _uiState.update {
             it.copy(
                 audioTracks = audioTracks,
@@ -1406,6 +1424,41 @@ class PlayerViewModel @Inject constructor(
             )
         }
         tryAutoSelectPreferredSubtitleFromAvailableTracks()
+    }
+
+    private fun maybeApplyRememberedAudioSelection(audioTracks: List<TrackInfo>) {
+        if (hasAppliedRememberedAudioSelection) return
+        if (!streamReuseLastLinkEnabled) return
+        if (audioTracks.isEmpty()) return
+        if (rememberedAudioLanguage.isNullOrBlank() && rememberedAudioName.isNullOrBlank()) return
+
+        fun normalize(value: String?): String? = value
+            ?.lowercase()
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val targetLang = normalize(rememberedAudioLanguage)
+        val targetName = normalize(rememberedAudioName)
+
+        val index = audioTracks.indexOfFirst { track ->
+            val trackLang = normalize(track.language)
+            val trackName = normalize(track.name)
+            val langMatch = !targetLang.isNullOrBlank() &&
+                !trackLang.isNullOrBlank() &&
+                (trackLang == targetLang || trackLang.startsWith("$targetLang-"))
+            val nameMatch = !targetName.isNullOrBlank() &&
+                !trackName.isNullOrBlank() &&
+                (trackName == targetName || trackName.contains(targetName))
+            langMatch || nameMatch
+        }
+        if (index < 0) {
+            hasAppliedRememberedAudioSelection = true
+            return
+        }
+
+        selectAudioTrack(index)
+        hasAppliedRememberedAudioSelection = true
     }
 
     private fun subtitleLanguageTargets(): List<String> {
@@ -2088,12 +2141,33 @@ class PlayerViewModel @Inject constructor(
                                 .buildUpon()
                                 .setOverrideForType(override)
                                 .build()
+                            persistRememberedLinkAudioSelection(trackIndex)
                             return
                         }
                         currentAudioIndex++
                     }
                 }
             }
+        }
+    }
+
+    private fun persistRememberedLinkAudioSelection(trackIndex: Int) {
+        if (!streamReuseLastLinkEnabled) return
+
+        val key = streamCacheKey ?: return
+        val url = currentStreamUrl.takeIf { it.isNotBlank() } ?: return
+        val streamName = _uiState.value.currentStreamName?.takeIf { it.isNotBlank() } ?: title
+        val selectedTrack = _uiState.value.audioTracks.getOrNull(trackIndex)
+
+        viewModelScope.launch {
+            streamLinkCacheDataStore.save(
+                contentKey = key,
+                url = url,
+                streamName = streamName,
+                headers = currentHeaders,
+                rememberedAudioLanguage = selectedTrack?.language,
+                rememberedAudioName = selectedTrack?.name
+            )
         }
     }
 

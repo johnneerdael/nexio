@@ -221,7 +221,9 @@ fun NuvioNavHost(
                                 videoId = playbackInfo.videoId,
                                 season = playbackInfo.season,
                                 episode = playbackInfo.episode,
-                                episodeTitle = playbackInfo.episodeTitle
+                                episodeTitle = playbackInfo.episodeTitle,
+                                rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
+                                rememberedAudioName = playbackInfo.rememberedAudioName
                             )
                         )
                     }
@@ -295,6 +297,16 @@ fun NuvioNavHost(
                     defaultValue = null
                 },
                 navArgument("episodeTitle") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("rememberedAudioLanguage") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("rememberedAudioName") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null

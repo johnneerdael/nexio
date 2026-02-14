@@ -121,7 +121,9 @@ class StreamScreenViewModel @Inject constructor(
                                 videoId = videoId,
                                 season = season,
                                 episode = episode,
-                                episodeTitle = episodeName
+                                episodeTitle = episodeName,
+                                rememberedAudioLanguage = cached.rememberedAudioLanguage,
+                                rememberedAudioName = cached.rememberedAudioName
                             )
                         )
                     }
@@ -274,7 +276,9 @@ class StreamScreenViewModel @Inject constructor(
             videoId = videoId,
             season = season,
             episode = episode,
-            episodeTitle = episodeName
+            episodeTitle = episodeName,
+            rememberedAudioLanguage = null,
+            rememberedAudioName = null
         )
 
         val url = playbackInfo.url
@@ -375,5 +379,7 @@ data class StreamPlaybackInfo(
     val videoId: String?,
     val season: Int?,
     val episode: Int?,
-    val episodeTitle: String?
+    val episodeTitle: String?,
+    val rememberedAudioLanguage: String?,
+    val rememberedAudioName: String?
 )
