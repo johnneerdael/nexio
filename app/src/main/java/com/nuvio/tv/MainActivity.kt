@@ -120,14 +120,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.OCEAN)
-            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = null as Boolean?)
+            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = false)
 
             NuvioTheme(appTheme = currentTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
-                    val layoutChosen = hasChosenLayout ?: return@Surface
+                    val layoutChosen = hasChosenLayout ?: false
 
                     val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
                     val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = false)

@@ -7,6 +7,8 @@ import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.MetaCompany
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -40,26 +42,35 @@ class TmdbMetadataService @Inject constructor(
             }
 
             try {
-                val details = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvDetails(numericId, TMDB_API_KEY, normalizedLanguage)
-                    else -> tmdbApi.getMovieDetails(numericId, TMDB_API_KEY, normalizedLanguage)
-                }.body()
-
-                val credits = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvCredits(numericId, TMDB_API_KEY, normalizedLanguage)
-                    else -> tmdbApi.getMovieCredits(numericId, TMDB_API_KEY, normalizedLanguage)
-                }.body()
-
                 val includeImageLanguage = buildString {
                     append(normalizedLanguage.substringBefore("-"))
                     append(",")
                     append(normalizedLanguage)
                     append(",en,null")
                 }
-                val images = when (tmdbType) {
-                    "tv" -> tmdbApi.getTvImages(numericId, TMDB_API_KEY, includeImageLanguage)
-                    else -> tmdbApi.getMovieImages(numericId, TMDB_API_KEY, includeImageLanguage)
-                }.body()
+
+                // Fetch details, credits, and images in parallel
+                val (details, credits, images) = coroutineScope {
+                    val detailsDeferred = async {
+                        when (tmdbType) {
+                            "tv" -> tmdbApi.getTvDetails(numericId, TMDB_API_KEY, normalizedLanguage)
+                            else -> tmdbApi.getMovieDetails(numericId, TMDB_API_KEY, normalizedLanguage)
+                        }.body()
+                    }
+                    val creditsDeferred = async {
+                        when (tmdbType) {
+                            "tv" -> tmdbApi.getTvCredits(numericId, TMDB_API_KEY, normalizedLanguage)
+                            else -> tmdbApi.getMovieCredits(numericId, TMDB_API_KEY, normalizedLanguage)
+                        }.body()
+                    }
+                    val imagesDeferred = async {
+                        when (tmdbType) {
+                            "tv" -> tmdbApi.getTvImages(numericId, TMDB_API_KEY, includeImageLanguage)
+                            else -> tmdbApi.getMovieImages(numericId, TMDB_API_KEY, includeImageLanguage)
+                        }.body()
+                    }
+                    Triple(detailsDeferred.await(), creditsDeferred.await(), imagesDeferred.await())
+                }
 
                 val genres = details?.genres?.mapNotNull { genre ->
                     genre.name.trim().takeIf { name -> name.isNotBlank() }

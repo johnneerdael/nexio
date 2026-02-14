@@ -24,6 +24,9 @@ import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,7 +78,8 @@ class HomeViewModel @Inject constructor(
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var currentHeroCatalogKey: String? = null
     private var catalogUpdateJob: Job? = null
-    private val catalogLoadSemaphore = Semaphore(3)
+    private var hasRenderedFirstCatalog = false
+    private val catalogLoadSemaphore = Semaphore(6)
     private var pendingCatalogLoads = 0
     private val truncatedItemsCache = mutableMapOf<String, List<MetaPreview>>()
     private val trailerPreviewLoadingIds = mutableSetOf<String>()
@@ -437,6 +441,7 @@ class HomeViewModel @Inject constructor(
         catalogOrder.clear()
         catalogsMap.clear()
         truncatedItemsCache.clear()
+        hasRenderedFirstCatalog = false
         trailerPreviewLoadingIds.clear()
         trailerPreviewNegativeCache.clear()
         trailerPreviewUrlsState.clear()
@@ -574,10 +579,16 @@ class HomeViewModel @Inject constructor(
     private fun scheduleUpdateCatalogRows() {
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
+            // Render immediately for the first catalog arrival, debounce subsequent updates
+            if (!hasRenderedFirstCatalog && catalogsMap.isNotEmpty()) {
+                hasRenderedFirstCatalog = true
+                updateCatalogRows()
+                return@launch
+            }
             val debounceMs = when {
-                pendingCatalogLoads > 5 -> 500L
-                pendingCatalogLoads > 0 -> 300L
-                else -> 150L
+                pendingCatalogLoads > 5 -> 300L
+                pendingCatalogLoads > 0 -> 150L
+                else -> 100L
             }
             delay(debounceMs)
             updateCatalogRows()
@@ -681,34 +692,37 @@ class HomeViewModel @Inject constructor(
             Triple(computedDisplayRows, computedHeroItems, computedGridItems)
         }
 
-        val heroItems = enrichHeroItems(baseHeroItems)
-        val gridItems = if (currentLayout == HomeLayout.GRID) {
-            replaceGridHeroItems(baseGridItems, heroItems)
-        } else {
-            baseGridItems
-        }
-
         // Full (untruncated) rows for CatalogSeeAllScreen
         val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
 
-        val currentState = _uiState.value
-        if (
-            currentState.catalogRows == displayRows &&
-            currentState.fullCatalogRows == fullRows &&
-            currentState.heroItems == heroItems &&
-            currentState.gridItems == gridItems &&
-            !currentState.isLoading
-        ) {
-            return
-        }
-
-        _uiState.value = currentState.copy(
+        // Show catalog rows immediately with un-enriched hero items
+        _uiState.value = _uiState.value.copy(
             catalogRows = displayRows,
             fullCatalogRows = fullRows,
-            heroItems = heroItems,
-            gridItems = gridItems,
+            heroItems = baseHeroItems,
+            gridItems = if (currentLayout == HomeLayout.GRID) {
+                replaceGridHeroItems(baseGridItems, baseHeroItems)
+            } else {
+                baseGridItems
+            },
             isLoading = false
         )
+
+        // Enrich hero items asynchronously (only if TMDB is enabled)
+        val enrichedHeroItems = enrichHeroItems(baseHeroItems)
+        if (enrichedHeroItems !== baseHeroItems) {
+            val enrichedGridItems = if (currentLayout == HomeLayout.GRID) {
+                replaceGridHeroItems(baseGridItems, enrichedHeroItems)
+            } else {
+                _uiState.value.gridItems
+            }
+            _uiState.update {
+                it.copy(
+                    heroItems = enrichedHeroItems,
+                    gridItems = enrichedGridItems
+                )
+            }
+        }
     }
 
     private fun navigateToDetail(itemId: String, itemType: String) {
@@ -719,43 +733,54 @@ class HomeViewModel @Inject constructor(
         if (items.isEmpty()) return items
 
         val settings = tmdbSettingsDataStore.settings.first()
+        // Never trigger any TMDB calls when enrichment is OFF
         if (!settings.enabled) return items
         if (!settings.useArtwork && !settings.useBasicInfo && !settings.useDetails) return items
 
-        return items.map { item ->
-            val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@map item
-            val enrichment = tmdbMetadataService.fetchEnrichment(
-                tmdbId = tmdbId,
-                contentType = item.type,
-                language = settings.language
-            ) ?: return@map item
+        // Enrich all hero items in parallel
+        return coroutineScope {
+            items.map { item ->
+                async(Dispatchers.IO) {
+                    try {
+                        val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@async item
+                        val enrichment = tmdbMetadataService.fetchEnrichment(
+                            tmdbId = tmdbId,
+                            contentType = item.type,
+                            language = settings.language
+                        ) ?: return@async item
 
-            var enriched = item
+                        var enriched = item
 
-            if (settings.useArtwork) {
-                enriched = enriched.copy(
-                    background = enrichment.backdrop ?: enriched.background,
-                    logo = enrichment.logo ?: enriched.logo,
-                    poster = enrichment.poster ?: enriched.poster
-                )
-            }
+                        if (settings.useArtwork) {
+                            enriched = enriched.copy(
+                                background = enrichment.backdrop ?: enriched.background,
+                                logo = enrichment.logo ?: enriched.logo,
+                                poster = enrichment.poster ?: enriched.poster
+                            )
+                        }
 
-            if (settings.useBasicInfo) {
-                enriched = enriched.copy(
-                    name = enrichment.localizedTitle ?: enriched.name,
-                    description = enrichment.description ?: enriched.description,
-                    genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
-                    imdbRating = enrichment.rating?.toFloat() ?: enriched.imdbRating
-                )
-            }
+                        if (settings.useBasicInfo) {
+                            enriched = enriched.copy(
+                                name = enrichment.localizedTitle ?: enriched.name,
+                                description = enrichment.description ?: enriched.description,
+                                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
+                                imdbRating = enrichment.rating?.toFloat() ?: enriched.imdbRating
+                            )
+                        }
 
-            if (settings.useDetails) {
-                enriched = enriched.copy(
-                    releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo
-                )
-            }
+                        if (settings.useDetails) {
+                            enriched = enriched.copy(
+                                releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo
+                            )
+                        }
 
-            enriched
+                        enriched
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
+                        item
+                    }
+                }
+            }.awaitAll()
         }
     }
 
