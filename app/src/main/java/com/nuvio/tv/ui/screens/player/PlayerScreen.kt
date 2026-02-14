@@ -119,7 +119,11 @@ fun PlayerScreen(
         } else if (uiState.showSourcesPanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
         } else if (uiState.showEpisodesPanel) {
-            viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
+            if (uiState.showEpisodeStreams) {
+                viewModel.onEvent(PlayerEvent.OnBackFromEpisodeStreams)
+            } else {
+                viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
+            }
         } else if (uiState.showControls) {
             // If controls are visible, hide them instead of going back
             viewModel.hideControls()
@@ -548,6 +552,7 @@ fun PlayerScreen(
                     streamsFocusRequester = streamsFocusRequester,
                     onClose = { viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel) },
                     onBackToEpisodes = { viewModel.onEvent(PlayerEvent.OnBackFromEpisodeStreams) },
+                    onReloadEpisodeStreams = { viewModel.onEvent(PlayerEvent.OnReloadEpisodeStreams) },
                     onSeasonSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeSeasonSelected(it)) },
                     onAddonFilterSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeAddonFilterSelected(it)) },
                     onEpisodeSelected = { viewModel.onEvent(PlayerEvent.OnEpisodeSelected(it)) },
@@ -587,6 +592,7 @@ fun PlayerScreen(
                     uiState = uiState,
                     streamsFocusRequester = sourceStreamsFocusRequester,
                     onClose = { viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel) },
+                    onReload = { viewModel.onEvent(PlayerEvent.OnReloadSourceStreams) },
                     onAddonFilterSelected = { viewModel.onEvent(PlayerEvent.OnSourceAddonFilterSelected(it)) },
                     onStreamSelected = { viewModel.onEvent(PlayerEvent.OnSourceStreamSelected(it)) },
                     modifier = Modifier.align(Alignment.CenterEnd)

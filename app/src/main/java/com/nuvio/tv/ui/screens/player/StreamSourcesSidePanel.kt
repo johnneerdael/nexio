@@ -45,6 +45,7 @@ internal fun StreamSourcesSidePanel(
     uiState: PlayerUiState,
     streamsFocusRequester: FocusRequester,
     onClose: () -> Unit,
+    onReload: () -> Unit,
     onAddonFilterSelected: (String?) -> Unit,
     onStreamSelected: (Stream) -> Unit,
     modifier: Modifier = Modifier
@@ -79,11 +80,18 @@ internal fun StreamSourcesSidePanel(
                     color = NuvioColors.TextPrimary
                 )
 
-                DialogButton(
-                    text = "Close",
-                    onClick = onClose,
-                    isPrimary = false
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DialogButton(
+                        text = "Reload",
+                        onClick = onReload,
+                        isPrimary = false
+                    )
+                    DialogButton(
+                        text = "Close",
+                        onClick = onClose,
+                        isPrimary = false
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
