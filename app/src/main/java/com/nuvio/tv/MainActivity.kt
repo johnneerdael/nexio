@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.OCEAN)
-            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = false)
+            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = true)
 
             NuvioTheme(appTheme = currentTheme) {
                 Surface(
