@@ -73,14 +73,16 @@ fun CatalogRowSection(
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
     val rowFocusRequester = remember { FocusRequester() }
-    val itemFocusRequesters = remember(catalogRow.items.size) {
-        List(catalogRow.items.size) { FocusRequester() }
+    val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
+    LaunchedEffect(catalogRow.items.size) {
+        itemFocusRequesters.keys.removeAll { it >= catalogRow.items.size }
     }
 
     LaunchedEffect(focusedItemIndex, catalogRow.items.size) {
-        if (focusedItemIndex >= 0 && focusedItemIndex < itemFocusRequesters.size) {
+        if (focusedItemIndex >= 0 && focusedItemIndex < catalogRow.items.size) {
+            val requester = itemFocusRequesters.getOrPut(focusedItemIndex) { FocusRequester() }
             kotlinx.coroutines.delay(100)
-            runCatching { itemFocusRequesters[focusedItemIndex].requestFocus() }
+            runCatching { requester.requestFocus() }
         }
     }
 
@@ -121,8 +123,8 @@ fun CatalogRowSection(
                             val visibleIndex = listState.layoutInfo.visibleItemsInfo
                                 .firstOrNull()
                                 ?.index
-                            if (visibleIndex != null && visibleIndex in itemFocusRequesters.indices) {
-                                itemFocusRequesters[visibleIndex]
+                            if (visibleIndex != null && visibleIndex < catalogRow.items.size) {
+                                itemFocusRequesters.getOrPut(visibleIndex) { FocusRequester() }
                             } else {
                                 rowFocusRequester
                             }
@@ -165,10 +167,7 @@ fun CatalogRowSection(
                                 Modifier
                             }
                         ),
-                    focusRequester = when {
-                        index in itemFocusRequesters.indices -> itemFocusRequesters[index]
-                        else -> null
-                    }
+                    focusRequester = itemFocusRequesters.getOrPut(index) { FocusRequester() }
                 )
             }
 
