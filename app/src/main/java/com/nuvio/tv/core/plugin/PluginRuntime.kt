@@ -21,7 +21,8 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
-import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.URL
 import java.security.MessageDigest
 import java.util.Base64
@@ -38,6 +39,7 @@ import javax.inject.Singleton
 
 private const val TAG = "PluginRuntime"
 private const val PLUGIN_TIMEOUT_MS = 60_000L
+private const val MAX_FETCH_RESPONSE_BYTES = 2 * 1024 * 1024
 
 @Singleton
 class PluginRuntime @Inject constructor() {
@@ -432,34 +434,28 @@ class PluginRuntime @Inject constructor() {
             inFlightCalls.add(call)
 
             try {
-                val response = try {
-                    call.execute()
-                } catch (protoEx: java.net.ProtocolException) {
-                    // Handle 407 Proxy Auth or other protocol issues gracefully
-                    Log.w(TAG, "Protocol error for ${url}: ${protoEx.message}")
-                    return gson.toJson(mapOf(
-                        "ok" to false,
-                        "status" to 407,
-                        "statusText" to (protoEx.message ?: "Protocol error"),
-                        "url" to url,
-                        "body" to "",
-                        "headers" to emptyMap<String, String>()
-                    ))
-                }
+                val response = call.execute()
 
                 response.use { httpResponse ->
                     val bodyContentType = httpResponse.body?.contentType()
-                    val responseBodyBytes = httpResponse.body?.bytes() ?: ByteArray(0)
                     val contentEncoding = httpResponse.header("Content-Encoding")?.lowercase()?.trim()
                     val decodedBytes = try {
-                        when (contentEncoding) {
-                            "gzip" -> GZIPInputStream(ByteArrayInputStream(responseBodyBytes)).use { it.readBytes() }
-                            "deflate" -> InflaterInputStream(ByteArrayInputStream(responseBodyBytes)).use { it.readBytes() }
-                            else -> responseBodyBytes
+                        val stream = httpResponse.body?.byteStream()
+                        if (stream == null) {
+                            ByteArray(0)
+                        } else {
+                            val decodeStream: InputStream = when (contentEncoding) {
+                                "gzip" -> GZIPInputStream(stream)
+                                "deflate" -> InflaterInputStream(stream)
+                                else -> stream
+                            }
+                            decodeStream.use {
+                                readAtMostBytes(it, MAX_FETCH_RESPONSE_BYTES)
+                            }
                         }
                     } catch (e: Exception) {
-                        // If decoding fails, fall back to raw bytes.
-                        responseBodyBytes
+                        Log.w(TAG, "Failed to read/decode response body for $url: ${e.message}")
+                        ByteArray(0)
                     }
 
                     val charset = bodyContentType?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
@@ -499,6 +495,20 @@ class PluginRuntime @Inject constructor() {
                 "headers" to emptyMap<String, String>()
             ))
         }
+    }
+
+    private fun readAtMostBytes(stream: InputStream, maxBytes: Int): ByteArray {
+        val out = ByteArrayOutputStream(minOf(maxBytes, 16 * 1024))
+        val buffer = ByteArray(8 * 1024)
+        var remaining = maxBytes
+
+        while (remaining > 0) {
+            val read = stream.read(buffer, 0, minOf(buffer.size, remaining))
+            if (read <= 0) break
+            out.write(buffer, 0, read)
+            remaining -= read
+        }
+        return out.toByteArray()
     }
 
     private fun parseUrl(urlString: String): String {
