@@ -30,6 +30,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,21 +72,17 @@ fun CatalogRowSection(
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
-    val firstItemFocusRequester = remember { FocusRequester() }
+    val rowFocusRequester = remember { FocusRequester() }
+    val itemFocusRequesters = remember(catalogRow.items.size) {
+        List(catalogRow.items.size) { FocusRequester() }
+    }
 
-    // Only allocate FocusRequester when actually restoring focus
-    val itemFocusRequester = if (focusedItemIndex >= 0) {
-        val requester = remember { FocusRequester() }
-        LaunchedEffect(focusedItemIndex) {
-            if (focusedItemIndex < catalogRow.items.size) {
-                kotlinx.coroutines.delay(100)
-                try {
-                    requester.requestFocus()
-                } catch (_: IllegalStateException) { }
-            }
+    LaunchedEffect(focusedItemIndex, catalogRow.items.size) {
+        if (focusedItemIndex >= 0 && focusedItemIndex < itemFocusRequesters.size) {
+            kotlinx.coroutines.delay(100)
+            runCatching { itemFocusRequesters[focusedItemIndex].requestFocus() }
         }
-        requester
-    } else null
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -117,9 +114,19 @@ fun CatalogRowSection(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
+                .focusRequester(rowFocusRequester)
                 .then(
-                    if (focusedItemIndex < 0) {
-                        Modifier.focusRestorer { firstItemFocusRequester }
+                    if (focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
+                        Modifier.focusRestorer {
+                            val visibleIndex = listState.layoutInfo.visibleItemsInfo
+                                .firstOrNull()
+                                ?.index
+                            if (visibleIndex != null && visibleIndex in itemFocusRequesters.indices) {
+                                itemFocusRequesters[visibleIndex]
+                            } else {
+                                rowFocusRequester
+                            }
+                        }
                     } else {
                         Modifier
                     }
@@ -159,8 +166,7 @@ fun CatalogRowSection(
                             }
                         ),
                     focusRequester = when {
-                        index == focusedItemIndex && itemFocusRequester != null -> itemFocusRequester
-                        index == 0 && focusedItemIndex < 0 -> firstItemFocusRequester
+                        index in itemFocusRequesters.indices -> itemFocusRequesters[index]
                         else -> null
                     }
                 )
