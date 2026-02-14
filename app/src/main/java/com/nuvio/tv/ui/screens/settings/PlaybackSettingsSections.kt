@@ -6,21 +6,26 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -44,6 +50,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -59,6 +66,7 @@ private enum class PlaybackSection {
 internal fun PlaybackSettingsSections(
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
+    onShowPlayerPreferenceDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
     onShowLanguageDialog: () -> Unit,
@@ -101,6 +109,8 @@ internal fun PlaybackSettingsSections(
 
     var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
 
+    val isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL
+
     LaunchedEffect(generalExpanded, focusedSection) {
         if (!generalExpanded && focusedSection == PlaybackSection.GENERAL) {
             generalHeaderFocus.requestFocus()
@@ -142,7 +152,8 @@ internal fun PlaybackSettingsSections(
                     subtitle = "Show loading screen until first video frame appears.",
                     isChecked = playerSettings.loadingOverlayEnabled,
                     onCheckedChange = onSetLoadingOverlayEnabled,
-                    onFocused = { focusedSection = PlaybackSection.GENERAL }
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -153,7 +164,8 @@ internal fun PlaybackSettingsSections(
                     subtitle = "Show details overlay after 5 seconds while paused.",
                     isChecked = playerSettings.pauseOverlayEnabled,
                     onCheckedChange = onSetPauseOverlayEnabled,
-                    onFocused = { focusedSection = PlaybackSection.GENERAL }
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -164,7 +176,8 @@ internal fun PlaybackSettingsSections(
                     subtitle = "Use introdb.app to detect intros and recaps.",
                     isChecked = playerSettings.skipIntroEnabled,
                     onCheckedChange = onSetSkipIntroEnabled,
-                    onFocused = { focusedSection = PlaybackSection.GENERAL }
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -175,20 +188,35 @@ internal fun PlaybackSettingsSections(
                     subtitle = "Match display refresh rate to video frame rate.",
                     isChecked = playerSettings.frameRateMatching,
                     onCheckedChange = onSetFrameRateMatching,
-                    onFocused = { focusedSection = PlaybackSection.GENERAL }
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = !isExternalPlayer
                 )
             }
         }
 
         playbackCollapsibleSection(
             keyPrefix = "stream_selection",
-            title = "Stream Selection",
-            description = "Auto-play and source filtering.",
+            title = "Player & Stream Selection",
+            description = "Player preference, auto-play, and source filtering.",
             expanded = streamExpanded,
             onToggle = { streamExpanded = !streamExpanded },
             focusRequester = streamHeaderFocus,
             onHeaderFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
         ) {
+            item {
+                NavigationSettingsItem(
+                    icon = Icons.Default.PlayArrow,
+                    title = "Player",
+                    subtitle = when (playerSettings.playerPreference) {
+                        PlayerPreference.INTERNAL -> "Internal"
+                        PlayerPreference.EXTERNAL -> "External"
+                        PlayerPreference.ASK_EVERY_TIME -> "Ask every time"
+                    },
+                    onClick = onShowPlayerPreferenceDialog,
+                    onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
+                )
+            }
+
             autoPlaySettingsItems(
                 playerSettings = playerSettings,
                 onShowModeDialog = onShowStreamAutoPlayModeDialog,
@@ -221,7 +249,8 @@ internal fun PlaybackSettingsSections(
                 onSetSkipSilence = onSetSkipSilence,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetMapDV7ToHevc = onSetMapDV7ToHevc,
-                onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER }
+                onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
+                enabled = !isExternalPlayer
             )
         }
 
@@ -247,7 +276,8 @@ internal fun PlaybackSettingsSections(
                 onSetSubtitleOutlineEnabled = onSetSubtitleOutlineEnabled,
                 onSetUseLibass = onSetUseLibass,
                 onSetLibassRenderType = onSetLibassRenderType,
-                onItemFocused = { focusedSection = PlaybackSection.SUBTITLES }
+                onItemFocused = { focusedSection = PlaybackSection.SUBTITLES },
+                enabled = !isExternalPlayer
             )
         }
     }
@@ -357,6 +387,7 @@ internal fun PlaybackSettingsDialogsHost(
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
     enabledPluginNames: List<String>,
+    showPlayerPreferenceDialog: Boolean,
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
     showTextColorDialog: Boolean,
@@ -370,6 +401,8 @@ internal fun PlaybackSettingsDialogsHost(
     showStreamAutoPlayPluginSelectionDialog: Boolean,
     showStreamRegexDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
+    onSetPlayerPreference: (PlayerPreference) -> Unit,
+    onDismissPlayerPreferenceDialog: () -> Unit,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
     onSetSubtitleTextColor: (Color) -> Unit,
@@ -397,6 +430,17 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissStreamAutoPlayPluginSelectionDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
+    if (showPlayerPreferenceDialog) {
+        PlayerPreferenceDialog(
+            currentPreference = playerSettings.playerPreference,
+            onPreferenceSelected = { preference ->
+                onSetPlayerPreference(preference)
+                onDismissPlayerPreferenceDialog()
+            },
+            onDismiss = onDismissPlayerPreferenceDialog
+        )
+    }
+
     SubtitleSettingsDialogs(
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
@@ -450,4 +494,102 @@ internal fun PlaybackSettingsDialogsHost(
         onDismissPluginSelectionDialog = onDismissStreamAutoPlayPluginSelectionDialog,
         onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
     )
+}
+
+@Composable
+private fun PlayerPreferenceDialog(
+    currentPreference: PlayerPreference,
+    onPreferenceSelected: (PlayerPreference) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    val options = listOf(
+        Triple(PlayerPreference.INTERNAL, "Internal", "Use NuvioTV's built-in player"),
+        Triple(PlayerPreference.EXTERNAL, "External", "Always open streams in an external app"),
+        Triple(PlayerPreference.ASK_EVERY_TIME, "Ask every time", "Choose the player each time")
+    )
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(420.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Player",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(options.size) { index ->
+                        val (preference, title, description) = options[index]
+                        val isSelected = preference == currentPreference
+
+                        Card(
+                            onClick = { onPreferenceSelected(preference) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = description,
+                                        color = NuvioColors.TextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

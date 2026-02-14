@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Speed
@@ -93,6 +94,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.R
+import com.nuvio.tv.core.player.ExternalPlayerLauncher
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
 import java.util.concurrent.TimeUnit
@@ -474,6 +476,7 @@ fun PlayerScreen(
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(200))
         ) {
+            val context = LocalContext.current
             PlayerControlsOverlay(
                 uiState = uiState,
                 playPauseFocusRequester = playPauseFocusRequester,
@@ -487,9 +490,17 @@ fun PlayerScreen(
                 onShowAudioDialog = { viewModel.onEvent(PlayerEvent.OnShowAudioDialog) },
                 onShowSubtitleDialog = { viewModel.onEvent(PlayerEvent.OnShowSubtitleDialog) },
                 onShowSpeedDialog = { viewModel.onEvent(PlayerEvent.OnShowSpeedDialog) },
-                onToggleAspectRatio = { 
+                onToggleAspectRatio = {
                     Log.d("PlayerScreen", "onToggleAspectRatio called - dispatching event")
-                    viewModel.onEvent(PlayerEvent.OnToggleAspectRatio) 
+                    viewModel.onEvent(PlayerEvent.OnToggleAspectRatio)
+                },
+                onOpenInExternalPlayer = {
+                    ExternalPlayerLauncher.launch(
+                        context = context,
+                        url = viewModel.getCurrentStreamUrl(),
+                        title = uiState.title,
+                        headers = viewModel.getCurrentHeaders()
+                    )
                 },
                 onResetHideTimer = { viewModel.scheduleHideControls() },
                 onBack = onBackPress
@@ -689,6 +700,7 @@ private fun PlayerControlsOverlay(
     onShowSubtitleDialog: () -> Unit,
     onShowSpeedDialog: () -> Unit,
     onToggleAspectRatio: () -> Unit,
+    onOpenInExternalPlayer: () -> Unit,
     onResetHideTimer: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -878,6 +890,14 @@ private fun PlayerControlsOverlay(
                         iconPainter = customSourcePainter,
                         contentDescription = "Sources",
                         onClick = onShowSourcesPanel,
+                        onFocused = onResetHideTimer
+                    )
+
+                    // Open in external player
+                    ControlButton(
+                        icon = Icons.Default.OpenInNew,
+                        contentDescription = "Open in external player",
+                        onClick = onOpenInExternalPlayer,
                         onFocused = onResetHideTimer
                     )
 

@@ -5,6 +5,7 @@ import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.TrailerSettings
@@ -46,6 +47,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         } else {
             scrapers.filter { it.enabled }.map { it.name }.distinct().sorted()
         }
+    }
+
+    suspend fun setPlayerPreference(preference: PlayerPreference) {
+        playerSettingsDataStore.setPlayerPreference(preference)
     }
 
     suspend fun setTrailerEnabled(enabled: Boolean) {
