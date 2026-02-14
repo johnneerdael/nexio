@@ -10,6 +10,7 @@ import com.google.gson.Gson
 import com.nuvio.tv.domain.model.SavedLibraryItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,6 +63,28 @@ class LibraryPreferences @Inject constructor(
                 } ?: false
             }
             preferences[libraryItemsKey] = filtered.toSet()
+        }
+    }
+
+    suspend fun getAllItems(): List<SavedLibraryItem> {
+        return libraryItems.first()
+    }
+
+    suspend fun mergeRemoteItems(remoteItems: List<SavedLibraryItem>) {
+        context.libraryDataStore.edit { preferences ->
+            val current = preferences[libraryItemsKey] ?: emptySet()
+            val localItems = current.mapNotNull { json ->
+                runCatching { gson.fromJson(json, SavedLibraryItem::class.java) }.getOrNull()
+            }
+            val localKeys = localItems.map { it.id to it.type.lowercase() }.toSet()
+
+            val newItems = remoteItems.filter { remote ->
+                (remote.id to remote.type.lowercase()) !in localKeys
+            }
+
+            if (newItems.isNotEmpty()) {
+                preferences[libraryItemsKey] = current + newItems.map { gson.toJson(it) }.toSet()
+            }
         }
     }
 }

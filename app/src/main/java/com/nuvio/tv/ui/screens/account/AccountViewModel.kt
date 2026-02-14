@@ -7,11 +7,14 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.sync.AddonSyncService
+import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.core.sync.PluginSyncService
 import com.nuvio.tv.core.sync.WatchProgressSyncService
+import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
+import com.nuvio.tv.data.repository.LibraryRepositoryImpl
 import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nuvio.tv.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,10 +33,13 @@ class AccountViewModel @Inject constructor(
     private val pluginSyncService: PluginSyncService,
     private val addonSyncService: AddonSyncService,
     private val watchProgressSyncService: WatchProgressSyncService,
+    private val librarySyncService: LibrarySyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
+    private val libraryRepository: LibraryRepositoryImpl,
     private val watchProgressPreferences: WatchProgressPreferences,
+    private val libraryPreferences: LibraryPreferences,
     private val traktAuthDataStore: TraktAuthDataStore
 ) : ViewModel() {
 
@@ -225,6 +231,7 @@ class AccountViewModel @Inject constructor(
         pluginSyncService.pushToRemote()
         addonSyncService.pushToRemote()
         watchProgressSyncService.pushToRemote()
+        librarySyncService.pushToRemote()
     }
 
     private suspend fun pullRemoteData() {
@@ -256,11 +263,21 @@ class AccountViewModel @Inject constructor(
                     Log.d("AccountViewModel", "pullRemoteData: no remote watch progress to merge")
                 }
                 watchProgressRepository.isSyncingFromRemote = false
+
+                libraryRepository.isSyncingFromRemote = true
+                val remoteLibraryItems = librarySyncService.pullFromRemote()
+                Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteLibraryItems.size} library items")
+                if (remoteLibraryItems.isNotEmpty()) {
+                    libraryPreferences.mergeRemoteItems(remoteLibraryItems)
+                    Log.d("AccountViewModel", "pullRemoteData: merged ${remoteLibraryItems.size} library items into local")
+                }
+                libraryRepository.isSyncingFromRemote = false
             }
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
             watchProgressRepository.isSyncingFromRemote = false
+            libraryRepository.isSyncingFromRemote = false
             throw e
         }
     }

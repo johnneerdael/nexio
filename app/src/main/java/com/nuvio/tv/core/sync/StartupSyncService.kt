@@ -3,9 +3,11 @@ package com.nuvio.tv.core.sync
 import android.util.Log
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
+import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
+import com.nuvio.tv.data.repository.LibraryRepositoryImpl
 import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nuvio.tv.domain.model.AuthState
 import kotlinx.coroutines.CoroutineScope
@@ -24,11 +26,14 @@ class StartupSyncService @Inject constructor(
     private val pluginSyncService: PluginSyncService,
     private val addonSyncService: AddonSyncService,
     private val watchProgressSyncService: WatchProgressSyncService,
+    private val librarySyncService: LibrarySyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
+    private val libraryRepository: LibraryRepositoryImpl,
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val watchProgressPreferences: WatchProgressPreferences
+    private val watchProgressPreferences: WatchProgressPreferences,
+    private val libraryPreferences: LibraryPreferences
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -77,13 +82,25 @@ class StartupSyncService @Inject constructor(
                 // Push local watch progress so linked devices can pull it
                 Log.d(TAG, "Pushing local watch progress to remote")
                 watchProgressSyncService.pushToRemote()
+
+                // Sync library items
+                libraryRepository.isSyncingFromRemote = true
+                val remoteLibraryItems = librarySyncService.pullFromRemote()
+                Log.d(TAG, "Pulled ${remoteLibraryItems.size} library items from remote")
+                if (remoteLibraryItems.isNotEmpty()) {
+                    libraryPreferences.mergeRemoteItems(remoteLibraryItems)
+                    Log.d(TAG, "Merged ${remoteLibraryItems.size} library items into local")
+                }
+                libraryRepository.isSyncingFromRemote = false
+                librarySyncService.pushToRemote()
             } else {
-                Log.d(TAG, "Skipping watch progress sync (Trakt connected)")
+                Log.d(TAG, "Skipping watch progress & library sync (Trakt connected)")
             }
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
             watchProgressRepository.isSyncingFromRemote = false
+            libraryRepository.isSyncingFromRemote = false
             Log.e(TAG, "Startup sync failed", e)
         }
     }

@@ -1,5 +1,7 @@
 package com.nuvio.tv.data.repository
 
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.sync.LibrarySyncService
 import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.domain.model.LibraryEntry
@@ -11,13 +13,19 @@ import com.nuvio.tv.domain.model.ListMembershipSnapshot
 import com.nuvio.tv.domain.model.SavedLibraryItem
 import com.nuvio.tv.domain.model.TraktListPrivacy
 import com.nuvio.tv.domain.repository.LibraryRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,8 +34,24 @@ import javax.inject.Singleton
 class LibraryRepositoryImpl @Inject constructor(
     private val libraryPreferences: LibraryPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val traktLibraryService: TraktLibraryService
+    private val traktLibraryService: TraktLibraryService,
+    private val librarySyncService: LibrarySyncService,
+    private val authManager: AuthManager
 ) : LibraryRepository {
+
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var syncJob: Job? = null
+    var isSyncingFromRemote = false
+
+    private fun triggerRemoteSync() {
+        if (isSyncingFromRemote) return
+        if (!authManager.isAuthenticated) return
+        syncJob?.cancel()
+        syncJob = syncScope.launch {
+            delay(2000)
+            librarySyncService.pushToRemote()
+        }
+    }
 
     override val sourceMode: Flow<LibrarySourceMode> = traktAuthDataStore.isAuthenticated
         .map { isAuthenticated ->
@@ -116,6 +140,7 @@ class LibraryRepositoryImpl @Inject constructor(
         } else {
             libraryPreferences.addItem(item.toSavedLibraryItem())
         }
+        triggerRemoteSync()
     }
 
     override suspend fun getMembershipSnapshot(item: LibraryEntryInput): ListMembershipSnapshot {
@@ -138,6 +163,7 @@ class LibraryRepositoryImpl @Inject constructor(
         } else {
             libraryPreferences.removeItem(itemId = item.itemId, itemType = item.itemType)
         }
+        triggerRemoteSync()
     }
 
     override suspend fun createPersonalList(name: String, description: String?, privacy: TraktListPrivacy) {
