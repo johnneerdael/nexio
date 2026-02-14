@@ -424,16 +424,11 @@ private fun ModernSidebarScaffold(
         }
     }
 
-    BackHandler(enabled = currentRoute in rootRoutes) {
-        if (isSidebarExpanded || sidebarCollapsePending) {
-            pendingContentFocusTransfer = true
-            sidebarCollapsePending = true
-        } else {
-            isSidebarExpanded = true
-            sidebarCollapsePending = false
-            pendingSidebarFocusRequest = true
-            isCollapsedPillIconOnly = false
-        }
+    BackHandler(enabled = currentRoute in rootRoutes && !isSidebarExpanded && !sidebarCollapsePending) {
+        isSidebarExpanded = true
+        sidebarCollapsePending = false
+        pendingSidebarFocusRequest = true
+        isCollapsedPillIconOnly = false
     }
 
     LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
@@ -643,7 +638,7 @@ private fun ModernSidebarScaffold(
                                 focusedDrawerIndex == drawerItems.lastIndex
                             }
 
-                            Key.DirectionRight, Key.Back -> {
+                            Key.DirectionRight -> {
                                 pendingContentFocusTransfer = true
                                 sidebarCollapsePending = true
                                 true

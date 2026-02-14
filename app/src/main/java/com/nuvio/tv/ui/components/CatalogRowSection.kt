@@ -117,7 +117,13 @@ fun CatalogRowSection(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRestorer { firstItemFocusRequester },
+                .then(
+                    if (focusedItemIndex < 0) {
+                        Modifier.focusRestorer { firstItemFocusRequester }
+                    } else {
+                        Modifier
+                    }
+                ),
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -154,7 +160,7 @@ fun CatalogRowSection(
                         ),
                     focusRequester = when {
                         index == focusedItemIndex && itemFocusRequester != null -> itemFocusRequester
-                        index == 0 -> firstItemFocusRequester
+                        index == 0 && focusedItemIndex < 0 -> firstItemFocusRequester
                         else -> null
                     }
                 )
