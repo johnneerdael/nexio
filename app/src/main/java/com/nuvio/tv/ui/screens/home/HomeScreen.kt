@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,14 +62,19 @@ fun HomeScreen(
         }
     }
 
-    val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
-    val posterCardStyle = PosterCardStyle(
-        width = uiState.posterCardWidthDp.dp,
-        height = computedHeightDp.dp,
-        cornerRadius = uiState.posterCardCornerRadiusDp.dp,
-        focusedBorderWidth = PosterCardDefaults.Style.focusedBorderWidth,
-        focusedScale = PosterCardDefaults.Style.focusedScale
-    )
+    val posterCardStyle = remember(
+        uiState.posterCardWidthDp,
+        uiState.posterCardCornerRadiusDp
+    ) {
+        val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
+        PosterCardStyle(
+            width = uiState.posterCardWidthDp.dp,
+            height = computedHeightDp.dp,
+            cornerRadius = uiState.posterCardCornerRadiusDp.dp,
+            focusedBorderWidth = PosterCardDefaults.Style.focusedBorderWidth,
+            focusedScale = PosterCardDefaults.Style.focusedScale
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -135,6 +141,7 @@ fun HomeScreen(
                                 uiState = uiState,
                                 posterCardStyle = posterCardStyle,
                                 focusState = focusState,
+                                trailerPreviewUrls = viewModel.trailerPreviewUrls,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,

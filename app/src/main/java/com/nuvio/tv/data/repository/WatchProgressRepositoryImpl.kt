@@ -3,6 +3,7 @@ package com.nuvio.tv.data.repository
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.sync.WatchProgressSyncService
+import android.util.Log
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.domain.model.WatchProgress
@@ -39,6 +40,9 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val authManager: AuthManager,
     private val metaRepository: MetaRepository
 ) : WatchProgressRepository {
+    companion object {
+        private const val TAG = "WatchProgressRepo"
+    }
 
     private data class EpisodeMetadata(
         val title: String?,
@@ -301,7 +305,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
-        if (traktAuthDataStore.isAuthenticated.first()) {
+        val isAuthenticated = traktAuthDataStore.isAuthenticated.first()
+        Log.d(
+            TAG,
+            "removeProgress called contentId=$contentId season=$season episode=$episode authenticated=$isAuthenticated"
+        )
+        if (isAuthenticated) {
             traktProgressService.applyOptimisticRemoval(contentId, season, episode)
             traktProgressService.removeProgress(contentId, season, episode)
             return

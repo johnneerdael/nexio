@@ -36,7 +36,8 @@ import com.nuvio.tv.ui.screens.account.SyncCodeClaimScreen
 @Composable
 fun NuvioNavHost(
     navController: NavHostController,
-    startDestination: String = Screen.Home.route
+    startDestination: String = Screen.Home.route,
+    hideBuiltInHeaders: Boolean = false
 ) {
     NavHost(
         navController = navController,
@@ -224,7 +225,9 @@ fun NuvioNavHost(
                                 videoId = playbackInfo.videoId,
                                 season = playbackInfo.season,
                                 episode = playbackInfo.episode,
-                                episodeTitle = playbackInfo.episodeTitle
+                                episodeTitle = playbackInfo.episodeTitle,
+                                rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
+                                rememberedAudioName = playbackInfo.rememberedAudioName
                             )
                         )
                     }
@@ -301,6 +304,16 @@ fun NuvioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("rememberedAudioLanguage") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("rememberedAudioName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) {
@@ -316,6 +329,7 @@ fun NuvioNavHost(
 
         composable(Screen.Search.route) {
             SearchScreen(
+                showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
@@ -327,6 +341,7 @@ fun NuvioNavHost(
 
         composable(Screen.Library.route) {
             LibraryScreen(
+                showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 }
@@ -335,6 +350,7 @@ fun NuvioNavHost(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
+                showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
                 onNavigateToAccount = { navController.navigate(Screen.Account.route) },
                 onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
@@ -376,6 +392,7 @@ fun NuvioNavHost(
 
         composable(Screen.AddonManager.route) {
             AddonManagerScreen(
+                showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) }
             )
         }

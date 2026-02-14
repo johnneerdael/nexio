@@ -36,7 +36,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -210,6 +209,21 @@ internal fun ContinueWatchingCard(
     val imageModel = nextUp?.thumbnail ?: progress?.backdrop ?: progress?.poster ?: nextUp?.backdrop ?: nextUp?.poster
     val titleText = progress?.name ?: nextUp?.name.orEmpty()
     val episodeTitle = progress?.episodeTitle ?: nextUp?.episodeTitle
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val requestWidthPx = remember(cardWidth, density) {
+        with(density) { cardWidth.roundToPx() }
+    }
+    val requestHeightPx = remember(imageHeight, density) {
+        with(density) { imageHeight.roundToPx() }
+    }
+    val imageRequest = remember(context, imageModel, requestWidthPx, requestHeightPx) {
+        ImageRequest.Builder(context)
+            .data(imageModel)
+            .crossfade(false)
+            .size(width = requestWidthPx, height = requestHeightPx)
+            .build()
+    }
 
     val bgColor = NuvioColors.Background
     val overlayBrush = remember(bgColor) {
@@ -278,14 +292,7 @@ internal fun ContinueWatchingCard(
             ) {
                 // Background image with size hints for efficient decoding
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(imageModel)
-                        .crossfade(true)
-                        .size(
-                            width = with(LocalDensity.current) { cardWidth.roundToPx() },
-                            height = with(LocalDensity.current) { imageHeight.roundToPx() }
-                        )
-                        .build(),
+                    model = imageRequest,
                     contentDescription = titleText,
                      modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

@@ -216,17 +216,43 @@ fun LayoutSettingsContent(
                 focusRequester = homeContentHeaderFocus,
                 onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
             ) {
+                if (!uiState.modernSidebarEnabled) {
+                    CompactToggleRow(
+                        title = "Collapse Sidebar",
+                        subtitle = "Hide sidebar by default; show when focused.",
+                        checked = uiState.sidebarCollapsedByDefault,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    )
+                }
                 CompactToggleRow(
-                    title = "Collapse Sidebar",
-                    subtitle = "Hide sidebar by default; show when focused.",
-                    checked = uiState.sidebarCollapsedByDefault,
+                    title = "Modern Sidebar ON/OFF",
+                    subtitle = "Enable floating frosted sidebar navigation.",
+                    checked = uiState.modernSidebarEnabled,
                     onToggle = {
                         viewModel.onEvent(
-                            LayoutSettingsEvent.SetSidebarCollapsed(!uiState.sidebarCollapsedByDefault)
+                            LayoutSettingsEvent.SetModernSidebarEnabled(!uiState.modernSidebarEnabled)
                         )
                     },
                     onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                 )
+                if (uiState.modernSidebarEnabled) {
+                    CompactToggleRow(
+                        title = "Modern Sidebar Blur",
+                        subtitle = "Toggle blur effect for modern sidebar surfaces. Enabling may affect performance.",
+                        checked = uiState.modernSidebarBlurEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetModernSidebarBlurEnabled(!uiState.modernSidebarBlurEnabled)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    )
+                }
                 CompactToggleRow(
                     title = "Show Hero Section",
                     subtitle = "Display hero carousel at top of home.",

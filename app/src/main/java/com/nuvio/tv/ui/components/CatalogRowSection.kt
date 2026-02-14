@@ -30,6 +30,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,19 +72,17 @@ fun CatalogRowSection(
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
-    // Only allocate FocusRequester when actually restoring focus
-    val itemFocusRequester = if (focusedItemIndex >= 0) {
-        val requester = remember { FocusRequester() }
-        LaunchedEffect(focusedItemIndex) {
-            if (focusedItemIndex < catalogRow.items.size) {
-                kotlinx.coroutines.delay(100)
-                try {
-                    requester.requestFocus()
-                } catch (_: IllegalStateException) { }
-            }
+    val rowFocusRequester = remember { FocusRequester() }
+    val itemFocusRequesters = remember(catalogRow.items.size) {
+        List(catalogRow.items.size) { FocusRequester() }
+    }
+
+    LaunchedEffect(focusedItemIndex, catalogRow.items.size) {
+        if (focusedItemIndex >= 0 && focusedItemIndex < itemFocusRequesters.size) {
+            kotlinx.coroutines.delay(100)
+            runCatching { itemFocusRequesters[focusedItemIndex].requestFocus() }
         }
-        requester
-    } else null
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -94,7 +94,7 @@ fun CatalogRowSection(
         ) {
             Column {
                 Text(
-                    text = "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.type.toApiString().replaceFirstChar { it.uppercase() }}",
+                    text = "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}",
                     style = MaterialTheme.typography.headlineMedium,
                     color = NuvioColors.TextPrimary,
                     maxLines = 3,
@@ -113,7 +113,24 @@ fun CatalogRowSection(
         LazyRow(
             state = listState,
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .focusRequester(rowFocusRequester)
+                .then(
+                    if (focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
+                        Modifier.focusRestorer {
+                            val visibleIndex = listState.layoutInfo.visibleItemsInfo
+                                .firstOrNull()
+                                ?.index
+                            if (visibleIndex != null && visibleIndex in itemFocusRequesters.indices) {
+                                itemFocusRequesters[visibleIndex]
+                            } else {
+                                rowFocusRequester
+                            }
+                        }
+                    } else {
+                        Modifier
+                    }
+                ),
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -134,7 +151,7 @@ fun CatalogRowSection(
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrl = trailerPreviewUrls[item.id],
                     onRequestTrailerPreview = onRequestTrailerPreview,
-                    onClick = { onItemClick(item.id, item.type.toApiString(), catalogRow.addonBaseUrl) },
+                    onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) {
@@ -148,7 +165,10 @@ fun CatalogRowSection(
                                 Modifier
                             }
                         ),
-                    focusRequester = if (index == focusedItemIndex) itemFocusRequester else null
+                    focusRequester = when {
+                        index in itemFocusRequesters.indices -> itemFocusRequesters[index]
+                        else -> null
+                    }
                 )
             }
 

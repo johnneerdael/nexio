@@ -1,6 +1,6 @@
 package com.nuvio.tv.ui.components
 
-import android.view.KeyEvent
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -52,7 +52,7 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 
 private const val BACKDROP_ASPECT_RATIO = 16f / 9f
-private const val YEAR_REGEX = "\\b(19|20)\\d{2}\\b"
+private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -125,12 +125,12 @@ fun ContentCard(
     val metaTokens = remember(item.type, item.genres, item.releaseInfo, item.imdbRating) {
         buildList {
             add(
-                item.type.toApiString()
+                item.apiType
                     .replaceFirstChar { ch -> ch.uppercase() }
             )
             item.genres.firstOrNull()?.let { add(it) }
             item.releaseInfo
-                ?.let { Regex(YEAR_REGEX).find(it)?.value }
+                ?.let { YEAR_REGEX.find(it)?.value }
                 ?.let { add(it) }
             item.imdbRating?.let { add(String.format("%.1f", it)) }
         }
@@ -164,22 +164,25 @@ fun ContentCard(
                     val focusedNow = state.isFocused
                     if (focusedNow != isFocused) {
                         isFocused = focusedNow
-                        interactionNonce++
-                        if (!focusedNow) {
+                        if (focusedNow) {
+                            interactionNonce++
+                        } else {
                             isBackdropExpanded = false
                         }
                     }
                 }
-                .onPreviewKeyEvent { keyEvent ->
-                    if (
-                        focusedPosterBackdropExpandEnabled &&
-                        isFocused &&
-                        keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN
-                    ) {
-                        interactionNonce++
+                .then(
+                    if (focusedPosterBackdropExpandEnabled) {
+                        Modifier.onPreviewKeyEvent { keyEvent ->
+                            if (isFocused && shouldResetBackdropTimer(keyEvent.nativeKeyEvent)) {
+                                interactionNonce++
+                            }
+                            false
+                        }
+                    } else {
+                        Modifier
                     }
-                    false
-                }
+                )
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
                     else Modifier
@@ -363,5 +366,22 @@ fun ContentCard(
                 }
             }
         }
+    }
+}
+
+private fun shouldResetBackdropTimer(nativeEvent: AndroidKeyEvent): Boolean {
+    if (nativeEvent.action != AndroidKeyEvent.ACTION_DOWN) return false
+    if (nativeEvent.repeatCount > 0 || nativeEvent.isLongPress) return false
+
+    return when (nativeEvent.keyCode) {
+        AndroidKeyEvent.KEYCODE_DPAD_UP,
+        AndroidKeyEvent.KEYCODE_DPAD_DOWN,
+        AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+        AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+        AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+        AndroidKeyEvent.KEYCODE_ENTER,
+        AndroidKeyEvent.KEYCODE_NUMPAD_ENTER,
+        AndroidKeyEvent.KEYCODE_BACK -> true
+        else -> false
     }
 }

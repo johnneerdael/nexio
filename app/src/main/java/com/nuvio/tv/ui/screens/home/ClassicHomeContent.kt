@@ -36,6 +36,7 @@ fun ClassicHomeContent(
     uiState: HomeUiState,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
+    trailerPreviewUrls: Map<String, String>,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
@@ -114,7 +115,7 @@ fun ClassicHomeContent(
                     onItemClick = { item ->
                         onNavigateToDetail(
                             item.id,
-                            item.type.toApiString(),
+                            item.apiType,
                             ""
                         )
                     }
@@ -175,7 +176,7 @@ fun ClassicHomeContent(
             key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}" },
             contentType = { _, _ -> "catalog_row" }
         ) { index, catalogRow ->
-            val catalogKey = "${catalogRow.addonId}_${catalogRow.type.toApiString()}_${catalogRow.catalogId}"
+            val catalogKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val shouldInitialFocusFirstCatalogRow =
                 shouldRequestInitialFocus &&
@@ -203,7 +204,7 @@ fun ClassicHomeContent(
                 focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
                 focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
                 focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
-                trailerPreviewUrls = uiState.trailerPreviewUrls,
+                trailerPreviewUrls = trailerPreviewUrls,
                 onRequestTrailerPreview = onRequestTrailerPreview,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
@@ -212,7 +213,7 @@ fun ClassicHomeContent(
                     onNavigateToCatalogSeeAll(
                         catalogRow.catalogId,
                         catalogRow.addonId,
-                        catalogRow.type.toApiString()
+                        catalogRow.apiType
                     )
                 },
                 listState = listState,

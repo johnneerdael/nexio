@@ -42,6 +42,7 @@ import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.TraktScrobbleItem
 import com.nuvio.tv.data.repository.TraktScrobbleService
@@ -89,6 +90,7 @@ class PlayerViewModel @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -137,6 +139,12 @@ class PlayerViewModel @Inject constructor(
     private val initialEpisodeTitle: String? = savedStateHandle.get<String>("episodeTitle")?.let {
         if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
     }
+    private val rememberedAudioLanguage: String? = savedStateHandle.get<String>("rememberedAudioLanguage")?.let {
+        if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
+    }
+    private val rememberedAudioName: String? = savedStateHandle.get<String>("rememberedAudioName")?.let {
+        if (it.isNotEmpty()) URLDecoder.decode(it, "UTF-8") else null
+    }
 
     private var currentStreamUrl: String = initialStreamUrl
     private var currentHeaders: Map<String, String> = parseHeaders(headersJson)
@@ -173,6 +181,8 @@ class PlayerViewModel @Inject constructor(
     private var frameRateProbeJob: Job? = null
     private var frameRateProbeToken: Long = 0L
     private var hideAspectRatioIndicatorJob: Job? = null
+    private var sourceStreamsJob: Job? = null
+    private var sourceStreamsCacheRequestKey: String? = null
     
     
     private var lastSavedPosition: Long = 0L
@@ -195,6 +205,8 @@ class PlayerViewModel @Inject constructor(
     private var lastSubtitleSecondaryLanguage: String? = null
     private var pendingAddonSubtitleLanguage: String? = null
     private var hasScannedTextTracksOnce: Boolean = false
+    private var streamReuseLastLinkEnabled: Boolean = false
+    private var hasAppliedRememberedAudioSelection: Boolean = false
 
     
     private var okHttpClient: OkHttpClient? = null
@@ -209,6 +221,13 @@ class PlayerViewModel @Inject constructor(
     private var pendingResumeProgress: WatchProgress? = null
     private var currentScrobbleItem: TraktScrobbleItem? = null
     private var hasSentScrobbleStartForCurrentItem: Boolean = false
+    private var episodeStreamsJob: Job? = null
+    private var episodeStreamsCacheRequestKey: String? = null
+    private val streamCacheKey: String? by lazy {
+        val type = contentType?.lowercase()
+        val vid = currentVideoId
+        if (type.isNullOrBlank() || vid.isNullOrBlank()) null else "$type|$vid"
+    }
 
     init {
         refreshScrobbleItem()
@@ -287,6 +306,7 @@ class PlayerViewModel @Inject constructor(
                 ) {
                     schedulePauseOverlay()
                 }
+                streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
 
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
@@ -909,38 +929,61 @@ class PlayerViewModel @Inject constructor(
                 showEpisodeStreams = false
             )
         }
-        loadSourceStreams()
+        loadSourceStreams(forceRefresh = false)
     }
 
-    private fun loadSourceStreams() {
+    private fun buildSourceRequestKey(type: String, videoId: String, season: Int?, episode: Int?): String {
+        return "$type|$videoId|${season ?: -1}|${episode ?: -1}"
+    }
+
+    private fun loadSourceStreams(forceRefresh: Boolean) {
         val type: String
         val vid: String
+        val seasonArg: Int?
+        val episodeArg: Int?
 
         if (contentType in listOf("series", "tv") && currentSeason != null && currentEpisode != null) {
             type = contentType ?: return
             vid = currentVideoId ?: contentId ?: return
+            seasonArg = currentSeason
+            episodeArg = currentEpisode
         } else {
             type = contentType ?: "movie"
             vid = contentId ?: return
+            seasonArg = null
+            episodeArg = null
         }
 
-        viewModelScope.launch {
+        val requestKey = buildSourceRequestKey(type = type, videoId = vid, season = seasonArg, episode = episodeArg)
+        val state = _uiState.value
+        val hasCachedPayload = state.sourceAllStreams.isNotEmpty() || state.sourceStreamsError != null
+        if (!forceRefresh && requestKey == sourceStreamsCacheRequestKey && hasCachedPayload) {
+            return
+        }
+        if (!forceRefresh && state.isLoadingSourceStreams && requestKey == sourceStreamsCacheRequestKey) {
+            return
+        }
+
+        val targetChanged = requestKey != sourceStreamsCacheRequestKey
+        sourceStreamsJob?.cancel()
+        sourceStreamsJob = viewModelScope.launch {
+            sourceStreamsCacheRequestKey = requestKey
             _uiState.update {
                 it.copy(
                     isLoadingSourceStreams = true,
                     sourceStreamsError = null,
-                    sourceAllStreams = emptyList(),
-                    sourceSelectedAddonFilter = null,
-                    sourceFilteredStreams = emptyList(),
-                    sourceAvailableAddons = emptyList()
+                    sourceAllStreams = if (forceRefresh || targetChanged) emptyList() else it.sourceAllStreams,
+                    sourceSelectedAddonFilter = if (forceRefresh || targetChanged) null else it.sourceSelectedAddonFilter,
+                    sourceFilteredStreams = if (forceRefresh || targetChanged) emptyList() else it.sourceFilteredStreams,
+                    sourceAvailableAddons = if (forceRefresh || targetChanged) emptyList() else it.sourceAvailableAddons
                 )
             }
 
             streamRepository.getStreamsFromAllAddons(
                 type = type,
                 videoId = vid,
-                season = if (contentType in listOf("series", "tv")) currentSeason else null,
-                episode = if (contentType in listOf("series", "tv")) currentEpisode else null
+                season = seasonArg,
+                episode = episodeArg
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
@@ -980,12 +1023,7 @@ class PlayerViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 showSourcesPanel = false,
-                isLoadingSourceStreams = false,
-                sourceStreamsError = null,
-                sourceAllStreams = emptyList(),
-                sourceSelectedAddonFilter = null,
-                sourceFilteredStreams = emptyList(),
-                sourceAvailableAddons = emptyList()
+                isLoadingSourceStreams = false
             )
         }
         scheduleHideControls()
@@ -1030,11 +1068,7 @@ class PlayerViewModel @Inject constructor(
                 currentStreamName = stream.name ?: stream.addonName,
                 showSourcesPanel = false,
                 isLoadingSourceStreams = false,
-                sourceStreamsError = null,
-                sourceAllStreams = emptyList(),
-                sourceSelectedAddonFilter = null,
-                sourceFilteredStreams = emptyList(),
-                sourceAvailableAddons = emptyList()
+                sourceStreamsError = null
             )
         }
 
@@ -1060,16 +1094,7 @@ class PlayerViewModel @Inject constructor(
             it.copy(
                 showEpisodesPanel = false,
                 showEpisodeStreams = false,
-                isLoadingEpisodeStreams = false,
-                episodeStreamsError = null,
-                episodeAllStreams = emptyList(),
-                episodeSelectedAddonFilter = null,
-                episodeFilteredStreams = emptyList(),
-                episodeAvailableAddons = emptyList(),
-                episodeStreamsForVideoId = null,
-                episodeStreamsSeason = null,
-                episodeStreamsEpisode = null,
-                episodeStreamsTitle = null
+                isLoadingEpisodeStreams = false
             )
         }
         scheduleHideControls()
@@ -1158,22 +1183,51 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun loadStreamsForEpisode(video: Video) {
+        loadStreamsForEpisode(video = video, forceRefresh = false)
+    }
+
+    private fun buildEpisodeRequestKey(type: String, video: Video): String {
+        return "$type|${video.id}|${video.season ?: -1}|${video.episode ?: -1}"
+    }
+
+    private fun loadStreamsForEpisode(video: Video, forceRefresh: Boolean) {
         val type = contentType
         if (type.isNullOrBlank()) {
             _uiState.update { it.copy(episodeStreamsError = "Missing content type") }
             return
         }
 
-        viewModelScope.launch {
+        val requestKey = buildEpisodeRequestKey(type = type, video = video)
+        val state = _uiState.value
+        val hasCachedPayload = state.episodeAllStreams.isNotEmpty() || state.episodeStreamsError != null
+        if (!forceRefresh && requestKey == episodeStreamsCacheRequestKey && hasCachedPayload) {
+            _uiState.update {
+                it.copy(
+                    showEpisodeStreams = true,
+                    isLoadingEpisodeStreams = false,
+                    episodeStreamsForVideoId = video.id,
+                    episodeStreamsSeason = video.season,
+                    episodeStreamsEpisode = video.episode,
+                    episodeStreamsTitle = video.title
+                )
+            }
+            return
+        }
+
+        val targetChanged = requestKey != episodeStreamsCacheRequestKey
+        episodeStreamsJob?.cancel()
+        episodeStreamsJob = viewModelScope.launch {
+            episodeStreamsCacheRequestKey = requestKey
+            val previousAddonFilter = _uiState.value.episodeSelectedAddonFilter
             _uiState.update {
                 it.copy(
                     showEpisodeStreams = true,
                     isLoadingEpisodeStreams = true,
                     episodeStreamsError = null,
-                    episodeAllStreams = emptyList(),
-                    episodeSelectedAddonFilter = null,
-                    episodeFilteredStreams = emptyList(),
-                    episodeAvailableAddons = emptyList(),
+                    episodeAllStreams = if (forceRefresh || targetChanged) emptyList() else it.episodeAllStreams,
+                    episodeSelectedAddonFilter = if (forceRefresh || targetChanged) null else it.episodeSelectedAddonFilter,
+                    episodeFilteredStreams = if (forceRefresh || targetChanged) emptyList() else it.episodeFilteredStreams,
+                    episodeAvailableAddons = if (forceRefresh || targetChanged) emptyList() else it.episodeAvailableAddons,
                     episodeStreamsForVideoId = video.id,
                     episodeStreamsSeason = video.season,
                     episodeStreamsEpisode = video.episode,
@@ -1192,12 +1246,17 @@ class PlayerViewModel @Inject constructor(
                         val addonStreams = result.data
                         val allStreams = addonStreams.flatMap { it.streams }
                         val availableAddons = addonStreams.map { it.addonName }
-                        val filteredStreams = allStreams
+                        val selectedAddon = previousAddonFilter?.takeIf { it in availableAddons }
+                        val filteredStreams = if (selectedAddon == null) {
+                            allStreams
+                        } else {
+                            allStreams.filter { it.addonName == selectedAddon }
+                        }
                         _uiState.update {
                             it.copy(
                                 isLoadingEpisodeStreams = false,
                                 episodeAllStreams = allStreams,
-                                episodeSelectedAddonFilter = null,
+                                episodeSelectedAddonFilter = selectedAddon,
                                 episodeFilteredStreams = filteredStreams,
                                 episodeAvailableAddons = availableAddons,
                                 episodeStreamsError = null
@@ -1219,6 +1278,25 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    private fun reloadEpisodeStreams() {
+        val state = _uiState.value
+        val targetVideoId = state.episodeStreamsForVideoId
+        val targetVideo = sequenceOf(
+            state.episodes.firstOrNull { it.id == targetVideoId },
+            state.episodesAll.firstOrNull { it.id == targetVideoId },
+            state.episodes.firstOrNull {
+                it.season == state.episodeStreamsSeason && it.episode == state.episodeStreamsEpisode
+            },
+            state.episodesAll.firstOrNull {
+                it.season == state.episodeStreamsSeason && it.episode == state.episodeStreamsEpisode
+            }
+        ).firstOrNull { it != null }
+
+        if (targetVideo != null) {
+            loadStreamsForEpisode(video = targetVideo, forceRefresh = true)
         }
     }
 
@@ -1258,14 +1336,6 @@ class PlayerViewModel @Inject constructor(
                 showEpisodeStreams = false,
                 isLoadingEpisodeStreams = false,
                 episodeStreamsError = null,
-                episodeAllStreams = emptyList(),
-                episodeSelectedAddonFilter = null,
-                episodeFilteredStreams = emptyList(),
-                episodeAvailableAddons = emptyList(),
-                episodeStreamsForVideoId = null,
-                episodeStreamsSeason = null,
-                episodeStreamsEpisode = null,
-                episodeStreamsTitle = null,
                 
                 parentalWarnings = emptyList(),
                 showParentalGuide = false,
@@ -1397,6 +1467,8 @@ class PlayerViewModel @Inject constructor(
             pendingAddonSubtitleLanguage = null
         }
 
+        maybeApplyRememberedAudioSelection(audioTracks)
+
         _uiState.update {
             it.copy(
                 audioTracks = audioTracks,
@@ -1406,6 +1478,41 @@ class PlayerViewModel @Inject constructor(
             )
         }
         tryAutoSelectPreferredSubtitleFromAvailableTracks()
+    }
+
+    private fun maybeApplyRememberedAudioSelection(audioTracks: List<TrackInfo>) {
+        if (hasAppliedRememberedAudioSelection) return
+        if (!streamReuseLastLinkEnabled) return
+        if (audioTracks.isEmpty()) return
+        if (rememberedAudioLanguage.isNullOrBlank() && rememberedAudioName.isNullOrBlank()) return
+
+        fun normalize(value: String?): String? = value
+            ?.lowercase()
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val targetLang = normalize(rememberedAudioLanguage)
+        val targetName = normalize(rememberedAudioName)
+
+        val index = audioTracks.indexOfFirst { track ->
+            val trackLang = normalize(track.language)
+            val trackName = normalize(track.name)
+            val langMatch = !targetLang.isNullOrBlank() &&
+                !trackLang.isNullOrBlank() &&
+                (trackLang == targetLang || trackLang.startsWith("$targetLang-"))
+            val nameMatch = !targetName.isNullOrBlank() &&
+                !trackName.isNullOrBlank() &&
+                (trackName == targetName || trackName.contains(targetName))
+            langMatch || nameMatch
+        }
+        if (index < 0) {
+            hasAppliedRememberedAudioSelection = true
+            return
+        }
+
+        selectAudioTrack(index)
+        hasAppliedRememberedAudioSelection = true
     }
 
     private fun subtitleLanguageTargets(): List<String> {
@@ -1908,16 +2015,7 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         showEpisodeStreams = false,
-                        isLoadingEpisodeStreams = false,
-                        episodeStreamsError = null,
-                        episodeAllStreams = emptyList(),
-                        episodeSelectedAddonFilter = null,
-                        episodeFilteredStreams = emptyList(),
-                        episodeAvailableAddons = emptyList(),
-                        episodeStreamsForVideoId = null,
-                        episodeStreamsSeason = null,
-                        episodeStreamsEpisode = null,
-                        episodeStreamsTitle = null
+                        isLoadingEpisodeStreams = false
                     )
                 }
             }
@@ -1926,6 +2024,9 @@ class PlayerViewModel @Inject constructor(
             }
             is PlayerEvent.OnEpisodeSelected -> {
                 loadStreamsForEpisode(event.video)
+            }
+            PlayerEvent.OnReloadEpisodeStreams -> {
+                reloadEpisodeStreams()
             }
             is PlayerEvent.OnEpisodeAddonFilterSelected -> {
                 filterEpisodeStreamsByAddon(event.addonName)
@@ -1938,6 +2039,9 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnDismissSourcesPanel -> {
                 dismissSourcesPanel()
+            }
+            PlayerEvent.OnReloadSourceStreams -> {
+                loadSourceStreams(forceRefresh = true)
             }
             is PlayerEvent.OnSourceAddonFilterSelected -> {
                 filterSourceStreamsByAddon(event.addonName)
@@ -2088,12 +2192,33 @@ class PlayerViewModel @Inject constructor(
                                 .buildUpon()
                                 .setOverrideForType(override)
                                 .build()
+                            persistRememberedLinkAudioSelection(trackIndex)
                             return
                         }
                         currentAudioIndex++
                     }
                 }
             }
+        }
+    }
+
+    private fun persistRememberedLinkAudioSelection(trackIndex: Int) {
+        if (!streamReuseLastLinkEnabled) return
+
+        val key = streamCacheKey ?: return
+        val url = currentStreamUrl.takeIf { it.isNotBlank() } ?: return
+        val streamName = _uiState.value.currentStreamName?.takeIf { it.isNotBlank() } ?: title
+        val selectedTrack = _uiState.value.audioTracks.getOrNull(trackIndex)
+
+        viewModelScope.launch {
+            streamLinkCacheDataStore.save(
+                contentKey = key,
+                url = url,
+                streamName = streamName,
+                headers = currentHeaders,
+                rememberedAudioLanguage = selectedTrack?.language,
+                rememberedAudioName = selectedTrack?.name
+            )
         }
     }
 

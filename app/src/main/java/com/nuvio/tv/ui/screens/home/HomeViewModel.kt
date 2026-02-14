@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
 import android.util.Log
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
@@ -51,6 +52,9 @@ class HomeViewModel @Inject constructor(
     private val tmdbMetadataService: TmdbMetadataService,
     private val trailerService: TrailerService
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "HomeViewModel"
+    }
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -74,8 +78,11 @@ class HomeViewModel @Inject constructor(
     private val catalogLoadSemaphore = Semaphore(6)
     private val trailerPreviewLoadingIds = mutableSetOf<String>()
     private val trailerPreviewNegativeCache = mutableSetOf<String>()
+    private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     private var activeTrailerPreviewItemId: String? = null
     private var trailerPreviewRequestVersion: Long = 0L
+    val trailerPreviewUrls: Map<String, String>
+        get() = trailerPreviewUrlsState
 
     init {
         loadLayoutPreference()
@@ -178,7 +185,7 @@ class HomeViewModel @Inject constructor(
         }
 
         if (trailerPreviewNegativeCache.contains(itemId)) return
-        if (_uiState.value.trailerPreviewUrls.containsKey(itemId)) return
+        if (trailerPreviewUrlsState.containsKey(itemId)) return
         if (!trailerPreviewLoadingIds.add(itemId)) return
 
         val requestVersion = trailerPreviewRequestVersion
@@ -188,7 +195,7 @@ class HomeViewModel @Inject constructor(
                 title = item.name,
                 year = extractYear(item.releaseInfo),
                 tmdbId = null,
-                type = item.type.toApiString()
+                type = item.apiType
             )
 
             val isLatestFocusedItem =
@@ -201,11 +208,8 @@ class HomeViewModel @Inject constructor(
             if (trailerUrl.isNullOrBlank()) {
                 trailerPreviewNegativeCache.add(itemId)
             } else {
-                _uiState.update { state ->
-                    if (state.trailerPreviewUrls[itemId] == trailerUrl) state
-                    else state.copy(
-                        trailerPreviewUrls = state.trailerPreviewUrls + (itemId to trailerUrl)
-                    )
+                if (trailerPreviewUrlsState[itemId] != trailerUrl) {
+                    trailerPreviewUrlsState[itemId] = trailerUrl
                 }
             }
 
@@ -405,7 +409,11 @@ class HomeViewModel @Inject constructor(
 
     private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
         viewModelScope.launch {
-            watchProgressRepository.removeProgress(contentId, season, episode)
+            Log.d(
+                TAG,
+                "removeContinueWatching requested contentId=$contentId season=$season episode=$episode; removing all progress for content"
+            )
+            watchProgressRepository.removeProgress(contentId = contentId, season = null, episode = null)
         }
     }
 
@@ -426,6 +434,11 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
+        trailerPreviewLoadingIds.clear()
+        trailerPreviewNegativeCache.clear()
+        trailerPreviewUrlsState.clear()
+        activeTrailerPreviewItemId = null
+        trailerPreviewRequestVersion = 0L
 
         try {
             if (addons.isEmpty()) {
@@ -447,7 +460,7 @@ class HomeViewModel @Inject constructor(
                         it.isSearchOnlyCatalog() || isCatalogDisabled(
                             addonBaseUrl = addon.baseUrl,
                             addonId = addon.id,
-                            type = it.type.toApiString(),
+                            type = it.apiType,
                             catalogId = it.id,
                             catalogName = it.name
                         )
@@ -471,7 +484,7 @@ class HomeViewModel @Inject constructor(
                     addonName = addon.name,
                     catalogId = catalog.id,
                     catalogName = catalog.name,
-                    type = catalog.type.toApiString(),
+                    type = catalog.apiType,
                     skip = 0,
                     supportsSkip = supportsSkip
                 ).collect { result ->
@@ -479,7 +492,7 @@ class HomeViewModel @Inject constructor(
                         is NetworkResult.Success -> {
                             val key = catalogKey(
                                 addonId = addon.id,
-                                type = catalog.type.toApiString(),
+                                type = catalog.apiType,
                                 catalogId = catalog.id
                             )
                             catalogsMap[key] = result.data
@@ -517,7 +530,7 @@ class HomeViewModel @Inject constructor(
                 addonName = addon.name,
                 catalogId = catalogId,
                 catalogName = currentRow.catalogName,
-                type = currentRow.type.toApiString(),
+                type = currentRow.apiType,
                 skip = nextSkip,
                 supportsSkip = currentRow.supportsSkip
             ).collect { result ->
@@ -599,7 +612,7 @@ class HomeViewModel @Inject constructor(
                                 catalogId = row.catalogId,
                                 addonBaseUrl = row.addonBaseUrl,
                                 addonId = row.addonId,
-                                type = row.type.toApiString()
+                                type = row.apiType
                             )
                         )
                         val hasEnoughForSeeAll = row.items.size >= 15
@@ -619,7 +632,7 @@ class HomeViewModel @Inject constructor(
                                 GridItem.SeeAll(
                                     catalogId = row.catalogId,
                                     addonId = row.addonId,
-                                    type = row.type.toApiString()
+                                    type = row.apiType
                                 )
                             )
                         }
@@ -674,7 +687,7 @@ class HomeViewModel @Inject constructor(
         if (!settings.useArtwork && !settings.useBasicInfo && !settings.useDetails) return items
 
         return items.map { item ->
-            val tmdbId = tmdbService.ensureTmdbId(item.id, item.type.toApiString()) ?: return@map item
+            val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@map item
             val enrichment = tmdbMetadataService.fetchEnrichment(
                 tmdbId = tmdbId,
                 contentType = item.type,
@@ -753,7 +766,7 @@ class HomeViewModel @Inject constructor(
                     it.isSearchOnlyCatalog() || isCatalogDisabled(
                         addonBaseUrl = addon.baseUrl,
                         addonId = addon.id,
-                        type = it.type.toApiString(),
+                        type = it.apiType,
                         catalogId = it.id,
                         catalogName = it.name
                     )
@@ -761,7 +774,7 @@ class HomeViewModel @Inject constructor(
                 .forEach { catalog ->
                     val key = catalogKey(
                         addonId = addon.id,
-                        type = catalog.type.toApiString(),
+                        type = catalog.apiType,
                         catalogId = catalog.id
                     )
                     if (key !in orderedKeys) {

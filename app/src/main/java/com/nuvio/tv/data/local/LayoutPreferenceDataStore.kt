@@ -32,6 +32,9 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
     private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
+    private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
+    private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
+    private val modernSidebarBlurEnabledKey = booleanPreferencesKey("modern_sidebar_blur_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
@@ -78,7 +81,21 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val sidebarCollapsedByDefault: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[sidebarCollapsedKey] ?: false
+        val modernSidebarEnabled =
+            prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+        if (modernSidebarEnabled) {
+            false
+        } else {
+            prefs[sidebarCollapsedKey] ?: false
+        }
+    }
+
+    val modernSidebarEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+    }
+
+    val modernSidebarBlurEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[modernSidebarBlurEnabledKey] ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -98,7 +115,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val focusedPosterBackdropExpandEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[focusedPosterBackdropExpandEnabledKey] ?: true
+        prefs[focusedPosterBackdropExpandEnabledKey] ?: false
     }
 
     val focusedPosterBackdropExpandDelaySeconds: Flow<Int> = dataStore.data.map { prefs ->
@@ -164,7 +181,25 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
         dataStore.edit { prefs ->
-            prefs[sidebarCollapsedKey] = collapsed
+            val modernSidebarEnabled =
+                prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+            prefs[sidebarCollapsedKey] = if (modernSidebarEnabled) false else collapsed
+        }
+    }
+
+    suspend fun setModernSidebarEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[modernSidebarEnabledKey] = enabled
+            prefs.remove(legacyModernSidebarEnabledKey)
+            if (enabled) {
+                prefs[sidebarCollapsedKey] = false
+            }
+        }
+    }
+
+    suspend fun setModernSidebarBlurEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[modernSidebarBlurEnabledKey] = enabled
         }
     }
 

@@ -19,7 +19,9 @@ data class CachedStreamLink(
     val url: String,
     val streamName: String,
     val headers: Map<String, String>,
-    val cachedAtMs: Long
+    val cachedAtMs: Long,
+    val rememberedAudioLanguage: String? = null,
+    val rememberedAudioName: String? = null
 )
 
 @Singleton
@@ -28,12 +30,21 @@ class StreamLinkCacheDataStore @Inject constructor(
 ) {
     private val dataStore = context.streamLinkCacheDataStore
 
-    suspend fun save(contentKey: String, url: String, streamName: String, headers: Map<String, String>?) {
+    suspend fun save(
+        contentKey: String,
+        url: String,
+        streamName: String,
+        headers: Map<String, String>?,
+        rememberedAudioLanguage: String? = null,
+        rememberedAudioName: String? = null
+    ) {
         val payload = JSONObject().apply {
             put("url", url)
             put("streamName", streamName)
             put("cachedAtMs", System.currentTimeMillis())
             put("headers", JSONObject(headers ?: emptyMap<String, String>()))
+            put("rememberedAudioLanguage", rememberedAudioLanguage)
+            put("rememberedAudioName", rememberedAudioName)
         }.toString()
 
         dataStore.edit { prefs ->
@@ -68,7 +79,9 @@ class StreamLinkCacheDataStore @Inject constructor(
                 url = url,
                 streamName = streamName,
                 headers = headers,
-                cachedAtMs = cachedAtMs
+                cachedAtMs = cachedAtMs,
+                rememberedAudioLanguage = json.optString("rememberedAudioLanguage", "").ifBlank { null },
+                rememberedAudioName = json.optString("rememberedAudioName", "").ifBlank { null }
             )
         }.getOrNull()
 

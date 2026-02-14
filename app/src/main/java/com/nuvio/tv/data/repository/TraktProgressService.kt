@@ -1,5 +1,6 @@
 package com.nuvio.tv.data.repository
 
+import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.dto.trakt.TraktEpisodeDto
@@ -18,6 +19,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,6 +57,10 @@ class TraktProgressService @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository
 ) {
+    companion object {
+        private const val TAG = "TraktProgressSvc"
+    }
+
     data class TraktCachedStats(
         val moviesWatched: Int = 0,
         val showsWatched: Int = 0,
@@ -85,7 +91,10 @@ class TraktProgressService @Inject constructor(
         val episodes: Map<Pair<Int, Int>, EpisodeMetadata>
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Uncaught exception in TraktProgressService scope", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private val refreshSignals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val episodeVideoIdCache = mutableMapOf<String, String>()
     private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
@@ -113,7 +122,11 @@ class TraktProgressService @Inject constructor(
     init {
         scope.launch {
             refreshEvents().collectLatest {
-                refreshRemoteSnapshot()
+                try {
+                    refreshRemoteSnapshot()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to refresh remote snapshot", e)
+                }
             }
         }
     }
@@ -275,6 +288,10 @@ class TraktProgressService @Inject constructor(
     }
 
     suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
+        Log.d(
+            TAG,
+            "removeProgress start contentId=$contentId season=$season episode=$episode"
+        )
         applyOptimisticRemoval(contentId, season, episode)
         val playbackMovies = getPlayback("movies", force = true)
         val playbackEpisodes = getPlayback("episodes", force = true)
@@ -284,6 +301,7 @@ class TraktProgressService @Inject constructor(
             .filter { normalizeContentId(it.movie?.ids) == target }
             .forEach { item ->
                 item.id?.let { playbackId ->
+                    Log.d(TAG, "removeProgress deleting movie playbackId=$playbackId")
                     traktAuthService.executeAuthorizedRequest { authHeader ->
                         traktApi.deletePlayback(authHeader, playbackId)
                     }
@@ -302,12 +320,17 @@ class TraktProgressService @Inject constructor(
             }
             .forEach { item ->
                 item.id?.let { playbackId ->
+                    Log.d(
+                        TAG,
+                        "removeProgress deleting episode playbackId=$playbackId s=${item.episode?.season} e=${item.episode?.number}"
+                    )
                     traktAuthService.executeAuthorizedRequest { authHeader ->
                         traktApi.deletePlayback(authHeader, playbackId)
                     }
                 }
             }
 
+        Log.d(TAG, "removeProgress refreshNow contentId=$contentId")
         refreshNow()
     }
 

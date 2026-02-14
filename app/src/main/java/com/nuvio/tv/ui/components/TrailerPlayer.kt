@@ -13,10 +13,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -36,6 +40,9 @@ fun TrailerPlayer(
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentIsPlaying by rememberUpdatedState(isPlaying)
+    val currentTrailerUrl by rememberUpdatedState(trailerUrl)
     var hasRenderedFirstFrame by remember(trailerUrl) { mutableStateOf(false) }
     val playerAlpha by animateFloatAsState(
         targetValue = if (isPlaying && hasRenderedFirstFrame) 1f else 0f,
@@ -76,6 +83,29 @@ fun TrailerPlayer(
             hasRenderedFirstFrame = false
             player.stop()
             player.clearMediaItems()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, trailerPlayer) {
+        val player = trailerPlayer ?: return@DisposableEffect onDispose {}
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
+                        player.playWhenReady = true
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP -> {
+                    player.playWhenReady = false
+                    player.pause()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 

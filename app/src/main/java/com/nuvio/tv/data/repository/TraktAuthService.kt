@@ -9,8 +9,10 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
+import android.util.Log
 import kotlinx.coroutines.flow.first
 import retrofit2.Response
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -169,10 +171,20 @@ class TraktAuthService @Inject constructor(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
         val firstToken = getValidAccessToken() ?: return null
-        var response = call("Bearer $firstToken")
+        val response = try {
+            call("Bearer $firstToken")
+        } catch (e: IOException) {
+            Log.w("TraktAuthService", "Network error during authorized request", e)
+            return null
+        }
         if (response.code() == 401 && refreshTokenIfNeeded(force = true)) {
             val refreshedToken = getCurrentAuthState().accessToken ?: return response
-            response = call("Bearer $refreshedToken")
+            return try {
+                call("Bearer $refreshedToken")
+            } catch (e: IOException) {
+                Log.w("TraktAuthService", "Network error during retry request", e)
+                null
+            }
         }
         return response
     }
