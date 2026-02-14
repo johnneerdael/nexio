@@ -297,6 +297,17 @@ fun LayoutSettingsContent(
                     },
                     onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                 )
+                CompactToggleRow(
+                    title = "Blur Unwatched Episodes",
+                    subtitle = "Blur episode thumbnails until watched to avoid spoilers.",
+                    checked = uiState.blurUnwatchedEpisodes,
+                    onToggle = {
+                        viewModel.onEvent(
+                            LayoutSettingsEvent.SetBlurUnwatchedEpisodes(!uiState.blurUnwatchedEpisodes)
+                        )
+                    },
+                    onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                )
             }
         }
 

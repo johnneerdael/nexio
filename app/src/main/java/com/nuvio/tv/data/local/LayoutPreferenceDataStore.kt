@@ -46,6 +46,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
+    private val blurUnwatchedEpisodesKey = booleanPreferencesKey("blur_unwatched_episodes")
 
     private companion object {
         const val DEFAULT_POSTER_CARD_WIDTH_DP = 126
@@ -142,6 +143,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val posterCardCornerRadiusDp: Flow<Int> = dataStore.data.map { prefs ->
         prefs[posterCardCornerRadiusDpKey] ?: DEFAULT_POSTER_CARD_CORNER_RADIUS_DP
+    }
+
+    val blurUnwatchedEpisodes: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[blurUnwatchedEpisodesKey] ?: false
     }
 
     suspend fun setLayout(layout: HomeLayout) {
@@ -274,6 +279,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setPosterCardCornerRadiusDp(cornerRadiusDp: Int) {
         dataStore.edit { prefs ->
             prefs[posterCardCornerRadiusDpKey] = cornerRadiusDp
+        }
+    }
+
+    suspend fun setBlurUnwatchedEpisodes(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[blurUnwatchedEpisodesKey] = enabled
         }
     }
 
