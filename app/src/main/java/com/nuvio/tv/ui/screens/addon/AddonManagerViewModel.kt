@@ -14,6 +14,7 @@ import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -184,7 +186,7 @@ class AddonManagerViewModel @Inject constructor(
                 )
             },
             onChangeProposed = { change -> handleChangeProposed(change) },
-            manifestFetcher = { url -> fetchAddonInfo(url) },
+            manifestFetcher = { url -> fetchAddonInfoBlocking(url) },
             logoProvider = { logoBytes }
         )
 
@@ -219,10 +221,14 @@ class AddonManagerViewModel @Inject constructor(
         }
     }
 
-    private fun fetchAddonInfo(url: String): AddonConfigServer.AddonInfo? {
-        return try {
-            runBlocking {
-                when (val result = addonRepository.fetchAddon(url)) {
+    private suspend fun fetchAddonInfo(url: String): AddonConfigServer.AddonInfo? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = withTimeoutOrNull(15_000L) {
+                    addonRepository.fetchAddon(url)
+                } ?: return@withContext null
+
+                when (result) {
                     is NetworkResult.Success -> AddonConfigServer.AddonInfo(
                         url = result.data.baseUrl,
                         name = result.data.name.ifBlank { url },
@@ -230,8 +236,18 @@ class AddonManagerViewModel @Inject constructor(
                     )
                     else -> null
                 }
+            } catch (_: Exception) {
+                null
             }
-        } catch (e: Exception) {
+        }
+    }
+
+    private fun fetchAddonInfoBlocking(url: String): AddonConfigServer.AddonInfo? {
+        return try {
+            kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                fetchAddonInfo(url)
+            }
+        } catch (_: Exception) {
             null
         }
     }
@@ -312,8 +328,10 @@ class AddonManagerViewModel @Inject constructor(
 
         if (added.isNotEmpty()) {
             viewModelScope.launch {
-                val addedNames = added.associateWith { url ->
-                    fetchAddonInfo(url)?.name ?: url
+                val addedNames = withContext(Dispatchers.IO) {
+                    added.associateWith { url ->
+                        fetchAddonInfo(url)?.name ?: url
+                    }
                 }
                 _uiState.update { state ->
                     val pending = state.pendingChange
