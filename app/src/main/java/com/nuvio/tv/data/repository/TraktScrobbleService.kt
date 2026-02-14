@@ -81,7 +81,7 @@ class TraktScrobbleService @Inject constructor(
             }
         } ?: return
 
-        if (response.isSuccessful) {
+        if (response.isSuccessful || response.code() == 409) {
             lastScrobbleStamp = ScrobbleStamp(
                 action = action,
                 itemKey = item.itemKey,

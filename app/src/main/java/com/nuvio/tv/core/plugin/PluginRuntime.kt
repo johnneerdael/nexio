@@ -551,6 +551,13 @@ class PluginRuntime @Inject constructor() {
                 var method = (options.method || 'GET').toUpperCase();
                 var headers = options.headers || {};
                 var body = options.body || '';
+                var signal = options.signal || null;
+
+                if (signal && signal.aborted) {
+                    var preErr = new Error('The operation was aborted.');
+                    preErr.name = 'AbortError';
+                    throw preErr;
+                }
 
                 // Add default User-Agent
                 if (!headers['User-Agent']) {
@@ -559,6 +566,12 @@ class PluginRuntime @Inject constructor() {
 
                 var result = await __native_fetch(url, method, JSON.stringify(headers), body);
                 var parsed = JSON.parse(result);
+
+                if (signal && signal.aborted) {
+                    var postErr = new Error('The operation was aborted.');
+                    postErr.name = 'AbortError';
+                    throw postErr;
+                }
 
                 return {
                     ok: parsed.ok,
@@ -582,6 +595,84 @@ class PluginRuntime @Inject constructor() {
                     }
                 };
             };
+
+            // AbortController/AbortSignal minimal polyfill
+            if (typeof AbortSignal === 'undefined') {
+                var AbortSignal = function() {
+                    this.aborted = false;
+                    this.reason = undefined;
+                    this._listeners = [];
+                };
+                AbortSignal.prototype.addEventListener = function(type, listener) {
+                    if (type !== 'abort' || typeof listener !== 'function') return;
+                    this._listeners.push(listener);
+                };
+                AbortSignal.prototype.removeEventListener = function(type, listener) {
+                    if (type !== 'abort') return;
+                    this._listeners = this._listeners.filter(function(l) { return l !== listener; });
+                };
+                AbortSignal.prototype.dispatchEvent = function(event) {
+                    if (!event || event.type !== 'abort') return true;
+                    for (var i = 0; i < this._listeners.length; i++) {
+                        try { this._listeners[i].call(this, event); } catch (e) {}
+                    }
+                    return true;
+                };
+                globalThis.AbortSignal = AbortSignal;
+            }
+            if (typeof AbortController === 'undefined') {
+                var AbortController = function() {
+                    this.signal = new AbortSignal();
+                };
+                AbortController.prototype.abort = function(reason) {
+                    if (this.signal.aborted) return;
+                    this.signal.aborted = true;
+                    this.signal.reason = reason;
+                    this.signal.dispatchEvent({ type: 'abort' });
+                };
+                globalThis.AbortController = AbortController;
+            }
+
+            // atob/btoa polyfills
+            if (typeof atob === 'undefined') {
+                globalThis.atob = function(input) {
+                    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+                    var str = String(input).replace(/=+$/, '');
+                    if (str.length % 4 === 1) {
+                        throw new Error('InvalidCharacterError');
+                    }
+                    var output = '';
+                    var bc = 0, bs, buffer, idx = 0;
+                    while ((buffer = str.charAt(idx++))) {
+                        buffer = chars.indexOf(buffer);
+                        if (buffer === -1) continue;
+                        bs = bc % 4 ? bs * 64 + buffer : buffer;
+                        if (bc++ % 4) {
+                            output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+                        }
+                    }
+                    return output;
+                };
+            }
+            if (typeof btoa === 'undefined') {
+                globalThis.btoa = function(input) {
+                    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+                    var str = String(input);
+                    var output = '';
+                    for (
+                        var block, charCode, idx = 0, map = chars;
+                        str.charAt(idx | 0) || (map = '=', idx % 1);
+                        output += map.charAt(63 & (block >> (8 - (idx % 1) * 8)))
+                    ) {
+                        charCode = str.charCodeAt(idx += 3 / 4);
+                        if (charCode > 0xFF) {
+                            throw new Error('InvalidCharacterError');
+                        }
+                        block = (block << 8) | charCode;
+                    }
+                    return output;
+                };
+            }
 
             // URL class
             var URL = function(urlString, base) {

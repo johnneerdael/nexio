@@ -4,6 +4,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -28,7 +29,6 @@ import com.nuvio.tv.ui.screens.settings.TraktScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
-import com.nuvio.tv.ui.screens.account.AccountScreen
 import com.nuvio.tv.ui.screens.account.AuthSignInScreen
 import com.nuvio.tv.ui.screens.account.SyncCodeGenerateScreen
 import com.nuvio.tv.ui.screens.account.SyncCodeClaimScreen
@@ -352,7 +352,8 @@ fun NuvioNavHost(
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
-                onNavigateToAccount = { navController.navigate(Screen.Account.route) },
+                // TEMP: Account route hidden from settings.
+                // onNavigateToAccount = { navController.navigate(Screen.Account.route) },
                 onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
                 onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
                 onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) },
@@ -410,12 +411,14 @@ fun NuvioNavHost(
         }
 
         composable(Screen.Account.route) {
-            AccountScreen(
-                onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
-                onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
-                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) },
-                onBackPress = { navController.popBackStack() }
-            )
+            
+            // AccountScreen(...)
+            LaunchedEffect(Unit) {
+                navController.navigate(Screen.Settings.route) {
+                    popUpTo(Screen.Account.route) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
         }
 
         composable(Screen.AuthSignIn.route) {

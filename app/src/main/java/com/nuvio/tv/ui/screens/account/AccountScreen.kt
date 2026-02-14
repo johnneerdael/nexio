@@ -46,6 +46,8 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.ui.theme.NuvioColors
 
+private const val SHOW_SYNC_CODE_FEATURES = false
+
 @Composable
 fun AccountScreen(
     onNavigateToAuthSignIn: () -> Unit = {},
@@ -114,36 +116,38 @@ fun AccountScreen(
                         onClick = onNavigateToAuthSignIn
                     )
                 }
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Sync Code",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = NuvioColors.TextPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Sync across devices without creating an account.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
-                    )
-                }
-                item {
-                    AccountActionCard(
-                        icon = Icons.Default.VpnKey,
-                        title = "Generate Sync Code",
-                        description = "Create a code on this device so other devices can link to it.",
-                        onClick = onNavigateToSyncGenerate
-                    )
-                }
-                item {
-                    AccountActionCard(
-                        icon = Icons.Default.Sync,
-                        title = "Enter Sync Code",
-                        description = "Link this device to another device using a sync code.",
-                        onClick = onNavigateToSyncClaim
-                    )
+                if (SHOW_SYNC_CODE_FEATURES) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Sync Code",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = NuvioColors.TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Sync across devices without creating an account.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = NuvioColors.TextSecondary
+                        )
+                    }
+                    item {
+                        AccountActionCard(
+                            icon = Icons.Default.VpnKey,
+                            title = "Generate Sync Code",
+                            description = "Create a code on this device so other devices can link to it.",
+                            onClick = onNavigateToSyncGenerate
+                        )
+                    }
+                    item {
+                        AccountActionCard(
+                            icon = Icons.Default.Sync,
+                            title = "Enter Sync Code",
+                            description = "Link this device to another device using a sync code.",
+                            onClick = onNavigateToSyncClaim
+                        )
+                    }
                 }
             }
 
@@ -160,13 +164,15 @@ fun AccountScreen(
                         onUnlink = { viewModel.unlinkDevice(it) }
                     )
                 }
-                item {
-                    AccountActionCard(
-                        icon = Icons.Default.VpnKey,
-                        title = "Generate Sync Code",
-                        description = "Create a code so other devices can sync with this account.",
-                        onClick = onNavigateToSyncGenerate
-                    )
+                if (SHOW_SYNC_CODE_FEATURES) {
+                    item {
+                        AccountActionCard(
+                            icon = Icons.Default.VpnKey,
+                            title = "Generate Sync Code",
+                            description = "Create a code so other devices can sync with this account.",
+                            onClick = onNavigateToSyncGenerate
+                        )
+                    }
                 }
                 item {
                     SignOutButton(onClick = { viewModel.signOut() })
@@ -186,13 +192,15 @@ fun AccountScreen(
                         onUnlink = { viewModel.unlinkDevice(it) }
                     )
                 }
-                item {
-                    AccountActionCard(
-                        icon = Icons.Default.VpnKey,
-                        title = "Generate Sync Code",
-                        description = "Create a new sync code for linking devices.",
-                        onClick = onNavigateToSyncGenerate
-                    )
+                if (SHOW_SYNC_CODE_FEATURES) {
+                    item {
+                        AccountActionCard(
+                            icon = Icons.Default.VpnKey,
+                            title = "Generate Sync Code",
+                            description = "Create a new sync code for linking devices.",
+                            onClick = onNavigateToSyncGenerate
+                        )
+                    }
                 }
                 item {
                     AccountActionCard(

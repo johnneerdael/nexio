@@ -228,6 +228,7 @@ class PlayerViewModel @Inject constructor(
     private var pendingResumeProgress: WatchProgress? = null
     private var currentScrobbleItem: TraktScrobbleItem? = null
     private var hasSentScrobbleStartForCurrentItem: Boolean = false
+    private var hasSentCompletionScrobbleForCurrentItem: Boolean = false
     private var episodeStreamsJob: Job? = null
     private var episodeStreamsCacheRequestKey: String? = null
     private val streamCacheKey: String? by lazy {
@@ -763,7 +764,7 @@ class PlayerViewModel @Inject constructor(
                         
                             
                             if (playbackState == Player.STATE_ENDED) {
-                                emitScrobbleStop(progressPercent = 99.5f)
+                                emitCompletionScrobbleStop(progressPercent = 99.5f)
                                 saveWatchProgress()
                             }
                         }
@@ -787,7 +788,7 @@ class PlayerViewModel @Inject constructor(
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
                                 if (playbackState != Player.STATE_BUFFERING) {
-                                    emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+                                    emitPauseScrobbleStop(progressPercent = currentPlaybackProgressPercent())
                                 }
                                 
                                 saveWatchProgress()
@@ -1086,7 +1087,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
-        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+        emitPauseScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1341,7 +1342,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
-        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+        emitPauseScrobbleStop(progressPercent = currentPlaybackProgressPercent())
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1793,6 +1794,7 @@ class PlayerViewModel @Inject constructor(
     private fun refreshScrobbleItem() {
         currentScrobbleItem = buildScrobbleItem()
         hasSentScrobbleStartForCurrentItem = false
+        hasSentCompletionScrobbleForCurrentItem = false
     }
 
     private fun buildScrobbleItem(): TraktScrobbleItem? {
@@ -1848,6 +1850,17 @@ class PlayerViewModel @Inject constructor(
             )
         }
         hasSentScrobbleStartForCurrentItem = false
+    }
+
+    private fun emitPauseScrobbleStop(progressPercent: Float) {
+        if (progressPercent < 1f || progressPercent >= 80f) return
+        emitScrobbleStop(progressPercent = progressPercent)
+    }
+
+    private fun emitCompletionScrobbleStop(progressPercent: Float) {
+        if (progressPercent < 80f || hasSentCompletionScrobbleForCurrentItem) return
+        hasSentCompletionScrobbleForCurrentItem = true
+        emitScrobbleStop(progressPercent = progressPercent)
     }
 
     fun scheduleHideControls() {
@@ -2392,7 +2405,9 @@ class PlayerViewModel @Inject constructor(
 
     private fun releasePlayer() {
         
-        emitScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+        val progressPercent = currentPlaybackProgressPercent()
+        emitPauseScrobbleStop(progressPercent = progressPercent)
+        emitCompletionScrobbleStop(progressPercent = progressPercent)
         saveWatchProgress()
 
         

@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
@@ -81,15 +80,13 @@ import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
 
-import com.nuvio.tv.ui.screens.account.AccountSettingsContent
-import com.nuvio.tv.ui.screens.account.AccountViewModel
-
 private enum class SettingsCategory(
     val displayName: String,
     val icon: ImageVector,
     @param:RawRes val rawIconRes: Int? = null
 ) {
-    ACCOUNT("Account", Icons.Default.Person),
+    // TEMP: Hide Account tab from settings.
+    // ACCOUNT("Account", Icons.Default.Person),
     APPEARANCE("Appearance", Icons.Default.Palette),
     LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
@@ -103,7 +100,6 @@ private enum class SettingsCategory(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToPlugins: () -> Unit = {},
-    onNavigateToAccount: () -> Unit = {},
     onNavigateToAuthSignIn: () -> Unit = {},
     onNavigateToSyncGenerate: () -> Unit = {},
     onNavigateToSyncClaim: () -> Unit = {},
@@ -117,8 +113,6 @@ fun SettingsScreen(
     var tabRowHasFocus by remember { mutableStateOf(false) }
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
-    val accountViewModel: AccountViewModel = hiltViewModel()
-    val accountUiState by accountViewModel.uiState.collectAsState()
 
     val accentColor = NuvioColors.Secondary
 
@@ -265,12 +259,8 @@ fun SettingsScreen(
                         uiState = pluginUiState,
                         viewModel = pluginViewModel
                     )
-                    SettingsCategory.ACCOUNT -> AccountSettingsContent(
-                        uiState = accountUiState,
-                        viewModel = accountViewModel,
-                        onNavigateToSyncGenerate = onNavigateToSyncGenerate,
-                        onNavigateToSyncClaim = onNavigateToSyncClaim
-                    )
+                    // TEMP: Hide Account page from settings content.
+                    // SettingsCategory.ACCOUNT -> AccountSettingsContent(...)
                     SettingsCategory.TRAKT -> Unit
                 }
             }

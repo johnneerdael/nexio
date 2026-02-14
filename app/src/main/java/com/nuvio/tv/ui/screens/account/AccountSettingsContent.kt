@@ -51,6 +51,8 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.ui.theme.NuvioColors
 
+private const val SHOW_SYNC_CODE_FEATURES = false
+
 @Composable
 fun AccountSettingsContent(
     uiState: AccountUiState,
@@ -87,21 +89,23 @@ fun AccountSettingsContent(
                         color = NuvioColors.TextSecondary
                     )
                 }
-                item {
-                    SettingsActionButton(
-                        icon = Icons.Default.VpnKey,
-                        title = "Generate Sync Code",
-                        subtitle = "Create a code to share with your other devices",
-                        onClick = onNavigateToSyncGenerate
-                    )
-                }
-                item {
-                    SettingsActionButton(
-                        icon = Icons.Default.Sync,
-                        title = "Enter Sync Code",
-                        subtitle = "Link this device using a code from another device",
-                        onClick = onNavigateToSyncClaim
-                    )
+                if (SHOW_SYNC_CODE_FEATURES) {
+                    item {
+                        SettingsActionButton(
+                            icon = Icons.Default.VpnKey,
+                            title = "Generate Sync Code",
+                            subtitle = "Create a code to share with your other devices",
+                            onClick = onNavigateToSyncGenerate
+                        )
+                    }
+                    item {
+                        SettingsActionButton(
+                            icon = Icons.Default.Sync,
+                            title = "Enter Sync Code",
+                            subtitle = "Link this device using a code from another device",
+                            onClick = onNavigateToSyncClaim
+                        )
+                    }
                 }
             }
 
@@ -112,21 +116,23 @@ fun AccountSettingsContent(
                         value = authState.email
                     )
                 }
-                item {
-                    SettingsActionButton(
-                        icon = Icons.Default.VpnKey,
-                        title = "Generate Sync Code",
-                        subtitle = "Share a code so other devices can link to this account",
-                        onClick = onNavigateToSyncGenerate
-                    )
-                }
-                item {
-                    SettingsActionButton(
-                        icon = Icons.Default.Sync,
-                        title = "Enter Sync Code",
-                        subtitle = "Link this device using a code from another device",
-                        onClick = onNavigateToSyncClaim
-                    )
+                if (SHOW_SYNC_CODE_FEATURES) {
+                    item {
+                        SettingsActionButton(
+                            icon = Icons.Default.VpnKey,
+                            title = "Generate Sync Code",
+                            subtitle = "Share a code so other devices can link to this account",
+                            onClick = onNavigateToSyncGenerate
+                        )
+                    }
+                    item {
+                        SettingsActionButton(
+                            icon = Icons.Default.Sync,
+                            title = "Enter Sync Code",
+                            subtitle = "Link this device using a code from another device",
+                            onClick = onNavigateToSyncClaim
+                        )
+                    }
                 }
                 item {
                     SignOutSettingsButton(onClick = { viewModel.signOut() })
@@ -140,11 +146,13 @@ fun AccountSettingsContent(
                         value = "Using sync code for cross-device sync"
                     )
                 }
-                item {
-                    ShowSyncCodeSection(
-                        uiState = uiState,
-                        viewModel = viewModel
-                    )
+                if (SHOW_SYNC_CODE_FEATURES) {
+                    item {
+                        ShowSyncCodeSection(
+                            uiState = uiState,
+                            viewModel = viewModel
+                        )
+                    }
                 }
                 item {
                     SignOutSettingsButton(onClick = { viewModel.signOut() })
