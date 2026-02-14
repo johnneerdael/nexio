@@ -131,7 +131,8 @@ class MainActivity : ComponentActivity() {
 
                     val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
                     val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = false)
-                    val modernSidebarBlurEnabled by layoutPreferenceDataStore.modernSidebarBlurEnabled.collectAsState(initial = false)
+                    val modernSidebarBlurPref by layoutPreferenceDataStore.modernSidebarBlurEnabled.collectAsState(initial = false)
+                    val modernSidebarBlurEnabled = modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
