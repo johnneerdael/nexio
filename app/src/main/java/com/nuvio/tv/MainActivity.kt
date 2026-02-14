@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -86,6 +87,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
+import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
@@ -99,6 +101,7 @@ import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class DrawerItem(
     val route: String,
@@ -114,6 +117,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var layoutPreferenceDataStore: LayoutPreferenceDataStore
+
+    @Inject
+    lateinit var traktProgressService: TraktProgressService
 
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -223,6 +229,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch {
+            traktProgressService.refreshNow()
         }
     }
 }

@@ -16,6 +16,7 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.TmdbSettings
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -695,47 +696,39 @@ class HomeViewModel @Inject constructor(
         // Full (untruncated) rows for CatalogSeeAllScreen
         val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
 
-        // Show catalog rows immediately with un-enriched hero items
+        val tmdbSettings = tmdbSettingsDataStore.settings.first()
+        val shouldUseEnrichedHeroItems = tmdbSettings.enabled &&
+            (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
+
+        val resolvedHeroItems = if (shouldUseEnrichedHeroItems) {
+            enrichHeroItems(baseHeroItems, tmdbSettings)
+        } else {
+            baseHeroItems
+        }
+
+        // Render hero from a single source per update cycle.
         _uiState.value = _uiState.value.copy(
             catalogRows = displayRows,
             fullCatalogRows = fullRows,
-            heroItems = baseHeroItems,
+            heroItems = resolvedHeroItems,
             gridItems = if (currentLayout == HomeLayout.GRID) {
-                replaceGridHeroItems(baseGridItems, baseHeroItems)
+                replaceGridHeroItems(baseGridItems, resolvedHeroItems)
             } else {
                 baseGridItems
             },
             isLoading = false
         )
-
-        // Enrich hero items asynchronously (only if TMDB is enabled)
-        val enrichedHeroItems = enrichHeroItems(baseHeroItems)
-        if (enrichedHeroItems !== baseHeroItems) {
-            val enrichedGridItems = if (currentLayout == HomeLayout.GRID) {
-                replaceGridHeroItems(baseGridItems, enrichedHeroItems)
-            } else {
-                _uiState.value.gridItems
-            }
-            _uiState.update {
-                it.copy(
-                    heroItems = enrichedHeroItems,
-                    gridItems = enrichedGridItems
-                )
-            }
-        }
     }
 
     private fun navigateToDetail(itemId: String, itemType: String) {
         _uiState.update { it.copy(selectedItemId = itemId) }
     }
 
-    private suspend fun enrichHeroItems(items: List<MetaPreview>): List<MetaPreview> {
+    private suspend fun enrichHeroItems(
+        items: List<MetaPreview>,
+        settings: TmdbSettings
+    ): List<MetaPreview> {
         if (items.isEmpty()) return items
-
-        val settings = tmdbSettingsDataStore.settings.first()
-        // Never trigger any TMDB calls when enrichment is OFF
-        if (!settings.enabled) return items
-        if (!settings.useArtwork && !settings.useBasicInfo && !settings.useDetails) return items
 
         // Enrich all hero items in parallel
         return coroutineScope {
