@@ -304,8 +304,7 @@ class SearchViewModel @Inject constructor(
         val discoverCatalogs = addons.flatMap { addon ->
             addon.catalogs
                 .filter { catalog ->
-                    (catalog.apiType == "movie" || catalog.apiType == "series") &&
-                        !catalog.extra.any { it.name == "search" && it.isRequired }
+                    !catalog.extra.any { it.name == "search" && it.isRequired }
                 }
                 .map { catalog ->
                     val genres = catalog.extra
@@ -326,7 +325,9 @@ class SearchViewModel @Inject constructor(
                 }
         }
 
-        val selectedType = _uiState.value.selectedDiscoverType
+        val availableTypes = discoverCatalogs.map { it.type }.distinct()
+        val currentType = _uiState.value.selectedDiscoverType
+        val selectedType = if (currentType in availableTypes) currentType else availableTypes.firstOrNull() ?: "movie"
         val selectedCatalog = pickDiscoverCatalog(
             catalogs = discoverCatalogs,
             selectedType = selectedType,
@@ -338,6 +339,7 @@ class SearchViewModel @Inject constructor(
             it.copy(
                 installedAddons = addons,
                 discoverCatalogs = discoverCatalogs,
+                selectedDiscoverType = selectedType,
                 selectedDiscoverCatalogKey = selectedCatalog?.key,
                 selectedDiscoverGenre = selectedGenre,
                 discoverInitialized = true,

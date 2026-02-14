@@ -76,7 +76,10 @@ internal fun DiscoverSection(
     val genres = selectedCatalog?.genres.orEmpty()
     var expandedPicker by remember { mutableStateOf<String?>(null) }
 
-    val selectedTypeLabel = if (uiState.selectedDiscoverType == "movie") "Movies" else "Series"
+    val availableTypes = remember(uiState.discoverCatalogs) {
+        uiState.discoverCatalogs.map { it.type }.distinct()
+    }
+    val selectedTypeLabel = uiState.selectedDiscoverType.replaceFirstChar { it.uppercase() }
     val selectedCatalogLabel = selectedCatalog?.catalogName ?: "Select"
     val selectedGenreLabel = uiState.selectedDiscoverGenre ?: "Default"
 
@@ -101,10 +104,9 @@ internal fun DiscoverSection(
                 title = "Type",
                 value = selectedTypeLabel,
                 expanded = expandedPicker == "type",
-                options = listOf(
-                    DiscoverOption("Movies", "movie"),
-                    DiscoverOption("Series", "series")
-                ),
+                options = availableTypes.map { type ->
+                    DiscoverOption(type.replaceFirstChar { it.uppercase() }, type)
+                },
                 onExpandedChange = { shouldExpand ->
                     expandedPicker = if (shouldExpand) "type" else null
                 },
@@ -150,7 +152,7 @@ internal fun DiscoverSection(
 
         selectedCatalog?.let {
             Text(
-                text = "${it.addonName} • ${if (it.type == "movie") "Movies" else "TV Shows"}${uiState.selectedDiscoverGenre?.let { g -> " • $g" } ?: ""}",
+                text = "${it.addonName} • ${it.type.replaceFirstChar { c -> c.uppercase() }}${uiState.selectedDiscoverGenre?.let { g -> " • $g" } ?: ""}",
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextSecondary
             )

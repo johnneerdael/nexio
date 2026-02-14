@@ -240,7 +240,7 @@ fun LayoutSettingsContent(
                     },
                     onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                 )
-                if (uiState.modernSidebarEnabled) {
+                if (uiState.modernSidebarEnabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     CompactToggleRow(
                         title = "Modern Sidebar Blur",
                         subtitle = "Toggle blur effect for modern sidebar surfaces. Enabling may affect performance.",

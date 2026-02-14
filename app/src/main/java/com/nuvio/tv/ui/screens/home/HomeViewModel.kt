@@ -75,7 +75,9 @@ class HomeViewModel @Inject constructor(
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
     private var currentHeroCatalogKey: String? = null
     private var catalogUpdateJob: Job? = null
-    private val catalogLoadSemaphore = Semaphore(6)
+    private val catalogLoadSemaphore = Semaphore(3)
+    private var pendingCatalogLoads = 0
+    private val truncatedItemsCache = mutableMapOf<String, List<MetaPreview>>()
     private val trailerPreviewLoadingIds = mutableSetOf<String>()
     private val trailerPreviewNegativeCache = mutableSetOf<String>()
     private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
@@ -434,6 +436,7 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
+        truncatedItemsCache.clear()
         trailerPreviewLoadingIds.clear()
         trailerPreviewNegativeCache.clear()
         trailerPreviewUrlsState.clear()
@@ -454,7 +457,7 @@ class HomeViewModel @Inject constructor(
             }
 
             // Load catalogs
-            addons.forEach { addon ->
+            val catalogsToLoad = addons.flatMap { addon ->
                 addon.catalogs
                     .filterNot {
                         it.isSearchOnlyCatalog() || isCatalogDisabled(
@@ -465,9 +468,11 @@ class HomeViewModel @Inject constructor(
                             catalogName = it.name
                         )
                     }
-                    .forEach { catalog ->
-                        loadCatalog(addon, catalog)
-                    }
+                    .map { catalog -> addon to catalog }
+            }
+            pendingCatalogLoads = catalogsToLoad.size
+            catalogsToLoad.forEach { (addon, catalog) ->
+                loadCatalog(addon, catalog)
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(isLoading = false, error = e.message) }
@@ -500,17 +505,20 @@ class HomeViewModel @Inject constructor(
                                 catalogId = catalog.id
                             )
                             catalogsMap[key] = result.data
+                            pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
                             Log.d(
                                 TAG,
-                                "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size}"
+                                "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size} pending=$pendingCatalogLoads"
                             )
                             scheduleUpdateCatalogRows()
                         }
                         is NetworkResult.Error -> {
+                            pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
                             Log.w(
                                 TAG,
                                 "Home catalog failed addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} code=${result.code} message=${result.message}"
                             )
+                            scheduleUpdateCatalogRows()
                         }
                         NetworkResult.Loading -> { /* Handled by individual row */ }
                     }
@@ -566,7 +574,12 @@ class HomeViewModel @Inject constructor(
     private fun scheduleUpdateCatalogRows() {
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
-            delay(150)
+            val debounceMs = when {
+                pendingCatalogLoads > 5 -> 500L
+                pendingCatalogLoads > 0 -> 300L
+                else -> 150L
+            }
+            delay(debounceMs)
             updateCatalogRows()
         }
     }
@@ -608,7 +621,19 @@ class HomeViewModel @Inject constructor(
             }
 
             val computedDisplayRows = orderedRows.map { row ->
-                if (row.items.size > 25) row.copy(items = row.items.take(25)) else row
+                if (row.items.size > 25) {
+                    val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
+                    val cached = truncatedItemsCache[key]
+                    if (cached != null && cached.size == 25 && row.items.take(25) == cached) {
+                        row.copy(items = cached)
+                    } else {
+                        val truncated = row.items.take(25)
+                        truncatedItemsCache[key] = truncated
+                        row.copy(items = truncated)
+                    }
+                } else {
+                    row
+                }
             }
 
             val computedGridItems = if (currentLayout == HomeLayout.GRID) {
