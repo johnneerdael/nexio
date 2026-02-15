@@ -64,6 +64,7 @@ private enum class PlaybackSection {
 
 @Composable
 internal fun PlaybackSettingsSections(
+    initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
     onShowPlayerPreferenceDialog: () -> Unit,
@@ -102,10 +103,11 @@ internal fun PlaybackSettingsSections(
     var audioTrailerExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val generalHeaderFocus = remember { FocusRequester() }
+    val defaultGeneralHeaderFocus = remember { FocusRequester() }
     val streamHeaderFocus = remember { FocusRequester() }
     val audioTrailerHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
+    val generalHeaderFocus = initialFocusRequester ?: defaultGeneralHeaderFocus
 
     var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
 
@@ -133,6 +135,7 @@ internal fun PlaybackSettingsSections(
     }
 
     LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -312,7 +315,7 @@ private fun LazyListScope.playbackCollapsibleSection(
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
                     .height(1.dp)
-                    .background(NuvioColors.Border.copy(alpha = 0.78f))
+                    .background(NuvioColors.Border)
             )
         }
     }
@@ -327,59 +330,17 @@ private fun PlaybackSectionHeader(
     focusRequester: FocusRequester,
     onFocused: () -> Unit
 ) {
-    Card(
+    SettingsActionRow(
+        title = title,
+        subtitle = description,
+        value = if (expanded) "Open" else "Closed",
         onClick = onToggle,
         modifier = Modifier
             .fillMaxWidth()
-            .focusRequester(focusRequester)
-            .onFocusChanged {
-                if (it.isFocused) onFocused()
-            },
-        colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-            )
-        ),
-        shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
-                contentDescription = if (expanded) "Collapse" else "Expand",
-                tint = NuvioColors.TextSecondary
-            )
-        }
-    }
-
+            .focusRequester(focusRequester),
+        onFocused = onFocused,
+        trailingIcon = if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight
+    )
 }
 
 @Composable

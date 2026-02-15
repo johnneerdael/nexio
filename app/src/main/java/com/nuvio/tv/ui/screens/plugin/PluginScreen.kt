@@ -117,7 +117,8 @@ fun PluginScreen(
 @Composable
 fun PluginScreenContent(
     uiState: PluginUiState = PluginUiState(),
-    viewModel: PluginViewModel = hiltViewModel()
+    viewModel: PluginViewModel = hiltViewModel(),
+    showHeader: Boolean = true
 ) {
     var repoUrl by remember { mutableStateOf("") }
 
@@ -146,12 +147,13 @@ fun PluginScreenContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            // Header
-            item {
-                PluginHeader(
-                    pluginsEnabled = uiState.pluginsEnabled,
-                    onPluginsEnabledChange = { viewModel.onEvent(PluginUiEvent.SetPluginsEnabled(it)) }
-                )
+            if (showHeader) {
+                item {
+                    PluginHeader(
+                        pluginsEnabled = uiState.pluginsEnabled,
+                        onPluginsEnabledChange = { viewModel.onEvent(PluginUiEvent.SetPluginsEnabled(it)) }
+                    )
+                }
             }
 
             item {
