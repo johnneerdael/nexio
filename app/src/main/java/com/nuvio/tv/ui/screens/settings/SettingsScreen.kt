@@ -41,11 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
@@ -170,7 +170,12 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioColors.Background)
-            .padding(horizontal = 32.dp, vertical = 24.dp)
+            .padding(
+                start = 32.dp,
+                end = 32.dp,
+                top = if (showBuiltInHeader) 24.dp else 68.dp,
+                bottom = 24.dp
+            )
     ) {
         SettingsWorkspaceSurface(
             modifier = Modifier
@@ -180,10 +185,19 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                var railHadFocus by remember { mutableStateOf(false) }
+
                 LazyColumn(
                     modifier = Modifier
                         .width(282.dp)
                         .fillMaxHeight()
+                        .onFocusChanged { state ->
+                            val justGainedFocus = !railHadFocus && state.hasFocus
+                            railHadFocus = state.hasFocus
+                            if (justGainedFocus) {
+                                railFocusRequesters[selectedCategory]?.requestFocus()
+                            }
+                        }
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                 focusManager.moveFocus(FocusDirection.Right)
@@ -224,17 +238,6 @@ fun SettingsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .onKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
-                                val movedWithinContent = focusManager.moveFocus(FocusDirection.Left)
-                                if (!movedWithinContent) {
-                                    railFocusRequesters[selectedCategory]?.requestFocus()
-                                }
-                                true
-                            } else {
-                                false
-                            }
-                        }
                 ) {
                     AnimatedContent(
                         targetState = selectedCategory,

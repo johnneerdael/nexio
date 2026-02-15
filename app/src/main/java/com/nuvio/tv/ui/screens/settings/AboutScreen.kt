@@ -69,7 +69,7 @@ fun AboutSettingsContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            title = "NuvioTV"
+            title = null
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),

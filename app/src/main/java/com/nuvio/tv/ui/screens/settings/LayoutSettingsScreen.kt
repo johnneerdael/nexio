@@ -139,6 +139,11 @@ fun LayoutSettingsContent(
             subtitle = "Adjust home layout, content visibility, and poster behavior"
         )
 
+        SettingsGroupCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -419,6 +424,7 @@ fun LayoutSettingsContent(
                     )
                 }
             }
+        }
         }
     }
 }
