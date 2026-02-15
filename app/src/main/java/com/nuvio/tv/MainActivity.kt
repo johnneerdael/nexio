@@ -34,11 +34,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +56,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -102,11 +99,15 @@ import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 
 data class DrawerItem(
     val route: String,
     val label: String,
-    val icon: ImageVector
+    val iconRes: Int? = null,
+    val icon: ImageVector? = null
 )
 
 @AndroidEntryPoint
@@ -164,27 +165,27 @@ class MainActivity : ComponentActivity() {
                             DrawerItem(
                                 route = Screen.Home.route,
                                 label = "Home",
-                                icon = Icons.Filled.Home
+                                icon = Icons.Default.Home
                             ),
                             DrawerItem(
                                 route = Screen.Search.route,
                                 label = "Search",
-                                icon = Icons.Filled.Search
+                                iconRes = R.raw.sidebar_search
                             ),
                             DrawerItem(
                                 route = Screen.Library.route,
                                 label = "Library",
-                                icon = Icons.Filled.Bookmark
+                                iconRes = R.raw.sidebar_library
                             ),
                             DrawerItem(
                                 route = Screen.AddonManager.route,
                                 label = "Addons",
-                                icon = Icons.Filled.Extension
+                                iconRes = R.raw.sidebar_plugin
                             ),
                             DrawerItem(
                                 route = Screen.Settings.route,
                                 label = "Settings",
-                                icon = Icons.Filled.Settings
+                                iconRes = R.raw.sidebar_settings
                             )
                         )
                     }
@@ -357,7 +358,11 @@ private fun LegacySidebarScaffold(
                                     drawerItemFocusRequesters.getValue(item.route)
                                 ),
                                 leadingContent = {
-                                    Icon(imageVector = item.icon, contentDescription = null)
+                                    DrawerItemIcon(
+                                        iconRes = item.iconRes,
+                                        icon = item.icon,
+                                        modifier = Modifier.size(22.dp)
+                                    )
                                 }
                             ) {
                                 if (drawerValue == DrawerValue.Open) {
@@ -684,6 +689,7 @@ private fun ModernSidebarScaffold(
             if (!sidebarCollapsed) {
                 CollapsedSidebarPill(
                     label = selectedDrawerItem.label,
+                    iconRes = selectedDrawerItem.iconRes,
                     icon = selectedDrawerItem.icon,
                     iconOnly = isFloatingPillIconOnly && !keepFloatingPillExpanded,
                     hazeState = sidebarHazeState,
@@ -714,7 +720,8 @@ private fun ModernSidebarScaffold(
 @Composable
 private fun CollapsedSidebarPill(
     label: String,
-    icon: ImageVector,
+    iconRes: Int?,
+    icon: ImageVector?,
     iconOnly: Boolean,
     hazeState: HazeState,
     blurEnabled: Boolean,
@@ -821,12 +828,12 @@ private fun CollapsedSidebarPill(
                         .background(Color(0xFF4F555E)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
+                    DrawerItemIcon(
+                        iconRes = iconRes,
+                        icon = icon,
                         tint = Color.White,
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(22.dp)
                             .offset(y = (-0.5).dp)
                     )
                 }
@@ -872,3 +879,35 @@ private fun isBlockedContentKey(key: Key): Boolean {
         key == Key.DirectionCenter ||
         key == Key.Enter
 }
+
+@Composable
+private fun DrawerItemIcon(
+    iconRes: Int?,
+    icon: ImageVector?,
+    modifier: Modifier = Modifier,
+    tint: Color = androidx.tv.material3.LocalContentColor.current
+) {
+    when {
+        icon != null -> Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = modifier
+        )
+
+        iconRes != null -> Icon(
+            painter = rememberRawSvgPainter(iconRes),
+            contentDescription = null,
+            tint = tint,
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+private fun rememberRawSvgPainter(rawIconRes: Int): Painter = rememberAsyncImagePainter(
+    model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+        .data(rawIconRes)
+        .decoderFactory(SvgDecoder.Factory())
+        .build()
+)

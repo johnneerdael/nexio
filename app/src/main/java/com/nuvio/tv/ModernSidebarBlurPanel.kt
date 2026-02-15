@@ -35,6 +35,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +45,9 @@ import androidx.tv.material3.Text
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
 import com.nuvio.tv.ui.theme.NuvioColors
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 
 @Composable
 internal fun ModernSidebarBlurPanel(
@@ -149,6 +154,7 @@ internal fun ModernSidebarBlurPanel(
             drawerItems.forEachIndexed { index, item ->
                 SidebarNavigationItem(
                     label = item.label,
+                    iconRes = item.iconRes,
                     icon = item.icon,
                     selected = selectedDrawerRoute == item.route,
                     focusEnabled = keepSidebarFocusDuringCollapse,
@@ -172,7 +178,8 @@ internal fun ModernSidebarBlurPanel(
 @Composable
 private fun SidebarNavigationItem(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int?,
+    icon: ImageVector?,
     selected: Boolean,
     focusEnabled: Boolean,
     labelAlpha: Float,
@@ -221,19 +228,28 @@ private fun SidebarNavigationItem(
                 .size(34.dp)
                 .clip(CircleShape)
                 .background(iconCircleColor)
-                .padding(8.dp)
+                .padding(6.dp)
                 .graphicsLayer(
                     scaleX = iconScale,
                     scaleY = iconScale
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(18.dp)
-            )
+            when {
+                icon != null -> Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+
+                iconRes != null -> Icon(
+                    painter = rememberRawSvgPainter(iconRes),
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
 
         Text(
@@ -246,3 +262,11 @@ private fun SidebarNavigationItem(
         )
     }
 }
+
+@Composable
+private fun rememberRawSvgPainter(rawIconRes: Int): Painter = rememberAsyncImagePainter(
+    model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+        .data(rawIconRes)
+        .decoderFactory(SvgDecoder.Factory())
+        .build()
+)

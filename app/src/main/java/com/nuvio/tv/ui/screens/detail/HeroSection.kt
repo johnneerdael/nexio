@@ -63,7 +63,6 @@ import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -197,7 +196,15 @@ fun HeroContentSection(
                         )
 
                         ActionIconButton(
-                            icon = if (isInLibrary) Icons.Default.Check else Icons.Default.Add,
+                            icon = if (isInLibrary) Icons.Default.Check else null,
+                            painter = if (!isInLibrary) {
+                                rememberRawSvgPainter(
+                                    context = LocalContext.current,
+                                    rawRes = com.nuvio.tv.R.raw.library_add_plus
+                                )
+                            } else {
+                                null
+                            },
                             contentDescription = if (isInLibrary) "Remove from library" else "Add to library",
                             onClick = onToggleLibrary,
                             onLongPress = onLibraryLongPress
@@ -442,7 +449,8 @@ private fun ActionIconButtonPainter(
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun ActionIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    painter: Painter? = null,
     contentDescription: String,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
@@ -509,11 +517,18 @@ private fun ActionIconButton(
             shape = CircleShape
         )
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp)
-        )
+        when {
+            painter != null -> Icon(
+                painter = painter,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(22.dp)
+            )
+            icon != null -> Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp)
+            )
+        }
     }
 }
 

@@ -2,6 +2,7 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.RawRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -27,10 +28,10 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -69,12 +71,17 @@ internal enum class SettingsCategory {
     APPEARANCE,
     LAYOUT,
     PLUGINS,
-    TMDB,
-    MDBLIST,
+    INTEGRATION,
     PLAYBACK,
     TRAKT,
     ABOUT,
     DEBUG
+}
+
+private enum class IntegrationSettingsSection {
+    Hub,
+    Tmdb,
+    MdbList
 }
 
 internal enum class SettingsSectionDestination {
@@ -132,17 +139,10 @@ fun SettingsScreen(
                 destination = SettingsSectionDestination.Inline
             ),
             SettingsSectionSpec(
-                category = SettingsCategory.TMDB,
-                title = "TMDB",
-                icon = Icons.Default.Tune,
-                subtitle = "Metadata enrichment controls.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.MDBLIST,
-                title = "MDBList",
-                icon = Icons.Default.Tune,
-                subtitle = "External ratings providers.",
+                category = SettingsCategory.INTEGRATION,
+                title = "Integration",
+                icon = Icons.Default.Link,
+                subtitle = "TMDB and MDBList controls.",
                 destination = SettingsSectionDestination.Inline
             ),
             SettingsSectionSpec(
@@ -194,12 +194,15 @@ fun SettingsScreen(
             mapOf(
                 SettingsCategory.APPEARANCE to FocusRequester(),
                 SettingsCategory.LAYOUT to FocusRequester(),
-                SettingsCategory.TMDB to FocusRequester(),
-                SettingsCategory.MDBLIST to FocusRequester(),
+                SettingsCategory.INTEGRATION to FocusRequester(),
                 SettingsCategory.PLAYBACK to FocusRequester(),
                 SettingsCategory.ABOUT to FocusRequester()
             )
     }
+    val integrationHubFocusRequester = remember { FocusRequester() }
+    val integrationTmdbFocusRequester = remember { FocusRequester() }
+    val integrationMdbListFocusRequester = remember { FocusRequester() }
+    var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
 
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
@@ -285,6 +288,9 @@ fun SettingsScreen(
                                         else -> Unit
                                     }
                                 } else {
+                                    if (section.category == SettingsCategory.INTEGRATION) {
+                                        integrationSection = IntegrationSettingsSection.Hub
+                                    }
                                     selectedCategory = section.category
                                     coroutineScope.launch {
                                         // Wait for detail content to settle before requesting first content focus.
@@ -339,11 +345,13 @@ fun SettingsScreen(
                             SettingsCategory.PLAYBACK -> PlaybackSettingsContent(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.PLAYBACK]
                             )
-                            SettingsCategory.TMDB -> TmdbSettingsContent(
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.TMDB]
-                            )
-                            SettingsCategory.MDBLIST -> MDBListSettingsContent(
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.MDBLIST]
+                            SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
+                                selectedSection = integrationSection,
+                                onSelectSection = { integrationSection = it },
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.INTEGRATION],
+                                hubFocusRequester = integrationHubFocusRequester,
+                                tmdbFocusRequester = integrationTmdbFocusRequester,
+                                mdbListFocusRequester = integrationMdbListFocusRequester
                             )
                             SettingsCategory.ABOUT -> AboutSettingsContent(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.ABOUT]
@@ -406,6 +414,82 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun IntegrationSettingsContent(
+    selectedSection: IntegrationSettingsSection,
+    onSelectSection: (IntegrationSettingsSection) -> Unit,
+    initialFocusRequester: FocusRequester?,
+    hubFocusRequester: FocusRequester,
+    tmdbFocusRequester: FocusRequester,
+    mdbListFocusRequester: FocusRequester
+) {
+    BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
+        onSelectSection(IntegrationSettingsSection.Hub)
+    }
+    val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
+
+    LaunchedEffect(selectedSection) {
+        val requester = when (selectedSection) {
+            IntegrationSettingsSection.Hub -> hubEntryFocusRequester
+            IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
+            IntegrationSettingsSection.MdbList -> mdbListFocusRequester
+        }
+        runCatching { requester.requestFocus() }
+    }
+
+    when (selectedSection) {
+        IntegrationSettingsSection.Hub -> {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                SettingsDetailHeader(
+                    title = "Integrations",
+                    subtitle = "Choose TMDB or MDBList settings"
+                )
+
+                SettingsGroupCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        item {
+                            SettingsActionRow(
+                                title = "TMDB",
+                                subtitle = "Metadata enrichment controls",
+                                onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) },
+                                modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                            )
+                        }
+                        item {
+                            SettingsActionRow(
+                                title = "MDBList",
+                                subtitle = "External ratings providers",
+                                onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        IntegrationSettingsSection.Tmdb -> {
+            TmdbSettingsContent(
+                initialFocusRequester = tmdbFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.MdbList -> {
+            MDBListSettingsContent(
+                initialFocusRequester = mdbListFocusRequester
+            )
         }
     }
 }
