@@ -65,12 +65,21 @@ class MetaDetailsViewModel @Inject constructor(
     private var isPlayButtonFocused = false
 
     init {
+        observeMetaViewSettings()
         observeLibraryState()
         observeWatchProgress()
         observeWatchedEpisodes()
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
         loadMeta()
+    }
+
+    private fun observeMetaViewSettings() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.detailPageTrailerButtonEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(trailerButtonEnabled = enabled) }
+            }
+        }
     }
 
     fun onEvent(event: MetaDetailsEvent) {
@@ -83,6 +92,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
             MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
             MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
+            MetaDetailsEvent.OnTrailerButtonClick -> handleTrailerButtonClick()
             MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
             MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
             is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
@@ -902,7 +912,13 @@ class MetaDetailsViewModel @Inject constructor(
 
         idleTimerJob = viewModelScope.launch {
             delay(trailerDelayMs)
-            _uiState.update { it.copy(isTrailerPlaying = true) }
+            _uiState.update {
+                it.copy(
+                    isTrailerPlaying = true,
+                    showTrailerControls = false,
+                    hideLogoDuringTrailer = false
+                )
+            }
         }
     }
 
@@ -915,14 +931,41 @@ class MetaDetailsViewModel @Inject constructor(
         idleTimerJob?.cancel()
         isPlayButtonFocused = false
 
-        if (_uiState.value.isTrailerPlaying) {
-            _uiState.update { it.copy(isTrailerPlaying = false) }
+        val state = _uiState.value
+        if (state.isTrailerPlaying && !state.showTrailerControls) {
+            _uiState.update {
+                it.copy(
+                    isTrailerPlaying = false,
+                    showTrailerControls = false,
+                    hideLogoDuringTrailer = false
+                )
+            }
+        }
+    }
+
+    private fun handleTrailerButtonClick() {
+        val state = _uiState.value
+        if (state.trailerUrl.isNullOrBlank()) return
+        idleTimerJob?.cancel()
+        isPlayButtonFocused = false
+        _uiState.update {
+            it.copy(
+                isTrailerPlaying = true,
+                showTrailerControls = true,
+                hideLogoDuringTrailer = true
+            )
         }
     }
 
     private fun handleTrailerEnded() {
         isPlayButtonFocused = false
-        _uiState.update { it.copy(isTrailerPlaying = false) }
+        _uiState.update {
+            it.copy(
+                isTrailerPlaying = false,
+                showTrailerControls = false,
+                hideLogoDuringTrailer = false
+            )
+        }
     }
 
     override fun onCleared() {

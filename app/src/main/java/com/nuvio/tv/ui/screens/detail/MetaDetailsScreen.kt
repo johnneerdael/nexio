@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +31,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -52,6 +56,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.clip
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -113,13 +118,19 @@ fun MetaDetailsScreen(
     BackHandler {
         if (uiState.isTrailerPlaying) {
             restorePlayFocusAfterTrailerBackToken += 1
-            viewModel.onEvent(MetaDetailsEvent.OnUserInteraction)
+            viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
         } else {
             onBackPress()
         }
     }
 
     val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
+    val currentShowTrailerControls by rememberUpdatedState(uiState.showTrailerControls)
+    var trailerSeekOverlayVisible by remember { mutableStateOf(false) }
+    var trailerPositionMs by remember { mutableLongStateOf(0L) }
+    var trailerDurationMs by remember { mutableLongStateOf(0L) }
+    var trailerSeekToken by remember { mutableIntStateOf(0) }
+    var trailerSeekDeltaMs by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(uiState.userMessage) {
         if (uiState.userMessage != null) {
@@ -134,7 +145,55 @@ fun MetaDetailsScreen(
             .background(NuvioColors.Background)
             .onPreviewKeyEvent { keyEvent ->
                 if (currentIsTrailerPlaying) {
-                    // During trailer, consume all keys except back/ESC so content doesn't scroll
+                    if (currentShowTrailerControls) {
+                        if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
+                            return@onPreviewKeyEvent false
+                        }
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_CENTER,
+                            KeyEvent.KEYCODE_ENTER,
+                            KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                trailerSeekOverlayVisible = true
+                                true
+                            }
+                            KeyEvent.KEYCODE_DPAD_UP -> {
+                                trailerSeekOverlayVisible = true
+                                true
+                            }
+                            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                trailerSeekOverlayVisible = false
+                                true
+                            }
+                            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+                                val delta = when {
+                                    repeatCount >= 12 -> -12_000L
+                                    repeatCount >= 6 -> -8_000L
+                                    repeatCount >= 2 -> -5_000L
+                                    else -> -3_000L
+                                }
+                                trailerSeekDeltaMs = delta
+                                trailerSeekToken += 1
+                                trailerSeekOverlayVisible = true
+                                true
+                            }
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+                                val delta = when {
+                                    repeatCount >= 12 -> 12_000L
+                                    repeatCount >= 6 -> 8_000L
+                                    repeatCount >= 2 -> 5_000L
+                                    else -> 3_000L
+                                }
+                                trailerSeekDeltaMs = delta
+                                trailerSeekToken += 1
+                                trailerSeekOverlayVisible = true
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    // During auto trailer preview, consume all keys except back/ESC so content doesn't scroll.
                     val keyCode = keyEvent.nativeKeyEvent.keyCode
                     return@onPreviewKeyEvent keyCode != KeyEvent.KEYCODE_BACK &&
                             keyCode != KeyEvent.KEYCODE_ESCAPE
@@ -224,7 +283,57 @@ fun MetaDetailsScreen(
                     },
                     trailerUrl = uiState.trailerUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
+                    showTrailerControls = uiState.showTrailerControls,
+                    hideLogoDuringTrailer = uiState.hideLogoDuringTrailer,
+                    trailerButtonEnabled = uiState.trailerButtonEnabled,
+                    trailerSeekToken = trailerSeekToken,
+                    trailerSeekDeltaMs = trailerSeekDeltaMs,
+                    onTrailerControlKey = { keyCode, action, repeatCount ->
+                        if (!uiState.showTrailerControls || !uiState.isTrailerPlaying) {
+                            false
+                        } else if (action != KeyEvent.ACTION_DOWN) {
+                            false
+                        } else {
+                            val seekStepMs = when {
+                                repeatCount >= 12 -> 12_000L
+                                repeatCount >= 6 -> 8_000L
+                                repeatCount >= 2 -> 5_000L
+                                else -> 3_000L
+                            }
+                            when (keyCode) {
+                                KeyEvent.KEYCODE_DPAD_CENTER,
+                                KeyEvent.KEYCODE_ENTER,
+                                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                                KeyEvent.KEYCODE_DPAD_UP -> {
+                                    trailerSeekOverlayVisible = true
+                                    true
+                                }
+                                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                    trailerSeekOverlayVisible = false
+                                    true
+                                }
+                                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                    trailerSeekDeltaMs = -seekStepMs
+                                    trailerSeekToken += 1
+                                    trailerSeekOverlayVisible = true
+                                    true
+                                }
+                                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                    trailerSeekDeltaMs = seekStepMs
+                                    trailerSeekToken += 1
+                                    trailerSeekOverlayVisible = true
+                                    true
+                                }
+                                else -> false
+                            }
+                        }
+                    },
+                    onTrailerProgressChanged = { position, duration ->
+                        trailerPositionMs = position
+                        trailerDurationMs = duration
+                    },
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
+                    onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
                     restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
                     onNavigateToCastDetail = onNavigateToCastDetail
                 )
@@ -269,6 +378,31 @@ fun MetaDetailsScreen(
                 )
             }
         }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = uiState.isTrailerPlaying && uiState.showTrailerControls && trailerSeekOverlayVisible,
+            enter = androidx.compose.animation.fadeIn(animationSpec = tween(150)),
+            exit = androidx.compose.animation.fadeOut(animationSpec = tween(150)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            TrailerSeekOverlay(
+                currentPosition = trailerPositionMs,
+                duration = trailerDurationMs
+            )
+        }
+    }
+
+    LaunchedEffect(trailerSeekOverlayVisible, uiState.isTrailerPlaying, uiState.showTrailerControls, trailerSeekToken) {
+        if (trailerSeekOverlayVisible && uiState.isTrailerPlaying && uiState.showTrailerControls) {
+            delay(3000)
+            trailerSeekOverlayVisible = false
+        }
+    }
+
+    LaunchedEffect(uiState.isTrailerPlaying, uiState.showTrailerControls) {
+        if (!uiState.isTrailerPlaying || !uiState.showTrailerControls) {
+            trailerSeekOverlayVisible = false
+        }
     }
 }
 
@@ -301,7 +435,15 @@ private fun MetaDetailsContent(
     onToggleEpisodeWatched: (Video) -> Unit,
     trailerUrl: String?,
     isTrailerPlaying: Boolean,
+    showTrailerControls: Boolean,
+    hideLogoDuringTrailer: Boolean,
+    trailerButtonEnabled: Boolean,
+    trailerSeekToken: Int,
+    trailerSeekDeltaMs: Long,
+    onTrailerControlKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean,
+    onTrailerProgressChanged: (Long, Long) -> Unit,
     onTrailerEnded: () -> Unit,
+    onTrailerButtonClick: () -> Unit,
     restorePlayFocusAfterTrailerBackToken: Int,
     onNavigateToCastDetail: (personId: Int, personName: String) -> Unit = { _, _ -> }
 ) {
@@ -525,6 +667,10 @@ private fun MetaDetailsContent(
             TrailerPlayer(
                 trailerUrl = trailerUrl,
                 isPlaying = isTrailerPlaying,
+                seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
+                seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
+                onRemoteKey = onTrailerControlKey,
+                onProgressChanged = onTrailerProgressChanged,
                 onEnded = onTrailerEnded,
                 modifier = Modifier.fillMaxSize()
             )
@@ -580,6 +726,9 @@ private fun MetaDetailsContent(
                         onToggleMovieWatched = onToggleMovieWatched,
                         mdbListRatings = mdbListRatings,
                         hideMetaInfoImdb = showMdbListImdb,
+                        trailerAvailable = trailerButtonEnabled && !trailerUrl.isNullOrBlank(),
+                        onTrailerClick = onTrailerButtonClick,
+                        hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
@@ -658,6 +807,71 @@ private fun MetaDetailsContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TrailerSeekOverlay(
+    currentPosition: Long,
+    duration: Long
+) {
+    val progress = if (duration > 0) {
+        (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(100),
+        label = "trailerSeekProgress"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 24.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color.White.copy(alpha = 0.3f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedProgress)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(NuvioColors.Secondary)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${formatPlaybackTime(currentPosition)} / ${formatPlaybackTime(duration)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.9f)
+            )
+        }
+    }
+}
+
+private fun formatPlaybackTime(milliseconds: Long): String {
+    val totalSeconds = (milliseconds / 1000).coerceAtLeast(0)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        String.format("%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format("%02d:%02d", minutes, seconds)
     }
 }
 

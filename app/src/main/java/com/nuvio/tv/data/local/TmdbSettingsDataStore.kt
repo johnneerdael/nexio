@@ -81,4 +81,5 @@ class TmdbSettingsDataStore @Inject constructor(
     suspend fun setUseEpisodes(enabled: Boolean) {
         dataStore.edit { it[useEpisodesKey] = enabled }
     }
+
 }

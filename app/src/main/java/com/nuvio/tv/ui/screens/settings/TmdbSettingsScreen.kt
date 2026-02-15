@@ -161,6 +161,7 @@ fun TmdbSettingsContent(
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEpisodes(!uiState.useEpisodes)) }
                     )
                 }
+
             }
         }
     }

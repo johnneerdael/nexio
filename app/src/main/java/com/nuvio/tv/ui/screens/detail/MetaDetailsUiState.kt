@@ -21,6 +21,9 @@ data class MetaDetailsUiState(
     val trailerUrl: String? = null,
     val isTrailerPlaying: Boolean = false,
     val isTrailerLoading: Boolean = false,
+    val showTrailerControls: Boolean = false,
+    val hideLogoDuringTrailer: Boolean = false,
+    val trailerButtonEnabled: Boolean = false,
     val librarySourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val libraryListTabs: List<LibraryListTab> = emptyList(),
     val isInWatchlist: Boolean = false,
@@ -48,6 +51,7 @@ sealed class MetaDetailsEvent {
     data object OnBackPress : MetaDetailsEvent()
     data object OnUserInteraction : MetaDetailsEvent()
     data object OnPlayButtonFocused : MetaDetailsEvent()
+    data object OnTrailerButtonClick : MetaDetailsEvent()
     data object OnTrailerEnded : MetaDetailsEvent()
     data object OnToggleMovieWatched : MetaDetailsEvent()
     data class OnToggleEpisodeWatched(val video: Video) : MetaDetailsEvent()

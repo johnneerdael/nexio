@@ -65,10 +65,10 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 
@@ -85,6 +85,9 @@ fun HeroContentSection(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     onToggleMovieWatched: () -> Unit,
+    trailerAvailable: Boolean = false,
+    onTrailerClick: () -> Unit = {},
+    hideLogoDuringTrailer: Boolean = false,
     mdbListRatings: MDBListRatings? = null,
     hideMetaInfoImdb: Boolean = false,
     isTrailerPlaying: Boolean = false,
@@ -127,7 +130,7 @@ fun HeroContentSection(
             verticalArrangement = Arrangement.Bottom
         ) {
             // Logo/Title — always visible during trailer, animates size
-            if (meta.logo != null) {
+            if (meta.logo != null && !(isTrailerPlaying && hideLogoDuringTrailer)) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(meta.logo)
@@ -157,9 +160,9 @@ fun HeroContentSection(
                 }
             }
 
-            // "Press back to exit" hint during trailer
+            // Everything below the logo fades out during trailer
             AnimatedVisibility(
-                visible = isTrailerPlaying,
+                visible = isTrailerPlaying && !hideLogoDuringTrailer,
                 enter = fadeIn(tween(600)),
                 exit = fadeOut(tween(300))
             ) {
@@ -219,14 +222,22 @@ fun HeroContentSection(
                                 selectedContentColor = Color.Black
                             )
                         }
+
+                        if (trailerAvailable) {
+                            val context = LocalContext.current
+                            val trailerPainter = rememberRawSvgPainter(
+                                context = context,
+                                rawRes = com.nuvio.tv.R.raw.trailer_play_button
+                            )
+                            ActionIconButtonPainter(
+                                painter = trailerPainter,
+                                contentDescription = "Play trailer",
+                                onClick = onTrailerClick
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-
-                    if (mdbListRatings?.isEmpty() == false) {
-                        MDBListRatingsRow(ratings = mdbListRatings)
-                        Spacer(modifier = Modifier.height(14.dp))
-                    }
 
                     // Director/Writer line above description
                     val directorLine = meta.director.takeIf { it.isNotEmpty() }?.joinToString(", ")
@@ -253,6 +264,11 @@ fun HeroContentSection(
                             modifier = Modifier.fillMaxWidth(0.6f)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (mdbListRatings?.isEmpty() == false) {
+                        MDBListRatingsRow(ratings = mdbListRatings)
+                        Spacer(modifier = Modifier.height(14.dp))
                     }
 
                     // Always show series/movie description, not episode description
@@ -335,6 +351,11 @@ private fun PlayButton(
             focusRequester.requestFocusAfterFrames()
         }
     }
+    val context = LocalContext.current
+    val playPainter = rememberRawSvgPainter(
+        context = context,
+        rawRes = com.nuvio.tv.R.raw.ic_player_play
+    )
 
     Button(
         onClick = onClick,
@@ -368,15 +389,53 @@ private fun PlayButton(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.PlayArrow,
+                painter = playPainter,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge
             )
         }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun ActionIconButtonPainter(
+    painter: Painter,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .size(48.dp)
+            .focusProperties { up = FocusRequester.Cancel },
+        colors = IconButtonDefaults.colors(
+            containerColor = NuvioColors.BackgroundCard,
+            focusedContainerColor = NuvioColors.Secondary,
+            contentColor = NuvioColors.TextPrimary,
+            focusedContentColor = NuvioColors.OnPrimary
+        ),
+        border = IconButtonDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = CircleShape
+            )
+        ),
+        shape = IconButtonDefaults.shape(
+            shape = CircleShape
+        )
+    ) {
+        Icon(
+            painter = painter,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(22.dp)
+        )
     }
 }
 
@@ -668,6 +727,20 @@ private fun formatRuntime(runtime: String): String {
     } else {
         "${minutes}m"
     }
+}
+
+@Composable
+private fun rememberRawSvgPainter(
+    context: android.content.Context,
+    @androidx.annotation.RawRes rawRes: Int
+): Painter {
+    val model = remember(rawRes, context) {
+        ImageRequest.Builder(context)
+            .data(rawRes)
+            .decoderFactory(SvgDecoder.Factory())
+            .build()
+    }
+    return coil.compose.rememberAsyncImagePainter(model = model)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

@@ -322,6 +322,20 @@ fun LayoutSettingsContent(
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
                     )
+
+                    CompactToggleRow(
+                        title = "Show Trailer Button",
+                        subtitle = "Show trailer button on detail page (only when trailer is available).",
+                        checked = uiState.detailPageTrailerButtonEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled(
+                                    !uiState.detailPageTrailerButtonEnabled
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                    )
                 }
             }
 

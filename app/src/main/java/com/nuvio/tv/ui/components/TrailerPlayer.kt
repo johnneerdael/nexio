@@ -27,6 +27,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.delay
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -36,6 +37,10 @@ fun TrailerPlayer(
     onEnded: () -> Unit,
     onFirstFrameRendered: () -> Unit = {},
     muted: Boolean = false,
+    seekRequestToken: Int = 0,
+    seekDeltaMs: Long = 0L,
+    onProgressChanged: (positionMs: Long, durationMs: Long) -> Unit = { _, _ -> },
+    onRemoteKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean = { _, _, _ -> false },
     modifier: Modifier = Modifier,
     enter: EnterTransition = fadeIn(animationSpec = tween(800)),
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
@@ -46,6 +51,8 @@ fun TrailerPlayer(
     val currentTrailerUrl by rememberUpdatedState(trailerUrl)
     val currentOnEnded by rememberUpdatedState(onEnded)
     val currentOnFirstFrameRendered by rememberUpdatedState(onFirstFrameRendered)
+    val currentOnProgressChanged by rememberUpdatedState(onProgressChanged)
+    val currentOnRemoteKey by rememberUpdatedState(onRemoteKey)
     var hasRenderedFirstFrame by remember(trailerUrl) { mutableStateOf(false) }
     val playerAlpha by animateFloatAsState(
         targetValue = if (isPlaying && hasRenderedFirstFrame) 1f else 0f,
@@ -80,6 +87,26 @@ fun TrailerPlayer(
             player.stop()
             player.clearMediaItems()
         }
+    }
+
+    LaunchedEffect(seekRequestToken, seekDeltaMs, trailerPlayer) {
+        val player = trailerPlayer ?: return@LaunchedEffect
+        if (seekRequestToken <= 0) return@LaunchedEffect
+        val duration = player.duration.takeIf { it > 0 } ?: 0L
+        val current = player.currentPosition
+        val target = (current + seekDeltaMs).coerceIn(0L, duration.coerceAtLeast(0L))
+        player.seekTo(target)
+    }
+
+    LaunchedEffect(trailerPlayer, isPlaying) {
+        val player = trailerPlayer ?: return@LaunchedEffect
+        while (isPlaying) {
+            val position = player.currentPosition.coerceAtLeast(0L)
+            val duration = player.duration.takeIf { it > 0 } ?: 0L
+            currentOnProgressChanged(position, duration)
+            delay(250)
+        }
+        currentOnProgressChanged(0L, 0L)
     }
 
     DisposableEffect(lifecycleOwner, trailerPlayer) {
@@ -135,6 +162,11 @@ fun TrailerPlayer(
                     PlayerView(ctx).apply {
                         player = trailerPlayer
                         useController = false
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        setOnKeyListener { _, keyCode, event ->
+                            currentOnRemoteKey(keyCode, event.action, event.repeatCount)
+                        }
                         keepScreenOn = true
                         setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                         setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)

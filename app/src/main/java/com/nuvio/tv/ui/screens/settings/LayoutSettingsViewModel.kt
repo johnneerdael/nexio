@@ -33,7 +33,8 @@ data class LayoutSettingsUiState(
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
-    val blurUnwatchedEpisodes: Boolean = false
+    val blurUnwatchedEpisodes: Boolean = false,
+    val detailPageTrailerButtonEnabled: Boolean = false
 )
 
 data class CatalogInfo(
@@ -59,6 +60,7 @@ sealed class LayoutSettingsEvent {
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
@@ -162,6 +164,11 @@ class LayoutSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(blurUnwatchedEpisodes = enabled) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.detailPageTrailerButtonEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(detailPageTrailerButtonEnabled = enabled) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
@@ -183,6 +190,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
+            is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
@@ -275,6 +283,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setPosterCardCornerRadius(cornerRadiusDp: Int) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setPosterCardCornerRadiusDp(cornerRadiusDp)
+        }
+    }
+
+    private fun setDetailPageTrailerButtonEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setDetailPageTrailerButtonEnabled(enabled)
         }
     }
 
