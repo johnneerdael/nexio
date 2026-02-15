@@ -496,7 +496,7 @@ class HomeViewModel @Inject constructor(
                 catalogRepository.getCatalog(
                     addonBaseUrl = addon.baseUrl,
                     addonId = addon.id,
-                    addonName = addon.name,
+                    addonName = addon.displayName,
                     catalogId = catalog.id,
                     catalogName = catalog.name,
                     type = catalog.apiType,
@@ -552,7 +552,7 @@ class HomeViewModel @Inject constructor(
             catalogRepository.getCatalog(
                 addonBaseUrl = addon.baseUrl,
                 addonId = addon.id,
-                addonName = addon.name,
+                addonName = addon.displayName,
                 catalogId = catalogId,
                 catalogName = currentRow.catalogName,
                 type = currentRow.apiType,

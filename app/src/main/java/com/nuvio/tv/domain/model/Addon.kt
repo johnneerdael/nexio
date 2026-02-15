@@ -6,6 +6,7 @@ import androidx.compose.runtime.Immutable
 data class Addon(
     val id: String,
     val name: String,
+    val displayName: String = name,
     val version: String,
     val description: String?,
     val logo: String?,

@@ -74,7 +74,7 @@ class StreamRepositoryImpl @Inject constructor(
                                     if (streamsResult.data.isNotEmpty()) {
                                         resultChannel.send(
                                             AddonStreams(
-                                                addonName = addon.name,
+                                                addonName = addon.displayName,
                                                 addonLogo = addon.logo,
                                                 streams = streamsResult.data
                                             )
@@ -253,7 +253,7 @@ class StreamRepositoryImpl @Inject constructor(
         // First, get addon info for name and logo
         val addonResult = addonRepository.fetchAddon(baseUrl)
         val addonName = when (addonResult) {
-            is NetworkResult.Success -> addonResult.data.name
+            is NetworkResult.Success -> addonResult.data.displayName
             else -> "Unknown"
         }
         val addonLogo = when (addonResult) {

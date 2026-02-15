@@ -220,7 +220,7 @@ class SearchViewModel @Inject constructor(
         catalogRepository.getCatalog(
             addonBaseUrl = addon.baseUrl,
             addonId = addon.id,
-            addonName = addon.name,
+            addonName = addon.displayName,
             catalogId = catalog.id,
             catalogName = catalog.name,
             type = catalog.apiType,
@@ -275,7 +275,7 @@ class SearchViewModel @Inject constructor(
             catalogRepository.getCatalog(
                 addonBaseUrl = addon.baseUrl,
                 addonId = addon.id,
-                addonName = addon.name,
+                addonName = addon.displayName,
                 catalogId = catalogId,
                 catalogName = currentRow.catalogName,
                 type = currentRow.apiType,
@@ -331,7 +331,7 @@ class SearchViewModel @Inject constructor(
                     DiscoverCatalog(
                         key = "${addon.id}_${catalog.apiType}_${catalog.id}",
                         addonId = addon.id,
-                        addonName = addon.name,
+                        addonName = addon.displayName,
                         addonBaseUrl = addon.baseUrl,
                         catalogId = catalog.id,
                         catalogName = catalog.name,

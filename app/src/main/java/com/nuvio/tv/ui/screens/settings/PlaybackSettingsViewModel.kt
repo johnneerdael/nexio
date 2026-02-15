@@ -34,7 +34,7 @@ class PlaybackSettingsViewModel @Inject constructor(
                     resource.name.equals("stream", ignoreCase = true)
                 }
             }
-            .map { it.name }
+            .map { it.displayName }
             .distinct()
             .sorted()
     }

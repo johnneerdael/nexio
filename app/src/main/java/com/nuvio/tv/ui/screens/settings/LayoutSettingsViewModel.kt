@@ -304,7 +304,7 @@ class LayoutSettingsViewModel @Inject constructor(
                             CatalogInfo(
                                 key = "${addon.id}_${catalog.apiType}_${catalog.id}",
                                 name = catalog.name,
-                                addonName = addon.name
+                                addonName = addon.displayName
                             )
                         }
                 }

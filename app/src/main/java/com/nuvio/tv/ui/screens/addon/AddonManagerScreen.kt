@@ -876,7 +876,7 @@ private fun AddonCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = addon.name,
+                        text = addon.displayName,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = NuvioColors.TextPrimary
                     )

@@ -169,7 +169,7 @@ class AddonManagerViewModel @Inject constructor(
                     addons = addons.map { addon ->
                         AddonConfigServer.AddonInfo(
                             url = addon.baseUrl,
-                            name = addon.name.ifBlank { addon.baseUrl },
+                            name = addon.displayName.ifBlank { addon.baseUrl },
                             description = addon.description
                         )
                     },
@@ -304,7 +304,7 @@ class AddonManagerViewModel @Inject constructor(
         val catalogsReordered = resolvedProposedCatalogOrderKeys != currentCatalogEntries.map { it.key }
 
         val removedNameMap = _uiState.value.installedAddons
-            .associateBy({ normalizeUrlForComparison(it.baseUrl) }, { it.name })
+            .associateBy({ normalizeUrlForComparison(it.baseUrl) }, { it.displayName })
         val removedNames = removed.associateWith { url ->
             removedNameMap[normalizeUrlForComparison(url)] ?: url
         }
@@ -508,7 +508,7 @@ class AddonManagerViewModel @Inject constructor(
                                     catalogName = catalog.name
                                 ),
                                 catalogName = catalog.name,
-                                addonName = addon.name,
+                                addonName = addon.displayName,
                                 typeLabel = catalog.apiType
                             )
                         )

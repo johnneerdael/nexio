@@ -138,7 +138,7 @@ class StreamScreenViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             val installedAddons = addonRepository.getInstalledAddons().first()
-            val installedAddonOrder = installedAddons.map { it.name }
+            val installedAddonOrder = installedAddons.map { it.displayName }
 
             streamRepository.getStreamsFromAllAddons(
                 type = contentType,

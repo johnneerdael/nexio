@@ -123,7 +123,7 @@ class SubtitleRepositoryImpl @Inject constructor(
                             id = dto.id ?: "${dto.lang}-${dto.url.hashCode()}",
                             url = dto.url,
                             lang = dto.lang,
-                            addonName = addon.name,
+                            addonName = addon.displayName,
                             addonLogo = addon.logo
                         )
                     } ?: emptyList()

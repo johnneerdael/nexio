@@ -92,7 +92,7 @@ class AddonRepositoryImpl @Inject constructor(
                 // Emit cached addons immediately (now includes disk-persisted cache)
                 val cached = urls.mapNotNull { manifestCache[it.trimEnd('/')] }
                 if (cached.isNotEmpty()) {
-                    emit(cached)
+                    emit(applyDisplayNames(cached))
                 }
 
                 val fresh = coroutineScope {
@@ -107,7 +107,7 @@ class AddonRepositoryImpl @Inject constructor(
                 }
 
                 if (fresh != cached) {
-                    emit(fresh)
+                    emit(applyDisplayNames(fresh))
                 }
             }.flowOn(Dispatchers.IO)
         }
@@ -144,5 +144,27 @@ class AddonRepositoryImpl @Inject constructor(
     override suspend fun setAddonOrder(urls: List<String>) {
         preferences.setAddonOrder(urls)
         triggerRemoteSync()
+    }
+
+    private fun applyDisplayNames(addons: List<Addon>): List<Addon> {
+        val nameCounts = mutableMapOf<String, Int>()
+        for (addon in addons) {
+            nameCounts[addon.name] = (nameCounts[addon.name] ?: 0) + 1
+        }
+
+        val nameCounters = mutableMapOf<String, Int>()
+        return addons.map { addon ->
+            if ((nameCounts[addon.name] ?: 0) <= 1) {
+                addon.copy(displayName = addon.name)
+            } else {
+                val occurrence = (nameCounters[addon.name] ?: 0) + 1
+                nameCounters[addon.name] = occurrence
+                if (occurrence == 1) {
+                    addon.copy(displayName = addon.name)
+                } else {
+                    addon.copy(displayName = "${addon.name} ($occurrence)")
+                }
+            }
+        }
     }
 }

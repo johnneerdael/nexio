@@ -147,7 +147,7 @@ class CatalogOrderViewModel @Inject constructor(
                                     catalogName = catalog.name
                                 ),
                                 catalogName = catalog.name,
-                                addonName = addon.name,
+                                addonName = addon.displayName,
                                 typeLabel = catalog.apiType
                             )
                         )
