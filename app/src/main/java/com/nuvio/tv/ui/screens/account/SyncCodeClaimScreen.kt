@@ -132,7 +132,7 @@ fun SyncCodeClaimScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 InputField(
                     value = code,
-                    onValueChange = { code = it },
+                    onValueChange = { code = it.uppercase() },
                     placeholder = "XXXX-XXXX-XXXX-XXXX-XXXX",
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next,
