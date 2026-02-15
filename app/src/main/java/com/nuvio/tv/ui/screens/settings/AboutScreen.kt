@@ -19,9 +19,12 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -47,7 +50,9 @@ fun AboutScreen(
 }
 
 @Composable
-fun AboutSettingsContent() {
+fun AboutSettingsContent(
+    initialFocusRequester: FocusRequester? = null
+) {
     val context = LocalContext.current
     val updateViewModel: UpdateViewModel = hiltViewModel(context as ComponentActivity)
 
@@ -68,7 +73,7 @@ fun AboutSettingsContent() {
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Start,
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Image(
@@ -83,13 +88,15 @@ fun AboutSettingsContent() {
                 Text(
                     text = "Made with \u2764\uFE0F by Tapframe and friends",
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioColors.TextSecondary,
+                    textAlign = TextAlign.Center
                 )
 
                 Text(
                     text = "Version ${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioColors.TextSecondary,
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -98,6 +105,11 @@ fun AboutSettingsContent() {
                     title = "Check for updates",
                     subtitle = "Download latest release",
                     trailingIcon = Icons.Default.OpenInNew,
+                    modifier = if (initialFocusRequester != null) {
+                        Modifier.focusRequester(initialFocusRequester)
+                    } else {
+                        Modifier
+                    },
                     onClick = {
                         updateViewModel.checkForUpdates(force = true, showNoUpdateFeedback = true)
                     }

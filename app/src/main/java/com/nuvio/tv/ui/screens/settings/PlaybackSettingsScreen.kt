@@ -121,7 +121,8 @@ fun PlaybackSettingsScreen(
 
 @Composable
 fun PlaybackSettingsContent(
-    viewModel: PlaybackSettingsViewModel = hiltViewModel()
+    viewModel: PlaybackSettingsViewModel = hiltViewModel(),
+    initialFocusRequester: FocusRequester? = null
 ) {
     val playerSettings by viewModel.playerSettings.collectAsState(initial = PlayerSettings())
     val trailerSettings by viewModel.trailerSettings.collectAsState(initial = TrailerSettings())
@@ -182,6 +183,7 @@ fun PlaybackSettingsContent(
                 .weight(1f)
         ) {
             PlaybackSettingsSections(
+                initialFocusRequester = initialFocusRequester,
                 playerSettings = playerSettings,
                 trailerSettings = trailerSettings,
                 onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },

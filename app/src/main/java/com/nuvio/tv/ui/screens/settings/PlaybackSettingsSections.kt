@@ -64,6 +64,7 @@ private enum class PlaybackSection {
 
 @Composable
 internal fun PlaybackSettingsSections(
+    initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
     onShowPlayerPreferenceDialog: () -> Unit,
@@ -102,10 +103,11 @@ internal fun PlaybackSettingsSections(
     var audioTrailerExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val generalHeaderFocus = remember { FocusRequester() }
+    val defaultGeneralHeaderFocus = remember { FocusRequester() }
     val streamHeaderFocus = remember { FocusRequester() }
     val audioTrailerHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
+    val generalHeaderFocus = initialFocusRequester ?: defaultGeneralHeaderFocus
 
     var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
 

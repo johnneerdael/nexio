@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
@@ -54,6 +56,8 @@ import com.nuvio.tv.R
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal enum class SettingsCategory {
     APPEARANCE,
@@ -142,8 +146,18 @@ fun SettingsScreen(
     val railFocusRequesters = remember {
         sectionSpecs.associate { it.category to FocusRequester() }
     }
+    val contentFocusRequesters = remember {
+        mapOf(
+            SettingsCategory.APPEARANCE to FocusRequester(),
+            SettingsCategory.LAYOUT to FocusRequester(),
+            SettingsCategory.TMDB to FocusRequester(),
+            SettingsCategory.PLAYBACK to FocusRequester(),
+            SettingsCategory.ABOUT to FocusRequester()
+        )
+    }
 
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
@@ -195,6 +209,11 @@ fun SettingsScreen(
                                     }
                                 } else {
                                     selectedCategory = section.category
+                                    coroutineScope.launch {
+                                        // Wait for detail content to settle before requesting first content focus.
+                                        delay(120)
+                                        contentFocusRequesters[section.category]?.requestFocus()
+                                    }
                                 }
                             }
                         )
@@ -205,9 +224,12 @@ fun SettingsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .onPreviewKeyEvent { event ->
+                        .onKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
-                                railFocusRequesters[selectedCategory]?.requestFocus()
+                                val movedWithinContent = focusManager.moveFocus(FocusDirection.Left)
+                                if (!movedWithinContent) {
+                                    railFocusRequesters[selectedCategory]?.requestFocus()
+                                }
                                 true
                             } else {
                                 false
@@ -232,11 +254,21 @@ fun SettingsScreen(
                         label = "settings_split_detail"
                     ) { category ->
                         when (category) {
-                            SettingsCategory.APPEARANCE -> ThemeSettingsContent()
-                            SettingsCategory.LAYOUT -> LayoutSettingsContent()
-                            SettingsCategory.PLAYBACK -> PlaybackSettingsContent()
-                            SettingsCategory.TMDB -> TmdbSettingsContent()
-                            SettingsCategory.ABOUT -> AboutSettingsContent()
+                            SettingsCategory.APPEARANCE -> ThemeSettingsContent(
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.APPEARANCE]
+                            )
+                            SettingsCategory.LAYOUT -> LayoutSettingsContent(
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.LAYOUT]
+                            )
+                            SettingsCategory.PLAYBACK -> PlaybackSettingsContent(
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.PLAYBACK]
+                            )
+                            SettingsCategory.TMDB -> TmdbSettingsContent(
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.TMDB]
+                            )
+                            SettingsCategory.ABOUT -> AboutSettingsContent(
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.ABOUT]
+                            )
                             SettingsCategory.PLUGINS -> {
                                 Column(
                                     modifier = Modifier.fillMaxSize(),

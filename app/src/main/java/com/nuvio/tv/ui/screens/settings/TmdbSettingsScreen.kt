@@ -16,6 +16,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -38,7 +40,8 @@ fun TmdbSettingsScreen(
 
 @Composable
 fun TmdbSettingsContent(
-    viewModel: TmdbSettingsViewModel = hiltViewModel()
+    viewModel: TmdbSettingsViewModel = hiltViewModel(),
+    initialFocusRequester: FocusRequester? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -66,7 +69,12 @@ fun TmdbSettingsContent(
                         title = "Enable TMDB Enrichment",
                         subtitle = "Use TMDB as a metadata source to enhance addon data",
                         checked = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) }
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) },
+                        modifier = if (initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
+                        }
                     )
                 }
 

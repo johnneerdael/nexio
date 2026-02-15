@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -34,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.grid.TvGridCells
 import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
-import androidx.tv.foundation.lazy.grid.items
+import androidx.tv.foundation.lazy.grid.itemsIndexed
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -63,7 +65,8 @@ fun ThemeSettingsScreen(
 
 @Composable
 fun ThemeSettingsContent(
-    viewModel: ThemeSettingsViewModel = hiltViewModel()
+    viewModel: ThemeSettingsViewModel = hiltViewModel(),
+    initialFocusRequester: FocusRequester? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -88,11 +91,16 @@ fun ThemeSettingsContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(uiState.availableThemes) { theme ->
+                itemsIndexed(uiState.availableThemes) { index, theme ->
                     ThemeCard(
                         theme = theme,
                         isSelected = theme == uiState.selectedTheme,
-                        onClick = { viewModel.onEvent(ThemeSettingsEvent.SelectTheme(theme)) }
+                        onClick = { viewModel.onEvent(ThemeSettingsEvent.SelectTheme(theme)) },
+                        modifier = if (index == 0 && initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
+                        }
                     )
                 }
             }
@@ -104,14 +112,15 @@ fun ThemeSettingsContent(
 private fun ThemeCard(
     theme: AppTheme,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val palette = ThemeColors.getColorPalette(theme)
 
     Card(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(

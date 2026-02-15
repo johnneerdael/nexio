@@ -84,7 +84,8 @@ private enum class LayoutSettingsSection {
 
 @Composable
 fun LayoutSettingsContent(
-    viewModel: LayoutSettingsViewModel = hiltViewModel()
+    viewModel: LayoutSettingsViewModel = hiltViewModel(),
+    initialFocusRequester: FocusRequester? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -94,11 +95,12 @@ fun LayoutSettingsContent(
     var focusedPosterExpanded by rememberSaveable { mutableStateOf(false) }
     var posterCardStyleExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val homeLayoutHeaderFocus = remember { FocusRequester() }
+    val defaultHomeLayoutHeaderFocus = remember { FocusRequester() }
     val homeContentHeaderFocus = remember { FocusRequester() }
     val detailPageHeaderFocus = remember { FocusRequester() }
     val focusedPosterHeaderFocus = remember { FocusRequester() }
     val posterCardStyleHeaderFocus = remember { FocusRequester() }
+    val homeLayoutHeaderFocus = initialFocusRequester ?: defaultHomeLayoutHeaderFocus
 
     var focusedSection by remember { mutableStateOf<LayoutSettingsSection?>(null) }
 
