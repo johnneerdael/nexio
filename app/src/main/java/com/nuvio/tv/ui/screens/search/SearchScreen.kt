@@ -22,15 +22,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +51,7 @@ import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -64,6 +70,7 @@ fun SearchScreen(
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
     val posterCardStyle = PosterCardStyle(
         width = uiState.posterCardWidthDp.dp,
@@ -78,10 +85,13 @@ fun SearchScreen(
     }
 
     val isDiscoverMode = uiState.discoverEnabled && uiState.query.trim().isEmpty()
+    val hasPendingUnsubmittedQuery = !isDiscoverMode &&
+        uiState.query.trim().length >= 2 &&
+        uiState.query.trim() != uiState.submittedQuery.trim()
     val canMoveToResults = if (isDiscoverMode) {
         uiState.discoverResults.isNotEmpty()
     } else {
-        uiState.query.trim().length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
+        uiState.submittedQuery.trim().length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
     }
 
     LaunchedEffect(focusResults, isDiscoverMode, uiState.discoverResults.size) {
@@ -95,11 +105,23 @@ fun SearchScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        repeat(2) { withFrameNanos { } }
+        runCatching { searchFocusRequester.requestFocus() }
+    }
+
     DisposableEffect(lifecycleOwner, pendingDiscoverRestoreOnResume) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && pendingDiscoverRestoreOnResume) {
-                restoreDiscoverFocus = true
-                pendingDiscoverRestoreOnResume = false
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (pendingDiscoverRestoreOnResume) {
+                    restoreDiscoverFocus = true
+                    pendingDiscoverRestoreOnResume = false
+                } else {
+                    coroutineScope.launch {
+                        repeat(2) { withFrameNanos { } }
+                        runCatching { searchFocusRequester.requestFocus() }
+                    }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -155,6 +177,12 @@ fun SearchScreen(
                         .onPreviewKeyEvent { keyEvent ->
                             if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                                 when (keyEvent.nativeKeyEvent.keyCode) {
+                                    KeyEvent.KEYCODE_ENTER,
+                                    KeyEvent.KEYCODE_NUMPAD_ENTER,
+                                    KeyEvent.KEYCODE_DPAD_CENTER -> {
+                                        viewModel.onEvent(SearchEvent.SubmitSearch)
+                                        return@onPreviewKeyEvent true
+                                    }
                                     KeyEvent.KEYCODE_DPAD_DOWN,
                                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
                                         if (canMoveToResults) {
@@ -166,6 +194,12 @@ fun SearchScreen(
                             }
                             false
                         },
+                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            viewModel.onEvent(SearchEvent.SubmitSearch)
+                        }
+                    ),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     placeholder = {
@@ -184,6 +218,19 @@ fun SearchScreen(
                         cursorColor = NuvioColors.FocusRing
                     )
                 )
+            }
+
+            if (!isDiscoverMode && (uiState.submittedQuery.trim().length < 2 || hasPendingUnsubmittedQuery)) {
+                item {
+                    Text(
+                        text = "Press Done on the keyboard to search",
+                        style = androidx.tv.material3.MaterialTheme.typography.bodySmall,
+                        color = NuvioColors.TextSecondary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 52.dp)
+                    )
+                }
             }
 
             if (isDiscoverMode) {
@@ -216,14 +263,14 @@ fun SearchScreen(
                 }
             } else {
                 when {
-                    uiState.query.trim().length < 2 -> {
+                    uiState.submittedQuery.trim().length < 2 && !hasPendingUnsubmittedQuery -> {
                         item {
                             EmptyScreenState(
                                 title = "Start Searching",
                                 subtitle = if (uiState.discoverEnabled) {
-                                    "Type at least 2 characters to search"
+                                    "Enter at least 2 characters"
                                 } else {
-                                    "Discover is disabled. Type at least 2 characters to search"
+                                    "Discover is disabled. Enter at least 2 characters"
                                 },
                                 icon = Icons.Default.Search
                             )
@@ -268,7 +315,7 @@ fun SearchScreen(
                         itemsIndexed(
                             items = visibleCatalogRows,
                             key = { index, item ->
-                                "${item.addonId}_${item.type}_${item.catalogId}_${uiState.query.trim()}_$index"
+                                "${item.addonId}_${item.type}_${item.catalogId}_${uiState.submittedQuery.trim()}_$index"
                             }
                         ) { index, catalogRow ->
                             CatalogRowSection(

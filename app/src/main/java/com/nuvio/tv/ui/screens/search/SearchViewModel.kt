@@ -11,7 +11,6 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.CatalogRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +34,6 @@ class SearchViewModel @Inject constructor(
     private val catalogsMap = linkedMapOf<String, CatalogRow>()
     private val catalogOrder = mutableListOf<String>()
 
-    private var debounceJob: Job? = null
     private var activeSearchJobs: List<Job> = emptyList()
     private var discoverJob: Job? = null
 
@@ -93,6 +91,7 @@ class SearchViewModel @Inject constructor(
     fun onEvent(event: SearchEvent) {
         when (event) {
             is SearchEvent.QueryChanged -> onQueryChanged(event.query)
+            SearchEvent.SubmitSearch -> submitSearch()
             is SearchEvent.LoadMoreCatalog -> loadMoreCatalogItems(
                 catalogId = event.catalogId,
                 addonId = event.addonId,
@@ -103,22 +102,40 @@ class SearchViewModel @Inject constructor(
             is SearchEvent.SelectDiscoverGenre -> selectDiscoverGenre(event.genre)
             SearchEvent.ShowMoreDiscoverResults -> showMoreDiscoverResults()
             SearchEvent.LoadMoreDiscoverResults -> loadMoreDiscoverResults()
-            SearchEvent.Retry -> performSearch(uiState.value.query)
+            SearchEvent.Retry -> performSearch(uiState.value.submittedQuery.ifBlank { uiState.value.query })
         }
     }
 
     private fun onQueryChanged(query: String) {
-        _uiState.update { it.copy(query = query, error = null) }
-
-        debounceJob?.cancel()
-        debounceJob = viewModelScope.launch {
-            delay(350)
-            performSearch(query)
+        _uiState.update {
+            val trimmedInput = query.trim()
+            val submitted = it.submittedQuery.trim()
+            it.copy(
+                query = query,
+                error = null,
+                isSearching = false,
+                catalogRows = if (trimmedInput == submitted) it.catalogRows else emptyList()
+            )
         }
+
+        // Search is explicit on submit only; stop any in-flight requests while editing.
+        activeSearchJobs.forEach { it.cancel() }
+        activeSearchJobs = emptyList()
+    }
+
+    private fun submitSearch() {
+        performSearch(_uiState.value.query)
     }
 
     private fun performSearch(rawQuery: String) {
         val query = rawQuery.trim()
+
+        _uiState.update {
+            it.copy(
+                submittedQuery = query,
+                query = rawQuery
+            )
+        }
 
         // Cancel any in-flight work from the previous query.
         activeSearchJobs.forEach { it.cancel() }
@@ -190,7 +207,7 @@ class SearchViewModel @Inject constructor(
                 } catch (_: Exception) {
                     // Cancellations are expected when query changes.
                 } finally {
-                    if (uiState.value.query.trim() == query) {
+                    if (uiState.value.submittedQuery.trim() == query) {
                         _uiState.update { it.copy(isSearching = false) }
                     }
                 }

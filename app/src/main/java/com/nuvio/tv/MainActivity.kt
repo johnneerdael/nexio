@@ -657,8 +657,10 @@ private fun ModernSidebarScaffold(
                                 currentRoute = currentRoute,
                                 targetRoute = targetRoute
                             )
+                            pendingSidebarFocusRequest = false
+                            isSidebarExpanded = false
+                            sidebarCollapsePending = false
                             pendingContentFocusTransfer = true
-                            sidebarCollapsePending = true
                         }
                     )
                 }

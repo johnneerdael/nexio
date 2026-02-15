@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.search
 
 sealed interface SearchEvent {
     data class QueryChanged(val query: String) : SearchEvent
+    data object SubmitSearch : SearchEvent
 
     data class LoadMoreCatalog(
         val catalogId: String,

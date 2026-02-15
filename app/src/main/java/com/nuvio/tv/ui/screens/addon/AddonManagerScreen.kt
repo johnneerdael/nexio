@@ -48,7 +48,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -81,6 +83,10 @@ import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -92,6 +98,8 @@ fun AddonManagerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     val surfaceFocusRequester = remember { FocusRequester() }
     val installButtonFocusRequester = remember { FocusRequester() }
     val textFieldFocusRequester = remember { FocusRequester() }
@@ -107,6 +115,35 @@ fun AddonManagerScreen(
         if (isEditing) {
             textFieldFocusRequester.requestFocus()
             keyboardController?.show()
+        }
+    }
+
+    val requestInputBarFocus = {
+        coroutineScope.launch {
+            repeat(2) { withFrameNanos { } }
+            runCatching { surfaceFocusRequester.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(uiState.isQrModeActive, uiState.pendingChange, isEditing) {
+        if (!uiState.isQrModeActive && uiState.pendingChange == null && !isEditing) {
+            requestInputBarFocus()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, uiState.isQrModeActive, uiState.pendingChange, isEditing) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME &&
+                !uiState.isQrModeActive &&
+                uiState.pendingChange == null &&
+                !isEditing
+            ) {
+                requestInputBarFocus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
