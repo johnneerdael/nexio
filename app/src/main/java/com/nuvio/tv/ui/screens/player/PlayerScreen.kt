@@ -670,6 +670,7 @@ fun PlayerScreen(
                 selectedInternalIndex = uiState.selectedSubtitleTrackIndex,
                 addonSubtitles = uiState.addonSubtitles,
                 selectedAddonSubtitle = uiState.selectedAddonSubtitle,
+                preferredLanguage = uiState.subtitleStyle.preferredLanguage,
                 isLoadingAddons = uiState.isLoadingAddonSubtitles,
                 onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
                 onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },

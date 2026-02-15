@@ -79,6 +79,7 @@ internal fun SubtitleSelectionDialog(
     selectedInternalIndex: Int,
     addonSubtitles: List<Subtitle>,
     selectedAddonSubtitle: Subtitle?,
+    preferredLanguage: String,
     isLoadingAddons: Boolean,
     onInternalTrackSelected: (Int) -> Unit,
     onAddonSubtitleSelected: (Subtitle) -> Unit,
@@ -143,12 +144,14 @@ internal fun SubtitleSelectionDialog(
                         tracks = internalTracks,
                         selectedIndex = selectedInternalIndex,
                         selectedAddonSubtitle = selectedAddonSubtitle,
+                        preferredLanguage = preferredLanguage,
                         onTrackSelected = onInternalTrackSelected,
                         onDisableSubtitles = onDisableSubtitles
                     )
                     1 -> AddonSubtitlesContent(
                         subtitles = addonSubtitles,
                         selectedSubtitle = selectedAddonSubtitle,
+                        preferredLanguage = preferredLanguage,
                         isLoading = isLoadingAddons,
                         onSubtitleSelected = onAddonSubtitleSelected
                     )
@@ -226,9 +229,14 @@ private fun InternalSubtitlesContent(
     tracks: List<TrackInfo>,
     selectedIndex: Int,
     selectedAddonSubtitle: Subtitle?,
+    preferredLanguage: String,
     onTrackSelected: (Int) -> Unit,
     onDisableSubtitles: () -> Unit
 ) {
+    val orderedTracks = remember(tracks, preferredLanguage) {
+        sortByPreferredLanguage(tracks, preferredLanguage) { it.language }
+    }
+
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(top = 4.dp),
@@ -258,7 +266,7 @@ private fun InternalSubtitlesContent(
                 }
             }
         } else {
-            items(tracks) { track ->
+            items(orderedTracks) { track ->
                 TrackItem(
                     track = track,
                     isSelected = track.index == selectedIndex && selectedAddonSubtitle == null,
@@ -273,9 +281,14 @@ private fun InternalSubtitlesContent(
 private fun AddonSubtitlesContent(
     subtitles: List<Subtitle>,
     selectedSubtitle: Subtitle?,
+    preferredLanguage: String,
     isLoading: Boolean,
     onSubtitleSelected: (Subtitle) -> Unit
 ) {
+    val orderedSubtitles = remember(subtitles, preferredLanguage) {
+        sortByPreferredLanguage(subtitles, preferredLanguage) { it.lang }
+    }
+
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(top = 4.dp),
@@ -318,7 +331,7 @@ private fun AddonSubtitlesContent(
                 }
             }
         } else {
-            items(subtitles) { subtitle ->
+            items(orderedSubtitles) { subtitle ->
                 AddonSubtitleItem(
                     subtitle = subtitle,
                     isSelected = selectedSubtitle?.id == subtitle.id,
@@ -327,6 +340,70 @@ private fun AddonSubtitlesContent(
             }
         }
     }
+}
+
+private fun normalizeSubtitleLanguageCode(lang: String): String {
+    return when (lang.trim().lowercase()) {
+        "eng" -> "en"
+        "spa" -> "es"
+        "fre", "fra" -> "fr"
+        "ger", "deu" -> "de"
+        "ita" -> "it"
+        "por" -> "pt"
+        "rus" -> "ru"
+        "jpn" -> "ja"
+        "kor" -> "ko"
+        "chi", "zho" -> "zh"
+        "ara" -> "ar"
+        "hin" -> "hi"
+        "nld", "dut" -> "nl"
+        "pol" -> "pl"
+        "swe" -> "sv"
+        "nor" -> "no"
+        "dan" -> "da"
+        "fin" -> "fi"
+        "tur" -> "tr"
+        "ell", "gre" -> "el"
+        "heb" -> "he"
+        "tha" -> "th"
+        "vie" -> "vi"
+        "ind" -> "id"
+        "msa", "may" -> "ms"
+        "ces", "cze" -> "cs"
+        "hun" -> "hu"
+        "ron", "rum" -> "ro"
+        "ukr" -> "uk"
+        "bul" -> "bg"
+        "hrv" -> "hr"
+        "srp" -> "sr"
+        "slk", "slo" -> "sk"
+        "slv" -> "sl"
+        else -> lang.trim().lowercase()
+    }
+}
+
+private fun matchesPreferredLanguage(language: String?, preferredLanguage: String): Boolean {
+    if (language.isNullOrBlank()) return false
+    val preferred = preferredLanguage.trim().lowercase()
+    if (preferred.isBlank() || preferred == "none") return false
+
+    val normalizedLanguage = normalizeSubtitleLanguageCode(language)
+    val normalizedPreferred = normalizeSubtitleLanguageCode(preferred)
+
+    return normalizedLanguage == normalizedPreferred ||
+        normalizedLanguage.startsWith("$normalizedPreferred-") ||
+        normalizedLanguage.startsWith("${normalizedPreferred}_")
+}
+
+private fun <T> sortByPreferredLanguage(
+    items: List<T>,
+    preferredLanguage: String,
+    languageSelector: (T) -> String?
+): List<T> {
+    val (preferred, others) = items.partition { item ->
+        matchesPreferredLanguage(languageSelector(item), preferredLanguage)
+    }
+    return preferred + others
 }
 
 @Composable
