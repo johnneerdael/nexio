@@ -592,7 +592,7 @@ class PlayerViewModel @Inject constructor(
                 hasScannedTextTracksOnce = false
                 resetLoadingOverlayForNewStream()
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
-                val useLibass = playerSettings.useLibass
+                val useLibass = false // Temporarily disabled for maintenance
                 val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
                 val loadControl = DefaultLoadControl.Builder().build()
 

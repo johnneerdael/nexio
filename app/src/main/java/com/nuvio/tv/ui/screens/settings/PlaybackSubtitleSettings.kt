@@ -216,15 +216,15 @@ internal fun LazyListScope.subtitleSettingsItems(
         ToggleSettingsItem(
             icon = Icons.Default.Subtitles,
             title = "Use libass for ASS/SSA subtitles",
-            subtitle = "Enable native libass rendering for advanced ASS/SSA subtitle features including animations, positioning, and styling",
-            isChecked = playerSettings.useLibass,
-            onCheckedChange = onSetUseLibass,
+            subtitle = "Temporarily disabled for maintenance",
+            isChecked = false,
+            onCheckedChange = {},
             onFocused = onItemFocused,
-            enabled = enabled
+            enabled = false
         )
     }
 
-    if (playerSettings.useLibass) {
+    if (false) { // Libass temporarily disabled for maintenance
         item {
             Text(
                 text = "Libass Render Mode",
