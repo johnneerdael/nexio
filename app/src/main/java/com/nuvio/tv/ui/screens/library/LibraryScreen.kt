@@ -800,27 +800,16 @@ private fun ListEditorDialog(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = onSave,
-                        enabled = !pending,
-                        colors = ButtonDefaults.colors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        )
-                    ) {
-                        Text(if (pending) "Saving..." else "Save")
-                    }
-                    Button(
-                        onClick = onCancel,
-                        enabled = !pending,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) {
-                        Text("Cancel")
-                    }
+                Button(
+                    onClick = onSave,
+                    enabled = !pending,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
+                    Text(if (pending) "Saving..." else "Save")
                 }
             }
         }
@@ -852,27 +841,16 @@ private fun ConfirmDeleteDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = onConfirm,
-                        enabled = !pending,
-                        colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFF4A2323),
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) {
-                        Text("Delete")
-                    }
-                    Button(
-                        onClick = onCancel,
-                        enabled = !pending,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) {
-                        Text("Cancel")
-                    }
+                Button(
+                    onClick = onConfirm,
+                    enabled = !pending,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFF4A2323),
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
+                    Text("Delete")
                 }
             }
         }

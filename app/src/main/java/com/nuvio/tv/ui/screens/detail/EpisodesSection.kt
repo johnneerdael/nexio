@@ -604,38 +604,22 @@ private fun EpisodeOptionsDialog(
                         .fillMaxWidth()
                         .focusRequester(primaryFocusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
                     )
                 ) {
                     Text(if (isWatched) "Mark as unwatched" else "Mark as watched")
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Button(
+                    onClick = onPlay,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(
-                        onClick = onPlay,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        ),
-                        modifier = Modifier.width(240.dp)
-                    ) {
-                        Text("Play")
-                    }
-
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        ),
-                        modifier = Modifier.width(240.dp)
-                    ) {
-                        Text("Cancel")
-                    }
+                    Text("Play")
                 }
             }
         }

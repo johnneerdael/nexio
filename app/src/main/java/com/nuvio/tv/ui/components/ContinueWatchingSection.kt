@@ -436,38 +436,22 @@ internal fun ContinueWatchingOptionsDialog(
                         .fillMaxWidth()
                         .focusRequester(detailsFocusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
                     )
                 ) {
                     Text("Go to details")
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Button(
+                    onClick = onRemove,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(
-                        onClick = onRemove,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        ),
-                        modifier = Modifier.width(240.dp)
-                    ) {
-                        Text("Remove")
-                    }
-
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        ),
-                        modifier = Modifier.width(240.dp)
-                    ) {
-                        Text("Cancel")
-                    }
+                    Text("Remove")
                 }
             }
         }

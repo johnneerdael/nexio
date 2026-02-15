@@ -20,6 +20,7 @@ import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -707,32 +708,18 @@ private fun LibraryListPickerDialog(
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                Divider(color = NuvioColors.Border, thickness = 1.dp)
+
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                     Button(
                         onClick = onSave,
                         enabled = !isPending,
                         colors = ButtonDefaults.colors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ),
-                        modifier = Modifier.width(244.dp)
-                    ) {
-                        Text(if (isPending) "Saving..." else "Save")
-                    }
-
-                    Button(
-                        onClick = onDismiss,
-                        enabled = !isPending,
-                        colors = ButtonDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,
                             contentColor = NuvioColors.TextPrimary
-                        ),
-                        modifier = Modifier.width(244.dp)
+                        )
                     ) {
-                        Text("Cancel")
+                        Text(if (isPending) "Saving..." else "Save")
                     }
                 }
             }
