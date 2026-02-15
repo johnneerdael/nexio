@@ -351,12 +351,6 @@ fun NuvioNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
-                onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
-                // TEMP: Account route hidden from settings.
-                // onNavigateToAccount = { navController.navigate(Screen.Account.route) },
-                onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
-                onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
-                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) },
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) }
             )
         }

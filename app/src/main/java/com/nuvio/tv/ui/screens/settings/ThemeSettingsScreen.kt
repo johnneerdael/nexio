@@ -53,28 +53,10 @@ fun ThemeSettingsScreen(
 ) {
     BackHandler { onBackPress() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NuvioColors.Background)
-            .padding(horizontal = 48.dp, vertical = 24.dp)
+    SettingsStandaloneScaffold(
+        title = "Appearance",
+        subtitle = "Choose your color theme"
     ) {
-        Text(
-            text = "Appearance",
-            style = MaterialTheme.typography.headlineLarge,
-            color = NuvioColors.TextPrimary
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Choose your color theme",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
         ThemeSettingsContent(viewModel = viewModel)
     }
 }
@@ -85,35 +67,34 @@ fun ThemeSettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Appearance",
-            style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.Secondary
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        SettingsDetailHeader(
+            title = "Appearance",
+            subtitle = "Choose your color theme"
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Choose your color theme",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        TvLazyVerticalGrid(
-            columns = TvGridCells.Fixed(3),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+        SettingsGroupCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
         ) {
-            items(uiState.availableThemes) { theme ->
-                ThemeCard(
-                    theme = theme,
-                    isSelected = theme == uiState.selectedTheme,
-                    onClick = { viewModel.onEvent(ThemeSettingsEvent.SelectTheme(theme)) }
-                )
+            TvLazyVerticalGrid(
+                columns = TvGridCells.Fixed(3),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(uiState.availableThemes) { theme ->
+                    ThemeCard(
+                        theme = theme,
+                        isSelected = theme == uiState.selectedTheme,
+                        onClick = { viewModel.onEvent(ThemeSettingsEvent.SelectTheme(theme)) }
+                    )
+                }
             }
         }
     }
@@ -134,32 +115,31 @@ private fun ThemeCard(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = palette.focusBackground
+            containerColor = NuvioColors.Background,
+            focusedContainerColor = NuvioColors.Background
         ),
         border = CardDefaults.border(
             border = if (isSelected) Border(
-                border = BorderStroke(2.dp, palette.focusRing),
-                shape = RoundedCornerShape(12.dp)
+                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ) else Border.None,
             focusedBorder = Border(
-                border = BorderStroke(2.dp, palette.focusRing),
-                shape = RoundedCornerShape(12.dp)
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             )
         ),
-        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        shape = CardDefaults.shape(RoundedCornerShape(SettingsSecondaryCardRadius)),
+        scale = CardDefaults.scale(focusedScale = 1f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Color preview circle
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(56.dp)
                     .clip(CircleShape)
                     .background(palette.secondary),
                 contentAlignment = Alignment.Center
@@ -169,12 +149,12 @@ private fun ThemeCard(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Selected",
                         tint = Color.White,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = theme.displayName,
@@ -184,12 +164,11 @@ private fun ThemeCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Color bar showing the theme colors
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(RoundedCornerShape(SettingsPillRadius))
                     .background(palette.focusRing)
             )
         }

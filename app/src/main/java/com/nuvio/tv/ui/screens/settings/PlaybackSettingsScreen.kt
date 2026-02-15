@@ -68,6 +68,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
@@ -108,45 +109,12 @@ fun PlaybackSettingsScreen(
     viewModel: PlaybackSettingsViewModel = hiltViewModel(),
     onBackPress: () -> Unit = {}
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NuvioColors.Background)
-            .padding(horizontal = 48.dp, vertical = 24.dp)
+    BackHandler { onBackPress() }
+
+    SettingsStandaloneScaffold(
+        title = "Playback Settings",
+        subtitle = "Configure video playback and subtitle options"
     ) {
-        // Header with back button
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            IconButton(onClick = onBackPress) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = NuvioColors.TextPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Text(
-                text = "Playback Settings",
-                style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Configure video playback and subtitle options",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary,
-            modifier = Modifier.padding(start = 56.dp)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
         PlaybackSettingsContent(viewModel = viewModel)
     }
 }
@@ -199,40 +167,56 @@ fun PlaybackSettingsContent(
         setter()
     }
 
-    PlaybackSettingsSections(
-        playerSettings = playerSettings,
-        trailerSettings = trailerSettings,
-        onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },
-        onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
-        onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
-        onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
-        onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
-        onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
-        onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
-        onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
-        onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
-        onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
-        onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
-        onShowStreamAutoPlayPluginSelectionDialog = { openDialog { showStreamAutoPlayPluginSelectionDialog = true } },
-        onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
-        onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
-        onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
-        onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
-        onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
-        onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
-        onSetFrameRateMatching = { enabled -> coroutineScope.launch { viewModel.setFrameRateMatching(enabled) } },
-        onSetTrailerEnabled = { enabled -> coroutineScope.launch { viewModel.setTrailerEnabled(enabled) } },
-        onSetTrailerDelaySeconds = { seconds -> coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) } },
-        onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
-        onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
-        onSetMapDV7ToHevc = { enabled -> coroutineScope.launch { viewModel.setMapDV7ToHevc(enabled) } },
-        onSetSubtitleSize = { newSize -> coroutineScope.launch { viewModel.setSubtitleSize(newSize) } },
-        onSetSubtitleVerticalOffset = { newOffset -> coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) } },
-        onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },
-        onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
-        onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
-        onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } }
-    )
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        SettingsDetailHeader(
+            title = "Playback Settings",
+            subtitle = "Configure video playback and subtitle options"
+        )
+
+        SettingsGroupCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            PlaybackSettingsSections(
+                playerSettings = playerSettings,
+                trailerSettings = trailerSettings,
+                onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },
+                onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
+                onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
+                onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
+                onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
+                onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
+                onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
+                onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
+                onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
+                onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
+                onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
+                onShowStreamAutoPlayPluginSelectionDialog = { openDialog { showStreamAutoPlayPluginSelectionDialog = true } },
+                onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
+                onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
+                onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
+                onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
+                onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
+                onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
+                onSetFrameRateMatching = { enabled -> coroutineScope.launch { viewModel.setFrameRateMatching(enabled) } },
+                onSetTrailerEnabled = { enabled -> coroutineScope.launch { viewModel.setTrailerEnabled(enabled) } },
+                onSetTrailerDelaySeconds = { seconds -> coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) } },
+                onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
+                onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
+                onSetMapDV7ToHevc = { enabled -> coroutineScope.launch { viewModel.setMapDV7ToHevc(enabled) } },
+                onSetSubtitleSize = { newSize -> coroutineScope.launch { viewModel.setSubtitleSize(newSize) } },
+                onSetSubtitleVerticalOffset = { newOffset -> coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) } },
+                onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },
+                onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
+                onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
+                onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } }
+            )
+        }
+    }
 
     PlaybackSettingsDialogsHost(
         playerSettings = playerSettings,
@@ -333,16 +317,16 @@ internal fun ToggleSettingsItem(
                 if (it.isFocused) onFocused()
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NuvioColors.Background,
+            focusedContainerColor = NuvioColors.Background
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, if (enabled) NuvioColors.FocusRing else NuvioColors.FocusRing.copy(alpha = 0.3f)),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(SettingsPillRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
@@ -387,7 +371,7 @@ internal fun ToggleSettingsItem(
                     checkedThumbColor = NuvioColors.Secondary.copy(alpha = contentAlpha),
                     checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.35f * contentAlpha),
                     uncheckedThumbColor = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
-                    uncheckedTrackColor = NuvioColors.BackgroundCard
+                    uncheckedTrackColor = NuvioColors.Border
                 )
             )
         }
@@ -419,14 +403,14 @@ internal fun RenderTypeSettingsItem(
         border = CardDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ),
             border = if (isSelected) Border(
                 border = BorderStroke(2.dp, NuvioColors.Primary),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ) else Border.None
         ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(SettingsSecondaryCardRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
@@ -487,16 +471,16 @@ internal fun NavigationSettingsItem(
                 if (it.isFocused) onFocused()
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NuvioColors.Background,
+            focusedContainerColor = NuvioColors.Background
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, if (enabled) NuvioColors.FocusRing else NuvioColors.FocusRing.copy(alpha = 0.3f)),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(SettingsPillRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(
@@ -585,16 +569,16 @@ internal fun SliderSettingsItem(
                 }
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NuvioColors.Background,
+            focusedContainerColor = NuvioColors.Background
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, if (enabled) NuvioColors.FocusRing else NuvioColors.FocusRing.copy(alpha = 0.3f)),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             )
         ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(SettingsSecondaryCardRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Column(
@@ -667,8 +651,8 @@ internal fun SliderSettingsItem(
                             if (it.isFocused) onFocused()
                         },
                     colors = CardDefaults.colors(
-                        containerColor = NuvioColors.BackgroundElevated,
-                        focusedContainerColor = NuvioColors.BackgroundElevated
+                        containerColor = NuvioColors.Background,
+                        focusedContainerColor = NuvioColors.Background
                     ),
                     border = CardDefaults.border(
                         focusedBorder = Border(
@@ -725,8 +709,8 @@ internal fun SliderSettingsItem(
                             if (it.isFocused) onFocused()
                         },
                     colors = CardDefaults.colors(
-                        containerColor = NuvioColors.BackgroundElevated,
-                        focusedContainerColor = NuvioColors.BackgroundElevated
+                        containerColor = NuvioColors.Background,
+                        focusedContainerColor = NuvioColors.Background
                     ),
                     border = CardDefaults.border(
                         focusedBorder = Border(
@@ -776,16 +760,16 @@ internal fun ColorSettingsItem(
                 if (it.isFocused) onFocused()
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NuvioColors.Background,
+            focusedContainerColor = NuvioColors.Background
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
                 border = BorderStroke(2.dp, if (enabled) NuvioColors.FocusRing else NuvioColors.FocusRing.copy(alpha = 0.3f)),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
-        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        shape = CardDefaults.shape(shape = RoundedCornerShape(SettingsPillRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
         Row(

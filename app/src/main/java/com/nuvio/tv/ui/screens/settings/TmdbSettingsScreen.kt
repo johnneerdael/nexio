@@ -3,42 +3,23 @@
 package com.nuvio.tv.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.foundation.lazy.LazyColumn
-import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
-import androidx.tv.material3.Border
-import androidx.tv.material3.Card
-import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Switch
-import androidx.tv.material3.SwitchDefaults
-import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 
 @Composable
 fun TmdbSettingsScreen(
@@ -47,28 +28,10 @@ fun TmdbSettingsScreen(
 ) {
     BackHandler { onBackPress() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NuvioColors.Background)
-            .padding(horizontal = 48.dp, vertical = 24.dp)
+    SettingsStandaloneScaffold(
+        title = "TMDB Enrichment",
+        subtitle = "Choose which metadata fields should come from TMDB"
     ) {
-        Text(
-            text = "TMDB Enrichment",
-            style = MaterialTheme.typography.headlineLarge,
-            color = NuvioColors.TextPrimary
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Choose which metadata fields should come from TMDB",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
         TmdbSettingsContent(viewModel = viewModel)
     }
 }
@@ -80,118 +43,116 @@ fun TmdbSettingsContent(
     val uiState by viewModel.uiState.collectAsState()
     var showLanguageDialog by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "TMDB Enrichment",
-            style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.Secondary
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        SettingsDetailHeader(
+            title = "TMDB Enrichment",
+            subtitle = "Choose which metadata fields should come from TMDB"
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Choose which metadata fields should come from TMDB",
-            style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        LazyColumn(
-            contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        SettingsGroupCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
         ) {
-            item {
-                ToggleCard(
-                    title = "Enable TMDB Enrichment",
-                    subtitle = "Use TMDB as a metadata source to enhance addon data",
-                    checked = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(it)) }
-                )
-            }
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    SettingsToggleRow(
+                        title = "Enable TMDB Enrichment",
+                        subtitle = "Use TMDB as a metadata source to enhance addon data",
+                        checked = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) }
+                    )
+                }
 
-            item {
-                val languageName = AVAILABLE_SUBTITLE_LANGUAGES
-                    .find { it.code == uiState.language }
-                    ?.name
-                    ?: uiState.language.uppercase()
-                ActionCard(
-                    title = "Language",
-                    subtitle = "TMDB metadata language for title, logo, and enabled fields",
-                    value = languageName,
-                    enabled = uiState.enabled,
-                    onClick = { showLanguageDialog = true }
-                )
-            }
+                item {
+                    val languageName = AVAILABLE_SUBTITLE_LANGUAGES
+                        .find { it.code == uiState.language }
+                        ?.name
+                        ?: uiState.language.uppercase()
+                    SettingsActionRow(
+                        title = "Language",
+                        subtitle = "TMDB metadata language for title, logo, and enabled fields",
+                        value = languageName,
+                        enabled = uiState.enabled,
+                        onClick = { showLanguageDialog = true }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Artwork",
-                    subtitle = "Logo and backdrop images from TMDB",
-                    checked = uiState.useArtwork,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleArtwork(it)) }
-                )
-            }
+                item {
+                    SettingsToggleRow(
+                        title = "Artwork",
+                        subtitle = "Logo and backdrop images from TMDB",
+                        checked = uiState.useArtwork,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleArtwork(!uiState.useArtwork)) }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Basic Info",
-                    subtitle = "Description, genres, and rating from TMDB",
-                    checked = uiState.useBasicInfo,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleBasicInfo(it)) }
-                )
-            }
+                item {
+                    SettingsToggleRow(
+                        title = "Basic Info",
+                        subtitle = "Description, genres, and rating from TMDB",
+                        checked = uiState.useBasicInfo,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleBasicInfo(!uiState.useBasicInfo)) }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Details",
-                    subtitle = "Runtime, release date, country, and language from TMDB",
-                    checked = uiState.useDetails,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleDetails(it)) }
-                )
-            }
+                item {
+                    SettingsToggleRow(
+                        title = "Details",
+                        subtitle = "Runtime, release date, country, and language from TMDB",
+                        checked = uiState.useDetails,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleDetails(!uiState.useDetails)) }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Credits",
-                    subtitle = "Cast with photos, director, and writer from TMDB",
-                    checked = uiState.useCredits,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleCredits(it)) }
-                )
-            }
+                item {
+                    SettingsToggleRow(
+                        title = "Credits",
+                        subtitle = "Cast with photos, director, and writer from TMDB",
+                        checked = uiState.useCredits,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleCredits(!uiState.useCredits)) }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Productions",
-                    subtitle = "Production companies from TMDB",
-                    checked = uiState.useProductions,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleProductions(it)) }
-                )
-            }
+                item {
+                    SettingsToggleRow(
+                        title = "Productions",
+                        subtitle = "Production companies from TMDB",
+                        checked = uiState.useProductions,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleProductions(!uiState.useProductions)) }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Networks",
-                    subtitle = "Networks with logos from TMDB",
-                    checked = uiState.useNetworks,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleNetworks(it)) }
-                )
-            }
+                item {
+                    SettingsToggleRow(
+                        title = "Networks",
+                        subtitle = "Networks with logos from TMDB",
+                        checked = uiState.useNetworks,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleNetworks(!uiState.useNetworks)) }
+                    )
+                }
 
-            item {
-                ToggleCard(
-                    title = "Episodes",
-                    subtitle = "Episode titles, overviews, thumbnails, and runtime from TMDB",
-                    checked = uiState.useEpisodes,
-                    enabled = uiState.enabled,
-                    onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEpisodes(it)) }
-                )
+                item {
+                    SettingsToggleRow(
+                        title = "Episodes",
+                        subtitle = "Episode titles, overviews, thumbnails, and runtime from TMDB",
+                        checked = uiState.useEpisodes,
+                        enabled = uiState.enabled,
+                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEpisodes(!uiState.useEpisodes)) }
+                    )
+                }
             }
         }
     }
@@ -207,137 +168,5 @@ fun TmdbSettingsContent(
             },
             onDismiss = { showLanguageDialog = false }
         )
-    }
-}
-
-@Composable
-private fun ToggleCard(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onToggle: (Boolean) -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val disabledAlpha = 0.5f
-
-    Card(
-        onClick = { if (enabled) onToggle(!checked) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(12.dp)
-            )
-        ),
-        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary.copy(alpha = if (enabled) 1f else disabledAlpha)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary.copy(alpha = if (enabled) 1f else disabledAlpha)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Switch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = { onToggle(it) },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = NuvioColors.Secondary,
-                    checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f),
-                    uncheckedThumbColor = NuvioColors.TextSecondary,
-                    uncheckedTrackColor = NuvioColors.BackgroundCard
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActionCard(
-    title: String,
-    subtitle: String,
-    value: String,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val disabledAlpha = 0.5f
-
-    Card(
-        onClick = { if (enabled) onClick() },
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(12.dp)
-            )
-        ),
-        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary.copy(alpha = if (enabled) 1f else disabledAlpha)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary.copy(alpha = if (enabled) 1f else disabledAlpha)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.Secondary.copy(alpha = if (enabled) 1f else disabledAlpha)
-            )
-        }
     }
 }
