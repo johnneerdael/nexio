@@ -72,11 +72,14 @@ class StreamRepositoryImpl @Inject constructor(
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
+                                        val namedStreams = streamsResult.data.map {
+                                            it.copy(addonName = addon.displayName, addonLogo = addon.logo)
+                                        }
                                         resultChannel.send(
                                             AddonStreams(
                                                 addonName = addon.displayName,
                                                 addonLogo = addon.logo,
-                                                streams = streamsResult.data
+                                                streams = namedStreams
                                             )
                                         )
                                     }
