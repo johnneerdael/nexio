@@ -213,7 +213,21 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
-                    traktProgressService.observeAllProgress()
+                    combine(
+                        traktProgressService.observeAllProgress(),
+                        watchProgressPreferences.allProgress,
+                        metadataState
+                    ) { remoteItems, localItems, metadataMap ->
+                        val mergedByKey = linkedMapOf<String, WatchProgress>()
+                        remoteItems.forEach { mergedByKey[progressKey(it)] = it }
+                        localItems.forEach { local ->
+                            mergedByKey.putIfAbsent(progressKey(local), local)
+                        }
+                        val merged = mergedByKey.values
+                            .sortedByDescending { it.lastWatched }
+                        hydrateMetadata(merged)
+                        merged.map { enrichWithMetadata(it, metadataMap) }
+                    }
                 } else {
                     combine(
                         watchProgressPreferences.allProgress,
@@ -318,6 +332,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun saveProgress(progress: WatchProgress) {
         if (traktAuthDataStore.isAuthenticated.first()) {
             traktProgressService.applyOptimisticProgress(progress)
+            watchProgressPreferences.saveProgress(progress)
             return
         }
         watchProgressPreferences.saveProgress(progress)
@@ -346,6 +361,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (isAuthenticated) {
             traktProgressService.applyOptimisticRemoval(contentId, season, episode)
             traktProgressService.removeProgress(contentId, season, episode)
+            watchProgressPreferences.removeProgress(contentId, season, episode)
             return
         }
         watchProgressPreferences.removeProgress(contentId, season, episode)
@@ -355,6 +371,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
         if (traktAuthDataStore.isAuthenticated.first()) {
             traktProgressService.removeFromHistory(contentId, season, episode)
+            watchProgressPreferences.removeProgress(contentId, season, episode)
             return
         }
         watchProgressPreferences.removeProgress(contentId, season, episode)
@@ -408,8 +425,17 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun clearAll() {
         if (traktAuthDataStore.isAuthenticated.first()) {
             traktProgressService.clearOptimistic()
+            watchProgressPreferences.clearAll()
             return
         }
         watchProgressPreferences.clearAll()
+    }
+
+    private fun progressKey(progress: WatchProgress): String {
+        return if (progress.season != null && progress.episode != null) {
+            "${progress.contentId}_s${progress.season}e${progress.episode}"
+        } else {
+            progress.contentId
+        }
     }
 }

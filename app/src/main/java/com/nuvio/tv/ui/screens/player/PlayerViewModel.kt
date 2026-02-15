@@ -789,7 +789,7 @@ class PlayerViewModel @Inject constructor(
                                 stopProgressUpdates()
                                 stopWatchProgressSaving()
                                 if (playbackState != Player.STATE_BUFFERING) {
-                                    emitPauseScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+                                    emitStopScrobbleForCurrentProgress()
                                 }
                                 
                                 saveWatchProgress()
@@ -1088,7 +1088,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
-        emitPauseScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+        emitStopScrobbleForCurrentProgress()
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1343,7 +1343,7 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
-        emitPauseScrobbleStop(progressPercent = currentPlaybackProgressPercent())
+        emitStopScrobbleForCurrentProgress()
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
@@ -1855,13 +1855,28 @@ class PlayerViewModel @Inject constructor(
 
     private fun emitPauseScrobbleStop(progressPercent: Float) {
         if (progressPercent < 1f || progressPercent >= 80f) return
-        emitScrobbleStop(progressPercent = progressPercent)
+        val item = currentScrobbleItem ?: return
+        if (!hasSentScrobbleStartForCurrentItem) return
+
+        viewModelScope.launch {
+            traktScrobbleService.scrobblePause(
+                item = item,
+                progressPercent = progressPercent
+            )
+        }
+        hasSentScrobbleStartForCurrentItem = false
     }
 
     private fun emitCompletionScrobbleStop(progressPercent: Float) {
         if (progressPercent < 80f || hasSentCompletionScrobbleForCurrentItem) return
         hasSentCompletionScrobbleForCurrentItem = true
         emitScrobbleStop(progressPercent = progressPercent)
+    }
+
+    private fun emitStopScrobbleForCurrentProgress() {
+        val progressPercent = currentPlaybackProgressPercent()
+        emitPauseScrobbleStop(progressPercent = progressPercent)
+        emitCompletionScrobbleStop(progressPercent = progressPercent)
     }
 
     fun scheduleHideControls() {

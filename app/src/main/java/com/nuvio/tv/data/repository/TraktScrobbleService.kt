@@ -61,6 +61,10 @@ class TraktScrobbleService @Inject constructor(
         sendScrobble(action = "stop", item = item, progressPercent = progressPercent)
     }
 
+    suspend fun scrobblePause(item: TraktScrobbleItem, progressPercent: Float) {
+        sendScrobble(action = "stop", item = item, progressPercent = progressPercent)
+    }
+
     private suspend fun sendScrobble(
         action: String,
         item: TraktScrobbleItem,
