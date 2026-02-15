@@ -51,12 +51,11 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.ui.theme.NuvioColors
 
-private const val SHOW_SYNC_CODE_FEATURES = false
-
 @Composable
 fun AccountSettingsContent(
     uiState: AccountUiState,
     viewModel: AccountViewModel,
+    showSyncCodeFeatures: Boolean = false,
     onNavigateToSyncGenerate: () -> Unit = {},
     onNavigateToSyncClaim: () -> Unit = {}
 ) {
@@ -89,7 +88,7 @@ fun AccountSettingsContent(
                         color = NuvioColors.TextSecondary
                     )
                 }
-                if (SHOW_SYNC_CODE_FEATURES) {
+                if (showSyncCodeFeatures) {
                     item {
                         SettingsActionButton(
                             icon = Icons.Default.VpnKey,
@@ -116,7 +115,7 @@ fun AccountSettingsContent(
                         value = authState.email
                     )
                 }
-                if (SHOW_SYNC_CODE_FEATURES) {
+                if (showSyncCodeFeatures) {
                     item {
                         SettingsActionButton(
                             icon = Icons.Default.VpnKey,
@@ -146,7 +145,7 @@ fun AccountSettingsContent(
                         value = "Using sync code for cross-device sync"
                     )
                 }
-                if (SHOW_SYNC_CODE_FEATURES) {
+                if (showSyncCodeFeatures) {
                     item {
                         ShowSyncCodeSection(
                             uiState = uiState,

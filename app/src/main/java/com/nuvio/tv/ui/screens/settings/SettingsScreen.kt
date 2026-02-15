@@ -30,13 +30,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,7 +78,10 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
+import com.nuvio.tv.ui.screens.account.AccountSettingsContent
+import com.nuvio.tv.ui.screens.account.AccountViewModel
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -85,15 +91,15 @@ private enum class SettingsCategory(
     val icon: ImageVector,
     @param:RawRes val rawIconRes: Int? = null
 ) {
-    // TEMP: Hide Account tab from settings.
-    // ACCOUNT("Account", Icons.Default.Person),
+    ACCOUNT("Account", Icons.Default.Person),
     APPEARANCE("Appearance", Icons.Default.Palette),
     LAYOUT("Layout", Icons.Default.GridView),
     PLUGINS("Plugins", Icons.Default.Build),
     TMDB("TMDB", Icons.Default.Tune),
     PLAYBACK("Playback", Icons.Default.Settings),
     TRAKT("Trakt", Icons.Default.Tune, rawIconRes = R.raw.trakt_tv_glyph),
-    ABOUT("About", Icons.Default.Info)
+    ABOUT("About", Icons.Default.Info),
+    DEBUG("Debug", Icons.Default.BugReport)
 }
 
 @Composable
@@ -105,14 +111,35 @@ fun SettingsScreen(
     onNavigateToSyncClaim: () -> Unit = {},
     onNavigateToTrakt: () -> Unit = {}
 ) {
+    val debugSettingsViewModel: DebugSettingsViewModel = hiltViewModel()
+    val debugUiState by debugSettingsViewModel.uiState.collectAsState()
+
+    val visibleCategories = remember(debugUiState.accountTabEnabled) {
+        SettingsCategory.entries.filter { category ->
+            when (category) {
+                SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
+                SettingsCategory.ACCOUNT -> BuildConfig.IS_DEBUG_BUILD && debugUiState.accountTabEnabled
+                else -> true
+            }
+        }
+    }
+
     var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
     var previousIndex by remember { mutableIntStateOf(0) }
-    val tabFocusRequesters = remember {
-        SettingsCategory.entries.associateWith { FocusRequester() }
+    val tabFocusRequesters = remember(visibleCategories) {
+        visibleCategories.associateWith { FocusRequester() }
     }
     var tabRowHasFocus by remember { mutableStateOf(false) }
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
+    val accountViewModel: AccountViewModel = hiltViewModel()
+    val accountUiState by accountViewModel.uiState.collectAsState()
+
+    LaunchedEffect(visibleCategories) {
+        if (selectedCategory !in visibleCategories) {
+            selectedCategory = SettingsCategory.APPEARANCE
+        }
+    }
 
     val accentColor = NuvioColors.Secondary
 
@@ -179,7 +206,7 @@ fun SettingsScreen(
                     tabRowHasFocus = state.hasFocus
                 }
         ) {
-            itemsIndexed(SettingsCategory.entries.toList()) { index, category ->
+            itemsIndexed(visibleCategories) { index, category ->
                 CategoryTab(
                     category = category,
                     isSelected = selectedCategory == category,
@@ -189,7 +216,7 @@ fun SettingsScreen(
                         if (category == SettingsCategory.TRAKT) {
                             onNavigateToTrakt()
                         } else {
-                            previousIndex = selectedCategory.ordinal
+                            previousIndex = visibleCategories.indexOf(selectedCategory)
                             selectedCategory = category
                         }
                     }
@@ -230,7 +257,7 @@ fun SettingsScreen(
                 )
                 .padding(24.dp)
         ) {
-            val currentIndex = selectedCategory.ordinal
+            val currentIndex = visibleCategories.indexOf(selectedCategory)
 
             AnimatedContent(
                 targetState = selectedCategory,
@@ -259,9 +286,15 @@ fun SettingsScreen(
                         uiState = pluginUiState,
                         viewModel = pluginViewModel
                     )
-                    // TEMP: Hide Account page from settings content.
-                    // SettingsCategory.ACCOUNT -> AccountSettingsContent(...)
+                    SettingsCategory.ACCOUNT -> AccountSettingsContent(
+                        uiState = accountUiState,
+                        viewModel = accountViewModel,
+                        showSyncCodeFeatures = debugUiState.syncCodeFeaturesEnabled,
+                        onNavigateToSyncGenerate = onNavigateToSyncGenerate,
+                        onNavigateToSyncClaim = onNavigateToSyncClaim
+                    )
                     SettingsCategory.TRAKT -> Unit
+                    SettingsCategory.DEBUG -> DebugSettingsContent()
                 }
             }
         }
