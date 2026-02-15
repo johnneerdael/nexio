@@ -178,7 +178,7 @@ fun SettingsScreen(
                                 false
                             }
                         },
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
                 ) {
                     items(sectionSpecs) { section ->
                         SettingsRailButton(
@@ -255,7 +255,8 @@ fun SettingsScreen(
                                         ) {
                                             PluginScreenContent(
                                                 uiState = pluginUiState,
-                                                viewModel = pluginViewModel
+                                                viewModel = pluginViewModel,
+                                                showHeader = false
                                             )
                                         }
                                     }

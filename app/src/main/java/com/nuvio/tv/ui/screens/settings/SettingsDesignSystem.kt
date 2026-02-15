@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -239,55 +240,63 @@ internal fun SettingsRailButton(
         shape = CardDefaults.shape(RoundedCornerShape(SettingsPillRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .heightIn(min = SettingsRailItemHeight),
+            contentAlignment = Alignment.CenterStart
         ) {
             Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                if (rawIconRes != null) {
-                    Image(
-                        painter = rememberRawSvgPainter(rawIconRes),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        contentScale = ContentScale.Fit,
-                        colorFilter = ColorFilter.tint(
-                            if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (rawIconRes != null) {
+                        Image(
+                            painter = rememberRawSvgPainter(rawIconRes),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            contentScale = ContentScale.Fit,
+                            colorFilter = ColorFilter.tint(
+                                if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                            )
                         )
-                    )
-                } else if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
-                        modifier = Modifier.size(18.dp)
+                    } else if (icon != null) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    if (rawIconRes != null || icon != null) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Medium,
+                        color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                if (rawIconRes != null || icon != null) {
-                    Spacer(modifier = Modifier.width(10.dp))
-                }
-
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = NuvioColors.TextTertiary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
-
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = NuvioColors.TextTertiary,
-                modifier = Modifier.size(18.dp)
-            )
         }
     }
 }
