@@ -39,6 +39,29 @@ class WatchProgressPreferences @Inject constructor(
    
     private val maxStoredEntries = 300
 
+    private data class StoredWatchProgress(
+        val contentId: String? = null,
+        val contentType: String? = null,
+        val name: String? = null,
+        val poster: String? = null,
+        val backdrop: String? = null,
+        val logo: String? = null,
+        val videoId: String? = null,
+        val season: Int? = null,
+        val episode: Int? = null,
+        val episodeTitle: String? = null,
+        val position: Long? = null,
+        val duration: Long? = null,
+        val lastWatched: Long? = null,
+        val addonBaseUrl: String? = null,
+        val progressPercent: Float? = null,
+        val source: String? = null,
+        val traktPlaybackId: Long? = null,
+        val traktMovieId: Int? = null,
+        val traktShowId: Int? = null,
+        val traktEpisodeId: Int? = null
+    )
+
     /**
      * Get all watch progress items, sorted by last watched (most recent first)
      * For series, only returns the series-level entry (not individual episode entries)
@@ -238,12 +261,50 @@ class WatchProgressPreferences @Inject constructor(
 
     private fun parseProgressMap(json: String): Map<String, WatchProgress> {
         return try {
-            val type = object : TypeToken<Map<String, WatchProgress>>() {}.type
-            gson.fromJson(json, type) ?: emptyMap()
+            val type = object : TypeToken<Map<String, StoredWatchProgress>>() {}.type
+            val rawMap: Map<String, StoredWatchProgress> = gson.fromJson(json, type) ?: emptyMap()
+            rawMap.mapNotNull { (key, rawEntry) ->
+                rawEntry.toWatchProgressOrNull(key)?.let { key to it }
+            }.toMap()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse progress data", e)
             emptyMap()
         }
+    }
+
+    private fun StoredWatchProgress.toWatchProgressOrNull(key: String): WatchProgress? {
+        val resolvedContentId = contentId?.takeIf { it.isNotBlank() }
+        val resolvedContentType = contentType?.takeIf { it.isNotBlank() }
+        val resolvedVideoId = videoId?.takeIf { it.isNotBlank() } ?: resolvedContentId
+        val resolvedLastWatched = lastWatched
+
+        if (resolvedContentId == null || resolvedContentType == null || resolvedVideoId == null || resolvedLastWatched == null) {
+            Log.w(TAG, "Dropping invalid watch progress entry for key=$key")
+            return null
+        }
+
+        return WatchProgress(
+            contentId = resolvedContentId,
+            contentType = resolvedContentType,
+            name = name.orEmpty(),
+            poster = poster,
+            backdrop = backdrop,
+            logo = logo,
+            videoId = resolvedVideoId,
+            season = season,
+            episode = episode,
+            episodeTitle = episodeTitle,
+            position = position ?: 0L,
+            duration = duration ?: 0L,
+            lastWatched = resolvedLastWatched,
+            addonBaseUrl = addonBaseUrl,
+            progressPercent = progressPercent,
+            source = source?.takeIf { it.isNotBlank() } ?: WatchProgress.SOURCE_LOCAL,
+            traktPlaybackId = traktPlaybackId,
+            traktMovieId = traktMovieId,
+            traktShowId = traktShowId,
+            traktEpisodeId = traktEpisodeId
+        )
     }
 
     private fun pruneOldItems(map: MutableMap<String, WatchProgress>): Map<String, WatchProgress> {

@@ -181,13 +181,13 @@ private fun HeroCarouselSlide(
             )
         )
     }
-    val leftGradient = remember {
+    val leftGradient = remember(bgColor) {
         Brush.horizontalGradient(
             colorStops = arrayOf(
-                0.0f to Color.Black.copy(alpha = 0.98f),
-                0.16f to Color.Black.copy(alpha = 0.88f),
-                0.34f to Color.Black.copy(alpha = 0.56f),
-                0.56f to Color.Black.copy(alpha = 0.20f),
+                0.0f to bgColor.copy(alpha = 0.98f),
+                0.16f to bgColor.copy(alpha = 0.88f),
+                0.34f to bgColor.copy(alpha = 0.56f),
+                0.56f to bgColor.copy(alpha = 0.20f),
                 0.72f to Color.Transparent,
                 1.0f to Color.Transparent
             )
