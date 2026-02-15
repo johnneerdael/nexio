@@ -142,10 +142,12 @@ class AccountViewModel @Inject constructor(
                         pullRemoteData()
                         _uiState.update { it.copy(isLoading = false, syncClaimSuccess = true) }
                     } else {
+                        authManager.signOut()
                         _uiState.update { it.copy(isLoading = false, error = result.message) }
                     }
                 },
                 onFailure = { e ->
+                    authManager.signOut()
                     _uiState.update { it.copy(isLoading = false, error = userFriendlyError(e)) }
                 }
             )
