@@ -38,9 +38,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
@@ -58,6 +60,10 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
+        private const val CONTINUE_WATCHING_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
+        private const val MAX_RECENT_PROGRESS_ITEMS = 300
+        private const val MAX_NEXT_UP_LOOKUPS = 24
+        private const val MAX_NEXT_UP_CONCURRENCY = 4
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -288,13 +294,18 @@ class HomeViewModel @Inject constructor(
     private fun loadContinueWatching() {
         viewModelScope.launch {
             watchProgressRepository.allProgress.collectLatest { items ->
-                Log.d("HomeViewModel", "allProgress emitted ${items.size} items")
-                items.forEach { p ->
-                    Log.d("HomeViewModel", "  item: id=${p.contentId} type=${p.contentType} pos=${p.position} dur=${p.duration} pct=${p.progressPercentage} inProgress=${p.isInProgress()} name='${p.name}'")
-                }
+                val cutoffMs = System.currentTimeMillis() - CONTINUE_WATCHING_WINDOW_MS
+                val recentItems = items
+                    .asSequence()
+                    .filter { it.lastWatched >= cutoffMs }
+                    .sortedByDescending { it.lastWatched }
+                    .take(MAX_RECENT_PROGRESS_ITEMS)
+                    .toList()
+
+                Log.d("HomeViewModel", "allProgress emitted=${items.size} recentWindow=${recentItems.size}")
 
                 val inProgressOnly = deduplicateInProgress(
-                    items.filter { it.isInProgress() }
+                    recentItems.filter { it.isInProgress() }
                 ).map { ContinueWatchingItem.InProgress(it) }
 
                 Log.d("HomeViewModel", "inProgressOnly: ${inProgressOnly.size} items after filter+dedup")
@@ -302,10 +313,11 @@ class HomeViewModel @Inject constructor(
                 // Optimistic immediate render: show in-progress entries instantly.
                 _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
 
-                // Then compute NextUp enrichment (may need remote meta lookups).
-                val entries = buildContinueWatchingItems(items)
-                Log.d("HomeViewModel", "buildContinueWatchingItems: ${entries.size} final items")
-                _uiState.update { it.copy(continueWatchingItems = entries) }
+                // Then enrich Next Up in background with bounded concurrency.
+                enrichContinueWatchingProgressively(
+                    allProgress = recentItems,
+                    inProgressItems = inProgressOnly
+                )
             }
         }
     }
@@ -318,13 +330,10 @@ class HomeViewModel @Inject constructor(
         return (nonSeries + latestPerShow).sortedByDescending { it.lastWatched }
     }
 
-    private suspend fun buildContinueWatchingItems(
-        allProgress: List<WatchProgress>
-    ): List<ContinueWatchingItem> = withContext(Dispatchers.IO) {
-        val inProgressItems = deduplicateInProgress(
-            allProgress.filter { it.isInProgress() }
-        ).map { ContinueWatchingItem.InProgress(it) }
-
+    private suspend fun enrichContinueWatchingProgressively(
+        allProgress: List<WatchProgress>,
+        inProgressItems: List<ContinueWatchingItem.InProgress>
+    ) = coroutineScope {
         val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
 
         val latestCompletedBySeries = allProgress
@@ -338,35 +347,69 @@ class HomeViewModel @Inject constructor(
             .groupBy { it.contentId }
             .mapNotNull { (_, items) -> items.maxByOrNull { it.lastWatched } }
             .filter { it.contentId !in inProgressIds }
+            .sortedByDescending { it.lastWatched }
+            .take(MAX_NEXT_UP_LOOKUPS)
 
-        val nextUpItems = latestCompletedBySeries.mapNotNull { progress ->
-            val nextEpisode = findNextEpisode(progress) ?: return@mapNotNull null
-            val meta = nextEpisode.first
-            val video = nextEpisode.second
-            val info = NextUpInfo(
-                contentId = progress.contentId,
-                contentType = progress.contentType,
-                name = meta.name,
-                poster = meta.poster,
-                backdrop = meta.background,
-                logo = meta.logo,
-                videoId = video.id,
-                season = video.season ?: return@mapNotNull null,
-                episode = video.episode ?: return@mapNotNull null,
-                episodeTitle = video.title,
-                thumbnail = video.thumbnail,
-                lastWatched = progress.lastWatched
-            )
-            ContinueWatchingItem.NextUp(info)
+        if (latestCompletedBySeries.isEmpty()) {
+            return@coroutineScope
         }
 
+        val lookupSemaphore = Semaphore(MAX_NEXT_UP_CONCURRENCY)
+        val mergeMutex = Mutex()
+        val nextUpByContent = linkedMapOf<String, ContinueWatchingItem.NextUp>()
+
+        latestCompletedBySeries.forEach { progress ->
+            launch(Dispatchers.IO) {
+                lookupSemaphore.withPermit {
+                    val nextUp = buildNextUpItem(progress) ?: return@withPermit
+                    mergeMutex.withLock {
+                        nextUpByContent[progress.contentId] = nextUp
+                        _uiState.update {
+                            it.copy(
+                                continueWatchingItems = mergeContinueWatchingItems(
+                                    inProgressItems = inProgressItems,
+                                    nextUpItems = nextUpByContent.values.toList()
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun mergeContinueWatchingItems(
+        inProgressItems: List<ContinueWatchingItem.InProgress>,
+        nextUpItems: List<ContinueWatchingItem.NextUp>
+    ): List<ContinueWatchingItem> {
         val combined = mutableListOf<Pair<Long, ContinueWatchingItem>>()
         inProgressItems.forEach { combined.add(it.progress.lastWatched to it) }
         nextUpItems.forEach { combined.add(it.info.lastWatched to it) }
 
-        combined
+        return combined
             .sortedByDescending { it.first }
             .map { it.second }
+    }
+
+    private suspend fun buildNextUpItem(progress: WatchProgress): ContinueWatchingItem.NextUp? {
+        val nextEpisode = findNextEpisode(progress) ?: return null
+        val meta = nextEpisode.first
+        val video = nextEpisode.second
+        val info = NextUpInfo(
+            contentId = progress.contentId,
+            contentType = progress.contentType,
+            name = meta.name,
+            poster = meta.poster,
+            backdrop = meta.background,
+            logo = meta.logo,
+            videoId = video.id,
+            season = video.season ?: return null,
+            episode = video.episode ?: return null,
+            episodeTitle = video.title,
+            thumbnail = video.thumbnail,
+            lastWatched = progress.lastWatched
+        )
+        return ContinueWatchingItem.NextUp(info)
     }
 
     private suspend fun findNextEpisode(progress: WatchProgress): Pair<Meta, Video>? {

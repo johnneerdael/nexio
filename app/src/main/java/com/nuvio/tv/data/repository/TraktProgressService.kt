@@ -17,6 +17,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -116,6 +117,8 @@ class TraktProgressService @Inject constructor(
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = 60_000L
     private val optimisticTtlMs = 3 * 60_000L
+    private val recentWatchWindowMs = 30L * 24 * 60 * 60 * 1000
+    private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 30
     private val fastSyncThrottleMs = 3_000L
     private val baseRefreshIntervalMs = 60_000L
@@ -447,10 +450,17 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {
+        val recentCompletedEpisodes = fetchRecentEpisodeHistorySnapshot()
         val inProgressMovies = getPlayback("movies", force = force).mapNotNull { mapPlaybackMovie(it) }
         val inProgressEpisodes = getPlayback("episodes", force = force).mapNotNull { mapPlaybackEpisode(it) }
 
         val mergedByKey = linkedMapOf<String, WatchProgress>()
+
+        recentCompletedEpisodes
+            .sortedByDescending { it.lastWatched }
+            .forEach { progress ->
+                mergedByKey[progressKey(progress)] = progress
+            }
 
         (inProgressMovies + inProgressEpisodes)
             .sortedByDescending { it.lastWatched }
@@ -459,6 +469,81 @@ class TraktProgressService @Inject constructor(
             }
 
         return mergedByKey.values.sortedByDescending { it.lastWatched }
+    }
+
+    private suspend fun fetchRecentEpisodeHistorySnapshot(): List<WatchProgress> {
+        val cutoffMs = System.currentTimeMillis() - recentWatchWindowMs
+        val results = linkedMapOf<String, WatchProgress>()
+        var page = 1
+        val pageLimit = 100
+        val maxPages = 5
+
+        while (page <= maxPages) {
+            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+                traktApi.getEpisodeHistory(
+                    authorization = authHeader,
+                    page = page,
+                    limit = pageLimit
+                )
+            } ?: break
+
+            if (!response.isSuccessful) break
+            val items = response.body().orEmpty()
+            if (items.isEmpty()) break
+
+            var shouldStop = false
+            items.forEach { item ->
+                val mapped = mapEpisodeHistoryItem(item) ?: return@forEach
+                if (mapped.lastWatched < cutoffMs) {
+                    shouldStop = true
+                    return@forEach
+                }
+                results.putIfAbsent(progressKey(mapped), mapped)
+                if (results.size >= maxRecentEpisodeHistoryEntries) {
+                    shouldStop = true
+                    return@forEach
+                }
+            }
+
+            if (items.size < pageLimit || shouldStop) break
+            page += 1
+        }
+
+        return results.values.toList()
+    }
+
+    private fun mapEpisodeHistoryItem(item: TraktUserEpisodeHistoryItemDto): WatchProgress? {
+        val show = item.show ?: return null
+        val episode = item.episode ?: return null
+        val season = episode.season ?: return null
+        val number = episode.number ?: return null
+
+        val contentId = normalizeContentId(show.ids)
+        if (contentId.isBlank()) return null
+
+        val lastWatched = parseIsoToMillis(item.watchedAt)
+        // Avoid expensive metadata lookups for each history row.
+        val videoId = "$contentId:$season:$number"
+
+        return WatchProgress(
+            contentId = contentId,
+            contentType = "series",
+            name = show.title ?: contentId,
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = videoId,
+            season = season,
+            episode = number,
+            episodeTitle = episode.title,
+            position = 1L,
+            duration = 1L,
+            lastWatched = lastWatched,
+            progressPercent = 100f,
+            source = WatchProgress.SOURCE_TRAKT_HISTORY,
+            traktShowId = show.ids?.trakt,
+            traktEpisodeId = episode.ids?.trakt
+        )
     }
 
     private suspend fun fetchEpisodeProgressSnapshot(
