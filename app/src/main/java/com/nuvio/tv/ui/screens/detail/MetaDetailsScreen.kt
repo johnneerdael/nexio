@@ -68,6 +68,7 @@ import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaCastMember
+import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
@@ -177,6 +178,8 @@ fun MetaDetailsScreen(
                     blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
+                    mdbListRatings = uiState.mdbListRatings,
+                    showMdbListImdb = uiState.showMdbListImdb,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                     onEpisodeClick = { video ->
                         onPlayClick(
@@ -286,6 +289,8 @@ private fun MetaDetailsContent(
     blurUnwatchedEpisodes: Boolean,
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
+    mdbListRatings: MDBListRatings?,
+    showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
@@ -573,6 +578,8 @@ private fun MetaDetailsContent(
                         isMovieWatched = isMovieWatched,
                         isMovieWatchedPending = isMovieWatchedPending,
                         onToggleMovieWatched = onToggleMovieWatched,
+                        mdbListRatings = mdbListRatings,
+                        hideMetaInfoImdb = showMdbListImdb,
                         isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +

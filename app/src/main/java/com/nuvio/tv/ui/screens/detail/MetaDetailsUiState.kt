@@ -6,6 +6,7 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
+import com.nuvio.tv.domain.model.MDBListRatings
 
 data class MetaDetailsUiState(
     val isLoading: Boolean = true,
@@ -32,6 +33,8 @@ data class MetaDetailsUiState(
     val watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
     val blurUnwatchedEpisodes: Boolean = false,
+    val mdbListRatings: MDBListRatings? = null,
+    val showMdbListImdb: Boolean = false,
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )

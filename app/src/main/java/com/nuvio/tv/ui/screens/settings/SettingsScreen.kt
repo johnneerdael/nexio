@@ -70,6 +70,7 @@ internal enum class SettingsCategory {
     LAYOUT,
     PLUGINS,
     TMDB,
+    MDBLIST,
     PLAYBACK,
     TRAKT,
     ABOUT,
@@ -138,6 +139,13 @@ fun SettingsScreen(
                 destination = SettingsSectionDestination.Inline
             ),
             SettingsSectionSpec(
+                category = SettingsCategory.MDBLIST,
+                title = "MDBList",
+                icon = Icons.Default.Tune,
+                subtitle = "External ratings providers.",
+                destination = SettingsSectionDestination.Inline
+            ),
+            SettingsSectionSpec(
                 category = SettingsCategory.PLAYBACK,
                 title = "Playback",
                 icon = Icons.Default.Settings,
@@ -183,13 +191,14 @@ fun SettingsScreen(
         visibleSections.associate { it.category to FocusRequester() }
     }
     val contentFocusRequesters = remember {
-        mapOf(
-            SettingsCategory.APPEARANCE to FocusRequester(),
-            SettingsCategory.LAYOUT to FocusRequester(),
-            SettingsCategory.TMDB to FocusRequester(),
-            SettingsCategory.PLAYBACK to FocusRequester(),
-            SettingsCategory.ABOUT to FocusRequester()
-        )
+            mapOf(
+                SettingsCategory.APPEARANCE to FocusRequester(),
+                SettingsCategory.LAYOUT to FocusRequester(),
+                SettingsCategory.TMDB to FocusRequester(),
+                SettingsCategory.MDBLIST to FocusRequester(),
+                SettingsCategory.PLAYBACK to FocusRequester(),
+                SettingsCategory.ABOUT to FocusRequester()
+            )
     }
 
     val focusManager = LocalFocusManager.current
@@ -332,6 +341,9 @@ fun SettingsScreen(
                             )
                             SettingsCategory.TMDB -> TmdbSettingsContent(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.TMDB]
+                            )
+                            SettingsCategory.MDBLIST -> MDBListSettingsContent(
+                                initialFocusRequester = contentFocusRequesters[SettingsCategory.MDBLIST]
                             )
                             SettingsCategory.ABOUT -> AboutSettingsContent(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.ABOUT]

@@ -9,6 +9,7 @@ import com.nuvio.tv.data.remote.api.GitHubReleaseApi
 import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.api.TrailerApi
 import com.nuvio.tv.data.remote.api.IntroDbApi
+import com.nuvio.tv.data.remote.api.MDBListApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.squareup.moshi.Moshi
@@ -211,4 +212,21 @@ object NetworkModule {
     @Singleton
     fun provideTrailerApi(@Named("trailer") retrofit: Retrofit): TrailerApi =
         retrofit.create(TrailerApi::class.java)
+
+    // --- MDBList API ---
+
+    @Provides
+    @Singleton
+    @Named("mdblist")
+    fun provideMDBListRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.mdblist.com/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
+        retrofit.create(MDBListApi::class.java)
 }

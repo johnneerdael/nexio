@@ -8,6 +8,7 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -40,6 +41,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val mdbListRepository: MDBListRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val watchedItemsPreferences: WatchedItemsPreferences,
@@ -172,7 +174,14 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadMeta() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    error = null,
+                    mdbListRatings = null,
+                    showMdbListImdb = false
+                )
+            }
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
 
@@ -251,6 +260,24 @@ class MetaDetailsViewModel @Inject constructor(
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
         val enriched = enrichMeta(meta)
         applyMeta(enriched)
+        loadMDBListRatings(enriched)
+    }
+
+    private suspend fun loadMDBListRatings(meta: Meta) {
+        val ratingsResult = runCatching {
+            mdbListRepository.getRatingsForMeta(
+                meta = meta,
+                fallbackItemId = itemId,
+                fallbackItemType = itemType
+            )
+        }.getOrNull()
+
+        _uiState.update { state ->
+            state.copy(
+                mdbListRatings = ratingsResult?.ratings,
+                showMdbListImdb = ratingsResult?.hasImdbRating == true
+            )
+        }
     }
 
     private suspend fun enrichMeta(meta: Meta): Meta {

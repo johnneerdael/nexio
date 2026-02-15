@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,7 +55,9 @@ import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
 import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -82,6 +85,8 @@ fun HeroContentSection(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     onToggleMovieWatched: () -> Unit,
+    mdbListRatings: MDBListRatings? = null,
+    hideMetaInfoImdb: Boolean = false,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
@@ -218,6 +223,11 @@ fun HeroContentSection(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    if (mdbListRatings?.isEmpty() == false) {
+                        MDBListRatingsRow(ratings = mdbListRatings)
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
                     // Director/Writer line above description
                     val directorLine = meta.director.takeIf { it.isNotEmpty() }?.joinToString(", ")
                     val writerLine = meta.writer.takeIf { it.isNotEmpty() }?.joinToString(", ")
@@ -304,7 +314,7 @@ fun HeroContentSection(
                         }
                     }
 
-                    MetaInfoRow(meta = meta)
+                    MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb)
                 }
             }
         }
@@ -450,12 +460,17 @@ private fun ActionIconButton(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun MetaInfoRow(meta: Meta) {
+private fun MetaInfoRow(
+    meta: Meta,
+    hideImdbRating: Boolean
+) {
     val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
     val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
     val yearText = remember(meta.releaseInfo) {
         meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
     }
+    val imdbRating = if (hideImdbRating) null else meta.imdbRating
+    val shouldShowImdbRating = imdbRating != null
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Primary row: Genres, Runtime, Release, Ratings
@@ -489,10 +504,12 @@ private fun MetaInfoRow(meta: Meta) {
                     style = MaterialTheme.typography.labelLarge,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
-                MetaInfoDivider()
+                if (shouldShowImdbRating) {
+                    MetaInfoDivider()
+                }
             }
 
-            meta.imdbRating?.let { rating ->
+            imdbRating?.let { rating ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -547,6 +564,97 @@ private fun MetaInfoRow(meta: Meta) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MDBListRatingsRow(ratings: MDBListRatings) {
+    val context = LocalContext.current
+    val items = remember(ratings) {
+        listOf(
+            Triple("trakt", com.nuvio.tv.R.raw.mdblist_trakt, ratings.trakt),
+            Triple("imdb", com.nuvio.tv.R.raw.imdb_logo_2016, ratings.imdb),
+            Triple("tmdb", com.nuvio.tv.R.raw.mdblist_tmdb, ratings.tmdb),
+            Triple("letterboxd", com.nuvio.tv.R.raw.mdblist_letterboxd, ratings.letterboxd),
+            Triple("tomatoes", com.nuvio.tv.R.raw.mdblist_tomatoes, ratings.tomatoes)
+        )
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items.forEach { (provider, logoRes, rating) ->
+            if (rating != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val model = remember(logoRes) {
+                        ImageRequest.Builder(context)
+                            .data(logoRes)
+                            .decoderFactory(SvgDecoder.Factory())
+                            .build()
+                    }
+                    AsyncImage(
+                        model = model,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Text(
+                        text = formatMDBListRating(provider, rating),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NuvioTheme.extendedColors.textSecondary
+                    )
+                }
+            }
+        }
+
+        ratings.audience?.let { rating ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = com.nuvio.tv.R.drawable.mdblist_audience),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = formatMDBListRating("audience", rating),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NuvioTheme.extendedColors.textSecondary
+                )
+            }
+        }
+
+        ratings.metacritic?.let { rating ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = com.nuvio.tv.R.drawable.mdblist_metacritic),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = formatMDBListRating("metacritic", rating),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NuvioTheme.extendedColors.textSecondary
+                )
+            }
+        }
+    }
+}
+
+private fun formatMDBListRating(provider: String, rating: Double): String {
+    return when (provider) {
+        "imdb", "tmdb", "letterboxd" -> String.format("%.1f", rating)
+        else -> {
+            if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
         }
     }
 }
