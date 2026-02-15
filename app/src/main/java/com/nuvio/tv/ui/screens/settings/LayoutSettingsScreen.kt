@@ -100,6 +100,7 @@ fun LayoutSettingsScreen(
 private enum class LayoutSettingsSection {
     HOME_LAYOUT,
     HOME_CONTENT,
+    DETAIL_PAGE,
     FOCUSED_POSTER,
     POSTER_CARD_STYLE
 }
@@ -112,11 +113,13 @@ fun LayoutSettingsContent(
 
     var homeLayoutExpanded by rememberSaveable { mutableStateOf(false) }
     var homeContentExpanded by rememberSaveable { mutableStateOf(false) }
+    var detailPageExpanded by rememberSaveable { mutableStateOf(false) }
     var focusedPosterExpanded by rememberSaveable { mutableStateOf(false) }
     var posterCardStyleExpanded by rememberSaveable { mutableStateOf(false) }
 
     val homeLayoutHeaderFocus = remember { FocusRequester() }
     val homeContentHeaderFocus = remember { FocusRequester() }
+    val detailPageHeaderFocus = remember { FocusRequester() }
     val focusedPosterHeaderFocus = remember { FocusRequester() }
     val posterCardStyleHeaderFocus = remember { FocusRequester() }
 
@@ -130,6 +133,11 @@ fun LayoutSettingsContent(
     LaunchedEffect(homeContentExpanded, focusedSection) {
         if (!homeContentExpanded && focusedSection == LayoutSettingsSection.HOME_CONTENT) {
             homeContentHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(detailPageExpanded, focusedSection) {
+        if (!detailPageExpanded && focusedSection == LayoutSettingsSection.DETAIL_PAGE) {
+            detailPageHeaderFocus.requestFocus()
         }
     }
     LaunchedEffect(focusedPosterExpanded, focusedSection) {
@@ -297,6 +305,18 @@ fun LayoutSettingsContent(
                     },
                     onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                 )
+            }
+        }
+
+        item {
+            CollapsibleSectionCard(
+                title = "Detail Page",
+                description = "Settings for the detail and episode screens.",
+                expanded = detailPageExpanded,
+                onToggle = { detailPageExpanded = !detailPageExpanded },
+                focusRequester = detailPageHeaderFocus,
+                onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+            ) {
                 CompactToggleRow(
                     title = "Blur Unwatched Episodes",
                     subtitle = "Blur episode thumbnails until watched to avoid spoilers.",
@@ -306,7 +326,7 @@ fun LayoutSettingsContent(
                             LayoutSettingsEvent.SetBlurUnwatchedEpisodes(!uiState.blurUnwatchedEpisodes)
                         )
                     },
-                    onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
                 )
             }
         }
