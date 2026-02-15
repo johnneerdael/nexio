@@ -104,7 +104,7 @@ fun ContinueWatchingSection(
         ) {
             Text(
                 text = "Continue Watching",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 color = NuvioColors.TextPrimary
             )
         }
