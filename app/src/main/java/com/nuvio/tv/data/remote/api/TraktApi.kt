@@ -90,14 +90,18 @@ interface TraktApi {
     @GET("sync/playback/{type}")
     suspend fun getPlayback(
         @Header("Authorization") authorization: String,
-        @Path("type") type: String
+        @Path("type") type: String,
+        @Query("start_at") startAt: String? = null,
+        @Query("end_at") endAt: String? = null
     ): Response<List<TraktPlaybackItemDto>>
 
     @GET("sync/history/episodes")
     suspend fun getEpisodeHistory(
         @Header("Authorization") authorization: String,
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 100
+        @Query("limit") limit: Int = 100,
+        @Query("start_at") startAt: String? = null,
+        @Query("end_at") endAt: String? = null
     ): Response<List<TraktUserEpisodeHistoryItemDto>>
 
     @POST("sync/history")

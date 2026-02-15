@@ -10,7 +10,10 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
 import android.util.Log
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import retrofit2.Response
 import java.io.IOException
 import javax.inject.Inject
@@ -31,6 +34,9 @@ class TraktAuthService @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore
 ) {
     private val refreshLeewaySeconds = 60L
+    private val writeRequestMutex = Mutex()
+    private var lastWriteRequestAtMs = 0L
+    private val minWriteIntervalMs = 1_000L
 
     fun hasRequiredCredentials(): Boolean {
         return BuildConfig.TRAKT_CLIENT_ID.isNotBlank() && BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
@@ -175,23 +181,48 @@ class TraktAuthService @Inject constructor(
     suspend fun <T> executeAuthorizedRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
-        val firstToken = getValidAccessToken() ?: return null
-        val response = try {
-            call("Bearer $firstToken")
-        } catch (e: IOException) {
-            Log.w("TraktAuthService", "Network error during authorized request", e)
-            return null
-        }
-        if (response.code() == 401 && refreshTokenIfNeeded(force = true)) {
-            val refreshedToken = getCurrentAuthState().accessToken ?: return response
-            return try {
-                call("Bearer $refreshedToken")
+        var token = getValidAccessToken() ?: return null
+        var retriedAuth = false
+        var retriedRateLimit = false
+
+        while (true) {
+            val response = try {
+                call("Bearer $token")
             } catch (e: IOException) {
-                Log.w("TraktAuthService", "Network error during retry request", e)
-                null
+                Log.w("TraktAuthService", "Network error during authorized request", e)
+                return null
             }
+
+            if (response.code() == 401 && !retriedAuth && refreshTokenIfNeeded(force = true)) {
+                token = getCurrentAuthState().accessToken ?: return response
+                retriedAuth = true
+                continue
+            }
+
+            if (response.code() == 429 && !retriedRateLimit) {
+                val retryAfterSeconds = response.headers()["Retry-After"]
+                    ?.toLongOrNull()
+                    ?.coerceIn(1L, 60L)
+                    ?: 2L
+                delay(retryAfterSeconds * 1000L)
+                retriedRateLimit = true
+                continue
+            }
+
+            return response
         }
-        return response
+    }
+
+    suspend fun <T> executeAuthorizedWriteRequest(
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T>? {
+        writeRequestMutex.withLock {
+            val now = System.currentTimeMillis()
+            val waitMs = (lastWriteRequestAtMs + minWriteIntervalMs - now).coerceAtLeast(0L)
+            if (waitMs > 0L) delay(waitMs)
+            lastWriteRequestAtMs = System.currentTimeMillis()
+        }
+        return executeAuthorizedRequest(call)
     }
 
     private suspend fun getValidAccessToken(): String? {

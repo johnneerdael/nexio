@@ -271,7 +271,7 @@ class TraktProgressService @Inject constructor(
         val body = buildHistoryAddRequest(progress, title, year)
             ?: throw IllegalStateException("Insufficient Trakt IDs to mark watched")
 
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.addHistory(authHeader, body)
         } ?: throw IllegalStateException("Trakt request failed")
 
@@ -314,7 +314,7 @@ class TraktProgressService @Inject constructor(
             .forEach { item ->
                 item.id?.let { playbackId ->
                     Log.d(TAG, "removeProgress deleting movie playbackId=$playbackId")
-                    traktAuthService.executeAuthorizedRequest { authHeader ->
+                    traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                         traktApi.deletePlayback(authHeader, playbackId)
                     }
                 }
@@ -336,7 +336,7 @@ class TraktProgressService @Inject constructor(
                         TAG,
                         "removeProgress deleting episode playbackId=$playbackId s=${item.episode?.season} e=${item.episode?.number}"
                     )
-                    traktAuthService.executeAuthorizedRequest { authHeader ->
+                    traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                         traktApi.deletePlayback(authHeader, playbackId)
                     }
                 }
@@ -378,7 +378,7 @@ class TraktProgressService @Inject constructor(
             )
         }
 
-        traktAuthService.executeAuthorizedRequest { authHeader ->
+        traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.removeHistory(authHeader, removeBody)
         }
 
@@ -433,8 +433,8 @@ class TraktProgressService @Inject constructor(
     private suspend fun hasActivityChanged(): Boolean {
         val response = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getLastActivities(authHeader)
-        } ?: return true
-        if (!response.isSuccessful) return true
+        } ?: return !hasLoadedRemoteProgress.value
+        if (!response.isSuccessful) return !hasLoadedRemoteProgress.value
 
         val activities = response.body() ?: return true
         val fingerprint = listOfNotNull(
@@ -451,8 +451,9 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {
         val recentCompletedEpisodes = fetchRecentEpisodeHistorySnapshot()
-        val inProgressMovies = getPlayback("movies", force = force).mapNotNull { mapPlaybackMovie(it) }
-        val inProgressEpisodes = getPlayback("episodes", force = force).mapNotNull { mapPlaybackEpisode(it) }
+        val playbackStartAt = toTraktUtcDateTime(System.currentTimeMillis() - recentWatchWindowMs)
+        val inProgressMovies = getPlayback("movies", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackMovie(it) }
+        val inProgressEpisodes = getPlayback("episodes", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackEpisode(it) }
 
         val mergedByKey = linkedMapOf<String, WatchProgress>()
 
@@ -483,7 +484,8 @@ class TraktProgressService @Inject constructor(
                 traktApi.getEpisodeHistory(
                     authorization = authHeader,
                     page = page,
-                    limit = pageLimit
+                    limit = pageLimit,
+                    startAt = toTraktUtcDateTime(cutoffMs)
                 )
             } ?: break
 
@@ -505,7 +507,8 @@ class TraktProgressService @Inject constructor(
                 }
             }
 
-            if (items.size < pageLimit || shouldStop) break
+            val pageCount = response.headers()["X-Pagination-Page-Count"]?.toIntOrNull()
+            if (items.size < pageLimit || shouldStop || (pageCount != null && page >= pageCount)) break
             page += 1
         }
 
@@ -570,7 +573,10 @@ class TraktProgressService @Inject constructor(
             }
         }
 
-        val inProgress = getPlayback("episodes")
+        val inProgress = getPlayback(
+            type = "episodes",
+            startAt = toTraktUtcDateTime(System.currentTimeMillis() - recentWatchWindowMs)
+        )
             .mapNotNull { mapPlaybackEpisode(it) }
             .filter { it.contentId == contentId }
 
@@ -583,29 +589,43 @@ class TraktProgressService @Inject constructor(
         return completed
     }
 
-    private suspend fun getPlayback(type: String, force: Boolean = false): List<TraktPlaybackItemDto> {
+    private suspend fun getPlayback(
+        type: String,
+        force: Boolean = false,
+        startAt: String? = null,
+        endAt: String? = null
+    ): List<TraktPlaybackItemDto> {
         val now = System.currentTimeMillis()
-        cacheMutex.withLock {
-            val cache = when (type) {
-                "movies" -> cachedMoviesPlayback
-                "episodes" -> cachedEpisodesPlayback
-                else -> null
-            }
-            if (!force && cache != null && now - cache.updatedAtMs <= playbackCacheTtlMs) {
-                return cache.value
+        if (startAt == null && endAt == null) {
+            cacheMutex.withLock {
+                val cache = when (type) {
+                    "movies" -> cachedMoviesPlayback
+                    "episodes" -> cachedEpisodesPlayback
+                    else -> null
+                }
+                if (!force && cache != null && now - cache.updatedAtMs <= playbackCacheTtlMs) {
+                    return cache.value
+                }
             }
         }
 
         val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getPlayback(authHeader, type)
+            traktApi.getPlayback(
+                authorization = authHeader,
+                type = type,
+                startAt = startAt,
+                endAt = endAt
+            )
         } ?: return emptyList()
 
         val value = if (response.isSuccessful) response.body().orEmpty() else emptyList()
-        cacheMutex.withLock {
-            val timed = TimedCache(value = value, updatedAtMs = now)
-            when (type) {
-                "movies" -> cachedMoviesPlayback = timed
-                "episodes" -> cachedEpisodesPlayback = timed
+        if (startAt == null && endAt == null) {
+            cacheMutex.withLock {
+                val timed = TimedCache(value = value, updatedAtMs = now)
+                when (type) {
+                    "movies" -> cachedMoviesPlayback = timed
+                    "episodes" -> cachedEpisodesPlayback = timed
+                }
             }
         }
         return value

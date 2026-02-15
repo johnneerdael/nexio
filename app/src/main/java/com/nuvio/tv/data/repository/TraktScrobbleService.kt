@@ -74,7 +74,7 @@ class TraktScrobbleService @Inject constructor(
 
         val requestBody = buildRequestBody(item, clampedProgress)
 
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             when (action) {
                 "start" -> traktApi.scrobbleStart(authHeader, requestBody)
                 else -> traktApi.scrobbleStop(authHeader, requestBody)
