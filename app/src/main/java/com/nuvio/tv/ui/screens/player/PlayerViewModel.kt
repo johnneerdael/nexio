@@ -288,6 +288,22 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+
+    private fun refreshSubtitlesForCurrentEpisode() {
+        autoSubtitleSelected = false
+        hasScannedTextTracksOnce = false
+        pendingAddonSubtitleLanguage = null
+        _uiState.update {
+            it.copy(
+                addonSubtitles = emptyList(),
+                selectedAddonSubtitle = null,
+                selectedSubtitleTrackIndex = -1,
+                isLoadingAddonSubtitles = true,
+                addonSubtitlesError = null
+            )
+        }
+        fetchAddonSubtitles()
+    }
     
     private fun observeBlurUnwatchedEpisodes() {
         viewModelScope.launch {
@@ -1383,6 +1399,7 @@ class PlayerViewModel @Inject constructor(
         }
 
         updateEpisodeDescription()
+        refreshSubtitlesForCurrentEpisode()
 
         playbackStartedForParentalGuide = false
         skipIntervals = emptyList()
