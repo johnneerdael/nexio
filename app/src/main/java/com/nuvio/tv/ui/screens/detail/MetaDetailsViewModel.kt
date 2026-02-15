@@ -301,10 +301,18 @@ class MetaDetailsViewModel @Inject constructor(
 
         // Group: Credits (cast with photos, director, writer)
         if (enrichment != null && settings.useCredits) {
-            if (enrichment.castMembers.isNotEmpty()) {
+            val peopleCredits = buildList {
+                addAll(enrichment.directorMembers)
+                addAll(enrichment.writerMembers)
+                addAll(enrichment.castMembers)
+            }
+                .filter { it.name.isNotBlank() }
+                .distinctBy { it.tmdbId ?: (it.name.lowercase() + "|" + (it.character ?: "")) }
+
+            if (peopleCredits.isNotEmpty()) {
                 updated = updated.copy(
-                    castMembers = enrichment.castMembers,
-                    cast = enrichment.castMembers.map { it.name }
+                    castMembers = peopleCredits,
+                    cast = enrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
                 )
             }
             updated = updated.copy(

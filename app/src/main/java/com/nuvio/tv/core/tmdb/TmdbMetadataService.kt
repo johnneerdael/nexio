@@ -136,18 +136,100 @@ class TmdbMetadataService @Inject constructor(
                         )
                     }
 
-                val director = credits?.crew
+                val creatorMembers = if (tmdbType == "tv") {
+                    details?.createdBy
+                        .orEmpty()
+                        .mapNotNull { creator ->
+                            val tmdbPersonId = creator.id ?: return@mapNotNull null
+                            val name = creator.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            MetaCastMember(
+                                name = name,
+                                character = "Creator",
+                                photo = buildImageUrl(creator.profilePath, size = "w500"),
+                                tmdbId = tmdbPersonId
+                            )
+                        }
+                        .distinctBy { it.tmdbId ?: it.name.lowercase() }
+                } else {
+                    emptyList()
+                }
+
+                val creator = if (tmdbType == "tv") {
+                    details?.createdBy
+                        .orEmpty()
+                        .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
+                } else {
+                    emptyList()
+                }
+
+                val directorCrew = credits?.crew
                     .orEmpty()
                     .filter { it.job.equals("Director", ignoreCase = true) }
+
+                val directorMembers = directorCrew
+                    .mapNotNull { member ->
+                        val tmdbPersonId = member.id ?: return@mapNotNull null
+                        val name = member.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        MetaCastMember(
+                            name = name,
+                            character = "Director",
+                            photo = buildImageUrl(member.profilePath, size = "w500"),
+                            tmdbId = tmdbPersonId
+                        )
+                    }
+                    .distinctBy { it.tmdbId ?: it.name.lowercase() }
+
+                val director = directorCrew
                     .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
 
-                val writer = credits?.crew
+                val writerCrew = credits?.crew
                     .orEmpty()
                     .filter { crew ->
                         val job = crew.job?.lowercase() ?: ""
                         job.contains("writer") || job.contains("screenplay")
                     }
+
+                val writerMembers = writerCrew
+                    .mapNotNull { member ->
+                        val tmdbPersonId = member.id ?: return@mapNotNull null
+                        val name = member.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        MetaCastMember(
+                            name = name,
+                            character = "Writer",
+                            photo = buildImageUrl(member.profilePath, size = "w500"),
+                            tmdbId = tmdbPersonId
+                        )
+                    }
+                    .distinctBy { it.tmdbId ?: it.name.lowercase() }
+
+                val writer = writerCrew
                     .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
+
+                // Only expose either Director or Writer people (prefer Director).
+                val hasCreator = creatorMembers.isNotEmpty() || creator.isNotEmpty()
+                val hasDirector = directorMembers.isNotEmpty() || director.isNotEmpty()
+
+                val exposedDirectorMembers = when {
+                    tmdbType == "tv" && hasCreator -> creatorMembers
+                    tmdbType != "tv" && hasDirector -> directorMembers
+                    else -> emptyList()
+                }
+                val exposedWriterMembers = when {
+                    tmdbType == "tv" && hasCreator -> emptyList()
+                    tmdbType != "tv" && hasDirector -> emptyList()
+                    else -> writerMembers
+                }
+
+                val exposedDirector = when {
+                    tmdbType == "tv" && hasCreator -> creator
+                    tmdbType != "tv" && hasDirector -> director
+                    else -> emptyList()
+                }
+                val exposedWriter = when {
+                    tmdbType == "tv" && hasCreator -> emptyList()
+                    tmdbType != "tv" && hasDirector -> emptyList()
+                    else -> writer
+                }
 
                 if (
                     genres.isEmpty() && description == null && backdrop == null && logo == null &&
@@ -165,12 +247,14 @@ class TmdbMetadataService @Inject constructor(
                     backdrop = backdrop,
                     logo = logo,
                     poster = poster,
+                    directorMembers = exposedDirectorMembers,
+                    writerMembers = exposedWriterMembers,
                     castMembers = castMembers,
                     releaseInfo = releaseInfo,
                     rating = rating,
                     runtimeMinutes = runtime,
-                    director = director,
-                    writer = writer,
+                    director = exposedDirector,
+                    writer = exposedWriter,
                     productionCompanies = productionCompanies,
                     networks = networks,
                     countries = countries,
@@ -321,6 +405,8 @@ data class TmdbEnrichment(
     val backdrop: String?,
     val logo: String?,
     val poster: String?,
+    val directorMembers: List<MetaCastMember>,
+    val writerMembers: List<MetaCastMember>,
     val castMembers: List<MetaCastMember>,
     val releaseInfo: String?,
     val rating: Double?,

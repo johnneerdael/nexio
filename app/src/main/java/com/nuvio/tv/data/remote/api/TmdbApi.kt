@@ -123,6 +123,7 @@ data class TmdbDetailsResponse(
     @Json(name = "name") val name: String? = null,
     @Json(name = "overview") val overview: String? = null,
     @Json(name = "genres") val genres: List<TmdbGenre>? = null,
+    @Json(name = "created_by") val createdBy: List<TmdbCreatedBy>? = null,
     @Json(name = "release_date") val releaseDate: String? = null,
     @Json(name = "first_air_date") val firstAirDate: String? = null,
     @Json(name = "runtime") val runtime: Int? = null,
@@ -135,6 +136,13 @@ data class TmdbDetailsResponse(
     @Json(name = "original_language") val originalLanguage: String? = null,
     @Json(name = "backdrop_path") val backdropPath: String? = null,
     @Json(name = "poster_path") val posterPath: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCreatedBy(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "profile_path") val profilePath: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -171,9 +179,11 @@ data class TmdbCastMember(
 
 @JsonClass(generateAdapter = true)
 data class TmdbCrewMember(
+    @Json(name = "id") val id: Int? = null,
     @Json(name = "name") val name: String? = null,
     @Json(name = "job") val job: String? = null,
-    @Json(name = "department") val department: String? = null
+    @Json(name = "department") val department: String? = null,
+    @Json(name = "profile_path") val profilePath: String? = null
 )
 
 @JsonClass(generateAdapter = true)

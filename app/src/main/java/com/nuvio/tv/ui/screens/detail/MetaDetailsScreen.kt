@@ -378,6 +378,32 @@ private fun MetaDetailsContent(
         }
     }
 
+    fun isLeadCreditRole(role: String?): Boolean {
+        val r = role?.trim().orEmpty()
+        return r.equals("Creator", ignoreCase = true) ||
+            r.equals("Director", ignoreCase = true) ||
+            r.equals("Writer", ignoreCase = true)
+    }
+
+    val directorWriterMembers = remember(castMembersToShow) {
+        val creators = castMembersToShow.filter { it.tmdbId != null && it.character.equals("Creator", ignoreCase = true) }
+        val directors = castMembersToShow.filter { it.tmdbId != null && it.character.equals("Director", ignoreCase = true) }
+        val writers = castMembersToShow.filter { it.tmdbId != null && it.character.equals("Writer", ignoreCase = true) }
+        when {
+            creators.isNotEmpty() -> creators
+            directors.isNotEmpty() -> directors
+            else -> writers
+        }
+    }
+
+    val normalCastMembers = remember(castMembersToShow, directorWriterMembers) {
+        val leadingIds = directorWriterMembers.mapNotNull { it.tmdbId }.toSet()
+        castMembersToShow.filterNot {
+            val id = it.tmdbId
+            id != null && id in leadingIds && isLeadCreditRole(it.character)
+        }
+    }
+
     // Backdrop alpha for crossfade
     val backdropAlpha by animateFloatAsState(
         targetValue = if (isTrailerPlaying) 0f else 1f,
@@ -590,10 +616,12 @@ private fun MetaDetailsContent(
             }
 
             // Cast section below episodes
-            if (castMembersToShow.isNotEmpty()) {
+            if (directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()) {
                 item(key = "cast", contentType = "horizontal_row") {
                     CastSection(
-                        cast = castMembersToShow,
+                        cast = normalCastMembers,
+                        title = "Creator and Casts",
+                        leadingCast = directorWriterMembers,
                         preferredFocusedCastTmdbId = lastOpenedCastTmdbId,
                         onCastMemberClick = { member ->
                             member.tmdbId?.let { id ->
