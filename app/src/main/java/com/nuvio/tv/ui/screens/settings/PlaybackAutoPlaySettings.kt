@@ -737,17 +737,17 @@ private fun StreamRegexDialog(
     val keyboardController = LocalSoftwareKeyboardController.current
     val presets = remember {
         listOf(
-            "Any 1080p+" to ".*(2160p|4k|1080p).*",
-            "4K / Remux" to ".*(2160p|4k|remux).*",
-            "1080p Standard" to ".*(1080p|full\\s*hd).*",
-            "720p / Smaller" to ".*(720p|webrip|web-dl).*",
-            "WEB Sources" to ".*(web[-\\s]?dl|webrip).*",
-            "BluRay Quality" to ".*(bluray|b[dr]rip|remux).*",
-            "HEVC / x265" to ".*(hevc|x265|h\\.265).*",
-            "AVC / x264" to ".*(x264|h\\.264|avc).*",
-            "HDR / Dolby Vision" to ".*(hdr|hdr10\\+?|dv|dolby\\s*vision).*",
-            "Dolby Atmos / DTS" to ".*(atmos|truehd|dts[-\\s]?hd|dtsx?).*",
-            "English" to ".*(\\beng\\b|english).*",
+            "Any 1080p+" to "(2160p|4k|1080p)",
+            "4K / Remux" to "(2160p|4k|remux)",
+            "1080p Standard" to "(1080p|full\\s*hd)",
+            "720p / Smaller" to "(720p|webrip|web-dl)",
+            "WEB Sources" to "(web[-\\s]?dl|webrip)",
+            "BluRay Quality" to "(bluray|b[dr]rip|remux)",
+            "HEVC / x265" to "(hevc|x265|h\\.265)",
+            "AVC / x264" to "(x264|h\\.264|avc)",
+            "HDR / Dolby Vision" to "(hdr|hdr10\\+?|dv|dolby\\s*vision)",
+            "Dolby Atmos / DTS" to "(atmos|truehd|dts[-\\s]?hd|dtsx?)",
+            "English" to "(\\beng\\b|english)",
             "No CAM/TS" to "^(?!.*\\b(cam|hdcam|ts|telesync)\\b).*$"
         )
     }
@@ -774,7 +774,7 @@ private fun StreamRegexDialog(
                     color = NuvioColors.TextPrimary
                 )
                 Text(
-                    text = "Matches full stream text (name/title/description/addon/url). Use .*term.* for contains-style matching.",
+                    text = "Matches against stream name/title/description/addon/url. Example: 4K|2160p|Remux",
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
                 )
