@@ -12,6 +12,7 @@ import androidx.media3.session.MediaSession
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -2166,16 +2167,8 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnToggleAspectRatio -> {
                 val currentMode = _uiState.value.resizeMode
-                val newMode = if (currentMode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) {
-                    androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                } else {
-                    androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                }
-                val modeText = if (newMode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) {
-                    "Fit"
-                } else {
-                    "Zoom"
-                }
+                val newMode = nextResizeMode(currentMode)
+                val modeText = resizeModeLabel(newMode)
                 Log.d("PlayerViewModel", "Aspect ratio toggled: $currentMode -> $newMode")
                 _uiState.update { 
                     it.copy(
@@ -2191,6 +2184,28 @@ class PlayerViewModel @Inject constructor(
                     _uiState.update { it.copy(showAspectRatioIndicator = false) }
                 }
             }
+        }
+    }
+
+    private fun nextResizeMode(currentMode: Int): Int {
+        return when (currentMode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+            AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
+            AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+    }
+
+    private fun resizeModeLabel(mode: Int): String {
+        return when (mode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> "Fit (Original)"
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
+            AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH -> "Fit Width"
+            AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT -> "Fit Height"
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"
+            else -> "Fit (Original)"
         }
     }
 
