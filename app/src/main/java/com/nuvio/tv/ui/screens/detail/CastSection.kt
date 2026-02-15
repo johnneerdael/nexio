@@ -38,7 +38,8 @@ import com.nuvio.tv.ui.theme.NuvioColors
 @Composable
 fun CastSection(
     cast: List<MetaCastMember>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCastMemberClick: (MetaCastMember) -> Unit = {}
 ) {
     if (cast.isEmpty()) return
 
@@ -67,7 +68,10 @@ fun CastSection(
                     member.name + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
                 }
             ) { member ->
-                CastMemberItem(member = member)
+                CastMemberItem(
+                    member = member,
+                    onClick = { onCastMemberClick(member) }
+                )
             }
         }
     }
@@ -76,14 +80,15 @@ fun CastSection(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CastMemberItem(
-    member: MetaCastMember
+    member: MetaCastMember,
+    onClick: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.width(150.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Card(
-            onClick = { /* no-op (for focus + row scrolling) */ },
+            onClick = onClick,
             modifier = Modifier
                 .size(100.dp),
             shape = CardDefaults.shape(

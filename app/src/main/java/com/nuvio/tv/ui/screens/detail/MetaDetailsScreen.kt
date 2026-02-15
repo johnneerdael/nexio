@@ -89,6 +89,7 @@ private enum class RestoreTarget {
 fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     onBackPress: () -> Unit,
+    onNavigateToCastDetail: (personId: Int, personName: String) -> Unit = { _, _ -> },
     onPlayClick: (
         videoId: String,
         contentType: String,
@@ -221,7 +222,8 @@ fun MetaDetailsScreen(
                     trailerUrl = uiState.trailerUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
-                    restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken
+                    restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
+                    onNavigateToCastDetail = onNavigateToCastDetail
                 )
             }
         }
@@ -295,7 +297,8 @@ private fun MetaDetailsContent(
     trailerUrl: String?,
     isTrailerPlaying: Boolean,
     onTrailerEnded: () -> Unit,
-    restorePlayFocusAfterTrailerBackToken: Int
+    restorePlayFocusAfterTrailerBackToken: Int,
+    onNavigateToCastDetail: (personId: Int, personName: String) -> Unit = { _, _ -> }
 ) {
     val isSeries = remember(meta.type, meta.videos) {
         meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
@@ -587,7 +590,14 @@ private fun MetaDetailsContent(
             // Cast section below episodes
             if (castMembersToShow.isNotEmpty()) {
                 item(key = "cast", contentType = "horizontal_row") {
-                    CastSection(cast = castMembersToShow)
+                    CastSection(
+                        cast = castMembersToShow,
+                        onCastMemberClick = { member ->
+                            member.tmdbId?.let { id ->
+                                onNavigateToCastDetail(id, member.name)
+                            }
+                        }
+                    )
                 }
             }
 

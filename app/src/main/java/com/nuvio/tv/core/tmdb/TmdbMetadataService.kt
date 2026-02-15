@@ -6,6 +6,9 @@ import com.nuvio.tv.data.remote.api.TmdbEpisode
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.MetaCompany
+import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.model.PersonDetail
+import com.nuvio.tv.domain.model.PosterShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -24,6 +27,7 @@ class TmdbMetadataService @Inject constructor(
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
     private val episodeCache = ConcurrentHashMap<String, Map<Pair<Int, Int>, TmdbEpisodeEnrichment>>()
+    private val personCache = ConcurrentHashMap<Int, PersonDetail>()
 
     suspend fun fetchEnrichment(
         tmdbId: String,
@@ -127,7 +131,8 @@ class TmdbMetadataService @Inject constructor(
                         MetaCastMember(
                             name = name,
                             character = member.character?.takeIf { it.isNotBlank() },
-                            photo = buildImageUrl(member.profilePath, size = "w500")
+                            photo = buildImageUrl(member.profilePath, size = "w500"),
+                            tmdbId = member.id
                         )
                     }
 
@@ -222,6 +227,91 @@ class TmdbMetadataService @Inject constructor(
             ?.replace('_', '-')
             ?: "en"
     }
+
+    suspend fun fetchPersonDetail(personId: Int): PersonDetail? =
+        withContext(Dispatchers.IO) {
+            personCache[personId]?.let { return@withContext it }
+
+            try {
+                val (person, credits) = coroutineScope {
+                    val personDeferred = async {
+                        tmdbApi.getPersonDetails(personId, TMDB_API_KEY).body()
+                    }
+                    val creditsDeferred = async {
+                        tmdbApi.getPersonCombinedCredits(personId, TMDB_API_KEY).body()
+                    }
+                    Pair(personDeferred.await(), creditsDeferred.await())
+                }
+
+                if (person == null) return@withContext null
+
+                val seenMovieIds = mutableSetOf<Int>()
+                val movieCredits = credits?.cast
+                    .orEmpty()
+                    .filter { it.mediaType == "movie" && it.posterPath != null }
+                    .sortedByDescending { it.voteAverage ?: 0.0 }
+                    .mapNotNull { credit ->
+                        if (!seenMovieIds.add(credit.id)) return@mapNotNull null
+                        val title = credit.title ?: credit.name ?: return@mapNotNull null
+                        val year = credit.releaseDate?.take(4)
+                        MetaPreview(
+                            id = "tmdb:${credit.id}",
+                            type = ContentType.MOVIE,
+                            name = title,
+                            poster = buildImageUrl(credit.posterPath, "w500"),
+                            posterShape = PosterShape.POSTER,
+                            background = buildImageUrl(credit.backdropPath, "w1280"),
+                            logo = null,
+                            description = credit.overview?.takeIf { it.isNotBlank() },
+                            releaseInfo = year,
+                            imdbRating = credit.voteAverage?.toFloat(),
+                            genres = emptyList()
+                        )
+                    }
+
+                val seenTvIds = mutableSetOf<Int>()
+                val tvCredits = credits?.cast
+                    .orEmpty()
+                    .filter { it.mediaType == "tv" && it.posterPath != null }
+                    .sortedByDescending { it.voteAverage ?: 0.0 }
+                    .mapNotNull { credit ->
+                        if (!seenTvIds.add(credit.id)) return@mapNotNull null
+                        val title = credit.name ?: credit.title ?: return@mapNotNull null
+                        val year = credit.firstAirDate?.take(4)
+                        MetaPreview(
+                            id = "tmdb:${credit.id}",
+                            type = ContentType.SERIES,
+                            name = title,
+                            poster = buildImageUrl(credit.posterPath, "w500"),
+                            posterShape = PosterShape.POSTER,
+                            background = buildImageUrl(credit.backdropPath, "w1280"),
+                            logo = null,
+                            description = credit.overview?.takeIf { it.isNotBlank() },
+                            releaseInfo = year,
+                            imdbRating = credit.voteAverage?.toFloat(),
+                            genres = emptyList()
+                        )
+                    }
+
+                val detail = PersonDetail(
+                    tmdbId = person.id,
+                    name = person.name ?: "Unknown",
+                    biography = person.biography?.takeIf { it.isNotBlank() },
+                    birthday = person.birthday?.takeIf { it.isNotBlank() },
+                    deathday = person.deathday?.takeIf { it.isNotBlank() },
+                    placeOfBirth = person.placeOfBirth?.takeIf { it.isNotBlank() },
+                    profilePhoto = buildImageUrl(person.profilePath, "w500"),
+                    knownFor = person.knownForDepartment?.takeIf { it.isNotBlank() },
+                    movieCredits = movieCredits,
+                    tvCredits = tvCredits
+                )
+                personCache[personId] = detail
+                detail
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch person detail: ${e.message}", e)
+                null
+            }
+        }
 }
 
 data class TmdbEnrichment(
