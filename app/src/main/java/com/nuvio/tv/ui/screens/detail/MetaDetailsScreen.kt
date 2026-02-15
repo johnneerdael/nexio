@@ -73,6 +73,7 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
@@ -624,104 +625,70 @@ private fun LibraryListPickerDialog(
     onDismiss: () -> Unit
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
-    var suppressNextKeyUp by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         primaryFocusRequester.requestFocus()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = title,
+        subtitle = "Select which lists should include this title.",
+        width = 500.dp
+    ) {
+        if (!error.isNullOrBlank()) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFFFB6B6)
+            )
+        }
+
+        LazyColumn(
             modifier = Modifier
-                .width(500.dp)
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
-                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
-                .padding(24.dp)
-                .onPreviewKeyEvent { event ->
-                    val native = event.nativeKeyEvent
-                    if (suppressNextKeyUp && native.action == KeyEvent.ACTION_UP) {
-                        val isSelectOrMenu = native.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-                            native.keyCode == KeyEvent.KEYCODE_ENTER ||
-                            native.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
-                            native.keyCode == KeyEvent.KEYCODE_MENU
-                        if (isSelectOrMenu) {
-                            suppressNextKeyUp = false
-                            return@onPreviewKeyEvent true
-                        }
-                    }
-                    false
-                }
+                .fillMaxWidth()
+                .heightIn(max = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = "Select which lists should include this title.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
-                )
-
-                if (!error.isNullOrBlank()) {
+            items(tabs, key = { it.key }) { tab ->
+                val selected = membership[tab.key] == true
+                val titleText = if (selected) "\u2713 ${tab.title}" else tab.title
+                Button(
+                    onClick = { onToggle(tab.key) },
+                    enabled = !isPending,
+                    modifier = if (tab.key == tabs.firstOrNull()?.key) {
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(primaryFocusRequester)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
                     Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFFFB6B6)
+                        text = titleText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+        }
 
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 300.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(tabs, key = { it.key }) { tab ->
-                        val selected = membership[tab.key] == true
-                        val titleText = if (selected) "✓ ${tab.title}" else tab.title
-                        Button(
-                            onClick = { onToggle(tab.key) },
-                            enabled = !isPending,
-                            modifier = if (tab.key == tabs.firstOrNull()?.key) {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(primaryFocusRequester)
-                            } else {
-                                Modifier.fillMaxWidth()
-                            },
-                            colors = ButtonDefaults.colors(
-                                containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextPrimary
-                            )
-                        ) {
-                            Text(
-                                text = titleText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
+        Divider(color = NuvioColors.Border, thickness = 1.dp)
 
-                Divider(color = NuvioColors.Border, thickness = 1.dp)
-
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                    Button(
-                        onClick = onSave,
-                        enabled = !isPending,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) {
-                        Text(if (isPending) "Saving..." else "Save")
-                    }
-                }
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Button(
+                onClick = onSave,
+                enabled = !isPending,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.BackgroundCard,
+                    contentColor = NuvioColors.TextPrimary
+                )
+            ) {
+                Text(if (isPending) "Saving..." else "Save")
             }
         }
     }

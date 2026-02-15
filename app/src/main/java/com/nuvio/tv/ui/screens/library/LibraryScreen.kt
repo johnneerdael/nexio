@@ -67,6 +67,7 @@ import com.nuvio.tv.domain.model.TraktListPrivacy
 import com.nuvio.tv.ui.components.ContentCard
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.LoadingIndicator
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.delay
@@ -681,137 +682,126 @@ private fun ListEditorDialog(
         nameFocusRequester.requestFocus()
     }
 
-    Dialog(onDismissRequest = onCancel) {
-        Box(
+    NuvioDialog(
+        onDismiss = onCancel,
+        title = if (state.mode == LibraryListEditorState.Mode.CREATE) "Create List" else "Edit List",
+        width = 560.dp
+    ) {
+        androidx.compose.material3.OutlinedTextField(
+            value = state.name,
+            onValueChange = onNameChanged,
             modifier = Modifier
-                .width(560.dp)
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
-                .padding(24.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = if (state.mode == LibraryListEditorState.Mode.CREATE) "Create List" else "Edit List",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
-                )
-
-                androidx.compose.material3.OutlinedTextField(
-                    value = state.name,
-                    onValueChange = onNameChanged,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(nameFocusRequester)
-                        .onFocusChanged {
-                            if (!it.isFocused) {
-                                nameEditing = false
-                            }
-                        }
-                        .onPreviewKeyEvent { event ->
-                            val native = event.nativeKeyEvent
-                            if (native.action == AndroidKeyEvent.ACTION_DOWN && isSelectKey(native.keyCode)) {
-                                nameEditing = true
-                                descriptionEditing = false
-                                keyboardController?.show()
-                            }
-                            false
-                        },
-                    enabled = !pending,
-                    readOnly = !nameEditing,
-                    singleLine = true,
-                    maxLines = 1,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            nameEditing = false
-                            keyboardController?.hide()
-                        }
-                    ),
-                    label = { androidx.compose.material3.Text("Name") },
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = NuvioColors.TextPrimary,
-                        unfocusedTextColor = NuvioColors.TextPrimary,
-                        focusedContainerColor = NuvioColors.BackgroundCard,
-                        unfocusedContainerColor = NuvioColors.BackgroundCard,
-                        focusedBorderColor = NuvioColors.FocusRing,
-                        unfocusedBorderColor = NuvioColors.Border,
-                        focusedLabelColor = NuvioColors.TextSecondary,
-                        unfocusedLabelColor = NuvioColors.TextTertiary,
-                        cursorColor = NuvioColors.FocusRing
-                    )
-                )
-
-                androidx.compose.material3.OutlinedTextField(
-                    value = state.description,
-                    onValueChange = onDescriptionChanged,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(descriptionFocusRequester)
-                        .onFocusChanged {
-                            if (!it.isFocused) {
-                                descriptionEditing = false
-                            }
-                        }
-                        .onPreviewKeyEvent { event ->
-                            val native = event.nativeKeyEvent
-                            if (native.action == AndroidKeyEvent.ACTION_DOWN && isSelectKey(native.keyCode)) {
-                                descriptionEditing = true
-                                nameEditing = false
-                                keyboardController?.show()
-                            }
-                            false
-                        },
-                    enabled = !pending,
-                    readOnly = !descriptionEditing,
-                    minLines = 3,
-                    maxLines = 5,
-                    label = { androidx.compose.material3.Text("Description") },
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = NuvioColors.TextPrimary,
-                        unfocusedTextColor = NuvioColors.TextPrimary,
-                        focusedContainerColor = NuvioColors.BackgroundCard,
-                        unfocusedContainerColor = NuvioColors.BackgroundCard,
-                        focusedBorderColor = NuvioColors.FocusRing,
-                        unfocusedBorderColor = NuvioColors.Border,
-                        focusedLabelColor = NuvioColors.TextSecondary,
-                        unfocusedLabelColor = NuvioColors.TextTertiary,
-                        cursorColor = NuvioColors.FocusRing
-                    )
-                )
-
-                Text(
-                    text = "Privacy",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
-                )
-
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(TraktListPrivacy.entries.toList(), key = { it.name }) { privacy ->
-                        val selected = privacy == state.privacy
-                        Button(
-                            onClick = { onPrivacyChanged(privacy) },
-                            enabled = !pending,
-                            colors = ButtonDefaults.colors(
-                                containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextPrimary
-                            )
-                        ) {
-                            Text(privacy.apiValue.replaceFirstChar { it.uppercase() })
-                        }
+                .fillMaxWidth()
+                .focusRequester(nameFocusRequester)
+                .onFocusChanged {
+                    if (!it.isFocused) {
+                        nameEditing = false
                     }
                 }
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (native.action == AndroidKeyEvent.ACTION_DOWN && isSelectKey(native.keyCode)) {
+                        nameEditing = true
+                        descriptionEditing = false
+                        keyboardController?.show()
+                    }
+                    false
+                },
+            enabled = !pending,
+            readOnly = !nameEditing,
+            singleLine = true,
+            maxLines = 1,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    nameEditing = false
+                    keyboardController?.hide()
+                }
+            ),
+            label = { androidx.compose.material3.Text("Name") },
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedTextColor = NuvioColors.TextPrimary,
+                unfocusedTextColor = NuvioColors.TextPrimary,
+                focusedContainerColor = NuvioColors.BackgroundCard,
+                unfocusedContainerColor = NuvioColors.BackgroundCard,
+                focusedBorderColor = NuvioColors.FocusRing,
+                unfocusedBorderColor = NuvioColors.Border,
+                focusedLabelColor = NuvioColors.TextSecondary,
+                unfocusedLabelColor = NuvioColors.TextTertiary,
+                cursorColor = NuvioColors.FocusRing
+            )
+        )
 
+        androidx.compose.material3.OutlinedTextField(
+            value = state.description,
+            onValueChange = onDescriptionChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(descriptionFocusRequester)
+                .onFocusChanged {
+                    if (!it.isFocused) {
+                        descriptionEditing = false
+                    }
+                }
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (native.action == AndroidKeyEvent.ACTION_DOWN && isSelectKey(native.keyCode)) {
+                        descriptionEditing = true
+                        nameEditing = false
+                        keyboardController?.show()
+                    }
+                    false
+                },
+            enabled = !pending,
+            readOnly = !descriptionEditing,
+            minLines = 3,
+            maxLines = 5,
+            label = { androidx.compose.material3.Text("Description") },
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedTextColor = NuvioColors.TextPrimary,
+                unfocusedTextColor = NuvioColors.TextPrimary,
+                focusedContainerColor = NuvioColors.BackgroundCard,
+                unfocusedContainerColor = NuvioColors.BackgroundCard,
+                focusedBorderColor = NuvioColors.FocusRing,
+                unfocusedBorderColor = NuvioColors.Border,
+                focusedLabelColor = NuvioColors.TextSecondary,
+                unfocusedLabelColor = NuvioColors.TextTertiary,
+                cursorColor = NuvioColors.FocusRing
+            )
+        )
+
+        Text(
+            text = "Privacy",
+            style = MaterialTheme.typography.bodyMedium,
+            color = NuvioTheme.extendedColors.textSecondary
+        )
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(TraktListPrivacy.entries.toList(), key = { it.name }) { privacy ->
+                val selected = privacy == state.privacy
                 Button(
-                    onClick = onSave,
+                    onClick = { onPrivacyChanged(privacy) },
                     enabled = !pending,
-                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
+                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
                         contentColor = NuvioColors.TextPrimary
                     )
                 ) {
-                    Text(if (pending) "Saving..." else "Save")
+                    Text(privacy.apiValue.replaceFirstChar { it.uppercase() })
                 }
             }
+        }
+
+        Button(
+            onClick = onSave,
+            enabled = !pending,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            )
+        ) {
+            Text(if (pending) "Saving..." else "Save")
         }
     }
 }
@@ -823,36 +813,22 @@ private fun ConfirmDeleteDialog(
     onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    Dialog(onDismissRequest = onCancel) {
-        Box(
-            modifier = Modifier
-                .width(420.dp)
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
-                .padding(24.dp)
+    NuvioDialog(
+        onDismiss = onCancel,
+        title = "Delete this list?",
+        subtitle = "This removes the list and all list items from Trakt.",
+        width = 420.dp
+    ) {
+        Button(
+            onClick = onConfirm,
+            enabled = !pending,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = Color(0xFF4A2323),
+                contentColor = NuvioColors.TextPrimary
+            )
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Delete this list?",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
-                )
-                Text(
-                    text = "This removes the list and all list items from Trakt.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
-                )
-                Button(
-                    onClick = onConfirm,
-                    enabled = !pending,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFF4A2323),
-                        contentColor = NuvioColors.TextPrimary
-                    )
-                ) {
-                    Text("Delete")
-                }
-            }
+            Text("Delete")
         }
     }
 }

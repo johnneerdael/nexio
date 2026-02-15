@@ -62,6 +62,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.compose.ui.window.Dialog
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 
@@ -557,71 +558,39 @@ private fun EpisodeOptionsDialog(
     onToggleWatched: () -> Unit
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
-    var suppressNextKeyUp by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         primaryFocusRequester.requestFocus()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = episode.title,
+        subtitle = "Episode actions"
+    ) {
+        Button(
+            onClick = onToggleWatched,
+            enabled = !isPending,
             modifier = Modifier
-                .width(520.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
-                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
-                .padding(24.dp)
-                .onPreviewKeyEvent { event ->
-                    val native = event.nativeKeyEvent
-                    if (suppressNextKeyUp && native.action == AndroidKeyEvent.ACTION_UP) {
-                        if (isSelectKey(native.keyCode) || native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
-                            suppressNextKeyUp = false
-                            return@onPreviewKeyEvent true
-                        }
-                    }
-                    false
-                }
+                .fillMaxWidth()
+                .focusRequester(primaryFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            )
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = episode.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text(if (isWatched) "Mark as unwatched" else "Mark as watched")
+        }
 
-                Text(
-                    text = "Episode actions",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
-                )
-
-                Button(
-                    onClick = onToggleWatched,
-                    enabled = !isPending,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(primaryFocusRequester),
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
-                ) {
-                    Text(if (isWatched) "Mark as unwatched" else "Mark as watched")
-                }
-
-                Button(
-                    onClick = onPlay,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Play")
-                }
-            }
+        Button(
+            onClick = onPlay,
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Play")
         }
     }
 }

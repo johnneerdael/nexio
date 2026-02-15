@@ -390,70 +390,38 @@ internal fun ContinueWatchingOptionsDialog(
     }
 
     val detailsFocusRequester = remember { FocusRequester() }
-    var suppressNextKeyUp by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         detailsFocusRequester.requestFocus()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = title,
+        subtitle = "Choose what you want to do with this item."
+    ) {
+        Button(
+            onClick = onDetails,
             modifier = Modifier
-                .width(520.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
-                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
-                .padding(24.dp)
-                .onPreviewKeyEvent { event ->
-                    val native = event.nativeKeyEvent
-                    if (suppressNextKeyUp && native.action == AndroidKeyEvent.ACTION_UP) {
-                        if (isSelectKey(native.keyCode) || native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
-                            suppressNextKeyUp = false
-                            return@onPreviewKeyEvent true
-                        }
-                    }
-                    false
-                }
+                .fillMaxWidth()
+                .focusRequester(detailsFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            )
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text("Go to details")
+        }
 
-                Text(
-                    text = "Choose what you want to do with this item.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
-                )
-
-                Button(
-                    onClick = onDetails,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(detailsFocusRequester),
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
-                ) {
-                    Text("Go to details")
-                }
-
-                Button(
-                    onClick = onRemove,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Remove")
-                }
-            }
+        Button(
+            onClick = onRemove,
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Remove")
         }
     }
 }
