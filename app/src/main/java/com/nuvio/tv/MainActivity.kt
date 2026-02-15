@@ -414,6 +414,8 @@ private fun ModernSidebarScaffold(
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
     var focusedDrawerIndex by remember { mutableStateOf(-1) }
+    var isFloatingPillIconOnly by remember { mutableStateOf(false) }
+    val keepFloatingPillExpanded = selectedDrawerRoute == Screen.Settings.route
     val keepSidebarFocusDuringCollapse =
         isSidebarExpanded || sidebarCollapsePending || pendingContentFocusTransfer
 
@@ -423,6 +425,13 @@ private fun ModernSidebarScaffold(
             sidebarCollapsePending = false
             pendingContentFocusTransfer = false
             pendingSidebarFocusRequest = false
+            isFloatingPillIconOnly = false
+        }
+    }
+
+    LaunchedEffect(keepFloatingPillExpanded, showSidebar) {
+        if (!showSidebar || keepFloatingPillExpanded) {
+            isFloatingPillIconOnly = false
         }
     }
 
@@ -570,19 +579,25 @@ private fun ModernSidebarScaffold(
                     }
                 }
                 .onKeyEvent { keyEvent ->
-                    if (
-                        showSidebar &&
-                        !isSidebarExpanded &&
-                        keyEvent.type == KeyEventType.KeyDown &&
-                        keyEvent.key == Key.DirectionLeft
-                    ) {
-                        if (focusManager.moveFocus(FocusDirection.Left)) {
-                            true
+                    if (showSidebar && !isSidebarExpanded && keyEvent.type == KeyEventType.KeyDown) {
+                        if (!keepFloatingPillExpanded) {
+                            when (keyEvent.key) {
+                                Key.DirectionDown -> isFloatingPillIconOnly = true
+                                Key.DirectionUp -> isFloatingPillIconOnly = false
+                                else -> Unit
+                            }
+                        }
+                        if (keyEvent.key == Key.DirectionLeft) {
+                            if (focusManager.moveFocus(FocusDirection.Left)) {
+                                true
+                            } else {
+                                isSidebarExpanded = true
+                                sidebarCollapsePending = false
+                                pendingSidebarFocusRequest = true
+                                true
+                            }
                         } else {
-                            isSidebarExpanded = true
-                            sidebarCollapsePending = false
-                            pendingSidebarFocusRequest = true
-                            true
+                            false
                         }
                     } else {
                         false
@@ -670,6 +685,7 @@ private fun ModernSidebarScaffold(
                 CollapsedSidebarPill(
                     label = selectedDrawerItem.label,
                     icon = selectedDrawerItem.icon,
+                    iconOnly = isFloatingPillIconOnly && !keepFloatingPillExpanded,
                     hazeState = sidebarHazeState,
                     blurEnabled = modernSidebarBlurEnabled,
                     modifier = Modifier
@@ -699,6 +715,7 @@ private fun ModernSidebarScaffold(
 private fun CollapsedSidebarPill(
     label: String,
     icon: ImageVector,
+    iconOnly: Boolean,
     hazeState: HazeState,
     blurEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -716,14 +733,16 @@ private fun CollapsedSidebarPill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(0.25.dp)
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_chevron_compact_left),
-            contentDescription = "Expand sidebar",
-            modifier = Modifier
-                .width(8.5.dp)
-                .height(16.dp)
-                .offset(y = (-0.5).dp)
-        )
+        if (!iconOnly) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_chevron_compact_left),
+                contentDescription = "Expand sidebar",
+                modifier = Modifier
+                    .width(8.5.dp)
+                    .height(16.dp)
+                    .offset(y = (-0.5).dp)
+            )
+        }
 
         Box(
             modifier = Modifier
@@ -791,9 +810,9 @@ private fun CollapsedSidebarPill(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .padding(start = 5.dp, end = 12.dp),
+                    .padding(start = 5.dp, end = if (iconOnly) 5.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (iconOnly) 0.dp else 9.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -812,15 +831,17 @@ private fun CollapsedSidebarPill(
                     )
                 }
 
-                Text(
-                    text = label,
-                    color = Color.White,
-                    style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
-                        lineHeight = 30.sp
-                    ),
-                    modifier = Modifier.offset(y = (-0.5).dp),
-                    maxLines = 1
-                )
+                if (!iconOnly) {
+                    Text(
+                        text = label,
+                        color = Color.White,
+                        style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
+                            lineHeight = 30.sp
+                        ),
+                        modifier = Modifier.offset(y = (-0.5).dp),
+                        maxLines = 1
+                    )
+                }
             }
         }
     }
