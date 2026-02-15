@@ -226,7 +226,17 @@ fun SettingsScreen(
                                     coroutineScope.launch {
                                         // Wait for detail content to settle before requesting first content focus.
                                         delay(120)
-                                        contentFocusRequesters[section.category]?.requestFocus()
+                                        val requester = contentFocusRequesters[section.category]
+                                        val requested = if (requester != null) {
+                                            runCatching {
+                                                requester.requestFocus()
+                                            }.isSuccess
+                                        } else {
+                                            false
+                                        }
+                                        if (!requested) {
+                                            focusManager.moveFocus(FocusDirection.Right)
+                                        }
                                     }
                                 }
                             }
