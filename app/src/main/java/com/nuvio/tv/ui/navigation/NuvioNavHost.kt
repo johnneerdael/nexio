@@ -382,7 +382,10 @@ fun NuvioNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
-                onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) }
+                onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
+                onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
+                onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
+                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) }
             )
         }
 

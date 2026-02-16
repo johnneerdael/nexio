@@ -242,6 +242,15 @@ class WatchProgressPreferences @Inject constructor(
         }
     }
 
+    suspend fun replaceWithRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
+        Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${remoteEntries.size} remote entries")
+        context.watchProgressDataStore.edit { preferences ->
+            val pruned = pruneOldItems(remoteEntries.toMutableMap())
+            Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${pruned.size} entries after prune, writing to DataStore")
+            preferences[watchProgressKey] = gson.toJson(pruned)
+        }
+    }
+
     /**
      * Clear all watch progress
      */

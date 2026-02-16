@@ -102,6 +102,7 @@ internal data class SettingsSectionSpec(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTrakt: () -> Unit = {},
+    onNavigateToAuthSignIn: () -> Unit = {},
     onNavigateToSyncGenerate: () -> Unit = {},
     onNavigateToSyncClaim: () -> Unit = {}
 ) {
@@ -401,6 +402,7 @@ fun SettingsScreen(
                                                 uiState = accountUiState,
                                                 viewModel = accountViewModel,
                                                 showSyncCodeFeatures = debugUiState.syncCodeFeaturesEnabled,
+                                                onNavigateToAuthSignIn = onNavigateToAuthSignIn,
                                                 onNavigateToSyncGenerate = onNavigateToSyncGenerate,
                                                 onNavigateToSyncClaim = onNavigateToSyncClaim
                                             )

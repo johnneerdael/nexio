@@ -72,19 +72,13 @@ class LibraryPreferences @Inject constructor(
 
     suspend fun mergeRemoteItems(remoteItems: List<SavedLibraryItem>) {
         context.libraryDataStore.edit { preferences ->
-            val current = preferences[libraryItemsKey] ?: emptySet()
-            val localItems = current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, SavedLibraryItem::class.java) }.getOrNull()
+            val dedupedRemote = linkedMapOf<Pair<String, String>, SavedLibraryItem>()
+            remoteItems.forEach { item ->
+                dedupedRemote[item.id to item.type.lowercase()] = item
             }
-            val localKeys = localItems.map { it.id to it.type.lowercase() }.toSet()
-
-            val newItems = remoteItems.filter { remote ->
-                (remote.id to remote.type.lowercase()) !in localKeys
-            }
-
-            if (newItems.isNotEmpty()) {
-                preferences[libraryItemsKey] = current + newItems.map { gson.toJson(it) }.toSet()
-            }
+            preferences[libraryItemsKey] = dedupedRemote.values
+                .map { gson.toJson(it) }
+                .toSet()
         }
     }
 }

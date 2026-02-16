@@ -9,5 +9,6 @@ data class AccountUiState(
     val error: String? = null,
     val generatedSyncCode: String? = null,
     val syncClaimSuccess: Boolean = false,
-    val linkedDevices: List<SupabaseLinkedDevice> = emptyList()
+    val linkedDevices: List<SupabaseLinkedDevice> = emptyList(),
+    val effectiveOwnerId: String? = null
 )

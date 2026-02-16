@@ -18,6 +18,7 @@ import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.repository.AddonRepositoryImpl
 import com.nuvio.tv.data.repository.LibraryRepositoryImpl
 import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
+import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.domain.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,7 +58,13 @@ class AccountViewModel @Inject constructor(
     private fun observeAuthState() {
         viewModelScope.launch {
             authManager.authState.collect { state ->
-                _uiState.update { it.copy(authState = state) }
+                _uiState.update {
+                    it.copy(
+                        authState = state,
+                        effectiveOwnerId = if (state is AuthState.SignedOut || state is AuthState.Loading) null else it.effectiveOwnerId
+                    )
+                }
+                updateEffectiveOwnerId(state)
             }
         }
     }
@@ -139,7 +146,9 @@ class AccountViewModel @Inject constructor(
             syncRepository.claimSyncCode(code, pin, Build.MODEL).fold(
                 onSuccess = { result ->
                     if (result.success) {
+                        authManager.clearEffectiveUserIdCache()
                         pullRemoteData()
+                        updateEffectiveOwnerId(_uiState.value.authState)
                         _uiState.update { it.copy(isLoading = false, syncClaimSuccess = true) }
                     } else {
                         authManager.signOut()
@@ -188,6 +197,18 @@ class AccountViewModel @Inject constructor(
 
     fun clearGeneratedSyncCode() {
         _uiState.update { it.copy(generatedSyncCode = null) }
+    }
+
+    private suspend fun updateEffectiveOwnerId(state: AuthState) {
+        val currentUserId = when (state) {
+            is AuthState.Anonymous -> state.userId
+            is AuthState.FullAccount -> state.userId
+            else -> null
+        }
+        if (currentUserId == null) return
+
+        val effectiveOwnerId = authManager.getEffectiveUserId() ?: currentUserId
+        _uiState.update { it.copy(effectiveOwnerId = effectiveOwnerId) }
     }
 
     private fun userFriendlyError(e: Throwable): String {
@@ -244,48 +265,42 @@ class AccountViewModel @Inject constructor(
     private suspend fun pullRemoteData() {
         try {
             pluginManager.isSyncingFromRemote = true
-            val newPluginUrls = pluginSyncService.getNewRemoteRepoUrls()
-            for (url in newPluginUrls) {
-                pluginManager.addRepository(url)
-            }
+            val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
+            pluginManager.reconcileWithRemoteRepoUrls(remotePluginUrls)
             pluginManager.isSyncingFromRemote = false
 
             addonRepository.isSyncingFromRemote = true
-            val newAddonUrls = addonSyncService.getNewRemoteAddonUrls()
-            for (url in newAddonUrls) {
-                addonRepository.addAddon(url)
-            }
+            val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
+            addonRepository.reconcileWithRemoteAddonUrls(remoteAddonUrls)
             addonRepository.isSyncingFromRemote = false
 
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
             Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected")
             if (!isTraktConnected) {
                 watchProgressRepository.isSyncingFromRemote = true
-                val remoteEntries = watchProgressSyncService.pullFromRemote()
+                val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
                 Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteEntries.size} watch progress entries")
-                if (remoteEntries.isNotEmpty()) {
-                    watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
-                    Log.d("AccountViewModel", "pullRemoteData: merged ${remoteEntries.size} entries into local")
-                } else {
-                    Log.d("AccountViewModel", "pullRemoteData: no remote watch progress to merge")
-                }
+                watchProgressPreferences.replaceWithRemoteEntries(remoteEntries.toMap())
+                Log.d("AccountViewModel", "pullRemoteData: reconciled local watch progress with ${remoteEntries.size} remote entries")
                 watchProgressRepository.isSyncingFromRemote = false
 
                 libraryRepository.isSyncingFromRemote = true
-                val remoteLibraryItems = librarySyncService.pullFromRemote()
-                Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteLibraryItems.size} library items")
-                if (remoteLibraryItems.isNotEmpty()) {
-                    libraryPreferences.mergeRemoteItems(remoteLibraryItems)
-                    Log.d("AccountViewModel", "pullRemoteData: merged ${remoteLibraryItems.size} library items into local")
-                }
+                librarySyncService.pullFromRemote().fold(
+                    onSuccess = { remoteLibraryItems ->
+                        Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteLibraryItems.size} library items")
+                        libraryPreferences.mergeRemoteItems(remoteLibraryItems)
+                        Log.d("AccountViewModel", "pullRemoteData: reconciled local library with ${remoteLibraryItems.size} remote items")
+                    },
+                    onFailure = { e ->
+                        Log.e("AccountViewModel", "pullRemoteData: failed to pull library items", e)
+                    }
+                )
                 libraryRepository.isSyncingFromRemote = false
 
-                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote()
+                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote().getOrElse { throw it }
                 Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteWatchedItems.size} watched items")
-                if (remoteWatchedItems.isNotEmpty()) {
-                    watchedItemsPreferences.mergeRemoteItems(remoteWatchedItems)
-                    Log.d("AccountViewModel", "pullRemoteData: merged ${remoteWatchedItems.size} watched items into local")
-                }
+                watchedItemsPreferences.replaceWithRemoteItems(remoteWatchedItems)
+                Log.d("AccountViewModel", "pullRemoteData: reconciled local watched items with ${remoteWatchedItems.size} remote items")
             }
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false

@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -135,7 +136,7 @@ private fun CastDetailContent(
 
     LaunchedEffect(allCredits) {
         if (allCredits.isNotEmpty()) {
-            firstPosterFocusRequester.requestFocus()
+            firstPosterFocusRequester.requestFocusSafely()
         }
     }
 
@@ -228,6 +229,13 @@ private fun releaseYearSortKey(releaseInfo: String?): Int {
         ?.take(4)
         ?.toIntOrNull()
         ?: 0
+}
+
+private suspend fun FocusRequester.requestFocusSafely(maxAttempts: Int = 5) {
+    repeat(maxAttempts.coerceAtLeast(1)) {
+        withFrameNanos { }
+        if (runCatching { requestFocus() }.isSuccess) return
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

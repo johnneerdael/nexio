@@ -21,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -46,6 +47,8 @@ class AddonRepositoryImpl @Inject constructor(
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
     var isSyncingFromRemote = false
+
+    private fun normalizeUrl(url: String): String = url.trimEnd('/').lowercase()
 
     private fun triggerRemoteSync() {
         if (isSyncingFromRemote) return
@@ -144,6 +147,27 @@ class AddonRepositoryImpl @Inject constructor(
     override suspend fun setAddonOrder(urls: List<String>) {
         preferences.setAddonOrder(urls)
         triggerRemoteSync()
+    }
+
+    suspend fun reconcileWithRemoteAddonUrls(remoteUrls: List<String>) {
+        val normalizedRemote = remoteUrls
+            .map { it.trimEnd('/') }
+            .filter { it.isNotBlank() }
+            .distinctBy { normalizeUrl(it) }
+        val remoteSet = normalizedRemote.map { normalizeUrl(it) }.toSet()
+
+        val localUrls = preferences.installedAddonUrls.first()
+        val localSet = localUrls.map { normalizeUrl(it) }.toSet()
+
+        localUrls
+            .filter { normalizeUrl(it) !in remoteSet }
+            .forEach { removeAddon(it) }
+
+        normalizedRemote
+            .filter { normalizeUrl(it) !in localSet }
+            .forEach { addAddon(it) }
+
+        preferences.setAddonOrder(normalizedRemote)
     }
 
     private fun applyDisplayNames(addons: List<Addon>): List<Addon> {

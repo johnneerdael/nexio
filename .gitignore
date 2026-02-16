@@ -28,3 +28,4 @@ docs/trakt-implementation/
 sentry.properties
 Deliverables
 Deliverables 2
+scripts/live_app_logs.sh

@@ -86,6 +86,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppTheme
+import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -121,6 +122,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var traktProgressService: TraktProgressService
+
+    @Inject
+    lateinit var startupSyncService: StartupSyncService
 
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -235,6 +239,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        startupSyncService.requestSyncNow()
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }

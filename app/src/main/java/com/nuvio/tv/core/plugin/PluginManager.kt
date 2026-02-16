@@ -63,6 +63,8 @@ class PluginManager @Inject constructor(
         }
         return sb.toString()
     }
+
+    private fun normalizeUrl(url: String): String = url.trimEnd('/').lowercase()
     
     // Single-flight map to prevent duplicate scraper executions
     private val inFlightScrapers = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<List<LocalScraperResult>>>()
@@ -160,6 +162,28 @@ class PluginManager @Inject constructor(
         // Remove repository
         dataStore.removeRepository(repoId)
         triggerRemoteSync()
+    }
+
+    
+    suspend fun reconcileWithRemoteRepoUrls(remoteUrls: List<String>) {
+        val normalizedRemote = remoteUrls
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { normalizeUrl(it) }
+        val remoteUrlSet = normalizedRemote.map { normalizeUrl(it) }.toSet()
+
+        val localRepos = dataStore.repositories.first()
+        val localByNormalizedUrl = localRepos.associateBy { normalizeUrl(it.url) }
+
+        localRepos
+            .filter { normalizeUrl(it.url) !in remoteUrlSet }
+            .forEach { repo -> removeRepository(repo.id) }
+
+        normalizedRemote.forEach { remoteUrl ->
+            if (localByNormalizedUrl[normalizeUrl(remoteUrl)] == null) {
+                addRepository(remoteUrl)
+            }
+        }
     }
     
     /**

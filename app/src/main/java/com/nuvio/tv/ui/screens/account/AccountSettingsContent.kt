@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.runtime.Composable
@@ -56,6 +57,7 @@ fun AccountSettingsContent(
     uiState: AccountUiState,
     viewModel: AccountViewModel,
     showSyncCodeFeatures: Boolean = false,
+    onNavigateToAuthSignIn: () -> Unit = {},
     onNavigateToSyncGenerate: () -> Unit = {},
     onNavigateToSyncClaim: () -> Unit = {}
 ) {
@@ -88,6 +90,14 @@ fun AccountSettingsContent(
                         color = NuvioColors.TextSecondary
                     )
                 }
+                item {
+                    SettingsActionButton(
+                        icon = Icons.Default.Person,
+                        title = "Sign In / Create Account",
+                        subtitle = "Use email and password to sign in or create an account",
+                        onClick = onNavigateToAuthSignIn
+                    )
+                }
                 if (showSyncCodeFeatures) {
                     item {
                         SettingsActionButton(
@@ -109,10 +119,19 @@ fun AccountSettingsContent(
             }
 
             is AuthState.FullAccount -> {
+                val ownerId = uiState.effectiveOwnerId ?: authState.userId
+                val connectionType = if (ownerId == authState.userId) "Email" else "Sync"
                 item {
                     StatusCard(
                         label = "Signed in",
                         value = authState.email
+                    )
+                }
+                item {
+                    DatabaseStatusCard(
+                        connectionType = connectionType,
+                        userId = authState.userId,
+                        ownerId = ownerId
                     )
                 }
                 if (showSyncCodeFeatures) {
@@ -139,10 +158,26 @@ fun AccountSettingsContent(
             }
 
             is AuthState.Anonymous -> {
+                val ownerId = uiState.effectiveOwnerId ?: authState.userId
                 item {
                     StatusCard(
                         label = "Synced",
                         value = "Using sync code for cross-device sync"
+                    )
+                }
+                item {
+                    DatabaseStatusCard(
+                        connectionType = "Sync",
+                        userId = authState.userId,
+                        ownerId = ownerId
+                    )
+                }
+                item {
+                    SettingsActionButton(
+                        icon = Icons.Default.Person,
+                        title = "Upgrade to Full Account",
+                        subtitle = "Sign in with email to use a normal account",
+                        onClick = onNavigateToAuthSignIn
                     )
                 }
                 if (showSyncCodeFeatures) {
@@ -404,6 +439,52 @@ private fun StatusCard(label: String, value: String) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DatabaseStatusCard(
+    connectionType: String,
+    userId: String,
+    ownerId: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = NuvioColors.BackgroundCard,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Database Status",
+                style = MaterialTheme.typography.titleSmall,
+                color = NuvioColors.TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            InfoRow(label = "Status", value = "Connected")
+            InfoRow(label = "Connection", value = connectionType)
+            InfoRow(label = "User ID", value = userId)
+            InfoRow(label = "Owner ID", value = ownerId)
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = NuvioColors.TextTertiary
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = NuvioColors.TextPrimary
+        )
     }
 }
 
