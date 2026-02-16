@@ -304,7 +304,12 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
-            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId, event.season, event.episode)
+            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(
+                contentId = event.contentId,
+                season = event.season,
+                episode = event.episode,
+                isNextUp = event.isNextUp
+            )
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
         }
     }
@@ -551,13 +556,24 @@ class HomeViewModel @Inject constructor(
         return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
     }
 
-    private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
+    private fun removeContinueWatching(
+        contentId: String,
+        season: Int? = null,
+        episode: Int? = null,
+        isNextUp: Boolean = false
+    ) {
         viewModelScope.launch {
+            val targetSeason = if (isNextUp) season else null
+            val targetEpisode = if (isNextUp) episode else null
             Log.d(
                 TAG,
-                "removeContinueWatching requested contentId=$contentId season=$season episode=$episode; removing all progress for content"
+                "removeContinueWatching requested contentId=$contentId season=$season episode=$episode isNextUp=$isNextUp targetSeason=$targetSeason targetEpisode=$targetEpisode"
             )
-            watchProgressRepository.removeProgress(contentId = contentId, season = null, episode = null)
+            watchProgressRepository.removeProgress(
+                contentId = contentId,
+                season = targetSeason,
+                episode = targetEpisode
+            )
         }
     }
 
