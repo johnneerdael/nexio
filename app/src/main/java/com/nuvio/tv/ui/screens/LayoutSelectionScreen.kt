@@ -38,6 +38,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.ui.components.ClassicLayoutPreview
 import com.nuvio.tv.ui.components.GridLayoutPreview
+import com.nuvio.tv.ui.components.ModernLayoutPreview
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsEvent
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -96,6 +97,13 @@ fun LayoutSelectionScreen(
                     layout = HomeLayout.GRID,
                     isSelected = selectedLayout == HomeLayout.GRID,
                     onSelect = { selectedLayout = HomeLayout.GRID },
+                    modifier = Modifier.weight(1f)
+                )
+
+                LayoutOptionCard(
+                    layout = HomeLayout.MODERN,
+                    isSelected = selectedLayout == HomeLayout.MODERN,
+                    onSelect = { selectedLayout = HomeLayout.MODERN },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -189,6 +197,9 @@ private fun LayoutOptionCard(
                     HomeLayout.GRID -> GridLayoutPreview(
                         modifier = Modifier.fillMaxSize()
                     )
+                    HomeLayout.MODERN -> ModernLayoutPreview(
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
 
@@ -206,6 +217,7 @@ private fun LayoutOptionCard(
                 text = when (layout) {
                     HomeLayout.CLASSIC -> "Scroll through categories horizontally"
                     HomeLayout.GRID -> "Browse everything in a vertical grid with a hero section"
+                    HomeLayout.MODERN -> "Fixed hero with a single active row for faster browsing"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextTertiary
