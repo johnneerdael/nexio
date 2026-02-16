@@ -16,6 +16,8 @@ data class HomeUiState(
     val selectedItemId: String? = null,
     val installedAddonsCount: Int = 0,
     val homeLayout: HomeLayout = HomeLayout.CLASSIC,
+    val modernLandscapePostersEnabled: Boolean = true,
+    val modernNextRowPreviewEnabled: Boolean = false,
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKey: String? = null,
     val heroSectionEnabled: Boolean = true,
@@ -34,7 +36,11 @@ data class HomeUiState(
 @Immutable
 sealed class ContinueWatchingItem {
     @Immutable
-    data class InProgress(val progress: WatchProgress) : ContinueWatchingItem()
+    data class InProgress(
+        val progress: WatchProgress,
+        val episodeDescription: String? = null,
+        val episodeThumbnail: String? = null
+    ) : ContinueWatchingItem()
 
     @Immutable
     data class NextUp(val info: NextUpInfo) : ContinueWatchingItem()
@@ -52,6 +58,7 @@ data class NextUpInfo(
     val season: Int,
     val episode: Int,
     val episodeTitle: String?,
+    val episodeDescription: String? = null,
     val thumbnail: String?,
     val lastWatched: Long
 )
@@ -86,11 +93,6 @@ sealed class GridItem {
 sealed class HomeEvent {
     data class OnItemClick(val itemId: String, val itemType: String) : HomeEvent()
     data class OnLoadMoreCatalog(val catalogId: String, val addonId: String, val type: String) : HomeEvent()
-    data class OnRemoveContinueWatching(
-        val contentId: String,
-        val season: Int? = null,
-        val episode: Int? = null,
-        val isNextUp: Boolean = false
-    ) : HomeEvent()
+    data class OnRemoveContinueWatching(val contentId: String, val season: Int? = null, val episode: Int? = null) : HomeEvent()
     data object OnRetry : HomeEvent()
 }

@@ -145,8 +145,8 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
-                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
+                                onRemoveContinueWatching = { contentId, season, episode ->
+                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode))
                                 },
                                 onRequestTrailerPreview = { item ->
                                     viewModel.requestTrailerPreview(item)
@@ -162,11 +162,20 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
-                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
+                                onRemoveContinueWatching = { contentId, season, episode ->
+                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode))
                                 },
                                 onSaveGridFocusState = { vi, vo ->
                                     viewModel.saveGridFocusState(vi, vo)
+                                }
+                            )
+                            HomeLayout.MODERN -> ModernHomeContent(
+                                uiState = uiState,
+                                focusState = focusState,
+                                onNavigateToDetail = onNavigateToDetail,
+                                onContinueWatchingClick = onContinueWatchingClick,
+                                onSaveFocusState = { vi, vo, ri, ii, m ->
+                                    viewModel.saveFocusState(vi, vo, ri, ii, m)
                                 }
                             )
                         }

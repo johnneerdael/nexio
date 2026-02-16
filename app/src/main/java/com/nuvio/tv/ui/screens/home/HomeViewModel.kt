@@ -8,7 +8,6 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
-import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
@@ -34,7 +33,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -55,7 +53,6 @@ class HomeViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val metaRepository: MetaRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
-    private val traktSettingsDataStore: TraktSettingsDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
@@ -63,6 +60,7 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
+        private const val CONTINUE_WATCHING_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
@@ -96,12 +94,13 @@ class HomeViewModel @Inject constructor(
     private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     private var activeTrailerPreviewItemId: String? = null
     private var trailerPreviewRequestVersion: Long = 0L
-    private val dismissedNextUpKeys = MutableStateFlow<Set<String>>(emptySet())
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
 
     init {
         loadLayoutPreference()
+        loadModernLandscapePostersPreference()
+        loadModernNextRowPreviewPreference()
         loadHeroCatalogPreference()
         loadHeroSectionPreference()
         loadPosterLabelPreference()
@@ -122,6 +121,22 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.selectedLayout.collectLatest { layout ->
                 _uiState.update { it.copy(homeLayout = layout) }
+            }
+        }
+    }
+
+    private fun loadModernLandscapePostersPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.modernLandscapePostersEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(modernLandscapePostersEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun loadModernNextRowPreviewPreference() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.modernNextRowPreviewEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(modernNextRowPreviewEnabled = enabled) }
             }
         }
     }
@@ -289,28 +304,15 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
-            is HomeEvent.OnRemoveContinueWatching ->
-                removeContinueWatching(
-                    contentId = event.contentId,
-                    season = event.season,
-                    episode = event.episode,
-                    isNextUp = event.isNextUp
-                )
+            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId, event.season, event.episode)
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
         }
     }
 
     private fun loadContinueWatching() {
         viewModelScope.launch {
-            combine(
-                watchProgressRepository.allProgress,
-                traktSettingsDataStore.continueWatchingDaysCap,
-                dismissedNextUpKeys
-            ) { items, daysCap, dismissedNextUp ->
-                Triple(items, daysCap, dismissedNextUp)
-            }.collectLatest { (items, daysCap, dismissedNextUp) ->
-                val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
-                val cutoffMs = System.currentTimeMillis() - windowMs
+            watchProgressRepository.allProgress.collectLatest { items ->
+                val cutoffMs = System.currentTimeMillis() - CONTINUE_WATCHING_WINDOW_MS
                 val recentItems = items
                     .asSequence()
                     .filter { it.lastWatched >= cutoffMs }
@@ -320,9 +322,20 @@ class HomeViewModel @Inject constructor(
 
                 Log.d("HomeViewModel", "allProgress emitted=${items.size} recentWindow=${recentItems.size}")
 
-                val inProgressOnly = deduplicateInProgress(
-                    recentItems.filter { it.isInProgress() }
-                ).map { ContinueWatchingItem.InProgress(it) }
+                val metaCache = mutableMapOf<String, Meta?>()
+                val inProgressOnly = buildList {
+                    deduplicateInProgress(
+                        recentItems.filter { it.isInProgress() }
+                    ).forEach { progress ->
+                        add(
+                            ContinueWatchingItem.InProgress(
+                                progress = progress,
+                                episodeDescription = resolveCurrentEpisodeDescription(progress, metaCache),
+                                episodeThumbnail = resolveCurrentEpisodeThumbnail(progress, metaCache)
+                            )
+                        )
+                    }
+                }
 
                 Log.d("HomeViewModel", "inProgressOnly: ${inProgressOnly.size} items after filter+dedup")
 
@@ -332,8 +345,7 @@ class HomeViewModel @Inject constructor(
                 // Then enrich Next Up in background with bounded concurrency.
                 enrichContinueWatchingProgressively(
                     allProgress = recentItems,
-                    inProgressItems = inProgressOnly,
-                    dismissedNextUp = dismissedNextUp
+                    inProgressItems = inProgressOnly
                 )
             }
         }
@@ -347,10 +359,47 @@ class HomeViewModel @Inject constructor(
         return (nonSeries + latestPerShow).sortedByDescending { it.lastWatched }
     }
 
+    private suspend fun resolveCurrentEpisodeDescription(
+        progress: WatchProgress,
+        metaCache: MutableMap<String, Meta?>
+    ): String? {
+        if (!isSeriesType(progress.contentType)) return null
+        val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+        val video = resolveVideoForProgress(progress, meta) ?: return null
+        return video.overview?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun resolveCurrentEpisodeThumbnail(
+        progress: WatchProgress,
+        metaCache: MutableMap<String, Meta?>
+    ): String? {
+        if (!isSeriesType(progress.contentType)) return null
+        val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+        val video = resolveVideoForProgress(progress, meta) ?: return null
+        return video.thumbnail?.takeIf { it.isNotBlank() }
+    }
+
+    private fun resolveVideoForProgress(progress: WatchProgress, meta: Meta): Video? {
+        if (!isSeriesType(progress.contentType)) return null
+        val videos = meta.videos.filter { it.season != null && it.episode != null && it.season != 0 }
+        if (videos.isEmpty()) return null
+
+        progress.videoId.takeIf { it.isNotBlank() }?.let { videoId ->
+            videos.firstOrNull { it.id == videoId }?.let { return it }
+        }
+
+        val season = progress.season
+        val episode = progress.episode
+        if (season != null && episode != null) {
+            videos.firstOrNull { it.season == season && it.episode == episode }?.let { return it }
+        }
+
+        return null
+    }
+
     private suspend fun enrichContinueWatchingProgressively(
         allProgress: List<WatchProgress>,
-        inProgressItems: List<ContinueWatchingItem.InProgress>,
-        dismissedNextUp: Set<String>
+        inProgressItems: List<ContinueWatchingItem.InProgress>
     ) = coroutineScope {
         val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
 
@@ -365,7 +414,6 @@ class HomeViewModel @Inject constructor(
             .groupBy { it.contentId }
             .mapNotNull { (_, items) -> items.maxByOrNull { it.lastWatched } }
             .filter { it.contentId !in inProgressIds }
-            .filter { progress -> nextUpDismissKey(progress.contentId) !in dismissedNextUp }
             .sortedByDescending { it.lastWatched }
             .take(MAX_NEXT_UP_LOOKUPS)
 
@@ -376,11 +424,12 @@ class HomeViewModel @Inject constructor(
         val lookupSemaphore = Semaphore(MAX_NEXT_UP_CONCURRENCY)
         val mergeMutex = Mutex()
         val nextUpByContent = linkedMapOf<String, ContinueWatchingItem.NextUp>()
+        val metaCache = mutableMapOf<String, Meta?>()
 
         latestCompletedBySeries.forEach { progress ->
             launch(Dispatchers.IO) {
                 lookupSemaphore.withPermit {
-                    val nextUp = buildNextUpItem(progress) ?: return@withPermit
+                    val nextUp = buildNextUpItem(progress, metaCache) ?: return@withPermit
                     mergeMutex.withLock {
                         nextUpByContent[progress.contentId] = nextUp
                         _uiState.update {
@@ -410,8 +459,11 @@ class HomeViewModel @Inject constructor(
             .map { it.second }
     }
 
-    private suspend fun buildNextUpItem(progress: WatchProgress): ContinueWatchingItem.NextUp? {
-        val nextEpisode = findNextEpisode(progress) ?: return null
+    private suspend fun buildNextUpItem(
+        progress: WatchProgress,
+        metaCache: MutableMap<String, Meta?>
+    ): ContinueWatchingItem.NextUp? {
+        val nextEpisode = findNextEpisode(progress, metaCache) ?: return null
         val meta = nextEpisode.first
         val video = nextEpisode.second
         val info = NextUpInfo(
@@ -425,39 +477,20 @@ class HomeViewModel @Inject constructor(
             season = video.season ?: return null,
             episode = video.episode ?: return null,
             episodeTitle = video.title,
+            episodeDescription = video.overview?.takeIf { it.isNotBlank() },
             thumbnail = video.thumbnail,
             lastWatched = progress.lastWatched
         )
         return ContinueWatchingItem.NextUp(info)
     }
 
-    private suspend fun findNextEpisode(progress: WatchProgress): Pair<Meta, Video>? {
+    private suspend fun findNextEpisode(
+        progress: WatchProgress,
+        metaCache: MutableMap<String, Meta?>
+    ): Pair<Meta, Video>? {
         if (!isSeriesType(progress.contentType)) return null
 
-        val idCandidates = buildList {
-            add(progress.contentId)
-            if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
-            if (progress.contentId.startsWith("trakt:")) add(progress.contentId.substringAfter(':'))
-        }.distinct()
-
-        val meta = run {
-            var resolved: Meta? = null
-            val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()
-            for (type in typeCandidates) {
-                for (candidateId in idCandidates) {
-                    val result = withTimeoutOrNull(2500) {
-                        metaRepository.getMetaFromAllAddons(
-                            type = type,
-                            id = candidateId
-                        ).first { it !is NetworkResult.Loading }
-                    } ?: continue
-                    resolved = (result as? NetworkResult.Success)?.data
-                    if (resolved != null) break
-                }
-                if (resolved != null) break
-            }
-            resolved
-        } ?: return null
+        val meta = resolveMetaForProgress(progress, metaCache) ?: return null
 
         val episodes = meta.videos
             .filter { it.season != null && it.episode != null && it.season != 0 }
@@ -472,33 +505,53 @@ class HomeViewModel @Inject constructor(
         return meta to episodes[currentIndex + 1]
     }
 
-    private fun isSeriesType(type: String?): Boolean {
-        return type == "series" || type == "tv"
-    }
-
-    private fun removeContinueWatching(
-        contentId: String,
-        season: Int? = null,
-        episode: Int? = null,
-        isNextUp: Boolean = false
-    ) {
-        if (isNextUp) {
-            val dismissKey = nextUpDismissKey(contentId)
-            dismissedNextUpKeys.update { it + dismissKey }
-            _uiState.update { state ->
-                state.copy(
-                    continueWatchingItems = state.continueWatchingItems.filterNot { item ->
-                        when (item) {
-                            is ContinueWatchingItem.NextUp ->
-                                nextUpDismissKey(item.info.contentId) == dismissKey
-                            is ContinueWatchingItem.InProgress -> false
-                        }
-                    }
-                )
+    private suspend fun resolveMetaForProgress(
+        progress: WatchProgress,
+        metaCache: MutableMap<String, Meta?>
+    ): Meta? {
+        val cacheKey = "${progress.contentType}:${progress.contentId}"
+        synchronized(metaCache) {
+            if (metaCache.containsKey(cacheKey)) {
+                return metaCache[cacheKey]
             }
-            return
         }
 
+        val idCandidates = buildList {
+            add(progress.contentId)
+            if (progress.contentId.startsWith("tmdb:")) add(progress.contentId.substringAfter(':'))
+            if (progress.contentId.startsWith("trakt:")) add(progress.contentId.substringAfter(':'))
+        }.distinct()
+
+        val typeCandidates = listOf(progress.contentType, "series", "tv").distinct()
+        val resolved = run {
+            var meta: Meta? = null
+            for (type in typeCandidates) {
+                for (candidateId in idCandidates) {
+                    val result = withTimeoutOrNull(2500) {
+                        metaRepository.getMetaFromAllAddons(
+                            type = type,
+                            id = candidateId
+                        ).first { it !is NetworkResult.Loading }
+                    } ?: continue
+                    meta = (result as? NetworkResult.Success)?.data
+                    if (meta != null) break
+                }
+                if (meta != null) break
+            }
+            meta
+        }
+
+        synchronized(metaCache) {
+            metaCache[cacheKey] = resolved
+        }
+        return resolved
+    }
+
+    private fun isSeriesType(type: String?): Boolean {
+        return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
+    }
+
+    private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
         viewModelScope.launch {
             Log.d(
                 TAG,
@@ -507,8 +560,6 @@ class HomeViewModel @Inject constructor(
             watchProgressRepository.removeProgress(contentId = contentId, season = null, episode = null)
         }
     }
-
-    private fun nextUpDismissKey(contentId: String): String = contentId
 
     private fun observeInstalledAddons() {
         viewModelScope.launch {
