@@ -65,6 +65,8 @@ fun TraktScreen(
     val uiState by viewModel.uiState.collectAsState()
     val primaryFocusRequester = remember { FocusRequester() }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
+    var showDaysCapDialog by remember { mutableStateOf(false) }
+    val continueWatchingDayOptions = remember { listOf(14, 30, 60, 90, 180, 365) }
 
     BackHandler { onBackPress() }
 
@@ -238,6 +240,13 @@ fun TraktScreen(
                 }
             }
 
+            SettingsActionRow(
+                title = "Continue Watching Window",
+                subtitle = "Days of Trakt progress considered for continue watching",
+                value = "${uiState.continueWatchingDaysCap} days",
+                onClick = { showDaysCapDialog = true }
+            )
+
             if (uiState.mode != TraktConnectionMode.CONNECTED) {
                 uiState.statusMessage?.let { status ->
                     Text(
@@ -276,6 +285,56 @@ fun TraktScreen(
                     )
                 ) {
                     Text("Back")
+                }
+            }
+        }
+    }
+
+    if (showDaysCapDialog) {
+        Dialog(onDismissRequest = { showDaysCapDialog = false }) {
+            Column(
+                modifier = Modifier
+                    .width(560.dp)
+                    .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                    .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Continue Watching Window",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = NuvioColors.TextPrimary
+                )
+                Text(
+                    text = "Choose how many days of Trakt activity should appear in continue watching.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+
+                continueWatchingDayOptions.forEach { days ->
+                    val selected = uiState.continueWatchingDaysCap == days
+                    Button(
+                        onClick = {
+                            viewModel.onContinueWatchingDaysCapSelected(days)
+                            showDaysCapDialog = false
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (selected) NuvioColors.Primary else NuvioColors.BackgroundCard,
+                            contentColor = if (selected) Color.Black else NuvioColors.TextPrimary
+                        )
+                    ) {
+                        Text("$days days")
+                    }
+                }
+
+                Button(
+                    onClick = { showDaysCapDialog = false },
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
+                    Text("Cancel")
                 }
             }
         }

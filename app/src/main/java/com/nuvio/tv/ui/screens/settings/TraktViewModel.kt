@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.TraktAuthState
+import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.repository.TraktAuthService
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.data.repository.TraktTokenPollResult
@@ -36,6 +37,7 @@ data class TraktUiState(
     val verificationUrl: String? = null,
     val pollIntervalSeconds: Int = 5,
     val deviceCodeExpiresAtMillis: Long? = null,
+    val continueWatchingDaysCap: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
     val connectedStats: TraktProgressService.TraktCachedStats? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null
@@ -45,7 +47,8 @@ data class TraktUiState(
 class TraktViewModel @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val traktProgressService: TraktProgressService
+    private val traktProgressService: TraktProgressService,
+    private val traktSettingsDataStore: TraktSettingsDataStore
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TraktUiState())
     val uiState: StateFlow<TraktUiState> = _uiState.asStateFlow()
@@ -58,7 +61,21 @@ class TraktViewModel @Inject constructor(
         _uiState.update {
             it.copy(credentialsConfigured = traktAuthService.hasRequiredCredentials())
         }
+        observeSettings()
         observeAuthState()
+    }
+
+    fun onContinueWatchingDaysCapSelected(days: Int) {
+        viewModelScope.launch {
+            traktSettingsDataStore.setContinueWatchingDaysCap(days)
+            traktProgressService.refreshNow()
+            _uiState.update {
+                it.copy(
+                    continueWatchingDaysCap = days,
+                    statusMessage = "Continue watching window updated"
+                )
+            }
+        }
     }
 
     fun onConnectClick() {
@@ -149,6 +166,14 @@ class TraktViewModel @Inject constructor(
         viewModelScope.launch {
             traktAuthDataStore.state.collectLatest { authState ->
                 applyAuthState(authState)
+            }
+        }
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            traktSettingsDataStore.continueWatchingDaysCap.collectLatest { daysCap ->
+                _uiState.update { it.copy(continueWatchingDaysCap = daysCap) }
             }
         }
     }

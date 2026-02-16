@@ -8,6 +8,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
@@ -33,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -53,6 +55,7 @@ class HomeViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val metaRepository: MetaRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val traktSettingsDataStore: TraktSettingsDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
@@ -60,7 +63,6 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
-        private const val CONTINUE_WATCHING_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
@@ -293,8 +295,14 @@ class HomeViewModel @Inject constructor(
 
     private fun loadContinueWatching() {
         viewModelScope.launch {
-            watchProgressRepository.allProgress.collectLatest { items ->
-                val cutoffMs = System.currentTimeMillis() - CONTINUE_WATCHING_WINDOW_MS
+            combine(
+                watchProgressRepository.allProgress,
+                traktSettingsDataStore.continueWatchingDaysCap
+            ) { items, daysCap ->
+                items to daysCap
+            }.collectLatest { (items, daysCap) ->
+                val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
+                val cutoffMs = System.currentTimeMillis() - windowMs
                 val recentItems = items
                     .asSequence()
                     .filter { it.lastWatched >= cutoffMs }
