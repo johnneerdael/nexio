@@ -205,6 +205,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamAutoPlayRegex(regex)
     }
 
+    suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
+    }
+
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStreamReuseLastLinkEnabled(enabled)
     }

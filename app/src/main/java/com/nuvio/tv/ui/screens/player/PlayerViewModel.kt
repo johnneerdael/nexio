@@ -223,6 +223,8 @@ class PlayerViewModel @Inject constructor(
     private var pendingAddonSubtitleLanguage: String? = null
     private var hasScannedTextTracksOnce: Boolean = false
     private var streamReuseLastLinkEnabled: Boolean = false
+    private var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL
+    private var streamAutoPlayNextEpisodeEnabledSetting: Boolean = false
     private var hasAppliedRememberedAudioSelection: Boolean = false
 
     
@@ -368,6 +370,8 @@ class PlayerViewModel @Inject constructor(
                     schedulePauseOverlay()
                 }
                 streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
+                streamAutoPlayModeSetting = settings.streamAutoPlayMode
+                streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
 
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
@@ -626,6 +630,9 @@ class PlayerViewModel @Inject constructor(
 
         if (shouldShow) {
             _uiState.update { it.copy(showNextEpisodeCard = true) }
+            if (streamAutoPlayNextEpisodeEnabledSetting && streamAutoPlayModeSetting != StreamAutoPlayMode.MANUAL) {
+                playNextEpisode()
+            }
         }
     }
 
@@ -1659,41 +1666,36 @@ class PlayerViewModel @Inject constructor(
 
                 val installedAddons = addonRepository.getInstalledAddons().first()
                 val installedAddonOrder = installedAddons.map { it.displayName }
-                val streamResult = streamRepository.getStreamsFromAllAddons(
+                var selectedStream: Stream? = null
+                val terminalResult = streamRepository.getStreamsFromAllAddons(
                     type = type,
                     videoId = nextVideo.id,
                     season = nextVideo.season,
                     episode = nextVideo.episode
-                ).first { it !is NetworkResult.Loading }
-
-                if (streamResult !is NetworkResult.Success) {
-                    _uiState.update {
-                        it.copy(
-                            showNextEpisodeCard = false,
-                            nextEpisodeCardDismissed = true,
-                            nextEpisodeAutoPlaySearching = false,
-                            nextEpisodeAutoPlaySourceName = null,
-                            nextEpisodeAutoPlayCountdownSec = null
-                        )
+                ).firstOrNull { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
+                            val allStreams = orderedStreams.flatMap { it.streams }
+                            selectedStream = StreamAutoPlaySelector.selectAutoPlayStream(
+                                streams = allStreams,
+                                mode = playerSettings.streamAutoPlayMode,
+                                regexPattern = playerSettings.streamAutoPlayRegex,
+                                source = playerSettings.streamAutoPlaySource,
+                                installedAddonNames = installedAddonOrder.toSet(),
+                                selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                                selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins
+                            )
+                            selectedStream != null
+                        }
+                        is NetworkResult.Error -> true
+                        NetworkResult.Loading -> false
                     }
-                    showEpisodeStreamPicker(video = nextVideo, forceRefresh = true)
-                    return@launch
                 }
 
-                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(streamResult.data, installedAddonOrder)
-                val allStreams = orderedStreams.flatMap { it.streams }
-                val selectedStream = StreamAutoPlaySelector.selectAutoPlayStream(
-                    streams = allStreams,
-                    mode = playerSettings.streamAutoPlayMode,
-                    regexPattern = playerSettings.streamAutoPlayRegex,
-                    source = playerSettings.streamAutoPlaySource,
-                    installedAddonNames = installedAddonOrder.toSet(),
-                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins
-                )
-
-                if (selectedStream != null) {
-                    val sourceName = (selectedStream.name?.takeIf { it.isNotBlank() } ?: selectedStream.addonName).trim()
+                val streamToPlay = selectedStream
+                if (streamToPlay != null) {
+                    val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
                     for (remaining in 3 downTo 1) {
                         _uiState.update {
                             it.copy(
@@ -1715,7 +1717,7 @@ class PlayerViewModel @Inject constructor(
                             nextEpisodeAutoPlayCountdownSec = null
                         )
                     }
-                    switchToEpisodeStream(stream = selectedStream, forcedTargetVideo = nextVideo)
+                    switchToEpisodeStream(stream = streamToPlay, forcedTargetVideo = nextVideo)
                 } else {
                     _uiState.update {
                         it.copy(
@@ -1726,7 +1728,10 @@ class PlayerViewModel @Inject constructor(
                             nextEpisodeAutoPlayCountdownSec = null
                         )
                     }
-                    showEpisodeStreamPicker(video = nextVideo, forceRefresh = false)
+                    showEpisodeStreamPicker(
+                        video = nextVideo,
+                        forceRefresh = terminalResult is NetworkResult.Error
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e

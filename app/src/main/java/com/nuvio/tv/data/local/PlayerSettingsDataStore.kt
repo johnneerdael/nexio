@@ -141,6 +141,7 @@ data class PlayerSettings(
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
+    val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24
 )
@@ -204,6 +205,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
     private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
+    private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
 
@@ -288,6 +290,7 @@ class PlayerSettingsDataStore @Inject constructor(
             streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
             streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
             streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
+            streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
             streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
             streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
             subtitleStyle = SubtitleStyleSettings(
@@ -415,6 +418,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayRegex(regex: String) {
         dataStore.edit { prefs ->
             prefs[streamAutoPlayRegexKey] = regex.trim()
+        }
+    }
+
+    suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlayNextEpisodeEnabledKey] = enabled
         }
     }
 

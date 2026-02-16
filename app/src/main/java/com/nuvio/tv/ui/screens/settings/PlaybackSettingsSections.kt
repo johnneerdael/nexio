@@ -81,6 +81,7 @@ internal fun PlaybackSettingsSections(
     onShowStreamAutoPlayPluginSelectionDialog: () -> Unit,
     onShowStreamRegexDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
@@ -228,6 +229,7 @@ internal fun PlaybackSettingsSections(
                 onShowPluginSelectionDialog = onShowStreamAutoPlayPluginSelectionDialog,
                 onShowRegexDialog = onShowStreamRegexDialog,
                 onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
+                onSetStreamAutoPlayNextEpisodeEnabled = onSetStreamAutoPlayNextEpisodeEnabled,
                 onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )

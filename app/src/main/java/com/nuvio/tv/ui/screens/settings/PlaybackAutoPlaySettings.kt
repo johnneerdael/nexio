@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
@@ -70,6 +71,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowPluginSelectionDialog: () -> Unit,
     onShowRegexDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
@@ -112,6 +114,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
     }
 
     if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
+        item {
+            ToggleSettingsItem(
+                icon = Icons.Default.SkipNext,
+                title = "Auto-play Next Episode",
+                subtitle = "Start next episode automatically when prompt appears.",
+                isChecked = playerSettings.streamAutoPlayNextEpisodeEnabled,
+                onCheckedChange = onSetStreamAutoPlayNextEpisodeEnabled,
+                onFocused = onItemFocused
+            )
+        }
+
         item {
             val sourceLabel = when (playerSettings.streamAutoPlaySource) {
                 StreamAutoPlaySource.ALL_SOURCES -> "All sources"
