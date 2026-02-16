@@ -1743,6 +1743,7 @@ class PlayerViewModel @Inject constructor(
             while (isActive) {
                 delay(10000) 
                 saveWatchProgressIfNeeded()
+                emitPeriodicScrobblePause()
             }
         }
     }
@@ -1861,6 +1862,18 @@ class PlayerViewModel @Inject constructor(
                 progressPercent = currentPlaybackProgressPercent()
             )
             hasSentScrobbleStartForCurrentItem = true
+        }
+    }
+
+    private fun emitPeriodicScrobblePause() {
+        val item = currentScrobbleItem ?: return
+        if (!hasSentScrobbleStartForCurrentItem) return
+
+        viewModelScope.launch {
+            traktScrobbleService.scrobblePause(
+                item = item,
+                progressPercent = currentPlaybackProgressPercent()
+            )
         }
     }
 
