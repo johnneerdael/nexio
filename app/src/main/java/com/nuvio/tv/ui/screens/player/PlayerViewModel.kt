@@ -200,6 +200,7 @@ class PlayerViewModel @Inject constructor(
     
     private var playbackStartedForParentalGuide = false
     private var hasRenderedFirstFrame = false
+    private var shouldEnforceAutoplayOnFirstReady = true
     private var metaVideos: List<Video> = emptyList()
     private var userPausedManually = false
 
@@ -770,6 +771,15 @@ class PlayerViewModel @Inject constructor(
                         
                             
                             if (playbackState == Player.STATE_READY) {
+                                if (shouldEnforceAutoplayOnFirstReady) {
+                                    shouldEnforceAutoplayOnFirstReady = false
+                                    if (!userPausedManually && !isPlaying) {
+                                        if (!playWhenReady) {
+                                            playWhenReady = true
+                                        }
+                                        play()
+                                    }
+                                }
                                 tryApplyPendingResumeProgress(this@apply)
                                 _uiState.value.pendingSeekPosition?.let { position ->
                                     seekTo(position)
@@ -855,6 +865,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun resetLoadingOverlayForNewStream() {
         hasRenderedFirstFrame = false
+        shouldEnforceAutoplayOnFirstReady = true
         userPausedManually = false
         lastKnownDuration = 0L
         _uiState.update { state ->
