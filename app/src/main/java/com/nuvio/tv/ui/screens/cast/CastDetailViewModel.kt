@@ -21,6 +21,7 @@ class CastDetailViewModel @Inject constructor(
     val personName: String = java.net.URLDecoder.decode(
         savedStateHandle.get<String>("personName") ?: "", "UTF-8"
     )
+    private val preferCrew: Boolean = savedStateHandle.get<Boolean>("preferCrew") ?: false
 
     private val _uiState = MutableStateFlow<CastDetailUiState>(CastDetailUiState.Loading)
     val uiState: StateFlow<CastDetailUiState> = _uiState.asStateFlow()
@@ -37,7 +38,10 @@ class CastDetailViewModel @Inject constructor(
     private fun loadPersonDetail() {
         viewModelScope.launch {
             try {
-                val detail = tmdbMetadataService.fetchPersonDetail(personId)
+                val detail = tmdbMetadataService.fetchPersonDetail(
+                    personId = personId,
+                    preferCrewCredits = preferCrew
+                )
                 if (detail != null) {
                     _uiState.value = CastDetailUiState.Success(detail)
                 } else {

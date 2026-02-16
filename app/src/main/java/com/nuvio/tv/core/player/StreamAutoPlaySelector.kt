@@ -1,0 +1,71 @@
+package com.nuvio.tv.core.player
+
+import com.nuvio.tv.data.local.StreamAutoPlayMode
+import com.nuvio.tv.data.local.StreamAutoPlaySource
+import com.nuvio.tv.domain.model.AddonStreams
+import com.nuvio.tv.domain.model.Stream
+
+object StreamAutoPlaySelector {
+    fun orderAddonStreams(
+        streams: List<AddonStreams>,
+        installedOrder: List<String>
+    ): List<AddonStreams> {
+        if (streams.isEmpty()) return streams
+
+        val (addonEntries, pluginEntries) = streams.partition { it.addonName in installedOrder }
+        val orderedAddons = addonEntries.sortedBy { installedOrder.indexOf(it.addonName) }
+        return orderedAddons + pluginEntries
+    }
+
+    fun selectAutoPlayStream(
+        streams: List<Stream>,
+        mode: StreamAutoPlayMode,
+        regexPattern: String,
+        source: StreamAutoPlaySource,
+        installedAddonNames: Set<String>,
+        selectedAddons: Set<String>,
+        selectedPlugins: Set<String>
+    ): Stream? {
+        if (streams.isEmpty()) return null
+
+        val sourceScopedStreams = when (source) {
+            StreamAutoPlaySource.ALL_SOURCES -> streams
+            StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> streams.filter { it.addonName in installedAddonNames }
+            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> streams.filter { it.addonName !in installedAddonNames }
+        }
+        val candidateStreams = sourceScopedStreams.filter { stream ->
+            val isAddonStream = stream.addonName in installedAddonNames
+            if (isAddonStream) {
+                selectedAddons.isEmpty() || stream.addonName in selectedAddons
+            } else {
+                selectedPlugins.isEmpty() || stream.addonName in selectedPlugins
+            }
+        }
+        if (candidateStreams.isEmpty()) return null
+
+        return when (mode) {
+            StreamAutoPlayMode.MANUAL -> null
+            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { it.getStreamUrl() != null }
+            StreamAutoPlayMode.REGEX_MATCH -> {
+                val pattern = regexPattern.trim()
+                if (pattern.isBlank()) return null
+                val regex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull() ?: return null
+
+                candidateStreams.firstOrNull { stream ->
+                    val searchableText = buildString {
+                        append(stream.addonName)
+                        append(' ')
+                        append(stream.name.orEmpty())
+                        append(' ')
+                        append(stream.title.orEmpty())
+                        append(' ')
+                        append(stream.description.orEmpty())
+                        append(' ')
+                        append(stream.getStreamUrl().orEmpty())
+                    }
+                    stream.getStreamUrl() != null && regex.containsMatchIn(searchableText)
+                }
+            }
+        }
+    }
+}

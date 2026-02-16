@@ -6,6 +6,7 @@ import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.PlayerPreference
+import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
@@ -208,6 +209,22 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayRegex(regex: String) {
         playerSettingsDataStore.setStreamAutoPlayRegex(regex)
+    }
+
+    suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
+    }
+
+    suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
+        playerSettingsDataStore.setNextEpisodeThresholdMode(mode)
+    }
+
+    suspend fun setNextEpisodeThresholdPercent(percent: Int) {
+        playerSettingsDataStore.setNextEpisodeThresholdPercent(percent)
+    }
+
+    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Int) {
+        playerSettingsDataStore.setNextEpisodeThresholdMinutesBeforeEnd(minutes)
     }
 
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {

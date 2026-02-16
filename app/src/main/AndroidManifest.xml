@@ -25,7 +25,7 @@
         android:theme="@style/Theme.MyApplication">
         <meta-data
             android:name="io.sentry.dsn"
-            android:value="https://fb3eb21fc3c09b22c9986c14fbf69214@o4509536317276160.ingest.de.sentry.io/4510874743734352" />
+            android:value="https://151aefbf907d5fd4a6c8533d9d064441@o4510894222278656.ingest.us.sentry.io/4510894227259392" />
         <meta-data
             android:name="io.sentry.send-default-pii"
             android:value="true" />
@@ -50,7 +50,6 @@
         <meta-data
             android:name="io.sentry.traces.profiling.start-on-app-start"
             android:value="true" />
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -112,6 +112,7 @@ fun PlayerScreen(
     val streamsFocusRequester = remember { FocusRequester() }
     val sourceStreamsFocusRequester = remember { FocusRequester() }
     val skipIntroFocusRequester = remember { FocusRequester() }
+    val nextEpisodeFocusRequester = remember { FocusRequester() }
 
     BackHandler {
         if (uiState.showPauseOverlay) {
@@ -200,14 +201,15 @@ fun PlayerScreen(
         } else if (!uiState.showControls) {
             // When controls are hidden, let skip intro button take focus if visible
             val skipVisible = uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed
-            if (!skipVisible) {
+            val nextEpisodeVisible = uiState.showNextEpisodeCard && uiState.nextEpisode != null
+            if (!skipVisible && !nextEpisodeVisible) {
                 try {
                     containerFocusRequester.requestFocus()
                 } catch (e: Exception) {
                     // Focus requester may not be ready yet
                 }
             }
-            // If skip button is visible, its own LaunchedEffect will request focus
+            // If skip or next episode card is visible, their own LaunchedEffect will request focus
         }
     }
 
@@ -295,6 +297,12 @@ fun PlayerScreen(
                                 if (skipVisible) {
                                     try {
                                         skipIntroFocusRequester.requestFocus()
+                                    } catch (_: Exception) {
+                                        // Focus requester may not be ready yet
+                                    }
+                                } else if (uiState.showNextEpisodeCard && uiState.nextEpisode != null) {
+                                    try {
+                                        nextEpisodeFocusRequester.requestFocus()
                                     } catch (_: Exception) {
                                         // Focus requester may not be ready yet
                                     }
@@ -453,6 +461,30 @@ fun PlayerScreen(
                 .padding(start = 32.dp, bottom = if (uiState.showControls) 120.dp else 32.dp)
         )
 
+        NextEpisodeCardOverlay(
+            nextEpisode = uiState.nextEpisode,
+            visible = uiState.showNextEpisodeCard &&
+                uiState.error == null &&
+                !uiState.showLoadingOverlay &&
+                !uiState.showPauseOverlay &&
+                !uiState.showEpisodesPanel &&
+                !uiState.showSourcesPanel &&
+                !uiState.showAudioDialog &&
+                !uiState.showSubtitleDialog &&
+                !uiState.showSubtitleStylePanel &&
+                !uiState.showSpeedDialog,
+            controlsVisible = uiState.showControls,
+            isAutoPlaySearching = uiState.nextEpisodeAutoPlaySearching,
+            autoPlaySourceName = uiState.nextEpisodeAutoPlaySourceName,
+            autoPlayCountdownSec = uiState.nextEpisodeAutoPlayCountdownSec,
+            onPlayNext = { viewModel.onEvent(PlayerEvent.OnPlayNextEpisode) },
+            focusRequester = nextEpisodeFocusRequester,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 26.dp, bottom = if (uiState.showControls) 122.dp else 30.dp)
+                .zIndex(2.1f)
+        )
+
         // Parental guide overlay (shows when video first starts playing)
         ParentalGuideOverlay(
             warnings = uiState.parentalWarnings,
@@ -522,6 +554,17 @@ fun PlayerScreen(
                 .padding(top = 80.dp)
         ) {
             AspectRatioIndicator(text = uiState.aspectRatioIndicatorText)
+        }
+
+        AnimatedVisibility(
+            visible = uiState.showStreamSourceIndicator,
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(180)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 128.dp)
+        ) {
+            StreamSourceIndicator(text = uiState.streamSourceIndicatorText)
         }
 
         // Seek-only overlay (progress bar + time) when controls are hidden
@@ -1083,6 +1126,27 @@ private fun AspectRatioIndicator(text: String) {
                 fontWeight = FontWeight.SemiBold
             ),
             color = Color.White
+        )
+    }
+}
+
+@Composable
+private fun StreamSourceIndicator(text: String) {
+    Row(
+        modifier = Modifier
+            .background(
+                color = Color.Black.copy(alpha = 0.82f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

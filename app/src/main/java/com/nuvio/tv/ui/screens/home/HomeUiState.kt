@@ -86,6 +86,11 @@ sealed class GridItem {
 sealed class HomeEvent {
     data class OnItemClick(val itemId: String, val itemType: String) : HomeEvent()
     data class OnLoadMoreCatalog(val catalogId: String, val addonId: String, val type: String) : HomeEvent()
-    data class OnRemoveContinueWatching(val contentId: String, val season: Int? = null, val episode: Int? = null) : HomeEvent()
+    data class OnRemoveContinueWatching(
+        val contentId: String,
+        val season: Int? = null,
+        val episode: Int? = null,
+        val isNextUp: Boolean = false
+    ) : HomeEvent()
     data object OnRetry : HomeEvent()
 }

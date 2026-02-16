@@ -2,6 +2,7 @@ package com.nuvio.tv.data.repository
 
 import android.util.Log
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.remote.api.TraktApi
 import com.nuvio.tv.data.remote.dto.trakt.TraktEpisodeDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
@@ -56,7 +57,8 @@ import javax.inject.Singleton
 class TraktProgressService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
-    private val metaRepository: MetaRepository
+    private val metaRepository: MetaRepository,
+    private val traktSettingsDataStore: TraktSettingsDataStore
 ) {
     companion object {
         private const val TAG = "TraktProgressSvc"
@@ -117,7 +119,6 @@ class TraktProgressService @Inject constructor(
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = 60_000L
     private val optimisticTtlMs = 3 * 60_000L
-    private val recentWatchWindowMs = 30L * 24 * 60 * 60 * 1000
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 30
     private val fastSyncThrottleMs = 3_000L
@@ -127,8 +128,15 @@ class TraktProgressService @Inject constructor(
     private var refreshIntervalMs = baseRefreshIntervalMs
     @Volatile
     private var consecutiveRefreshFailures = 0
+    @Volatile
+    private var continueWatchingWindowDays: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP
 
     init {
+        scope.launch {
+            traktSettingsDataStore.continueWatchingDaysCap.collectLatest { days ->
+                continueWatchingWindowDays = days
+            }
+        }
         scope.launch {
             refreshEvents().collectLatest {
                 val success = try {
@@ -142,6 +150,8 @@ class TraktProgressService @Inject constructor(
             }
         }
     }
+
+    private fun recentWatchWindowMs(): Long = continueWatchingWindowDays.toLong() * 24L * 60L * 60L * 1000L
 
     suspend fun refreshNow() {
         forceRefreshUntilMs = System.currentTimeMillis() + 30_000L
@@ -451,7 +461,7 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun fetchAllProgressSnapshot(force: Boolean = false): List<WatchProgress> {
         val recentCompletedEpisodes = fetchRecentEpisodeHistorySnapshot()
-        val playbackStartAt = toTraktUtcDateTime(System.currentTimeMillis() - recentWatchWindowMs)
+        val playbackStartAt = toTraktUtcDateTime(System.currentTimeMillis() - recentWatchWindowMs())
         val inProgressMovies = getPlayback("movies", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackMovie(it) }
         val inProgressEpisodes = getPlayback("episodes", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackEpisode(it) }
 
@@ -473,7 +483,7 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun fetchRecentEpisodeHistorySnapshot(): List<WatchProgress> {
-        val cutoffMs = System.currentTimeMillis() - recentWatchWindowMs
+        val cutoffMs = System.currentTimeMillis() - recentWatchWindowMs()
         val results = linkedMapOf<String, WatchProgress>()
         var page = 1
         val pageLimit = 100
@@ -575,7 +585,7 @@ class TraktProgressService @Inject constructor(
 
         val inProgress = getPlayback(
             type = "episodes",
-            startAt = toTraktUtcDateTime(System.currentTimeMillis() - recentWatchWindowMs)
+            startAt = toTraktUtcDateTime(System.currentTimeMillis() - recentWatchWindowMs())
         )
             .mapNotNull { mapPlaybackEpisode(it) }
             .filter { it.contentId == contentId }

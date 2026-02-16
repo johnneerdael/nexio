@@ -65,7 +65,7 @@ fun GridHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
-    onRemoveContinueWatching: (String, Int?, Int?) -> Unit,
+    onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
@@ -232,7 +232,8 @@ fun GridHomeContent(
                                             is ContinueWatchingItem.InProgress -> item.progress.episode
                                             is ContinueWatchingItem.NextUp -> item.info.episode
                                         }
-                                        onRemoveContinueWatching(contentId, season, episode)
+                                        val isNextUp = item is ContinueWatchingItem.NextUp
+                                        onRemoveContinueWatching(contentId, season, episode, isNextUp)
                                     }
                                 )
                             }
@@ -353,7 +354,8 @@ fun GridHomeContent(
                                 is ContinueWatchingItem.InProgress -> item.progress.episode
                                 is ContinueWatchingItem.NextUp -> item.info.episode
                             }
-                            onRemoveContinueWatching(contentId, season, episode)
+                            val isNextUp = item is ContinueWatchingItem.NextUp
+                            onRemoveContinueWatching(contentId, season, episode, isNextUp)
                         }
                     )
                 }

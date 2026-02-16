@@ -144,6 +144,7 @@ fun PlaybackSettingsContent(
     var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showStreamRegexDialog by remember { mutableStateOf(false) }
+    var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
 
@@ -161,6 +162,7 @@ fun PlaybackSettingsContent(
         showStreamAutoPlayAddonSelectionDialog = false
         showStreamAutoPlayPluginSelectionDialog = false
         showStreamRegexDialog = false
+        showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
     }
@@ -202,7 +204,17 @@ fun PlaybackSettingsContent(
                 onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
                 onShowStreamAutoPlayPluginSelectionDialog = { openDialog { showStreamAutoPlayPluginSelectionDialog = true } },
                 onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
+                onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
+                onSetStreamAutoPlayNextEpisodeEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setStreamAutoPlayNextEpisodeEnabled(enabled) }
+                },
+                onSetNextEpisodeThresholdPercent = { percent ->
+                    coroutineScope.launch { viewModel.setNextEpisodeThresholdPercent(percent) }
+                },
+                onSetNextEpisodeThresholdMinutesBeforeEnd = { minutes ->
+                    coroutineScope.launch { viewModel.setNextEpisodeThresholdMinutesBeforeEnd(minutes) }
+                },
                 onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
                 onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
@@ -241,6 +253,7 @@ fun PlaybackSettingsContent(
         showStreamAutoPlayAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
         showStreamAutoPlayPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
         showStreamRegexDialog = showStreamRegexDialog,
+        showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
@@ -276,6 +289,9 @@ fun PlaybackSettingsContent(
         onSetStreamAutoPlaySource = { source ->
             coroutineScope.launch { viewModel.setStreamAutoPlaySource(source) }
         },
+        onSetNextEpisodeThresholdMode = { mode ->
+            coroutineScope.launch { viewModel.setNextEpisodeThresholdMode(mode) }
+        },
         onSetStreamAutoPlayRegex = { regex ->
             coroutineScope.launch { viewModel.setStreamAutoPlayRegex(regex) }
         },
@@ -301,6 +317,7 @@ fun PlaybackSettingsContent(
         onDismissStreamRegexDialog = ::dismissAllDialogs,
         onDismissStreamAutoPlayAddonSelectionDialog = ::dismissAllDialogs,
         onDismissStreamAutoPlayPluginSelectionDialog = ::dismissAllDialogs,
+        onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
 }

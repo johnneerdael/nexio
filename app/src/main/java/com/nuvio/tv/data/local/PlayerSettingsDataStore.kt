@@ -141,6 +141,10 @@ data class PlayerSettings(
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
+    val streamAutoPlayNextEpisodeEnabled: Boolean = false,
+    val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+    val nextEpisodeThresholdPercent: Int = 95,
+    val nextEpisodeThresholdMinutesBeforeEnd: Int = 3,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE
@@ -156,6 +160,11 @@ enum class StreamAutoPlaySource {
     ALL_SOURCES,
     INSTALLED_ADDONS_ONLY,
     ENABLED_PLUGINS_ONLY
+}
+
+enum class NextEpisodeThresholdMode {
+    PERCENTAGE,
+    MINUTES_BEFORE_END
 }
 
 enum class SubtitleOrganizationMode {
@@ -211,6 +220,10 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
     private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
+    private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
+    private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
+    private val nextEpisodeThresholdPercentKey = intPreferencesKey("next_episode_threshold_percent")
+    private val nextEpisodeThresholdMinutesBeforeEndKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
@@ -296,6 +309,12 @@ class PlayerSettingsDataStore @Inject constructor(
             streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
             streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
             streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
+            streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
+            nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
+                runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
+            } ?: NextEpisodeThresholdMode.PERCENTAGE,
+            nextEpisodeThresholdPercent = (prefs[nextEpisodeThresholdPercentKey] ?: 95).coerceIn(50, 99),
+            nextEpisodeThresholdMinutesBeforeEnd = (prefs[nextEpisodeThresholdMinutesBeforeEndKey] ?: 3).coerceIn(1, 30),
             streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
             streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
             subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
@@ -424,6 +443,30 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayRegex(regex: String) {
         dataStore.edit { prefs ->
             prefs[streamAutoPlayRegexKey] = regex.trim()
+        }
+    }
+
+    suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[streamAutoPlayNextEpisodeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
+        dataStore.edit { prefs ->
+            prefs[nextEpisodeThresholdModeKey] = mode.name
+        }
+    }
+
+    suspend fun setNextEpisodeThresholdPercent(percent: Int) {
+        dataStore.edit { prefs ->
+            prefs[nextEpisodeThresholdPercentKey] = percent.coerceIn(50, 99)
+        }
+    }
+
+    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Int) {
+        dataStore.edit { prefs ->
+            prefs[nextEpisodeThresholdMinutesBeforeEndKey] = minutes.coerceIn(1, 30)
         }
     }
 

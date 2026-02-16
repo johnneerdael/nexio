@@ -61,11 +61,13 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerFetchJob: Job? = null
 
     private var trailerDelayMs = 7000L
+    private var trailerAutoplayEnabled = false
 
     private var isPlayButtonFocused = false
 
     init {
         observeMetaViewSettings()
+        observeTrailerAutoplaySettings()
         observeLibraryState()
         observeWatchProgress()
         observeWatchedEpisodes()
@@ -78,6 +80,18 @@ class MetaDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.detailPageTrailerButtonEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(trailerButtonEnabled = enabled) }
+            }
+        }
+    }
+
+    private fun observeTrailerAutoplaySettings() {
+        viewModelScope.launch {
+            trailerSettingsDataStore.settings.collectLatest { settings ->
+                trailerAutoplayEnabled = settings.enabled
+                trailerDelayMs = settings.delaySeconds * 1000L
+                if (!settings.enabled) {
+                    idleTimerJob?.cancel()
+                }
             }
         }
     }
@@ -865,12 +879,6 @@ class MetaDetailsViewModel @Inject constructor(
 
         trailerFetchJob?.cancel()
         trailerFetchJob = viewModelScope.launch {
-            // Check if trailers are enabled in settings
-            val settings = trailerSettingsDataStore.settings.first()
-            if (!settings.enabled) return@launch
-
-            trailerDelayMs = settings.delaySeconds * 1000L
-
             _uiState.update { it.copy(isTrailerLoading = true) }
 
             val year = meta.releaseInfo?.split("-")?.firstOrNull()
@@ -908,6 +916,7 @@ class MetaDetailsViewModel @Inject constructor(
 
         val state = _uiState.value
         if (state.trailerUrl == null || state.isTrailerPlaying) return
+        if (!trailerAutoplayEnabled) return
         if (!isPlayButtonFocused) return
 
         idleTimerJob = viewModelScope.launch {

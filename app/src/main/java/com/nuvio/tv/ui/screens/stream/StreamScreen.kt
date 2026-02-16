@@ -73,6 +73,7 @@ import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.components.StreamsSkeletonList
+import com.nuvio.tv.ui.screens.player.LoadingOverlay
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
@@ -83,7 +84,8 @@ import androidx.lifecycle.LifecycleEventObserver
 fun StreamScreen(
     viewModel: StreamScreenViewModel = hiltViewModel(),
     onBackPress: () -> Unit,
-    onStreamSelected: (StreamPlaybackInfo) -> Unit
+    onStreamSelected: (StreamPlaybackInfo) -> Unit,
+    onAutoPlayResolved: (StreamPlaybackInfo) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val playerPreference by viewModel.playerPreference.collectAsState(initial = PlayerPreference.INTERNAL)
@@ -117,6 +119,17 @@ fun StreamScreen(
         }
     }
 
+    fun routeAutoPlay(playbackInfo: StreamPlaybackInfo) {
+        if (uiState.isDirectAutoPlayFlow) {
+            onAutoPlayResolved(playbackInfo)
+            return
+        } else {
+            pendingRestoreOnResume = true
+            routePlayback(playbackInfo)
+            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+        }
+    }
+
     BackHandler {
         onBackPress()
     }
@@ -125,18 +138,14 @@ fun StreamScreen(
         val stream = uiState.autoPlayStream ?: return@LaunchedEffect
         val playbackInfo = viewModel.getStreamForPlayback(stream)
         if (playbackInfo.url != null) {
-            pendingRestoreOnResume = true
-            routePlayback(playbackInfo)
-            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+            routeAutoPlay(playbackInfo)
         }
     }
 
     LaunchedEffect(uiState.autoPlayPlaybackInfo) {
         val playbackInfo = uiState.autoPlayPlaybackInfo ?: return@LaunchedEffect
         if (playbackInfo.url != null) {
-            pendingRestoreOnResume = true
-            routePlayback(playbackInfo)
-            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+            routeAutoPlay(playbackInfo)
         }
     }
 
@@ -164,58 +173,78 @@ fun StreamScreen(
             isLoading = uiState.isLoading
         )
 
-        // Content overlay
-        Row(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Left side - Title/Logo (centered vertically)
-            LeftContentSection(
-                title = uiState.title,
-                logo = uiState.logo,
-                isEpisode = uiState.isEpisode,
-                season = uiState.season,
-                episode = uiState.episode,
-                episodeName = uiState.episodeName,
-                runtime = uiState.runtime,
-                genres = uiState.genres,
-                year = uiState.year,
-                modifier = Modifier
-                    .weight(0.4f)
-                    .fillMaxHeight()
+        if (uiState.showDirectAutoPlayOverlay) {
+            LoadingOverlay(
+                visible = true,
+                backdropUrl = uiState.backdrop ?: uiState.poster,
+                logoUrl = uiState.logo,
+                modifier = Modifier.fillMaxSize()
             )
+            uiState.directAutoPlayMessage?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.72f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(top = 144.dp)
+                )
+            }
+        } else {
+            // Content overlay
+            Row(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Left side - Title/Logo (centered vertically)
+                LeftContentSection(
+                    title = uiState.title,
+                    logo = uiState.logo,
+                    isEpisode = uiState.isEpisode,
+                    season = uiState.season,
+                    episode = uiState.episode,
+                    episodeName = uiState.episodeName,
+                    runtime = uiState.runtime,
+                    genres = uiState.genres,
+                    year = uiState.year,
+                    modifier = Modifier
+                        .weight(0.4f)
+                        .fillMaxHeight()
+                )
 
-            // Right side - Streams container
-            RightStreamSection(
-                isLoading = uiState.isLoading,
-                error = uiState.error,
-                streams = uiState.filteredStreams,
-                availableAddons = uiState.availableAddons,
-                selectedAddonFilter = uiState.selectedAddonFilter,
-                onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
-                onStreamSelected = { stream ->
-                    val currentIndex = uiState.filteredStreams.indexOfFirst {
-                        it.url == stream.url &&
-                            it.infoHash == stream.infoHash &&
-                            it.ytId == stream.ytId &&
-                            it.addonName == stream.addonName
-                    }
-                    if (currentIndex >= 0) {
-                        focusedStreamIndex = currentIndex
-                    }
-                    val playbackInfo = viewModel.getStreamForPlayback(stream)
-                    pendingRestoreOnResume = true
-                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
-                    routePlayback(playbackInfo)
-                },
-                focusedStreamIndex = focusedStreamIndex,
-                shouldRestoreFocusedStream = restoreFocusedStream,
-                onRestoreFocusedStreamHandled = { restoreFocusedStream = false },
-                onStreamFocused = { index -> focusedStreamIndex = index },
-                onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
-                modifier = Modifier
-                    .weight(0.6f)
-                    .fillMaxHeight()
-            )
+                // Right side - Streams container
+                RightStreamSection(
+                    isLoading = uiState.isLoading,
+                    error = uiState.error,
+                    streams = uiState.filteredStreams,
+                    availableAddons = uiState.availableAddons,
+                    selectedAddonFilter = uiState.selectedAddonFilter,
+                    onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
+                    onStreamSelected = { stream ->
+                        val currentIndex = uiState.filteredStreams.indexOfFirst {
+                            it.url == stream.url &&
+                                it.infoHash == stream.infoHash &&
+                                it.ytId == stream.ytId &&
+                                it.addonName == stream.addonName
+                        }
+                        if (currentIndex >= 0) {
+                            focusedStreamIndex = currentIndex
+                        }
+                        val playbackInfo = viewModel.getStreamForPlayback(stream)
+                        pendingRestoreOnResume = true
+                        viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                        routePlayback(playbackInfo)
+                    },
+                    focusedStreamIndex = focusedStreamIndex,
+                    shouldRestoreFocusedStream = restoreFocusedStream,
+                    onRestoreFocusedStreamHandled = { restoreFocusedStream = false },
+                    onStreamFocused = { index -> focusedStreamIndex = index },
+                    onRetry = { viewModel.onEvent(StreamScreenEvent.OnRetry) },
+                    modifier = Modifier
+                        .weight(0.6f)
+                        .fillMaxHeight()
+                )
+            }
         }
 
         // Player choice dialog for "Ask every time" preference

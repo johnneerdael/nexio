@@ -120,8 +120,8 @@ fun NuvioNavHost(
         ) { backStackEntry ->
             MetaDetailsScreen(
                 onBackPress = { navController.popBackStack() },
-                onNavigateToCastDetail = { personId, personName ->
-                    navController.navigate(Screen.CastDetail.createRoute(personId, personName))
+                onNavigateToCastDetail = { personId, personName, preferCrew ->
+                    navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
                 },
                 onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime ->
                     navController.navigate(
@@ -234,6 +234,33 @@ fun NuvioNavHost(
                                 rememberedAudioName = playbackInfo.rememberedAudioName
                             )
                         )
+                    }
+                },
+                onAutoPlayResolved = { playbackInfo ->
+                    playbackInfo.url?.let { url ->
+                        navController.navigate(
+                            Screen.Player.createRoute(
+                                streamUrl = url,
+                                title = playbackInfo.title,
+                                streamName = playbackInfo.streamName,
+                                year = playbackInfo.year,
+                                headers = playbackInfo.headers,
+                                contentId = playbackInfo.contentId,
+                                contentType = playbackInfo.contentType,
+                                contentName = playbackInfo.contentName,
+                                poster = playbackInfo.poster,
+                                backdrop = playbackInfo.backdrop,
+                                logo = playbackInfo.logo,
+                                videoId = playbackInfo.videoId,
+                                season = playbackInfo.season,
+                                episode = playbackInfo.episode,
+                                episodeTitle = playbackInfo.episodeTitle,
+                                rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
+                                rememberedAudioName = playbackInfo.rememberedAudioName
+                            )
+                        ) {
+                            popUpTo(Screen.Stream.route) { inclusive = true }
+                        }
                     }
                 }
             )
@@ -470,7 +497,11 @@ fun NuvioNavHost(
             route = Screen.CastDetail.route,
             arguments = listOf(
                 navArgument("personId") { type = NavType.StringType },
-                navArgument("personName") { type = NavType.StringType }
+                navArgument("personName") { type = NavType.StringType },
+                navArgument("preferCrew") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
             )
         ) {
             CastDetailScreen(
