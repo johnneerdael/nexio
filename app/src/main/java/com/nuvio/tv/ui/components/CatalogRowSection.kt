@@ -66,14 +66,17 @@ fun CatalogRowSection(
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {},
+    rowFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
     val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
-    val rowFocusRequester = remember { FocusRequester() }
+    val internalRowFocusRequester = remember { FocusRequester() }
+    val resolvedRowFocusRequester = rowFocusRequester ?: internalRowFocusRequester
     val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     LaunchedEffect(catalogRow.items.size) {
         itemFocusRequesters.keys.removeAll { it >= catalogRow.items.size }
@@ -85,6 +88,15 @@ fun CatalogRowSection(
             kotlinx.coroutines.delay(100)
             runCatching { requester.requestFocus() }
         }
+    }
+
+    val directionalFocusModifier = if (upFocusRequester != null || downFocusRequester != null) {
+        Modifier.focusProperties {
+            if (upFocusRequester != null) up = upFocusRequester
+            if (downFocusRequester != null) down = downFocusRequester
+        }
+    } else {
+        Modifier
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -117,7 +129,7 @@ fun CatalogRowSection(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(rowFocusRequester)
+                .focusRequester(resolvedRowFocusRequester)
                 .then(
                     if (enableRowFocusRestorer && focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
                         Modifier.focusRestorer {
@@ -127,7 +139,7 @@ fun CatalogRowSection(
                             if (visibleIndex != null && visibleIndex < catalogRow.items.size) {
                                 itemFocusRequesters.getOrPut(visibleIndex) { FocusRequester() }
                             } else {
-                                rowFocusRequester
+                                resolvedRowFocusRequester
                             }
                         }
                     } else {
@@ -161,13 +173,7 @@ fun CatalogRowSection(
                                 currentOnItemFocused(index)
                             }
                         }
-                        .then(
-                            if (upFocusRequester != null) {
-                                Modifier.focusProperties { up = upFocusRequester }
-                            } else {
-                                Modifier
-                            }
-                        ),
+                        .then(directionalFocusModifier),
                     focusRequester = itemFocusRequesters.getOrPut(index) { FocusRequester() }
                 )
             }
@@ -180,13 +186,7 @@ fun CatalogRowSection(
                         modifier = Modifier
                             .width(posterCardStyle.width)
                             .height(posterCardStyle.height)
-                            .then(
-                                if (upFocusRequester != null) {
-                                    Modifier.focusProperties { up = upFocusRequester }
-                                } else {
-                                    Modifier
-                                }
-                            ),
+                            .then(directionalFocusModifier),
                         shape = CardDefaults.shape(shape = seeAllCardShape),
                         colors = CardDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,
