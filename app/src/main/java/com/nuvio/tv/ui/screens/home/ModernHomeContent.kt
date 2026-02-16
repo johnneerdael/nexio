@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +64,7 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
+private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.75f
 
 private data class HeroPreview(
     val title: String,
@@ -163,11 +165,12 @@ fun ModernHomeContent(
 
     val focusedItemByRow = remember { mutableStateMapOf<String, Int>() }
     val itemFocusRequesters = remember { mutableMapOf<String, MutableMap<Int, FocusRequester>>() }
-    val rowFirstItemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val rowListStates = remember { mutableMapOf<String, LazyListState>() }
     val transitionFocusRequester = remember { FocusRequester() }
 
     var activeRowKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
+    var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
     var rowTransitionInProgress by remember { mutableStateOf(false) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
@@ -188,11 +191,11 @@ fun ModernHomeContent(
         if (targetRow.items.isEmpty()) return false
 
         rowTransitionInProgress = true
-        runCatching { transitionFocusRequester.requestFocus() }
         activeRowKey = targetRow.key
         focusedItemByRow[targetRow.key] = 0
         heroItem = targetRow.items.firstOrNull()?.heroPreview
         pendingRowFocusKey = targetRow.key
+        pendingRowFocusIndex = 0
         return true
     }
 
@@ -200,7 +203,7 @@ fun ModernHomeContent(
         val activeKeys = carouselRows.map { it.key }.toSet()
         focusedItemByRow.keys.retainAll(activeKeys)
         itemFocusRequesters.keys.retainAll(activeKeys)
-        rowFirstItemFocusRequesters.keys.retainAll(activeKeys)
+        rowListStates.keys.retainAll(activeKeys)
 
         carouselRows.forEach { row ->
             if (row.items.isNotEmpty() && row.key !in focusedItemByRow) {
@@ -225,6 +228,7 @@ fun ModernHomeContent(
             heroItem = resolvedRow.items.getOrNull(resolvedIndex)?.heroPreview
                 ?: resolvedRow.items.firstOrNull()?.heroPreview
             pendingRowFocusKey = resolvedRow.key
+            pendingRowFocusIndex = resolvedIndex
             restoredFromSavedState = true
             return@LaunchedEffect
         }
@@ -241,6 +245,7 @@ fun ModernHomeContent(
             ?: resolvedActive.items.firstOrNull()?.heroPreview
         if (!focusState.hasSavedFocus && !hadActiveRow) {
             pendingRowFocusKey = resolvedActive.key
+            pendingRowFocusIndex = resolvedIndex
         }
     }
 
@@ -258,25 +263,6 @@ fun ModernHomeContent(
         } else {
             null
         }
-    }
-
-    LaunchedEffect(pendingRowFocusKey, activeRow?.key) {
-        val rowKey = pendingRowFocusKey ?: return@LaunchedEffect
-        if (activeRow?.key != rowKey) return@LaunchedEffect
-        val requester = rowFirstItemFocusRequesters.getOrPut(rowKey) {
-            requesterFor(rowKey, 0)
-        }
-        repeat(8) {
-            val didFocus = runCatching { requester.requestFocus() }.isSuccess
-            if (didFocus) {
-                pendingRowFocusKey = null
-                rowTransitionInProgress = false
-                return@LaunchedEffect
-            }
-            withFrameNanos { }
-        }
-        pendingRowFocusKey = null
-        rowTransitionInProgress = false
     }
 
     DisposableEffect(activeRow?.key, activeItemIndex, carouselRows) {
@@ -325,6 +311,10 @@ fun ModernHomeContent(
         }
 
         val resolvedHero = heroItem ?: activeRow?.items?.firstOrNull()?.heroPreview
+        val heroBackdrop = resolvedHero?.backdrop?.takeIf { it.isNotBlank() }
+            ?: activeRow?.items?.firstNotNullOfOrNull { item ->
+                item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
+            }
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
         val titleY = when {
             useLandscapePosters -> maxHeight * 0.23f
@@ -333,7 +323,7 @@ fun ModernHomeContent(
         }
 
         Crossfade(
-            targetState = resolvedHero?.imageUrl ?: resolvedHero?.backdrop ?: resolvedHero?.poster,
+            targetState = heroBackdrop,
             animationSpec = tween(durationMillis = 350),
             label = "modernHeroBackground"
         ) { imageUrl ->
@@ -389,7 +379,7 @@ fun ModernHomeContent(
                 .align(Alignment.TopStart)
                 .offset(y = titleY)
                 .padding(start = rowHorizontalPadding, end = 48.dp)
-                .fillMaxWidth(if (useLandscapePosters) 0.48f else 0.40f)
+                .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
         )
 
         Column(
@@ -406,7 +396,17 @@ fun ModernHomeContent(
             )
 
             activeRow?.let { row ->
+                val rowListState = rowListStates.getOrPut(row.key) { LazyListState() }
+
+                LaunchedEffect(row.key, pendingRowFocusKey, pendingRowFocusIndex) {
+                    if (pendingRowFocusKey != row.key) return@LaunchedEffect
+                    val targetIndex = (pendingRowFocusIndex ?: 0)
+                        .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
+                    runCatching { rowListState.scrollToItem(targetIndex) }
+                }
+
                 LazyRow(
+                    state = rowListState,
                     contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
                     horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
                 ) {
@@ -415,8 +415,25 @@ fun ModernHomeContent(
                         key = { index, item -> "${row.key}_${item.key}_$index" }
                     ) { index, item ->
                         val requester = requesterFor(row.key, index)
-                        if (index == 0) {
-                            rowFirstItemFocusRequesters[row.key] = requester
+                        if (pendingRowFocusKey == row.key && pendingRowFocusIndex == index) {
+                            LaunchedEffect(row.key, pendingRowFocusKey, pendingRowFocusIndex, index) {
+                                repeat(24) {
+                                    val didFocus = runCatching {
+                                        requester.requestFocus()
+                                        true
+                                    }.getOrDefault(false)
+                                    if (didFocus) {
+                                        pendingRowFocusKey = null
+                                        pendingRowFocusIndex = null
+                                        rowTransitionInProgress = false
+                                        return@LaunchedEffect
+                                    }
+                                    withFrameNanos { }
+                                }
+                                pendingRowFocusKey = null
+                                pendingRowFocusIndex = null
+                                rowTransitionInProgress = false
+                            }
                         }
                         ModernCarouselCard(
                             item = item,
@@ -649,93 +666,107 @@ private fun ModernCarouselCard(
     rowTransitionInProgress: Boolean
 ) {
     val cardShape = RoundedCornerShape(if (useLandscapePosters) 12.dp else 14.dp)
-
-    val overlayBrush = remember {
+    val titleStyle = if (useLandscapePosters) {
+        MaterialTheme.typography.titleSmall
+    } else {
+        MaterialTheme.typography.bodyLarge
+    }
+    val landscapeLogoGradient = remember {
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0.0f to Color.Transparent,
-                0.54f to Color.Transparent,
-                0.84f to Color.Black.copy(alpha = 0.62f),
-                1.0f to Color.Black.copy(alpha = 0.9f)
+                0.58f to Color.Transparent,
+                1.0f to Color.Black.copy(alpha = 0.75f)
             )
         )
     }
 
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .width(cardWidth)
-            .height(cardHeight)
-            .focusRequester(focusRequester)
-            .onFocusChanged {
-                if (it.isFocused) {
-                    onFocused()
-                }
-            }
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (rowTransitionInProgress) return@onPreviewKeyEvent true
-                when (event.key) {
-                    Key.DirectionUp -> onMoveUp()
-                    Key.DirectionDown -> onMoveDown()
-                    else -> false
-                }
-            },
-        shape = CardDefaults.shape(shape = cardShape),
-        colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = cardShape
-            )
-        ),
-        scale = CardDefaults.scale(focusedScale = 1f)
+    Column(
+        modifier = Modifier.width(cardWidth),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize()
+        Card(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(cardHeight)
+                .focusRequester(focusRequester)
+                .onFocusChanged {
+                    if (it.isFocused) {
+                        onFocused()
+                    }
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (rowTransitionInProgress) return@onPreviewKeyEvent true
+                    when (event.key) {
+                        Key.DirectionUp -> {
+                            onMoveUp()
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            onMoveDown()
+                            true
+                        }
+                        else -> false
+                    }
+                },
+            shape = CardDefaults.shape(shape = cardShape),
+            colors = CardDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                focusedContainerColor = NuvioColors.BackgroundCard
+            ),
+            border = CardDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    shape = cardShape
+                )
+            ),
+            scale = CardDefaults.scale(focusedScale = 1f)
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(item.imageUrl)
-                    .crossfade(false)
-                    .build(),
-                contentDescription = item.title,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.imageUrl)
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = item.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(overlayBrush)
-            )
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 10.dp, vertical = 10.dp)
-            ) {
-                item.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = NuvioColors.Secondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                if (useLandscapePosters && !item.heroPreview.logo.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(landscapeLogoGradient)
+                    )
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(item.heroPreview.logo)
+                            .crossfade(false)
+                            .build(),
+                        contentDescription = item.title,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth(0.62f)
+                            .height(cardHeight * 0.34f)
+                            .padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.CenterStart
                     )
                 }
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = if (useLandscapePosters) 1 else 2,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
+
+        Text(
+            text = item.title,
+            style = titleStyle.copy(fontWeight = FontWeight.Medium),
+            color = NuvioColors.TextPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
     }
 }
 

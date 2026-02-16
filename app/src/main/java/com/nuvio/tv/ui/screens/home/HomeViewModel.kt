@@ -782,7 +782,7 @@ class HomeViewModel @Inject constructor(
             val computedHeroItems = when {
                 heroItemsFromSelectedCatalog.isNotEmpty() -> heroItemsFromSelectedCatalog.take(7)
                 fallbackHeroItemsWithArtwork.isNotEmpty() -> fallbackHeroItemsWithArtwork
-                else -> orderedRows.flatMap { it.items }.take(7)
+                else -> emptyList()
             }
 
             val computedDisplayRows = orderedRows.map { row ->
@@ -1020,7 +1020,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun MetaPreview.hasHeroArtwork(): Boolean {
-        return !background.isNullOrBlank() || !poster.isNullOrBlank()
+        return !background.isNullOrBlank()
     }
 
     private fun extractYear(releaseInfo: String?): String? {
