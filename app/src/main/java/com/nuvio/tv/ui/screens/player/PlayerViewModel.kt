@@ -42,6 +42,7 @@ import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
+import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
@@ -106,6 +107,7 @@ class PlayerViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "PlayerViewModel"
+        private const val TRACK_FRAME_RATE_GRACE_MS = 1500L
     }
 
     private val initialStreamUrl: String = savedStateHandle.get<String>("streamUrl") ?: ""
@@ -348,6 +350,8 @@ class PlayerViewModel @Inject constructor(
     private fun observeSubtitleSettings() {
         viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collect { settings ->
+                val wasFrameRateMatchingEnabled =
+                    _uiState.value.frameRateMatchingMode != FrameRateMatchingMode.OFF
                 _uiState.update { state ->
                     val shouldShowOverlay = if (settings.loadingOverlayEnabled && !hasRenderedFirstFrame) {
                         true
@@ -361,8 +365,26 @@ class PlayerViewModel @Inject constructor(
                         subtitleStyle = settings.subtitleStyle,
                         loadingOverlayEnabled = settings.loadingOverlayEnabled,
                         showLoadingOverlay = shouldShowOverlay,
-                        pauseOverlayEnabled = settings.pauseOverlayEnabled
+                        pauseOverlayEnabled = settings.pauseOverlayEnabled,
+                        frameRateMatchingMode = settings.frameRateMatchingMode
                     )
+                }
+                if (!wasFrameRateMatchingEnabled &&
+                    settings.frameRateMatchingMode != FrameRateMatchingMode.OFF &&
+                    _uiState.value.detectedFrameRate <= 0f &&
+                    currentStreamUrl.isNotBlank()
+                ) {
+                    startFrameRateProbe(currentStreamUrl, currentHeaders, true)
+                }
+                if (settings.frameRateMatchingMode == FrameRateMatchingMode.OFF) {
+                    frameRateProbeJob?.cancel()
+                    _uiState.update {
+                        it.copy(
+                            detectedFrameRateRaw = 0f,
+                            detectedFrameRate = 0f,
+                            detectedFrameRateSource = null
+                        )
+                    }
                 }
 
                 if (!settings.pauseOverlayEnabled) {
@@ -881,7 +903,7 @@ class PlayerViewModel @Inject constructor(
                     }
 
                     
-                    _uiState.update { it.copy(frameRateMatchingEnabled = playerSettings.frameRateMatching) }
+                    _uiState.update { it.copy(frameRateMatchingMode = playerSettings.frameRateMatchingMode) }
 
                     
                     try {
@@ -901,7 +923,11 @@ class PlayerViewModel @Inject constructor(
 
                     playWhenReady = true
                     prepare()
-                    startFrameRateProbe(url, headers, playerSettings.frameRateMatching)
+                    startFrameRateProbe(
+                        url,
+                        headers,
+                        playerSettings.frameRateMatchingMode != FrameRateMatchingMode.OFF
+                    )
 
                     addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -1307,7 +1333,11 @@ class PlayerViewModel @Inject constructor(
                 player.setMediaSource(createMediaSource(url, newHeaders))
                 player.prepare()
                 player.playWhenReady = true
-                startFrameRateProbe(url, newHeaders, _uiState.value.frameRateMatchingEnabled)
+                startFrameRateProbe(
+                    url,
+                    newHeaders,
+                    _uiState.value.frameRateMatchingMode != FrameRateMatchingMode.OFF
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
                 return
@@ -1607,7 +1637,11 @@ class PlayerViewModel @Inject constructor(
                 player.setMediaSource(createMediaSource(url, newHeaders))
                 player.prepare()
                 player.playWhenReady = true
-                startFrameRateProbe(url, newHeaders, _uiState.value.frameRateMatchingEnabled)
+                startFrameRateProbe(
+                    url,
+                    newHeaders,
+                    _uiState.value.frameRateMatchingMode != FrameRateMatchingMode.OFF
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
                 return
@@ -1777,9 +1811,16 @@ class PlayerViewModel @Inject constructor(
                         if (trackGroup.isTrackSelected(i)) {
                             val format = trackGroup.getTrackFormat(i)
                             if (format.frameRate > 0f) {
-                                val snapped = FrameRateUtils.snapToStandardRate(format.frameRate)
+                                val raw = format.frameRate
+                                val snapped = FrameRateUtils.snapToStandardRate(raw)
                                 frameRateProbeJob?.cancel()
-                                _uiState.update { it.copy(detectedFrameRate = snapped) }
+                                _uiState.update {
+                                    it.copy(
+                                        detectedFrameRateRaw = raw,
+                                        detectedFrameRate = snapped,
+                                        detectedFrameRateSource = FrameRateSource.TRACK
+                                    )
+                                }
                             }
                             break
                         }
@@ -1989,16 +2030,37 @@ class PlayerViewModel @Inject constructor(
         frameRateMatchingEnabled: Boolean
     ) {
         frameRateProbeJob?.cancel()
-        _uiState.update { it.copy(detectedFrameRate = 0f) }
+        _uiState.update {
+            it.copy(
+                detectedFrameRateRaw = 0f,
+                detectedFrameRate = 0f,
+                detectedFrameRateSource = null
+            )
+        }
         if (!frameRateMatchingEnabled) return
 
         val token = ++frameRateProbeToken
         frameRateProbeJob = viewModelScope.launch(Dispatchers.IO) {
-            val detected = FrameRateUtils.detectFrameRateFromSource(context, url, headers)
-            if (!isActive || detected <= 0f) return@launch
+            delay(TRACK_FRAME_RATE_GRACE_MS)
+            if (!isActive) return@launch
+            val trackAlreadySet = withContext(Dispatchers.Main) {
+                _uiState.value.detectedFrameRateSource == FrameRateSource.TRACK &&
+                    _uiState.value.detectedFrameRate > 0f
+            }
+            if (trackAlreadySet) return@launch
+
+            val detection = FrameRateUtils.detectFrameRateFromSource(context, url, headers)
+                ?: return@launch
+            if (!isActive) return@launch
             withContext(Dispatchers.Main) {
                 if (token == frameRateProbeToken && _uiState.value.detectedFrameRate <= 0f) {
-                    _uiState.update { it.copy(detectedFrameRate = detected) }
+                    _uiState.update {
+                        it.copy(
+                            detectedFrameRateRaw = detection.raw,
+                            detectedFrameRate = detection.snapped,
+                            detectedFrameRateSource = FrameRateSource.PROBE
+                        )
+                    }
                 }
             }
         }
@@ -2504,6 +2566,17 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnParentalGuideHide -> {
                 _uiState.update { it.copy(showParentalGuide = false) }
+            }
+            is PlayerEvent.OnShowDisplayModeInfo -> {
+                _uiState.update {
+                    it.copy(
+                        displayModeInfo = event.info,
+                        showDisplayModeInfo = true
+                    )
+                }
+            }
+            PlayerEvent.OnHideDisplayModeInfo -> {
+                _uiState.update { it.copy(showDisplayModeInfo = false) }
             }
             PlayerEvent.OnDismissPauseOverlay -> {
                 cancelPauseOverlay()

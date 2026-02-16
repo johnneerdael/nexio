@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.player
 import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
 import androidx.media3.ui.AspectRatioFrameLayout
+import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.domain.model.MetaCastMember
@@ -100,8 +101,12 @@ data class PlayerUiState(
     val showStreamSourceIndicator: Boolean = false,
     val streamSourceIndicatorText: String = "",
     // Frame rate matching
+    val detectedFrameRateRaw: Float = 0f,
+    val detectedFrameRateSource: FrameRateSource? = null,
     val detectedFrameRate: Float = 0f,
-    val frameRateMatchingEnabled: Boolean = false,
+    val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
+    val displayModeInfo: DisplayModeInfo? = null,
+    val showDisplayModeInfo: Boolean = false,
     // Aspect ratio / resize mode
     val resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
     val showAspectRatioIndicator: Boolean = false,
@@ -161,6 +166,8 @@ sealed class PlayerEvent {
     data object OnDismissDialog : PlayerEvent()
     data object OnRetry : PlayerEvent()
     data object OnParentalGuideHide : PlayerEvent()
+    data class OnShowDisplayModeInfo(val info: DisplayModeInfo) : PlayerEvent()
+    data object OnHideDisplayModeInfo : PlayerEvent()
     data object OnDismissPauseOverlay : PlayerEvent()
     data object OnSkipIntro : PlayerEvent()
     data object OnDismissSkipIntro : PlayerEvent()
@@ -181,5 +188,16 @@ data class ParentalWarning(
     val label: String,
     val severity: String
 )
+
+data class DisplayModeInfo(
+    val width: Int,
+    val height: Int,
+    val refreshRate: Float
+)
+
+enum class FrameRateSource {
+    TRACK,
+    PROBE
+}
 
 val PLAYBACK_SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
