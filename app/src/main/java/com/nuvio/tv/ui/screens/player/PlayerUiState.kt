@@ -89,6 +89,16 @@ data class PlayerUiState(
     // Skip intro
     val activeSkipInterval: SkipInterval? = null,
     val skipIntervalDismissed: Boolean = false,
+    // Next episode card
+    val nextEpisode: NextEpisodeInfo? = null,
+    val showNextEpisodeCard: Boolean = false,
+    val nextEpisodeCardDismissed: Boolean = false,
+    val nextEpisodeAutoPlaySearching: Boolean = false,
+    val nextEpisodeAutoPlaySourceName: String? = null,
+    val nextEpisodeAutoPlayCountdownSec: Int? = null,
+    // Stream source badge
+    val showStreamSourceIndicator: Boolean = false,
+    val streamSourceIndicatorText: String = "",
     // Frame rate matching
     val detectedFrameRate: Float = 0f,
     val frameRateMatchingEnabled: Boolean = false,
@@ -105,6 +115,15 @@ data class TrackInfo(
     val codec: String? = null,
     val channelCount: Int? = null,
     val isSelected: Boolean = false
+)
+
+data class NextEpisodeInfo(
+    val videoId: String,
+    val season: Int,
+    val episode: Int,
+    val title: String,
+    val thumbnail: String?,
+    val overview: String?
 )
 
 sealed class PlayerEvent {
@@ -145,6 +164,8 @@ sealed class PlayerEvent {
     data object OnDismissPauseOverlay : PlayerEvent()
     data object OnSkipIntro : PlayerEvent()
     data object OnDismissSkipIntro : PlayerEvent()
+    data object OnPlayNextEpisode : PlayerEvent()
+    data object OnDismissNextEpisodeCard : PlayerEvent()
     // Subtitle style events (for in-player style tab)
     data class OnSetSubtitleSize(val size: Int) : PlayerEvent()
     data class OnSetSubtitleTextColor(val color: Int) : PlayerEvent()

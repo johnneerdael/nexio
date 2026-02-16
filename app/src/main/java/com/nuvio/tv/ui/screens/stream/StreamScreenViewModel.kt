@@ -3,12 +3,11 @@ package com.nuvio.tv.ui.screens.stream
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
-import com.nuvio.tv.data.local.StreamAutoPlayMode
-import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -148,7 +147,7 @@ class StreamScreenViewModel @Inject constructor(
             ).collect { result ->
                 when (result) {
                     is NetworkResult.Success -> {
-                        val addonStreams = orderStreams(result.data, installedAddonOrder)
+                        val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
                         val allStreams = addonStreams.flatMap { it.streams }
                         val availableAddons = addonStreams.map { it.addonName }
                         
@@ -170,7 +169,7 @@ class StreamScreenViewModel @Inject constructor(
                                 autoPlayStream = if (autoPlayHandledForSession) {
                                     null
                                 } else {
-                                    selectAutoPlayStream(
+                                    StreamAutoPlaySelector.selectAutoPlayStream(
                                         streams = allStreams,
                                         mode = playerSettings.streamAutoPlayMode,
                                         regexPattern = playerSettings.streamAutoPlayRegex,
@@ -301,67 +300,6 @@ class StreamScreenViewModel @Inject constructor(
         return playbackInfo
     }
 
-    private fun orderStreams(
-        streams: List<com.nuvio.tv.domain.model.AddonStreams>,
-        installedOrder: List<String>
-    ): List<com.nuvio.tv.domain.model.AddonStreams> {
-        if (streams.isEmpty()) return streams
-
-        val (addonEntries, pluginEntries) = streams.partition { it.addonName in installedOrder }
-        val orderedAddons = addonEntries.sortedBy { installedOrder.indexOf(it.addonName) }
-        return orderedAddons + pluginEntries
-    }
-
-    private fun selectAutoPlayStream(
-        streams: List<Stream>,
-        mode: StreamAutoPlayMode,
-        regexPattern: String,
-        source: StreamAutoPlaySource,
-        installedAddonNames: Set<String>,
-        selectedAddons: Set<String>,
-        selectedPlugins: Set<String>
-    ): Stream? {
-        if (streams.isEmpty()) return null
-        val sourceScopedStreams = when (source) {
-            StreamAutoPlaySource.ALL_SOURCES -> streams
-            StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> streams.filter { it.addonName in installedAddonNames }
-            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> streams.filter { it.addonName !in installedAddonNames }
-        }
-        val candidateStreams = sourceScopedStreams.filter { stream ->
-            val isAddonStream = stream.addonName in installedAddonNames
-            if (isAddonStream) {
-                selectedAddons.isEmpty() || stream.addonName in selectedAddons
-            } else {
-                selectedPlugins.isEmpty() || stream.addonName in selectedPlugins
-            }
-        }
-        if (candidateStreams.isEmpty()) return null
-
-        return when (mode) {
-            StreamAutoPlayMode.MANUAL -> null
-            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { it.getStreamUrl() != null }
-            StreamAutoPlayMode.REGEX_MATCH -> {
-                val pattern = regexPattern.trim()
-                if (pattern.isBlank()) return null
-                val regex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull() ?: return null
-
-                candidateStreams.firstOrNull { stream ->
-                    val searchableText = buildString {
-                        append(stream.addonName)
-                        append(' ')
-                        append(stream.name.orEmpty())
-                        append(' ')
-                        append(stream.title.orEmpty())
-                        append(' ')
-                        append(stream.description.orEmpty())
-                        append(' ')
-                        append(stream.getStreamUrl().orEmpty())
-                    }
-                    stream.getStreamUrl() != null && regex.containsMatchIn(searchableText)
-                }
-            }
-        }
-    }
 }
 
 data class StreamPlaybackInfo(

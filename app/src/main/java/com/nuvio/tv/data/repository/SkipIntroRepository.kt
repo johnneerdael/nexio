@@ -5,6 +5,7 @@ import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.data.remote.api.AniSkipApi
 import com.nuvio.tv.data.remote.api.ArmApi
 import com.nuvio.tv.data.remote.api.IntroDbApi
+import com.nuvio.tv.data.remote.api.IntroDbSegment
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -62,24 +63,34 @@ class SkipIntroRepository @Inject constructor(
 
     private suspend fun fetchFromIntroDb(imdbId: String, season: Int, episode: Int): List<SkipInterval> {
         return try {
-            val response = introDbApi.getIntro(imdbId, season, episode)
+            val response = introDbApi.getSegments(imdbId, season, episode)
             if (response.isSuccessful && response.body() != null) {
                 val data = response.body()!!
-                if (data.endSec > data.startSec) {
-                    listOf(
-                        SkipInterval(
-                            startTime = data.startSec,
-                            endTime = data.endSec,
-                            type = "intro",
-                            provider = "introdb"
-                        )
-                    )
-                } else emptyList()
+                listOfNotNull(
+                    data.intro.toSkipIntervalOrNull(type = "intro"),
+                    data.recap.toSkipIntervalOrNull(type = "recap"),
+                    data.outro.toSkipIntervalOrNull(type = "outro")
+                )
             } else emptyList()
         } catch (e: Exception) {
             Log.d("SkipIntro", "IntroDB: no data for $imdbId S${season}E${episode}")
             emptyList()
         }
+    }
+
+    private fun IntroDbSegment?.toSkipIntervalOrNull(type: String): SkipInterval? {
+        if (this == null) return null
+
+        val start = startSec ?: startMs?.let { it / 1000.0 }
+        val end = endSec ?: endMs?.let { it / 1000.0 }
+        if (start == null || end == null || end <= start) return null
+
+        return SkipInterval(
+            startTime = start,
+            endTime = end,
+            type = type,
+            provider = "introdb"
+        )
     }
 
     private suspend fun fetchFromAniSkip(malId: String, episode: Int): List<SkipInterval> {

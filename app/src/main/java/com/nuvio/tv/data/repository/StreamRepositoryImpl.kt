@@ -14,6 +14,7 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -87,6 +88,7 @@ class StreamRepositoryImpl @Inject constructor(
                                 else -> { /* No streams */ }
                             }
                         } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Log.e(TAG, "Addon ${addon.name} failed: ${e.message}")
                         } finally {
                             completedJobs++
@@ -109,6 +111,7 @@ class StreamRepositoryImpl @Inject constructor(
                                 }
                             }
                         } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Log.e(TAG, "Plugin execution failed: ${e.message}")
                             completedJobs++
                             if (completedJobs >= totalJobs) {
@@ -136,6 +139,7 @@ class StreamRepositoryImpl @Inject constructor(
                 emit(NetworkResult.Success(emptyList()))
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Failed to fetch streams: ${e.message}", e)
             emit(NetworkResult.Error(e.message ?: "Failed to fetch streams"))
         }
@@ -225,6 +229,7 @@ class StreamRepositoryImpl @Inject constructor(
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Failed to stream plugins: ${e.message}", e)
         } finally {
             onComplete()

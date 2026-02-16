@@ -38,12 +38,14 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.common.MimeTypes
+import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
+import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.TraktScrobbleItem
 import com.nuvio.tv.data.repository.TraktScrobbleService
@@ -58,6 +60,7 @@ import com.nuvio.tv.data.repository.SkipIntroRepository
 import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.repository.MetaRepository
+import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -66,6 +69,7 @@ import io.github.peerless2012.ass.media.kt.buildWithAssSupport
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,6 +91,7 @@ class PlayerViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val metaRepository: MetaRepository,
     private val streamRepository: StreamRepository,
+    private val addonRepository: AddonRepository,
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val parentalGuideRepository: ParentalGuideRepository,
     private val traktScrobbleService: TraktScrobbleService,
@@ -189,6 +194,8 @@ class PlayerViewModel @Inject constructor(
     private var frameRateProbeJob: Job? = null
     private var frameRateProbeToken: Long = 0L
     private var hideAspectRatioIndicatorJob: Job? = null
+    private var hideStreamSourceIndicatorJob: Job? = null
+    private var nextEpisodeAutoPlayJob: Job? = null
     private var sourceStreamsJob: Job? = null
     private var sourceStreamsCacheRequestKey: String? = null
     
@@ -202,6 +209,7 @@ class PlayerViewModel @Inject constructor(
     private var hasRenderedFirstFrame = false
     private var shouldEnforceAutoplayOnFirstReady = true
     private var metaVideos: List<Video> = emptyList()
+    private var nextEpisodeVideo: Video? = null
     private var userPausedManually = false
 
     
@@ -481,6 +489,7 @@ class PlayerViewModel @Inject constructor(
                 castMembers = if (meta.castMembers.isNotEmpty()) meta.castMembers else state.castMembers
             )
         }
+        recomputeNextEpisode(resetVisibility = false)
     }
 
     private fun resolveDescription(meta: Meta): String? {
@@ -502,6 +511,138 @@ class PlayerViewModel @Inject constructor(
 
         if (!overview.isNullOrBlank()) {
             _uiState.update { it.copy(description = overview) }
+        }
+    }
+
+    private fun recomputeNextEpisode(resetVisibility: Boolean) {
+        val normalizedType = contentType?.lowercase()
+        if (normalizedType !in listOf("series", "tv")) {
+            nextEpisodeVideo = null
+            _uiState.update {
+                it.copy(
+                    nextEpisode = null,
+                    showNextEpisodeCard = false,
+                    nextEpisodeCardDismissed = false,
+                    nextEpisodeAutoPlaySearching = false,
+                    nextEpisodeAutoPlaySourceName = null,
+                    nextEpisodeAutoPlayCountdownSec = null
+                )
+            }
+            return
+        }
+
+        val season = currentSeason
+        val episode = currentEpisode
+        if (season == null || episode == null) {
+            nextEpisodeVideo = null
+            _uiState.update {
+                it.copy(
+                    nextEpisode = null,
+                    showNextEpisodeCard = false,
+                    nextEpisodeCardDismissed = false,
+                    nextEpisodeAutoPlaySearching = false,
+                    nextEpisodeAutoPlaySourceName = null,
+                    nextEpisodeAutoPlayCountdownSec = null
+                )
+            }
+            return
+        }
+
+        val resolvedNext = PlayerNextEpisodeRules.resolveNextEpisode(
+            videos = metaVideos,
+            currentSeason = season,
+            currentEpisode = episode
+        )
+
+        nextEpisodeVideo = resolvedNext
+        if (resolvedNext == null) {
+            _uiState.update {
+                it.copy(
+                    nextEpisode = null,
+                    showNextEpisodeCard = false,
+                    nextEpisodeCardDismissed = false,
+                    nextEpisodeAutoPlaySearching = false,
+                    nextEpisodeAutoPlaySourceName = null,
+                    nextEpisodeAutoPlayCountdownSec = null
+                )
+            }
+            return
+        }
+
+        val nextInfo = NextEpisodeInfo(
+            videoId = resolvedNext.id,
+            season = resolvedNext.season ?: return,
+            episode = resolvedNext.episode ?: return,
+            title = resolvedNext.title,
+            thumbnail = resolvedNext.thumbnail,
+            overview = resolvedNext.overview
+        )
+
+        _uiState.update { state ->
+            val sameEpisode = state.nextEpisode?.videoId == nextInfo.videoId
+            val shouldResetVisibility = resetVisibility || !sameEpisode
+            state.copy(
+                nextEpisode = nextInfo,
+                showNextEpisodeCard = if (shouldResetVisibility) false else state.showNextEpisodeCard,
+                nextEpisodeCardDismissed = if (shouldResetVisibility) false else state.nextEpisodeCardDismissed
+            )
+        }
+    }
+
+    private fun resetNextEpisodeCardState(clearEpisode: Boolean = false) {
+        nextEpisodeAutoPlayJob?.cancel()
+        nextEpisodeAutoPlayJob = null
+        _uiState.update { state ->
+            state.copy(
+                nextEpisode = if (clearEpisode) null else state.nextEpisode,
+                showNextEpisodeCard = false,
+                nextEpisodeCardDismissed = false,
+                nextEpisodeAutoPlaySearching = false,
+                nextEpisodeAutoPlaySourceName = null,
+                nextEpisodeAutoPlayCountdownSec = null
+            )
+        }
+        if (clearEpisode) {
+            nextEpisodeVideo = null
+        }
+    }
+
+    private fun evaluateNextEpisodeCardVisibility(positionMs: Long, durationMs: Long) {
+        val state = _uiState.value
+        if (state.nextEpisode == null || nextEpisodeVideo == null) {
+            if (state.showNextEpisodeCard) {
+                _uiState.update { it.copy(showNextEpisodeCard = false) }
+            }
+            return
+        }
+        if (state.showNextEpisodeCard || state.nextEpisodeCardDismissed) return
+
+        val effectiveDuration = durationMs.takeIf { it > 0L } ?: lastKnownDuration
+        val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
+            positionMs = positionMs,
+            durationMs = effectiveDuration,
+            skipIntervals = skipIntervals
+        )
+
+        if (shouldShow) {
+            _uiState.update { it.copy(showNextEpisodeCard = true) }
+        }
+    }
+
+    private fun showStreamSourceIndicator(stream: Stream) {
+        val chosenSource = (stream.name?.takeIf { it.isNotBlank() } ?: stream.addonName).trim()
+        if (chosenSource.isBlank()) return
+
+        hideStreamSourceIndicatorJob?.cancel()
+        _uiState.update {
+            it.copy(
+                showStreamSourceIndicator = true,
+                streamSourceIndicatorText = "Source: $chosenSource"
+            )
+        }
+        hideStreamSourceIndicatorJob = viewModelScope.launch {
+            delay(2200)
+            _uiState.update { it.copy(showStreamSourceIndicator = false) }
         }
     }
 
@@ -793,6 +934,7 @@ class PlayerViewModel @Inject constructor(
                             if (playbackState == Player.STATE_ENDED) {
                                 emitCompletionScrobbleStop(progressPercent = 99.5f)
                                 saveWatchProgress()
+                                resetNextEpisodeCardState(clearEpisode = false)
                             }
                         }
 
@@ -1114,6 +1256,8 @@ class PlayerViewModel @Inject constructor(
             _uiState.update { it.copy(sourceStreamsError = "Invalid stream URL") }
             return
         }
+        nextEpisodeAutoPlayJob?.cancel()
+        nextEpisodeAutoPlayJob = null
 
         emitStopScrobbleForCurrentProgress()
         saveWatchProgress()
@@ -1138,6 +1282,8 @@ class PlayerViewModel @Inject constructor(
                 sourceStreamsError = null
             )
         }
+        showStreamSourceIndicator(stream)
+        resetNextEpisodeCardState(clearEpisode = false)
 
         _exoPlayer?.let { player ->
             try {
@@ -1367,18 +1513,21 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private fun switchToEpisodeStream(stream: Stream) {
+    private fun switchToEpisodeStream(stream: Stream, forcedTargetVideo: Video? = null) {
         val url = stream.getStreamUrl()
         if (url.isNullOrBlank()) {
             _uiState.update { it.copy(episodeStreamsError = "Invalid stream URL") }
             return
         }
+        nextEpisodeAutoPlayJob?.cancel()
+        nextEpisodeAutoPlayJob = null
 
         emitStopScrobbleForCurrentProgress()
         saveWatchProgress()
 
         val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
-        val targetVideo = _uiState.value.episodes.firstOrNull { it.id == _uiState.value.episodeStreamsForVideoId }
+        val targetVideo = forcedTargetVideo
+            ?: _uiState.value.episodes.firstOrNull { it.id == _uiState.value.episodeStreamsForVideoId }
 
         currentStreamUrl = url
         currentHeaders = newHeaders
@@ -1413,9 +1562,16 @@ class PlayerViewModel @Inject constructor(
                 parentalGuideHasShown = false,
                 
                 activeSkipInterval = null,
-                skipIntervalDismissed = false
+                skipIntervalDismissed = false,
+                showNextEpisodeCard = false,
+                nextEpisodeCardDismissed = false,
+                nextEpisodeAutoPlaySearching = false,
+                nextEpisodeAutoPlaySourceName = null,
+                nextEpisodeAutoPlayCountdownSec = null
             )
         }
+        showStreamSourceIndicator(stream)
+        recomputeNextEpisode(resetVisibility = true)
 
         updateEpisodeDescription()
         refreshSubtitlesForCurrentEpisode()
@@ -1444,6 +1600,149 @@ class PlayerViewModel @Inject constructor(
         }
 
         loadSavedProgressFor(currentSeason, currentEpisode)
+    }
+
+    private fun showEpisodeStreamPicker(video: Video, forceRefresh: Boolean = true) {
+        _uiState.update {
+            it.copy(
+                showEpisodesPanel = true,
+                showEpisodeStreams = true,
+                showSourcesPanel = false,
+                showControls = true,
+                showAudioDialog = false,
+                showSubtitleDialog = false,
+                showSubtitleStylePanel = false,
+                showSpeedDialog = false,
+                episodesSelectedSeason = video.season ?: it.episodesSelectedSeason
+            )
+        }
+        loadEpisodesIfNeeded()
+        loadStreamsForEpisode(video = video, forceRefresh = forceRefresh)
+    }
+
+    private fun playNextEpisode() {
+        val nextVideo = nextEpisodeVideo ?: return
+        val type = contentType ?: return
+
+        val state = _uiState.value
+        if (state.nextEpisodeAutoPlaySearching || state.nextEpisodeAutoPlayCountdownSec != null) {
+            return
+        }
+
+        nextEpisodeAutoPlayJob?.cancel()
+        nextEpisodeAutoPlayJob = viewModelScope.launch {
+            try {
+                val playerSettings = playerSettingsDataStore.playerSettings.first()
+                if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
+                    _uiState.update {
+                        it.copy(
+                            showNextEpisodeCard = false,
+                            nextEpisodeCardDismissed = true,
+                            nextEpisodeAutoPlaySearching = false,
+                            nextEpisodeAutoPlaySourceName = null,
+                            nextEpisodeAutoPlayCountdownSec = null
+                        )
+                    }
+                    showEpisodeStreamPicker(video = nextVideo, forceRefresh = true)
+                    return@launch
+                }
+
+                _uiState.update {
+                    it.copy(
+                        showNextEpisodeCard = true,
+                        nextEpisodeCardDismissed = false,
+                        nextEpisodeAutoPlaySearching = true,
+                        nextEpisodeAutoPlaySourceName = null,
+                        nextEpisodeAutoPlayCountdownSec = null
+                    )
+                }
+
+                val installedAddons = addonRepository.getInstalledAddons().first()
+                val installedAddonOrder = installedAddons.map { it.displayName }
+                val streamResult = streamRepository.getStreamsFromAllAddons(
+                    type = type,
+                    videoId = nextVideo.id,
+                    season = nextVideo.season,
+                    episode = nextVideo.episode
+                ).first { it !is NetworkResult.Loading }
+
+                if (streamResult !is NetworkResult.Success) {
+                    _uiState.update {
+                        it.copy(
+                            showNextEpisodeCard = false,
+                            nextEpisodeCardDismissed = true,
+                            nextEpisodeAutoPlaySearching = false,
+                            nextEpisodeAutoPlaySourceName = null,
+                            nextEpisodeAutoPlayCountdownSec = null
+                        )
+                    }
+                    showEpisodeStreamPicker(video = nextVideo, forceRefresh = true)
+                    return@launch
+                }
+
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(streamResult.data, installedAddonOrder)
+                val allStreams = orderedStreams.flatMap { it.streams }
+                val selectedStream = StreamAutoPlaySelector.selectAutoPlayStream(
+                    streams = allStreams,
+                    mode = playerSettings.streamAutoPlayMode,
+                    regexPattern = playerSettings.streamAutoPlayRegex,
+                    source = playerSettings.streamAutoPlaySource,
+                    installedAddonNames = installedAddonOrder.toSet(),
+                    selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
+                    selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins
+                )
+
+                if (selectedStream != null) {
+                    val sourceName = (selectedStream.name?.takeIf { it.isNotBlank() } ?: selectedStream.addonName).trim()
+                    for (remaining in 3 downTo 1) {
+                        _uiState.update {
+                            it.copy(
+                                showNextEpisodeCard = true,
+                                nextEpisodeCardDismissed = false,
+                                nextEpisodeAutoPlaySearching = false,
+                                nextEpisodeAutoPlaySourceName = sourceName,
+                                nextEpisodeAutoPlayCountdownSec = remaining
+                            )
+                        }
+                        delay(1000)
+                    }
+                    _uiState.update {
+                        it.copy(
+                            showNextEpisodeCard = false,
+                            nextEpisodeCardDismissed = true,
+                            nextEpisodeAutoPlaySearching = false,
+                            nextEpisodeAutoPlaySourceName = null,
+                            nextEpisodeAutoPlayCountdownSec = null
+                        )
+                    }
+                    switchToEpisodeStream(stream = selectedStream, forcedTargetVideo = nextVideo)
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            showNextEpisodeCard = false,
+                            nextEpisodeCardDismissed = true,
+                            nextEpisodeAutoPlaySearching = false,
+                            nextEpisodeAutoPlaySourceName = null,
+                            nextEpisodeAutoPlayCountdownSec = null
+                        )
+                    }
+                    showEpisodeStreamPicker(video = nextVideo, forceRefresh = false)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        showNextEpisodeCard = false,
+                        nextEpisodeCardDismissed = true,
+                        nextEpisodeAutoPlaySearching = false,
+                        nextEpisodeAutoPlaySourceName = null,
+                        nextEpisodeAutoPlayCountdownSec = null
+                    )
+                }
+                showEpisodeStreamPicker(video = nextVideo, forceRefresh = false)
+            }
+        }
     }
 
     @OptIn(UnstableApi::class)
@@ -1723,6 +2022,10 @@ class PlayerViewModel @Inject constructor(
                         )
                     }
                     updateActiveSkipInterval(pos)
+                    evaluateNextEpisodeCardVisibility(
+                        positionMs = pos,
+                        durationMs = playerDuration.coerceAtLeast(0L)
+                    )
 
                     
                     if (player.isPlaying) {
@@ -2174,6 +2477,7 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnRetry -> {
                 hasRenderedFirstFrame = false
+                resetNextEpisodeCardState(clearEpisode = false)
                 _uiState.update { state ->
                     state.copy(
                         error = null,
@@ -2197,6 +2501,22 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnDismissSkipIntro -> {
                 _uiState.update { it.copy(skipIntervalDismissed = true) }
+            }
+            PlayerEvent.OnPlayNextEpisode -> {
+                playNextEpisode()
+            }
+            PlayerEvent.OnDismissNextEpisodeCard -> {
+                nextEpisodeAutoPlayJob?.cancel()
+                nextEpisodeAutoPlayJob = null
+                _uiState.update {
+                    it.copy(
+                        showNextEpisodeCard = false,
+                        nextEpisodeCardDismissed = true,
+                        nextEpisodeAutoPlaySearching = false,
+                        nextEpisodeAutoPlaySourceName = null,
+                        nextEpisodeAutoPlayCountdownSec = null
+                    )
+                }
             }
             is PlayerEvent.OnSetSubtitleSize -> {
                 viewModelScope.launch { playerSettingsDataStore.setSubtitleSize(event.size) }
@@ -2512,6 +2832,9 @@ class PlayerViewModel @Inject constructor(
         hideControlsJob?.cancel()
         watchProgressSaveJob?.cancel()
         frameRateProbeJob?.cancel()
+        hideStreamSourceIndicatorJob?.cancel()
+        nextEpisodeAutoPlayJob?.cancel()
+        nextEpisodeAutoPlayJob = null
         _exoPlayer?.release()
         _exoPlayer = null
     }
