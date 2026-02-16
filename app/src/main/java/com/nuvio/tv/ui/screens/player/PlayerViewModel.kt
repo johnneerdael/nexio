@@ -2197,11 +2197,16 @@ class PlayerViewModel @Inject constructor(
     private fun emitPeriodicScrobblePause() {
         val item = currentScrobbleItem ?: return
         if (!hasSentScrobbleStartForCurrentItem) return
+        val progressPercent = currentPlaybackProgressPercent()
+        if (progressPercent >= 80f) {
+            emitCompletionScrobbleStop(progressPercent = progressPercent)
+            return
+        }
 
         viewModelScope.launch {
             traktScrobbleService.scrobblePause(
                 item = item,
-                progressPercent = currentPlaybackProgressPercent()
+                progressPercent = progressPercent
             )
         }
     }
