@@ -235,6 +235,33 @@ fun NuvioNavHost(
                             )
                         )
                     }
+                },
+                onAutoPlayResolved = { playbackInfo ->
+                    playbackInfo.url?.let { url ->
+                        navController.navigate(
+                            Screen.Player.createRoute(
+                                streamUrl = url,
+                                title = playbackInfo.title,
+                                streamName = playbackInfo.streamName,
+                                year = playbackInfo.year,
+                                headers = playbackInfo.headers,
+                                contentId = playbackInfo.contentId,
+                                contentType = playbackInfo.contentType,
+                                contentName = playbackInfo.contentName,
+                                poster = playbackInfo.poster,
+                                backdrop = playbackInfo.backdrop,
+                                logo = playbackInfo.logo,
+                                videoId = playbackInfo.videoId,
+                                season = playbackInfo.season,
+                                episode = playbackInfo.episode,
+                                episodeTitle = playbackInfo.episodeTitle,
+                                rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
+                                rememberedAudioName = playbackInfo.rememberedAudioName
+                            )
+                        ) {
+                            popUpTo(Screen.Stream.route) { inclusive = true }
+                        }
+                    }
                 }
             )
         }
