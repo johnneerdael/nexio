@@ -57,6 +57,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.ui.components.ClassicLayoutPreview
 import com.nuvio.tv.ui.components.GridLayoutPreview
+import com.nuvio.tv.ui.components.ModernLayoutPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @Composable
@@ -181,6 +182,44 @@ fun LayoutSettingsContent(
                             },
                             onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT },
                             modifier = Modifier.weight(1f)
+                        )
+                        LayoutCard(
+                            layout = HomeLayout.MODERN,
+                            isSelected = uiState.selectedLayout == HomeLayout.MODERN,
+                            onClick = {
+                                viewModel.onEvent(LayoutSettingsEvent.SelectLayout(HomeLayout.MODERN))
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (uiState.selectedLayout == HomeLayout.MODERN) {
+                        CompactToggleRow(
+                            title = "Landscape Posters",
+                            subtitle = "Switch between portrait and landscape cards for Modern view.",
+                            checked = uiState.modernLandscapePostersEnabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetModernLandscapePostersEnabled(
+                                        !uiState.modernLandscapePostersEnabled
+                                    )
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                        )
+                        CompactToggleRow(
+                            title = "Show Preview Row",
+                            subtitle = "Show a partial preview of the row below in Modern Home layout.",
+                            checked = uiState.modernNextRowPreviewEnabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetModernNextRowPreviewEnabled(
+                                        !uiState.modernNextRowPreviewEnabled
+                                    )
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                         )
                     }
 
@@ -543,6 +582,7 @@ private fun LayoutCard(
                 when (layout) {
                     HomeLayout.CLASSIC -> ClassicLayoutPreview(modifier = Modifier.fillMaxWidth())
                     HomeLayout.GRID -> GridLayoutPreview(modifier = Modifier.fillMaxWidth())
+                    HomeLayout.MODERN -> ModernLayoutPreview(modifier = Modifier.fillMaxWidth())
                 }
             }
 
