@@ -118,7 +118,23 @@ class StartupSyncService @Inject constructor(
 
     private suspend fun pullRemoteData(): Result<Unit> {
         try {
-            Log.d(TAG, "Skipping addon/plugin reconciliation on startup")
+            pluginManager.isSyncingFromRemote = true
+            val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
+            pluginManager.reconcileWithRemoteRepoUrls(
+                remoteUrls = remotePluginUrls,
+                removeMissingLocal = false
+            )
+            pluginManager.isSyncingFromRemote = false
+            Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote")
+
+            addonRepository.isSyncingFromRemote = true
+            val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
+            addonRepository.reconcileWithRemoteAddonUrls(
+                remoteUrls = remoteAddonUrls,
+                removeMissingLocal = false
+            )
+            addonRepository.isSyncingFromRemote = false
+            Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote")
 
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
             Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")

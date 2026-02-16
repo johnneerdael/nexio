@@ -149,25 +149,44 @@ class AddonRepositoryImpl @Inject constructor(
         triggerRemoteSync()
     }
 
-    suspend fun reconcileWithRemoteAddonUrls(remoteUrls: List<String>) {
+    suspend fun reconcileWithRemoteAddonUrls(
+        remoteUrls: List<String>,
+        removeMissingLocal: Boolean = true
+    ) {
         val normalizedRemote = remoteUrls
             .map { it.trimEnd('/') }
             .filter { it.isNotBlank() }
             .distinctBy { normalizeUrl(it) }
         val remoteSet = normalizedRemote.map { normalizeUrl(it) }.toSet()
 
-        val localUrls = preferences.installedAddonUrls.first()
-        val localSet = localUrls.map { normalizeUrl(it) }.toSet()
+        val initialLocalUrls = preferences.installedAddonUrls.first()
+        val initialLocalSet = initialLocalUrls.map { normalizeUrl(it) }.toSet()
 
-        localUrls
-            .filter { normalizeUrl(it) !in remoteSet }
-            .forEach { removeAddon(it) }
+        if (removeMissingLocal) {
+            initialLocalUrls
+                .filter { normalizeUrl(it) !in remoteSet }
+                .forEach { removeAddon(it) }
+        }
 
         normalizedRemote
-            .filter { normalizeUrl(it) !in localSet }
+            .filter { normalizeUrl(it) !in initialLocalSet }
             .forEach { addAddon(it) }
 
-        preferences.setAddonOrder(normalizedRemote)
+        val currentUrls = preferences.installedAddonUrls.first()
+        val currentByNormalizedUrl = linkedMapOf<String, String>()
+        currentUrls.forEach { url ->
+            currentByNormalizedUrl.putIfAbsent(normalizeUrl(url), url.trimEnd('/'))
+        }
+        val remoteOrdered = normalizedRemote
+            .mapNotNull { currentByNormalizedUrl[normalizeUrl(it)] }
+        val extras = currentUrls
+            .map { it.trimEnd('/') }
+            .filter { normalizeUrl(it) !in remoteSet }
+
+        val reordered = if (removeMissingLocal) remoteOrdered else remoteOrdered + extras
+        if (reordered != currentUrls.map { it.trimEnd('/') }) {
+            preferences.setAddonOrder(reordered)
+        }
     }
 
     private fun applyDisplayNames(addons: List<Addon>): List<Addon> {

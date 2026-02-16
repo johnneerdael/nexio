@@ -165,24 +165,41 @@ class PluginManager @Inject constructor(
     }
 
     
-    suspend fun reconcileWithRemoteRepoUrls(remoteUrls: List<String>) {
+    suspend fun reconcileWithRemoteRepoUrls(
+        remoteUrls: List<String>,
+        removeMissingLocal: Boolean = true
+    ) {
         val normalizedRemote = remoteUrls
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinctBy { normalizeUrl(it) }
         val remoteUrlSet = normalizedRemote.map { normalizeUrl(it) }.toSet()
 
-        val localRepos = dataStore.repositories.first()
-        val localByNormalizedUrl = localRepos.associateBy { normalizeUrl(it.url) }
+        val initialLocalRepos = dataStore.repositories.first()
+        val initialLocalByNormalizedUrl = initialLocalRepos.associateBy { normalizeUrl(it.url) }
 
-        localRepos
-            .filter { normalizeUrl(it.url) !in remoteUrlSet }
-            .forEach { repo -> removeRepository(repo.id) }
+        if (removeMissingLocal) {
+            initialLocalRepos
+                .filter { normalizeUrl(it.url) !in remoteUrlSet }
+                .forEach { repo -> removeRepository(repo.id) }
+        }
 
         normalizedRemote.forEach { remoteUrl ->
-            if (localByNormalizedUrl[normalizeUrl(remoteUrl)] == null) {
+            if (initialLocalByNormalizedUrl[normalizeUrl(remoteUrl)] == null) {
                 addRepository(remoteUrl)
             }
+        }
+
+        val currentRepos = dataStore.repositories.first()
+        val currentByNormalizedUrl = currentRepos.associateBy { normalizeUrl(it.url) }
+        val remoteOrderedRepos = normalizedRemote
+            .mapNotNull { currentByNormalizedUrl[normalizeUrl(it)] }
+        val extras = currentRepos
+            .filter { normalizeUrl(it.url) !in remoteUrlSet }
+
+        val reordered = if (removeMissingLocal) remoteOrderedRepos else remoteOrderedRepos + extras
+        if (reordered.map { it.id } != currentRepos.map { it.id }) {
+            dataStore.saveRepositories(reordered)
         }
     }
     

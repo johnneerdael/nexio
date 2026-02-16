@@ -266,12 +266,18 @@ class AccountViewModel @Inject constructor(
         try {
             pluginManager.isSyncingFromRemote = true
             val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
-            pluginManager.reconcileWithRemoteRepoUrls(remotePluginUrls)
+            pluginManager.reconcileWithRemoteRepoUrls(
+                remoteUrls = remotePluginUrls,
+                removeMissingLocal = false
+            )
             pluginManager.isSyncingFromRemote = false
 
             addonRepository.isSyncingFromRemote = true
             val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
-            addonRepository.reconcileWithRemoteAddonUrls(remoteAddonUrls)
+            addonRepository.reconcileWithRemoteAddonUrls(
+                remoteUrls = remoteAddonUrls,
+                removeMissingLocal = false
+            )
             addonRepository.isSyncingFromRemote = false
 
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
