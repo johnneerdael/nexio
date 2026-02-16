@@ -240,12 +240,14 @@ fun TraktScreen(
                 }
             }
 
-            SettingsActionRow(
-                title = "Continue Watching Window",
-                subtitle = "Days of Trakt progress considered for continue watching",
-                value = "${uiState.continueWatchingDaysCap} days",
-                onClick = { showDaysCapDialog = true }
-            )
+            if (uiState.mode == TraktConnectionMode.CONNECTED) {
+                SettingsActionRow(
+                    title = "Continue Watching Window",
+                    subtitle = "Days of Trakt progress considered for continue watching",
+                    value = "${uiState.continueWatchingDaysCap} days",
+                    onClick = { showDaysCapDialog = true }
+                )
+            }
 
             if (uiState.mode != TraktConnectionMode.CONNECTED) {
                 uiState.statusMessage?.let { status ->
@@ -294,7 +296,7 @@ fun TraktScreen(
         Dialog(onDismissRequest = { showDaysCapDialog = false }) {
             Column(
                 modifier = Modifier
-                    .width(560.dp)
+                    .width(620.dp)
                     .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
                     .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
                     .padding(24.dp),
@@ -311,30 +313,46 @@ fun TraktScreen(
                     color = NuvioColors.TextSecondary
                 )
 
-                continueWatchingDayOptions.forEach { days ->
-                    val selected = uiState.continueWatchingDaysCap == days
-                    Button(
-                        onClick = {
-                            viewModel.onContinueWatchingDaysCapSelected(days)
-                            showDaysCapDialog = false
-                        },
-                        colors = ButtonDefaults.colors(
-                            containerColor = if (selected) NuvioColors.Primary else NuvioColors.BackgroundCard,
-                            contentColor = if (selected) Color.Black else NuvioColors.TextPrimary
-                        )
+                continueWatchingDayOptions.chunked(2).forEach { rowOptions ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("$days days")
+                        rowOptions.forEach { days ->
+                            val selected = uiState.continueWatchingDaysCap == days
+                            Button(
+                                onClick = {
+                                    viewModel.onContinueWatchingDaysCapSelected(days)
+                                    showDaysCapDialog = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.colors(
+                                    containerColor = if (selected) NuvioColors.Primary else NuvioColors.BackgroundCard,
+                                    contentColor = if (selected) Color.Black else NuvioColors.TextPrimary
+                                )
+                            ) {
+                                Text("$days days")
+                            }
+                        }
+                        if (rowOptions.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
                     }
                 }
 
-                Button(
-                    onClick = { showDaysCapDialog = false },
-                    colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Text("Cancel")
+                    Button(
+                        onClick = { showDaysCapDialog = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

@@ -145,8 +145,8 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                onRemoveContinueWatching = { contentId, season, episode ->
-                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode))
+                                onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
+                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
                                 },
                                 onRequestTrailerPreview = { item ->
                                     viewModel.requestTrailerPreview(item)
@@ -162,8 +162,8 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                onRemoveContinueWatching = { contentId, season, episode ->
-                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode))
+                                onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
+                                    viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
                                 },
                                 onSaveGridFocusState = { vi, vo ->
                                     viewModel.saveGridFocusState(vi, vo)

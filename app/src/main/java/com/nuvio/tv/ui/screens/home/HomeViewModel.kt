@@ -96,6 +96,7 @@ class HomeViewModel @Inject constructor(
     private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     private var activeTrailerPreviewItemId: String? = null
     private var trailerPreviewRequestVersion: Long = 0L
+    private val dismissedNextUpKeys = MutableStateFlow<Set<String>>(emptySet())
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
 
@@ -288,7 +289,13 @@ class HomeViewModel @Inject constructor(
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
             is HomeEvent.OnLoadMoreCatalog -> loadMoreCatalogItems(event.catalogId, event.addonId, event.type)
-            is HomeEvent.OnRemoveContinueWatching -> removeContinueWatching(event.contentId, event.season, event.episode)
+            is HomeEvent.OnRemoveContinueWatching ->
+                removeContinueWatching(
+                    contentId = event.contentId,
+                    season = event.season,
+                    episode = event.episode,
+                    isNextUp = event.isNextUp
+                )
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
         }
     }
@@ -297,10 +304,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 watchProgressRepository.allProgress,
-                traktSettingsDataStore.continueWatchingDaysCap
-            ) { items, daysCap ->
-                items to daysCap
-            }.collectLatest { (items, daysCap) ->
+                traktSettingsDataStore.continueWatchingDaysCap,
+                dismissedNextUpKeys
+            ) { items, daysCap, dismissedNextUp ->
+                Triple(items, daysCap, dismissedNextUp)
+            }.collectLatest { (items, daysCap, dismissedNextUp) ->
                 val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
                 val cutoffMs = System.currentTimeMillis() - windowMs
                 val recentItems = items
@@ -324,7 +332,8 @@ class HomeViewModel @Inject constructor(
                 // Then enrich Next Up in background with bounded concurrency.
                 enrichContinueWatchingProgressively(
                     allProgress = recentItems,
-                    inProgressItems = inProgressOnly
+                    inProgressItems = inProgressOnly,
+                    dismissedNextUp = dismissedNextUp
                 )
             }
         }
@@ -340,7 +349,8 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun enrichContinueWatchingProgressively(
         allProgress: List<WatchProgress>,
-        inProgressItems: List<ContinueWatchingItem.InProgress>
+        inProgressItems: List<ContinueWatchingItem.InProgress>,
+        dismissedNextUp: Set<String>
     ) = coroutineScope {
         val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
 
@@ -355,6 +365,7 @@ class HomeViewModel @Inject constructor(
             .groupBy { it.contentId }
             .mapNotNull { (_, items) -> items.maxByOrNull { it.lastWatched } }
             .filter { it.contentId !in inProgressIds }
+            .filter { progress -> nextUpDismissKey(progress.contentId) !in dismissedNextUp }
             .sortedByDescending { it.lastWatched }
             .take(MAX_NEXT_UP_LOOKUPS)
 
@@ -465,7 +476,29 @@ class HomeViewModel @Inject constructor(
         return type == "series" || type == "tv"
     }
 
-    private fun removeContinueWatching(contentId: String, season: Int? = null, episode: Int? = null) {
+    private fun removeContinueWatching(
+        contentId: String,
+        season: Int? = null,
+        episode: Int? = null,
+        isNextUp: Boolean = false
+    ) {
+        if (isNextUp) {
+            val dismissKey = nextUpDismissKey(contentId)
+            dismissedNextUpKeys.update { it + dismissKey }
+            _uiState.update { state ->
+                state.copy(
+                    continueWatchingItems = state.continueWatchingItems.filterNot { item ->
+                        when (item) {
+                            is ContinueWatchingItem.NextUp ->
+                                nextUpDismissKey(item.info.contentId) == dismissKey
+                            is ContinueWatchingItem.InProgress -> false
+                        }
+                    }
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             Log.d(
                 TAG,
@@ -474,6 +507,8 @@ class HomeViewModel @Inject constructor(
             watchProgressRepository.removeProgress(contentId = contentId, season = null, episode = null)
         }
     }
+
+    private fun nextUpDismissKey(contentId: String): String = contentId
 
     private fun observeInstalledAddons() {
         viewModelScope.launch {
