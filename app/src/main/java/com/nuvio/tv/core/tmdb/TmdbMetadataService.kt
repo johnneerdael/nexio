@@ -3,6 +3,8 @@ package com.nuvio.tv.core.tmdb
 import android.util.Log
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TmdbEpisode
+import com.nuvio.tv.data.remote.api.TmdbPersonCreditCast
+import com.nuvio.tv.data.remote.api.TmdbPersonCreditCrew
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.domain.model.MetaCompany
@@ -27,7 +29,7 @@ class TmdbMetadataService @Inject constructor(
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
     private val episodeCache = ConcurrentHashMap<String, Map<Pair<Int, Int>, TmdbEpisodeEnrichment>>()
-    private val personCache = ConcurrentHashMap<Int, PersonDetail>()
+    private val personCache = ConcurrentHashMap<String, PersonDetail>()
 
     suspend fun fetchEnrichment(
         tmdbId: String,
@@ -312,9 +314,13 @@ class TmdbMetadataService @Inject constructor(
             ?: "en"
     }
 
-    suspend fun fetchPersonDetail(personId: Int): PersonDetail? =
+    suspend fun fetchPersonDetail(
+        personId: Int,
+        preferCrewCredits: Boolean? = null
+    ): PersonDetail? =
         withContext(Dispatchers.IO) {
-            personCache[personId]?.let { return@withContext it }
+            val cacheKey = "$personId:${preferCrewCredits?.toString() ?: "auto"}"
+            personCache[cacheKey]?.let { return@withContext it }
 
             try {
                 val (person, credits) = coroutineScope {
@@ -329,53 +335,23 @@ class TmdbMetadataService @Inject constructor(
 
                 if (person == null) return@withContext null
 
-                val seenMovieIds = mutableSetOf<Int>()
-                val movieCredits = credits?.cast
-                    .orEmpty()
-                    .filter { it.mediaType == "movie" && it.posterPath != null }
-                    .sortedByDescending { it.voteAverage ?: 0.0 }
-                    .mapNotNull { credit ->
-                        if (!seenMovieIds.add(credit.id)) return@mapNotNull null
-                        val title = credit.title ?: credit.name ?: return@mapNotNull null
-                        val year = credit.releaseDate?.take(4)
-                        MetaPreview(
-                            id = "tmdb:${credit.id}",
-                            type = ContentType.MOVIE,
-                            name = title,
-                            poster = buildImageUrl(credit.posterPath, "w500"),
-                            posterShape = PosterShape.POSTER,
-                            background = buildImageUrl(credit.backdropPath, "w1280"),
-                            logo = null,
-                            description = credit.overview?.takeIf { it.isNotBlank() },
-                            releaseInfo = year,
-                            imdbRating = credit.voteAverage?.toFloat(),
-                            genres = emptyList()
-                        )
-                    }
+                val preferCrewFilmography = preferCrewCredits ?: shouldPreferCrewCredits(person.knownForDepartment)
 
-                val seenTvIds = mutableSetOf<Int>()
-                val tvCredits = credits?.cast
-                    .orEmpty()
-                    .filter { it.mediaType == "tv" && it.posterPath != null }
-                    .sortedByDescending { it.voteAverage ?: 0.0 }
-                    .mapNotNull { credit ->
-                        if (!seenTvIds.add(credit.id)) return@mapNotNull null
-                        val title = credit.name ?: credit.title ?: return@mapNotNull null
-                        val year = credit.firstAirDate?.take(4)
-                        MetaPreview(
-                            id = "tmdb:${credit.id}",
-                            type = ContentType.SERIES,
-                            name = title,
-                            poster = buildImageUrl(credit.posterPath, "w500"),
-                            posterShape = PosterShape.POSTER,
-                            background = buildImageUrl(credit.backdropPath, "w1280"),
-                            logo = null,
-                            description = credit.overview?.takeIf { it.isNotBlank() },
-                            releaseInfo = year,
-                            imdbRating = credit.voteAverage?.toFloat(),
-                            genres = emptyList()
-                        )
-                    }
+                val castMovieCredits = mapMovieCreditsFromCast(credits?.cast.orEmpty())
+                val crewMovieCredits = mapMovieCreditsFromCrew(credits?.crew.orEmpty())
+                val movieCredits = when {
+                    preferCrewFilmography && crewMovieCredits.isNotEmpty() -> crewMovieCredits
+                    castMovieCredits.isNotEmpty() -> castMovieCredits
+                    else -> crewMovieCredits
+                }
+
+                val castTvCredits = mapTvCreditsFromCast(credits?.cast.orEmpty())
+                val crewTvCredits = mapTvCreditsFromCrew(credits?.crew.orEmpty())
+                val tvCredits = when {
+                    preferCrewFilmography && crewTvCredits.isNotEmpty() -> crewTvCredits
+                    castTvCredits.isNotEmpty() -> castTvCredits
+                    else -> crewTvCredits
+                }
 
                 val detail = PersonDetail(
                     tmdbId = person.id,
@@ -389,13 +365,119 @@ class TmdbMetadataService @Inject constructor(
                     movieCredits = movieCredits,
                     tvCredits = tvCredits
                 )
-                personCache[personId] = detail
+                personCache[cacheKey] = detail
                 detail
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch person detail: ${e.message}", e)
                 null
             }
         }
+
+    private fun shouldPreferCrewCredits(knownForDepartment: String?): Boolean {
+        val department = knownForDepartment?.trim()?.lowercase() ?: return false
+        if (department.isBlank()) return false
+        return department != "acting" && department != "actors"
+    }
+
+    private fun mapMovieCreditsFromCast(cast: List<TmdbPersonCreditCast>): List<MetaPreview> {
+        val seenMovieIds = mutableSetOf<Int>()
+        return cast
+            .filter { it.mediaType == "movie" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seenMovieIds.add(credit.id)) return@mapNotNull null
+                val title = credit.title ?: credit.name ?: return@mapNotNull null
+                val year = credit.releaseDate?.take(4)
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = ContentType.MOVIE,
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    posterShape = PosterShape.POSTER,
+                    background = buildImageUrl(credit.backdropPath, "w1280"),
+                    logo = null,
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = year,
+                    imdbRating = credit.voteAverage?.toFloat(),
+                    genres = emptyList()
+                )
+            }
+    }
+
+    private fun mapMovieCreditsFromCrew(crew: List<TmdbPersonCreditCrew>): List<MetaPreview> {
+        val seenMovieIds = mutableSetOf<Int>()
+        return crew
+            .filter { it.mediaType == "movie" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seenMovieIds.add(credit.id)) return@mapNotNull null
+                val title = credit.title ?: credit.name ?: return@mapNotNull null
+                val year = credit.releaseDate?.take(4)
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = ContentType.MOVIE,
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    posterShape = PosterShape.POSTER,
+                    background = buildImageUrl(credit.backdropPath, "w1280"),
+                    logo = null,
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = year,
+                    imdbRating = credit.voteAverage?.toFloat(),
+                    genres = emptyList()
+                )
+            }
+    }
+
+    private fun mapTvCreditsFromCast(cast: List<TmdbPersonCreditCast>): List<MetaPreview> {
+        val seenTvIds = mutableSetOf<Int>()
+        return cast
+            .filter { it.mediaType == "tv" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seenTvIds.add(credit.id)) return@mapNotNull null
+                val title = credit.name ?: credit.title ?: return@mapNotNull null
+                val year = credit.firstAirDate?.take(4)
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = ContentType.SERIES,
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    posterShape = PosterShape.POSTER,
+                    background = buildImageUrl(credit.backdropPath, "w1280"),
+                    logo = null,
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = year,
+                    imdbRating = credit.voteAverage?.toFloat(),
+                    genres = emptyList()
+                )
+            }
+    }
+
+    private fun mapTvCreditsFromCrew(crew: List<TmdbPersonCreditCrew>): List<MetaPreview> {
+        val seenTvIds = mutableSetOf<Int>()
+        return crew
+            .filter { it.mediaType == "tv" && it.posterPath != null }
+            .sortedByDescending { it.voteAverage ?: 0.0 }
+            .mapNotNull { credit ->
+                if (!seenTvIds.add(credit.id)) return@mapNotNull null
+                val title = credit.name ?: credit.title ?: return@mapNotNull null
+                val year = credit.firstAirDate?.take(4)
+                MetaPreview(
+                    id = "tmdb:${credit.id}",
+                    type = ContentType.SERIES,
+                    name = title,
+                    poster = buildImageUrl(credit.posterPath, "w500"),
+                    posterShape = PosterShape.POSTER,
+                    background = buildImageUrl(credit.backdropPath, "w1280"),
+                    logo = null,
+                    description = credit.overview?.takeIf { it.isNotBlank() },
+                    releaseInfo = year,
+                    imdbRating = credit.voteAverage?.toFloat(),
+                    genres = emptyList()
+                )
+            }
+    }
 }
 
 data class TmdbEnrichment(

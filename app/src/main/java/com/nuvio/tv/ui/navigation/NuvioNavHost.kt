@@ -120,8 +120,8 @@ fun NuvioNavHost(
         ) { backStackEntry ->
             MetaDetailsScreen(
                 onBackPress = { navController.popBackStack() },
-                onNavigateToCastDetail = { personId, personName ->
-                    navController.navigate(Screen.CastDetail.createRoute(personId, personName))
+                onNavigateToCastDetail = { personId, personName, preferCrew ->
+                    navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
                 },
                 onPlayClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime ->
                     navController.navigate(
@@ -497,7 +497,11 @@ fun NuvioNavHost(
             route = Screen.CastDetail.route,
             arguments = listOf(
                 navArgument("personId") { type = NavType.StringType },
-                navArgument("personName") { type = NavType.StringType }
+                navArgument("personName") { type = NavType.StringType },
+                navArgument("preferCrew") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
             )
         ) {
             CastDetailScreen(

@@ -95,7 +95,7 @@ private enum class RestoreTarget {
 fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     onBackPress: () -> Unit,
-    onNavigateToCastDetail: (personId: Int, personName: String) -> Unit = { _, _ -> },
+    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onPlayClick: (
         videoId: String,
         contentType: String,
@@ -445,7 +445,7 @@ private fun MetaDetailsContent(
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
     restorePlayFocusAfterTrailerBackToken: Int,
-    onNavigateToCastDetail: (personId: Int, personName: String) -> Unit = { _, _ -> }
+    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> }
 ) {
     val isSeries = remember(meta.type, meta.videos) {
         meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
@@ -782,7 +782,10 @@ private fun MetaDetailsContent(
                         onCastMemberClick = { member ->
                             member.tmdbId?.let { id ->
                                 lastOpenedCastTmdbId = id
-                                onNavigateToCastDetail(id, member.name)
+                                val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
+                                    member.character.equals("Director", ignoreCase = true) ||
+                                    member.character.equals("Writer", ignoreCase = true)
+                                onNavigateToCastDetail(id, member.name, preferCrew)
                             }
                         }
                     )
