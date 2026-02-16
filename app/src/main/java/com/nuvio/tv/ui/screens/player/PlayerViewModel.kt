@@ -43,6 +43,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.FrameRateUtils
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.LibassRenderType
+import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.StreamLinkCacheDataStore
 import com.nuvio.tv.data.local.StreamAutoPlayMode
@@ -225,6 +226,9 @@ class PlayerViewModel @Inject constructor(
     private var streamReuseLastLinkEnabled: Boolean = false
     private var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL
     private var streamAutoPlayNextEpisodeEnabledSetting: Boolean = false
+    private var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
+    private var nextEpisodeThresholdPercentSetting: Int = 95
+    private var nextEpisodeThresholdMinutesBeforeEndSetting: Int = 3
     private var hasAppliedRememberedAudioSelection: Boolean = false
 
     
@@ -372,6 +376,9 @@ class PlayerViewModel @Inject constructor(
                 streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
                 streamAutoPlayModeSetting = settings.streamAutoPlayMode
                 streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
+                nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode
+                nextEpisodeThresholdPercentSetting = settings.nextEpisodeThresholdPercent
+                nextEpisodeThresholdMinutesBeforeEndSetting = settings.nextEpisodeThresholdMinutesBeforeEnd
 
                 applySubtitlePreferences(
                     settings.subtitleStyle.preferredLanguage,
@@ -625,7 +632,10 @@ class PlayerViewModel @Inject constructor(
         val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
             positionMs = positionMs,
             durationMs = effectiveDuration,
-            skipIntervals = skipIntervals
+            skipIntervals = skipIntervals,
+            thresholdMode = nextEpisodeThresholdModeSetting,
+            thresholdPercent = nextEpisodeThresholdPercentSetting,
+            thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
         )
 
         if (shouldShow) {

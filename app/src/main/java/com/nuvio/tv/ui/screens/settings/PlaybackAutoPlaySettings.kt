@@ -59,6 +59,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -70,8 +71,11 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowAddonSelectionDialog: () -> Unit,
     onShowPluginSelectionDialog: () -> Unit,
     onShowRegexDialog: () -> Unit,
+    onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
+    onSetNextEpisodeThresholdPercent: (Int) -> Unit,
+    onSetNextEpisodeThresholdMinutesBeforeEnd: (Int) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
@@ -123,6 +127,53 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onCheckedChange = onSetStreamAutoPlayNextEpisodeEnabled,
                 onFocused = onItemFocused
             )
+        }
+
+        item {
+            val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
+                NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
+                NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
+            }
+            NavigationSettingsItem(
+                icon = Icons.Default.Tune,
+                title = "Next Episode Threshold Mode",
+                subtitle = thresholdModeSubtitle,
+                onClick = onShowNextEpisodeThresholdModeDialog,
+                onFocused = onItemFocused
+            )
+        }
+
+        item {
+            when (playerSettings.nextEpisodeThresholdMode) {
+                NextEpisodeThresholdMode.PERCENTAGE -> {
+                    SliderSettingsItem(
+                        icon = Icons.Default.Tune,
+                        title = "Threshold Percentage",
+                        subtitle = "Fallback when no outro timestamp exists.",
+                        value = playerSettings.nextEpisodeThresholdPercent,
+                        valueText = "${playerSettings.nextEpisodeThresholdPercent}%",
+                        minValue = 50,
+                        maxValue = 99,
+                        step = 1,
+                        onValueChange = onSetNextEpisodeThresholdPercent,
+                        onFocused = onItemFocused
+                    )
+                }
+                NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
+                    SliderSettingsItem(
+                        icon = Icons.Default.Tune,
+                        title = "Threshold Minutes",
+                        subtitle = "Fallback when no outro timestamp exists.",
+                        value = playerSettings.nextEpisodeThresholdMinutesBeforeEnd,
+                        valueText = "${playerSettings.nextEpisodeThresholdMinutesBeforeEnd} min",
+                        minValue = 1,
+                        maxValue = 30,
+                        step = 1,
+                        onValueChange = onSetNextEpisodeThresholdMinutesBeforeEnd,
+                        onFocused = onItemFocused
+                    )
+                }
+            }
         }
 
         item {
@@ -198,12 +249,14 @@ internal fun AutoPlaySettingsDialogs(
     showRegexDialog: Boolean,
     showAddonSelectionDialog: Boolean,
     showPluginSelectionDialog: Boolean,
+    showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
     enabledPluginNames: List<String>,
     onSetMode: (StreamAutoPlayMode) -> Unit,
     onSetSource: (StreamAutoPlaySource) -> Unit,
+    onSetNextEpisodeThresholdMode: (NextEpisodeThresholdMode) -> Unit,
     onSetRegex: (String) -> Unit,
     onSetSelectedAddons: (Set<String>) -> Unit,
     onSetSelectedPlugins: (Set<String>) -> Unit,
@@ -213,6 +266,7 @@ internal fun AutoPlaySettingsDialogs(
     onDismissRegexDialog: () -> Unit,
     onDismissAddonSelectionDialog: () -> Unit,
     onDismissPluginSelectionDialog: () -> Unit,
+    onDismissNextEpisodeThresholdModeDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
     if (showModeDialog) {
@@ -248,6 +302,17 @@ internal fun AutoPlaySettingsDialogs(
         )
     }
 
+    if (showNextEpisodeThresholdModeDialog) {
+        NextEpisodeThresholdModeDialog(
+            selectedMode = playerSettings.nextEpisodeThresholdMode,
+            onModeSelected = {
+                onSetNextEpisodeThresholdMode(it)
+                onDismissNextEpisodeThresholdModeDialog()
+            },
+            onDismiss = onDismissNextEpisodeThresholdModeDialog
+        )
+    }
+
     if (showAddonSelectionDialog) {
         StreamAutoPlayProviderSelectionDialog(
             title = "Allowed Addons",
@@ -279,6 +344,108 @@ internal fun AutoPlaySettingsDialogs(
             },
             onDismiss = onDismissReuseLastLinkCacheDialog
         )
+    }
+}
+
+@Composable
+private fun NextEpisodeThresholdModeDialog(
+    selectedMode: NextEpisodeThresholdMode,
+    onModeSelected: (NextEpisodeThresholdMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = listOf(
+        Triple(
+            NextEpisodeThresholdMode.PERCENTAGE,
+            "Percentage",
+            "Show by playback percent when no outro timestamp is available."
+        ),
+        Triple(
+            NextEpisodeThresholdMode.MINUTES_BEFORE_END,
+            "Minutes before end",
+            "Show this many minutes before episode end when no outro timestamp is available."
+        )
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(NuvioColors.BackgroundCard)
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(520.dp)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Next Episode Threshold Mode",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(options.size) { index ->
+                        val (mode, title, description) = options[index]
+                        val isSelected = mode == selectedMode
+
+                        Card(
+                            onClick = { onModeSelected(mode) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                            colors = CardDefaults.colors(
+                                containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundElevated,
+                                focusedContainerColor = NuvioColors.FocusBackground
+                            ),
+                            border = CardDefaults.border(
+                                focusedBorder = Border(
+                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1.02f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = description,
+                                        color = NuvioColors.TextSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = NuvioColors.Primary,
+                                        modifier = Modifier.height(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

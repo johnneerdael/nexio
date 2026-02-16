@@ -80,8 +80,11 @@ internal fun PlaybackSettingsSections(
     onShowStreamAutoPlayAddonSelectionDialog: () -> Unit,
     onShowStreamAutoPlayPluginSelectionDialog: () -> Unit,
     onShowStreamRegexDialog: () -> Unit,
+    onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
+    onSetNextEpisodeThresholdPercent: (Int) -> Unit,
+    onSetNextEpisodeThresholdMinutesBeforeEnd: (Int) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
@@ -228,8 +231,11 @@ internal fun PlaybackSettingsSections(
                 onShowAddonSelectionDialog = onShowStreamAutoPlayAddonSelectionDialog,
                 onShowPluginSelectionDialog = onShowStreamAutoPlayPluginSelectionDialog,
                 onShowRegexDialog = onShowStreamRegexDialog,
+                onShowNextEpisodeThresholdModeDialog = onShowNextEpisodeThresholdModeDialog,
                 onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
                 onSetStreamAutoPlayNextEpisodeEnabled = onSetStreamAutoPlayNextEpisodeEnabled,
+                onSetNextEpisodeThresholdPercent = onSetNextEpisodeThresholdPercent,
+                onSetNextEpisodeThresholdMinutesBeforeEnd = onSetNextEpisodeThresholdMinutesBeforeEnd,
                 onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )
@@ -363,6 +369,7 @@ internal fun PlaybackSettingsDialogsHost(
     showStreamAutoPlayAddonSelectionDialog: Boolean,
     showStreamAutoPlayPluginSelectionDialog: Boolean,
     showStreamRegexDialog: Boolean,
+    showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
@@ -375,6 +382,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetDecoderPriority: (Int) -> Unit,
     onSetStreamAutoPlayMode: (com.nuvio.tv.data.local.StreamAutoPlayMode) -> Unit,
     onSetStreamAutoPlaySource: (com.nuvio.tv.data.local.StreamAutoPlaySource) -> Unit,
+    onSetNextEpisodeThresholdMode: (com.nuvio.tv.data.local.NextEpisodeThresholdMode) -> Unit,
     onSetStreamAutoPlayRegex: (String) -> Unit,
     onSetStreamAutoPlaySelectedAddons: (Set<String>) -> Unit,
     onSetStreamAutoPlaySelectedPlugins: (Set<String>) -> Unit,
@@ -391,6 +399,7 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissStreamRegexDialog: () -> Unit,
     onDismissStreamAutoPlayAddonSelectionDialog: () -> Unit,
     onDismissStreamAutoPlayPluginSelectionDialog: () -> Unit,
+    onDismissNextEpisodeThresholdModeDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
     if (showPlayerPreferenceDialog) {
@@ -440,12 +449,14 @@ internal fun PlaybackSettingsDialogsHost(
         showRegexDialog = showStreamRegexDialog,
         showAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
         showPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
+        showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
         enabledPluginNames = enabledPluginNames,
         onSetMode = onSetStreamAutoPlayMode,
         onSetSource = onSetStreamAutoPlaySource,
+        onSetNextEpisodeThresholdMode = onSetNextEpisodeThresholdMode,
         onSetRegex = onSetStreamAutoPlayRegex,
         onSetSelectedAddons = onSetStreamAutoPlaySelectedAddons,
         onSetSelectedPlugins = onSetStreamAutoPlaySelectedPlugins,
@@ -455,6 +466,7 @@ internal fun PlaybackSettingsDialogsHost(
         onDismissRegexDialog = onDismissStreamRegexDialog,
         onDismissAddonSelectionDialog = onDismissStreamAutoPlayAddonSelectionDialog,
         onDismissPluginSelectionDialog = onDismissStreamAutoPlayPluginSelectionDialog,
+        onDismissNextEpisodeThresholdModeDialog = onDismissNextEpisodeThresholdModeDialog,
         onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
     )
 }
