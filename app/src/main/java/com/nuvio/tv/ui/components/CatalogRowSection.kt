@@ -62,6 +62,7 @@ fun CatalogRowSection(
     trailerPreviewUrls: Map<String, String> = emptyMap(),
     onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     modifier: Modifier = Modifier,
+    enableRowFocusRestorer: Boolean = true,
     initialScrollIndex: Int = 0,
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {},
@@ -118,7 +119,7 @@ fun CatalogRowSection(
                 .fillMaxWidth()
                 .focusRequester(rowFocusRequester)
                 .then(
-                    if (focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
+                    if (enableRowFocusRestorer && focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
                         Modifier.focusRestorer {
                             val visibleIndex = listState.layoutInfo.visibleItemsInfo
                                 .firstOrNull()
