@@ -35,6 +35,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
     private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
     private val modernSidebarBlurEnabledKey = booleanPreferencesKey("modern_sidebar_blur_enabled")
+    private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
+    private val modernNextRowPreviewEnabledKey = booleanPreferencesKey("modern_next_row_preview_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
@@ -98,6 +100,14 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val modernSidebarBlurEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[modernSidebarBlurEnabledKey] ?: false
+    }
+
+    val modernLandscapePostersEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[modernLandscapePostersEnabledKey] ?: true
+    }
+
+    val modernNextRowPreviewEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[modernNextRowPreviewEnabledKey] ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -210,6 +220,18 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setModernSidebarBlurEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[modernSidebarBlurEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setModernLandscapePostersEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[modernLandscapePostersEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setModernNextRowPreviewEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[modernNextRowPreviewEnabledKey] = enabled
         }
     }
 
