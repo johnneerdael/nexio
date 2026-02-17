@@ -121,10 +121,10 @@ fun ContinueWatchingSection(
         ) {
             itemsIndexed(
                 items = items,
-                key = { _, progress ->
+                key = { index, progress ->
                     when (progress) {
-                        is ContinueWatchingItem.InProgress -> progress.progress.videoId
-                        is ContinueWatchingItem.NextUp -> "nextup_${progress.info.videoId}"
+                        is ContinueWatchingItem.InProgress -> "cw_${progress.progress.videoId}_$index"
+                        is ContinueWatchingItem.NextUp -> "nextup_${progress.info.videoId}_$index"
                     }
                 }
             ) { index, progress ->

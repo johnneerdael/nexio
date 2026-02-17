@@ -78,10 +78,10 @@ fun GridContinueWatchingSection(
         ) {
             itemsIndexed(
                 items = items,
-                key = { _, item ->
+                key = { index, item ->
                     when (item) {
-                        is ContinueWatchingItem.InProgress -> "cw_${item.progress.videoId}"
-                        is ContinueWatchingItem.NextUp -> "nextup_${item.info.videoId}"
+                        is ContinueWatchingItem.InProgress -> "cw_${item.progress.videoId}_$index"
+                        is ContinueWatchingItem.NextUp -> "nextup_${item.info.videoId}_$index"
                     }
                 }
             ) { index, progress ->
