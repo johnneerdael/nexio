@@ -358,7 +358,6 @@ fun NuvioNavHost(
 
         composable(Screen.Search.route) {
             SearchScreen(
-                showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },

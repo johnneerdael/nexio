@@ -41,10 +41,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -65,7 +63,6 @@ import kotlin.math.roundToInt
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
-    showBuiltInHeader: Boolean = true,
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> }
 ) {
@@ -161,15 +158,8 @@ fun SearchScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 24.dp)
+                    .padding(top = 10.dp)
             ) {
-                SearchModeHeader(
-                    showBuiltInHeader = showBuiltInHeader,
-                    modeLabel = "DISCOVER"
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
                 SearchInputField(
                     query = uiState.query,
                     canMoveToResults = canMoveToResults,
@@ -181,7 +171,7 @@ fun SearchScreen(
                     keyboardController = keyboardController
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 DiscoverSection(
                     uiState = uiState,
@@ -213,16 +203,9 @@ fun SearchScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item {
-                    SearchModeHeader(
-                        showBuiltInHeader = showBuiltInHeader,
-                        modeLabel = "RESULTS"
-                    )
-                }
-
                 item {
                     SearchInputField(
                         query = uiState.query,
@@ -333,36 +316,6 @@ fun SearchScreen(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SearchModeHeader(
-    showBuiltInHeader: Boolean,
-    modeLabel: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 48.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "Search",
-            style = androidx.tv.material3.MaterialTheme.typography.headlineMedium,
-            color = if (showBuiltInHeader) NuvioColors.TextPrimary else NuvioColors.TextPrimary.copy(alpha = 0f),
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.5.sp
-        )
-        Text(
-            text = modeLabel,
-            style = androidx.tv.material3.MaterialTheme.typography.labelLarge,
-            color = if (showBuiltInHeader) NuvioColors.TextTertiary else NuvioColors.TextTertiary.copy(alpha = 0f),
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 2.sp
-        )
     }
 }
 

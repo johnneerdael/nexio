@@ -403,9 +403,13 @@ private fun LegacySidebarScaffold(
                         keyEvent.type == KeyEventType.KeyDown &&
                         keyEvent.key == Key.DirectionLeft
                     ) {
-                        pendingSidebarFocusRequest = true
-                        drawerState.setValue(DrawerValue.Open)
-                        true
+                        if (focusManager.moveFocus(FocusDirection.Left)) {
+                            true
+                        } else {
+                            pendingSidebarFocusRequest = true
+                            drawerState.setValue(DrawerValue.Open)
+                            true
+                        }
                     } else {
                         false
                     }
@@ -452,6 +456,7 @@ private fun LegacySidebarButton(
     Box(
         modifier = modifier
             .height(52.dp)
+            .focusProperties { canFocus = expanded }
             .clip(itemShape)
             .background(color = backgroundColor, shape = itemShape)
             .onFocusChanged { isFocused = it.isFocused }
@@ -813,7 +818,11 @@ private fun ModernSidebarScaffold(
                 }
             }
 
-            if (!sidebarCollapsed && sidebarExpandProgress < 0.98f) {
+            if (
+                !sidebarCollapsed &&
+                sidebarExpandProgress < 0.98f &&
+                selectedDrawerRoute != Screen.Search.route
+            ) {
                 CollapsedSidebarPill(
                     label = selectedDrawerItem.label,
                     iconRes = selectedDrawerItem.iconRes,
