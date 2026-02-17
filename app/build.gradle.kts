@@ -29,7 +29,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.nuvio.tv2"
+        applicationId = "com.nuvio.tv"
         minSdk = 26
         targetSdk = 36
         versionCode = 14
@@ -58,7 +58,7 @@ android {
 
     buildTypes {
         debug {
-            // Use the default debug keystore for local debug builds.
+            signingConfig = signingConfigs.getByName("release")
             isDebuggable = false
             isMinifyEnabled = false
 
