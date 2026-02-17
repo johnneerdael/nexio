@@ -59,7 +59,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
-import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -200,9 +199,6 @@ fun SettingsScreen(
 
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
-
-    val pluginViewModel: PluginViewModel = hiltViewModel()
-    val pluginUiState by pluginViewModel.uiState.collectAsState()
 
     LaunchedEffect(visibleSections) {
         if (visibleSections.none { it.category == selectedCategory }) {
@@ -349,37 +345,43 @@ fun SettingsScreen(
                             SettingsCategory.ABOUT -> AboutSettingsContent(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.ABOUT]
                             )
-                            SettingsCategory.PLUGINS -> {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    SettingsDetailHeader(
-                                        title = "Plugins",
-                                        subtitle = "Manage repositories, providers, and plugin states."
-                                    )
-                                    SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .weight(1f),
-                                            contentAlignment = Alignment.TopStart
-                                        ) {
-                                            PluginScreenContent(
-                                                uiState = pluginUiState,
-                                                viewModel = pluginViewModel,
-                                                showHeader = false
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            SettingsCategory.PLUGINS -> PluginsSettingsContent()
                             SettingsCategory.ACCOUNT -> Unit
                             SettingsCategory.DEBUG -> DebugSettingsContent()
                             SettingsCategory.TRAKT -> Unit
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginsSettingsContent() {
+    val pluginViewModel: com.nuvio.tv.ui.screens.plugin.PluginViewModel = hiltViewModel()
+    val pluginUiState by pluginViewModel.uiState.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SettingsDetailHeader(
+            title = "Plugins",
+            subtitle = "Manage repositories, providers, and plugin states."
+        )
+        SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.TopStart
+            ) {
+                PluginScreenContent(
+                    uiState = pluginUiState,
+                    viewModel = pluginViewModel,
+                    showHeader = false
+                )
             }
         }
     }

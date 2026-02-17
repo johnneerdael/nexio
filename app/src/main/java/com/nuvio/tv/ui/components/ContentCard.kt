@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.components
 
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +49,7 @@ import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 
@@ -155,6 +157,7 @@ fun ContentCard(
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
         }
+        val imagePainter = rememberAsyncImagePainter(model = imageModel)
 
         Card(
             onClick = onClick,
@@ -206,8 +209,8 @@ fun ContentCard(
                     .height(baseCardHeight)
                     .clip(cardShape)
             ) {
-                AsyncImage(
-                    model = imageModel,
+                Image(
+                    painter = imagePainter,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -247,8 +250,8 @@ fun ContentCard(
                 }
 
                 if (shouldPlayTrailerPreview) {
-                    AsyncImage(
-                        model = imageModel,
+                    Image(
+                        painter = imagePainter,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()

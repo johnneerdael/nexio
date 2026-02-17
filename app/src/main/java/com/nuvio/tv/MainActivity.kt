@@ -7,10 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
@@ -98,6 +101,7 @@ import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -108,6 +112,14 @@ data class DrawerItem(
     val label: String,
     val iconRes: Int? = null,
     val icon: ImageVector? = null
+)
+
+private data class MainUiPrefs(
+    val theme: AppTheme = AppTheme.DEFAULT,
+    val hasChosenLayout: Boolean? = true,
+    val sidebarCollapsed: Boolean = false,
+    val modernSidebarEnabled: Boolean = false,
+    val modernSidebarBlurPref: Boolean = false
 )
 
 @AndroidEntryPoint
@@ -129,20 +141,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.DEFAULT)
-            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = true)
+            val mainUiPrefsFlow = remember(themeDataStore, layoutPreferenceDataStore) {
+                combine(
+                    themeDataStore.selectedTheme,
+                    layoutPreferenceDataStore.hasChosenLayout,
+                    layoutPreferenceDataStore.sidebarCollapsedByDefault,
+                    layoutPreferenceDataStore.modernSidebarEnabled,
+                    layoutPreferenceDataStore.modernSidebarBlurEnabled
+                ) { theme, hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref ->
+                    MainUiPrefs(
+                        theme = theme,
+                        hasChosenLayout = hasChosenLayout,
+                        sidebarCollapsed = sidebarCollapsed,
+                        modernSidebarEnabled = modernSidebarEnabled,
+                        modernSidebarBlurPref = modernSidebarBlurPref
+                    )
+                }
+            }
+            val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs())
 
-            NuvioTheme(appTheme = currentTheme) {
+            NuvioTheme(appTheme = mainUiPrefs.theme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
-                    val layoutChosen = hasChosenLayout ?: false
-
-                    val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
-                    val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = false)
-                    val modernSidebarBlurPref by layoutPreferenceDataStore.modernSidebarBlurEnabled.collectAsState(initial = false)
-                    val modernSidebarBlurEnabled = modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                    val layoutChosen = mainUiPrefs.hasChosenLayout ?: false
+                    val sidebarCollapsed = mainUiPrefs.sidebarCollapsed
+                    val modernSidebarEnabled = mainUiPrefs.modernSidebarEnabled
+                    val modernSidebarBlurEnabled =
+                        mainUiPrefs.modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
@@ -531,56 +558,82 @@ private fun ModernSidebarScaffold(
         animationSpec = tween(durationMillis = 135, easing = FastOutSlowInEasing),
         label = "sidebarSurfaceAlpha"
     )
-    val sidebarLabelAlpha by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0f,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 125, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 145, easing = LinearOutSlowInEasing)
+    val shouldApplySidebarHaze = showSidebar && (
+        sidebarVisible ||
+            isSidebarExpanded ||
+            sidebarCollapsePending ||
+            sidebarWidth > 0.dp
+        )
+    val sidebarTransition = updateTransition(
+        targetState = isSidebarExpanded,
+        label = "sidebarTransition"
+    )
+    val sidebarLabelAlpha by sidebarTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 125, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 145, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarLabelAlpha"
-    )
-    val sidebarExpandProgress by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0f,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 385, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 1f else 0f
+    }
+    val sidebarExpandProgress by sidebarTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 385, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarExpandProgress"
-    )
-    val sidebarIconScale by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0.92f,
-        animationSpec = tween(durationMillis = 145, easing = FastOutSlowInEasing),
+    ) { expanded ->
+        if (expanded) 1f else 0f
+    }
+    val sidebarIconScale by sidebarTransition.animateFloat(
+        transitionSpec = { tween(durationMillis = 145, easing = FastOutSlowInEasing) },
         label = "sidebarIconScale"
-    )
-    val sidebarBloomScale by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0.9f,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 1f else 0.92f
+    }
+    val sidebarBloomScale by sidebarTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarBloomScale"
-    )
-    val sidebarDeflateOffsetX by animateDpAsState(
-        targetValue = if (isSidebarExpanded) 0.dp else (-10).dp,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 1f else 0.9f
+    }
+    val sidebarDeflateOffsetX by sidebarTransition.animateDp(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarDeflateOffsetX"
-    )
-    val sidebarDeflateOffsetY by animateDpAsState(
-        targetValue = if (isSidebarExpanded) 0.dp else (-8).dp,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 0.dp else (-10).dp
+    }
+    val sidebarDeflateOffsetY by sidebarTransition.animateDp(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarDeflateOffsetY"
-    )
+    ) { expanded ->
+        if (expanded) 0.dp else (-8).dp
+    }
 
     LaunchedEffect(isSidebarExpanded, sidebarCollapsePending, pendingContentFocusTransfer, showSidebar) {
         if (!showSidebar || !pendingContentFocusTransfer || isSidebarExpanded || sidebarCollapsePending) {
@@ -612,7 +665,13 @@ private fun ModernSidebarScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .haze(sidebarHazeState)
+                .then(
+                    if (shouldApplySidebarHaze) {
+                        Modifier.haze(sidebarHazeState)
+                    } else {
+                        Modifier
+                    }
+                )
                 .onPreviewKeyEvent { keyEvent ->
                     if (
                         isSidebarExpanded &&
@@ -729,7 +788,7 @@ private fun ModernSidebarScaffold(
                 }
             }
 
-            if (!sidebarCollapsed) {
+            if (!sidebarCollapsed && sidebarExpandProgress < 0.98f) {
                 CollapsedSidebarPill(
                     label = selectedDrawerItem.label,
                     iconRes = selectedDrawerItem.iconRes,
