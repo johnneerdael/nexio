@@ -352,6 +352,20 @@ fun LayoutSettingsContent(
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
                     )
+
+                    CompactToggleRow(
+                        title = "Prefer meta from external addon",
+                        subtitle = "Use metadata from external addon instead of catalog addon.",
+                        checked = uiState.preferExternalMetaAddonDetail,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetPreferExternalMetaAddonDetail(
+                                    !uiState.preferExternalMetaAddonDetail
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                    )
                 }
             }
 
