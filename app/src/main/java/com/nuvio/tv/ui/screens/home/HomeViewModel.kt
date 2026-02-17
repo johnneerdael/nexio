@@ -114,19 +114,25 @@ class HomeViewModel @Inject constructor(
 
     private fun observeLayoutPreferences() {
         val coreLayoutPrefsFlow = combine(
-            layoutPreferenceDataStore.selectedLayout,
-            layoutPreferenceDataStore.heroCatalogSelections,
-            layoutPreferenceDataStore.heroSectionEnabled,
-            layoutPreferenceDataStore.posterLabelsEnabled,
-            layoutPreferenceDataStore.catalogAddonNameEnabled
-        ) { layout, heroCatalogKeys, heroSectionEnabled, posterLabelsEnabled, catalogAddonNameEnabled ->
-            CoreLayoutPrefs(
-                layout = layout,
-                heroCatalogKeys = heroCatalogKeys,
-                heroSectionEnabled = heroSectionEnabled,
-                posterLabelsEnabled = posterLabelsEnabled,
-                catalogAddonNameEnabled = catalogAddonNameEnabled
-            )
+            combine(
+                layoutPreferenceDataStore.selectedLayout,
+                layoutPreferenceDataStore.heroCatalogSelections,
+                layoutPreferenceDataStore.heroSectionEnabled,
+                layoutPreferenceDataStore.posterLabelsEnabled,
+                layoutPreferenceDataStore.catalogAddonNameEnabled
+            ) { layout, heroCatalogKeys, heroSectionEnabled, posterLabelsEnabled, catalogAddonNameEnabled ->
+                CoreLayoutPrefs(
+                    layout = layout,
+                    heroCatalogKeys = heroCatalogKeys,
+                    heroSectionEnabled = heroSectionEnabled,
+                    posterLabelsEnabled = posterLabelsEnabled,
+                    catalogAddonNameEnabled = catalogAddonNameEnabled,
+                    catalogTypeSuffixEnabled = true
+                )
+            },
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled
+        ) { corePrefs, catalogTypeSuffixEnabled ->
+            corePrefs.copy(catalogTypeSuffixEnabled = catalogTypeSuffixEnabled)
         }
 
         val focusedBackdropPrefsFlow = combine(
@@ -157,6 +163,7 @@ class HomeViewModel @Inject constructor(
                     heroSectionEnabled = corePrefs.heroSectionEnabled,
                     posterLabelsEnabled = corePrefs.posterLabelsEnabled,
                     catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
+                    catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
                     focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
                     focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
                     focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
@@ -179,6 +186,7 @@ class HomeViewModel @Inject constructor(
                         heroSectionEnabled = prefs.heroSectionEnabled,
                         posterLabelsEnabled = prefs.posterLabelsEnabled,
                         catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
+                        catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
                         focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
@@ -200,7 +208,8 @@ class HomeViewModel @Inject constructor(
         val heroCatalogKeys: List<String>,
         val heroSectionEnabled: Boolean,
         val posterLabelsEnabled: Boolean,
-        val catalogAddonNameEnabled: Boolean
+        val catalogAddonNameEnabled: Boolean,
+        val catalogTypeSuffixEnabled: Boolean
     )
 
     private data class FocusedBackdropPrefs(
@@ -216,6 +225,7 @@ class HomeViewModel @Inject constructor(
         val heroSectionEnabled: Boolean,
         val posterLabelsEnabled: Boolean,
         val catalogAddonNameEnabled: Boolean,
+        val catalogTypeSuffixEnabled: Boolean,
         val focusedBackdropExpandEnabled: Boolean,
         val focusedBackdropExpandDelaySeconds: Int,
         val focusedBackdropTrailerEnabled: Boolean,

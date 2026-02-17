@@ -87,6 +87,11 @@ class SearchViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(catalogTypeSuffixEnabled = enabled) }
+            }
+        }
     }
 
     private data class LayoutPrefs(

@@ -156,9 +156,16 @@ internal fun DiscoverSection(
             )
         }
 
-        selectedCatalog?.let {
+        selectedCatalog?.let { catalog ->
+            val metadataSegments = buildList {
+                add(catalog.addonName)
+                if (uiState.catalogTypeSuffixEnabled) {
+                    add(catalog.type.replaceFirstChar { c -> c.uppercase() })
+                }
+                uiState.selectedDiscoverGenre?.let(::add)
+            }
             Text(
-                text = "${it.addonName} • ${it.type.replaceFirstChar { c -> c.uppercase() }}${uiState.selectedDiscoverGenre?.let { g -> " • $g" } ?: ""}",
+                text = metadataSegments.joinToString(" • "),
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextSecondary
             )

@@ -54,6 +54,7 @@ fun CatalogRowSection(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showPosterLabels: Boolean = true,
     showAddonName: Boolean = true,
+    showCatalogTypeSuffix: Boolean = true,
     focusedPosterBackdropExpandEnabled: Boolean = false,
     focusedPosterBackdropExpandDelaySeconds: Int = 3,
     focusedPosterBackdropTrailerEnabled: Boolean = false,
@@ -94,8 +95,13 @@ fun CatalogRowSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                val catalogTitle = if (showCatalogTypeSuffix) {
+                    "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}"
+                } else {
+                    catalogRow.catalogName.replaceFirstChar { it.uppercase() }
+                }
                 Text(
-                    text = "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}",
+                    text = catalogTitle,
                     style = MaterialTheme.typography.headlineMedium,
                     color = NuvioColors.TextPrimary,
                     maxLines = 3,

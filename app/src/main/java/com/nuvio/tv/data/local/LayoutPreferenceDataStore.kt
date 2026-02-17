@@ -40,6 +40,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val searchDiscoverEnabledKey = booleanPreferencesKey("search_discover_enabled")
     private val posterLabelsEnabledKey = booleanPreferencesKey("poster_labels_enabled")
     private val catalogAddonNameEnabledKey = booleanPreferencesKey("catalog_addon_name_enabled")
+    private val catalogTypeSuffixEnabledKey = booleanPreferencesKey("catalog_type_suffix_enabled")
     private val focusedPosterBackdropExpandEnabledKey = booleanPreferencesKey("focused_poster_backdrop_expand_enabled")
     private val focusedPosterBackdropExpandDelaySecondsKey = intPreferencesKey("focused_poster_backdrop_expand_delay_seconds")
     private val focusedPosterBackdropTrailerEnabledKey = booleanPreferencesKey("focused_poster_backdrop_trailer_enabled")
@@ -128,6 +129,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val catalogAddonNameEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[catalogAddonNameEnabledKey] ?: true
+    }
+
+    val catalogTypeSuffixEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[catalogTypeSuffixEnabledKey] ?: true
     }
 
     val focusedPosterBackdropExpandEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -259,6 +264,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setCatalogAddonNameEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[catalogAddonNameEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setCatalogTypeSuffixEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[catalogTypeSuffixEnabledKey] = enabled
         }
     }
 
