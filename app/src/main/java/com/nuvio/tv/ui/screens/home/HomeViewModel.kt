@@ -275,6 +275,46 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun onItemFocus(item: MetaPreview) {
+        viewModelScope.launch {
+            val prefetchEnabled = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
+            if (prefetchEnabled) {
+                // Fetch meta from external addons
+                metaRepository.getMetaFromAllAddons(item.apiType, item.id)
+                    .first { it is NetworkResult.Success || it is NetworkResult.Error }
+                    .let { result ->
+                        if (result is NetworkResult.Success) {
+                            // Update the item in catalog rows
+                            updateCatalogItemWithMeta(item.id, result.data)
+                        }
+                    }
+            }
+        }
+    }
+
+    private fun updateCatalogItemWithMeta(itemId: String, meta: Meta) {
+        _uiState.update { state ->
+            val updatedRows = state.catalogRows.map { row ->
+                val updatedItems = row.items.map { item ->
+                    if (item.id == itemId) {
+                        item.copy(
+                            background = meta.background ?: item.background,
+                            logo = meta.logo ?: item.logo,
+                            description = meta.description ?: item.description,
+                            releaseInfo = meta.releaseInfo ?: item.releaseInfo,
+                            imdbRating = meta.imdbRating ?: item.imdbRating,
+                            genres = if (meta.genres.isNotEmpty()) meta.genres else item.genres
+                        )
+                    } else item
+                }
+                if (updatedItems != row.items) {
+                    row.copy(items = updatedItems)
+                } else row
+            }
+            state.copy(catalogRows = updatedRows)
+        }
+    }
+
     private fun loadHomeCatalogOrderPreference() {
         viewModelScope.launch {
             layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->

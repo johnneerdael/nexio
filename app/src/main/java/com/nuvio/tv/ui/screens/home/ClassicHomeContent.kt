@@ -42,6 +42,7 @@ fun ClassicHomeContent(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onRequestTrailerPreview: (MetaPreview) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit = {},
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
@@ -208,6 +209,7 @@ fun ClassicHomeContent(
                 focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
                 trailerPreviewUrls = trailerPreviewUrls,
                 onRequestTrailerPreview = onRequestTrailerPreview,
+                onItemFocus = onItemFocus,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },
