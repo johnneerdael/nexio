@@ -221,7 +221,7 @@ fun UpdatePromptDialog(
                             containerColor = NuvioColors.Background,
                             contentColor = NuvioColors.TextPrimary,
                             focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            focusedContentColor = NuvioColors.OnFocusBackground
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -236,7 +236,7 @@ fun UpdatePromptDialog(
                                 containerColor = NuvioColors.BackgroundCard,
                                 contentColor = NuvioColors.TextPrimary,
                                 focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                focusedContentColor = NuvioColors.OnFocusBackground
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
@@ -251,7 +251,7 @@ fun UpdatePromptDialog(
                                 containerColor = NuvioColors.BackgroundCard,
                                 contentColor = NuvioColors.TextPrimary,
                                 focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                focusedContentColor = NuvioColors.OnFocusBackground
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
@@ -266,7 +266,7 @@ fun UpdatePromptDialog(
                                 containerColor = NuvioColors.BackgroundCard,
                                 contentColor = NuvioColors.TextPrimary,
                                 focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                focusedContentColor = NuvioColors.OnFocusBackground
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
@@ -279,7 +279,7 @@ fun UpdatePromptDialog(
                                 containerColor = NuvioColors.Background,
                                 contentColor = NuvioColors.TextPrimary,
                                 focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                focusedContentColor = NuvioColors.OnFocusBackground
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {

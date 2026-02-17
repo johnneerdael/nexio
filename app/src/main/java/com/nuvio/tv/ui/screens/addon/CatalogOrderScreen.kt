@@ -188,7 +188,7 @@ private fun CatalogOrderCard(
                         containerColor = NuvioColors.BackgroundCard,
                         contentColor = NuvioColors.TextSecondary,
                         focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = NuvioColors.Primary
+                        focusedContentColor = NuvioColors.OnFocusBackground
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(
@@ -211,7 +211,7 @@ private fun CatalogOrderCard(
                         containerColor = NuvioColors.BackgroundCard,
                         contentColor = NuvioColors.TextSecondary,
                         focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = NuvioColors.Primary
+                        focusedContentColor = NuvioColors.OnFocusBackground
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(

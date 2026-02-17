@@ -38,6 +38,8 @@ class NuvioColorScheme(palette: ThemeColorPalette) {
     // Focus states - Theme dependent
     val FocusRing = palette.focusRing
     val FocusBackground = palette.focusBackground
+    val OnFocusBackground = palette.onFocusBackground
+    val OnAccent = palette.onAccent
 
     // Status colors (constant)
     val Rating = Color(0xFFFFD700)
@@ -114,6 +116,16 @@ object NuvioColors {
         @Composable
         @ReadOnlyComposable
         get() = NuvioTheme.colors.FocusBackground
+
+    val OnFocusBackground: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = NuvioTheme.colors.OnFocusBackground
+
+    val OnAccent: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = NuvioTheme.colors.OnAccent
 
     val BorderFocused: Color
         @Composable

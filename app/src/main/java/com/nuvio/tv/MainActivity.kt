@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.OCEAN)
+            val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.DEFAULT)
             val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = true)
 
             NuvioTheme(appTheme = currentTheme) {
@@ -390,7 +390,7 @@ private fun LegacySidebarButton(
     )
     val contentColor by animateColorAsState(
         targetValue = when {
-            isFocused -> NuvioColors.TextPrimary
+            isFocused -> NuvioColors.OnFocusBackground
             selected -> NuvioColors.TextPrimary
             else -> NuvioColors.TextSecondary
         },

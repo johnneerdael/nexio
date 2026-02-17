@@ -57,7 +57,9 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NuvioTheme
 
 internal val SettingsContainerRadius = 28.dp
 internal val SettingsPillRadius = 999.dp
@@ -562,12 +564,28 @@ private fun SettingsTogglePill(
     enabled: Boolean
 ) {
     val alpha = if (enabled) 1f else 0.35f
+    val isDefaultTheme = NuvioTheme.currentTheme == AppTheme.DEFAULT
+    val trackColor = if (checked) {
+        if (isDefaultTheme) {
+            NuvioColors.FocusRing.copy(alpha = 0.58f * alpha)
+        } else {
+            NuvioColors.FocusRing.copy(alpha = alpha)
+        }
+    } else {
+        NuvioColors.Border.copy(alpha = alpha)
+    }
+    val thumbColor = when {
+        !checked -> Color.White.copy(alpha = alpha)
+        isDefaultTheme -> Color.Black.copy(alpha = alpha)
+        else -> Color.White.copy(alpha = alpha)
+    }
+
     Box(
         modifier = Modifier
             .width(46.dp)
             .height(24.dp)
             .clip(RoundedCornerShape(SettingsPillRadius))
-            .background(if (checked) NuvioColors.FocusRing.copy(alpha = alpha) else NuvioColors.Border.copy(alpha = alpha))
+            .background(trackColor)
             .padding(2.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     ) {
@@ -575,7 +593,7 @@ private fun SettingsTogglePill(
             modifier = Modifier
                 .size(20.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = alpha))
+                .background(thumbColor)
         )
     }
 }

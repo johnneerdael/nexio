@@ -408,7 +408,11 @@ private fun LibraryDropdownPicker(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.labelSmall,
-                    color = NuvioColors.TextTertiary
+                    color = if (isFocused) {
+                        NuvioColors.OnFocusBackground.copy(alpha = 0.72f)
+                    } else {
+                        NuvioColors.TextTertiary
+                    }
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -418,7 +422,7 @@ private fun LibraryDropdownPicker(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextPrimary,
+                        color = if (isFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -582,8 +586,14 @@ private fun ManageListsDialog(
                                     Modifier.fillMaxWidth()
                                 },
                                 colors = ButtonDefaults.colors(
-                                    containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                    contentColor = NuvioColors.TextPrimary
+                                    containerColor = if (selected) {
+                                        NuvioColors.Secondary.copy(alpha = 0.28f)
+                                    } else {
+                                        NuvioColors.BackgroundCard
+                                    },
+                                    focusedContainerColor = NuvioColors.FocusBackground,
+                                    contentColor = if (selected) NuvioColors.OnAccent else NuvioColors.TextPrimary,
+                                    focusedContentColor = NuvioColors.OnFocusBackground
                                 )
                             ) {
                                 Text(
@@ -600,53 +610,65 @@ private fun ManageListsDialog(
                     Button(
                         onClick = onCreate,
                         enabled = !pending,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) { Text("Create") }
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        contentColor = NuvioColors.TextPrimary,
+                        focusedContentColor = NuvioColors.OnFocusBackground
+                    )
+                ) { Text("Create") }
                     Button(
                         onClick = onEdit,
                         enabled = !pending && selectedKey != null,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) { Text("Edit") }
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        contentColor = NuvioColors.TextPrimary,
+                        focusedContentColor = NuvioColors.OnFocusBackground
+                    )
+                ) { Text("Edit") }
                     Button(
                         onClick = onMoveUp,
                         enabled = !pending && selectedKey != null,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) { Text("Move Up") }
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        contentColor = NuvioColors.TextPrimary,
+                        focusedContentColor = NuvioColors.OnFocusBackground
+                    )
+                ) { Text("Move Up") }
                     Button(
                         onClick = onMoveDown,
                         enabled = !pending && selectedKey != null,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) { Text("Move Down") }
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.BackgroundCard,
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        contentColor = NuvioColors.TextPrimary,
+                        focusedContentColor = NuvioColors.OnFocusBackground
+                    )
+                ) { Text("Move Down") }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
                         onClick = onDelete,
                         enabled = !pending && selectedKey != null,
-                        colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFF4A2323),
-                            contentColor = NuvioColors.TextPrimary
-                        )
-                    ) { Text("Delete") }
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFF4A2323),
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        contentColor = NuvioColors.TextPrimary,
+                        focusedContentColor = NuvioColors.OnFocusBackground
+                    )
+                ) { Text("Delete") }
                     Button(
                         onClick = onDismiss,
                         enabled = !pending,
                         modifier = Modifier.focusRequester(closeFocusRequester),
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            contentColor = NuvioColors.TextPrimary,
+                            focusedContentColor = NuvioColors.OnFocusBackground
                         )
                     ) { Text("Close") }
                 }
@@ -783,8 +805,14 @@ private fun ListEditorDialog(
                     onClick = { onPrivacyChanged(privacy) },
                     enabled = !pending,
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = if (selected) {
+                            NuvioColors.Secondary.copy(alpha = 0.28f)
+                        } else {
+                            NuvioColors.BackgroundCard
+                        },
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        contentColor = if (selected) NuvioColors.OnAccent else NuvioColors.TextPrimary,
+                        focusedContentColor = NuvioColors.OnFocusBackground
                     )
                 ) {
                     Text(privacy.apiValue.replaceFirstChar { it.uppercase() })
@@ -798,7 +826,9 @@ private fun ListEditorDialog(
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                focusedContainerColor = NuvioColors.FocusBackground,
+                contentColor = NuvioColors.TextPrimary,
+                focusedContentColor = NuvioColors.OnFocusBackground
             )
         ) {
             Text(if (pending) "Saving..." else "Save")
@@ -825,7 +855,9 @@ private fun ConfirmDeleteDialog(
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.colors(
                 containerColor = Color(0xFF4A2323),
-                contentColor = NuvioColors.TextPrimary
+                focusedContainerColor = NuvioColors.FocusBackground,
+                contentColor = NuvioColors.TextPrimary,
+                focusedContentColor = NuvioColors.OnFocusBackground
             )
         ) {
             Text("Delete")

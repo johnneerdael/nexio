@@ -210,13 +210,25 @@ private fun SubtitleTab(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isSelected) Color.White.copy(alpha = 0.2f) else NuvioColors.Secondary)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) NuvioColors.FocusRing else NuvioColors.Secondary.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .background(
+                            color = if (isSelected) {
+                                NuvioColors.Secondary.copy(alpha = 0.24f)
+                            } else {
+                                Color.Transparent
+                            },
+                            shape = RoundedCornerShape(10.dp)
+                        )
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = badgeCount.toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White
+                        color = if (isSelected) NuvioColors.OnAccent else NuvioColors.Secondary
                     )
                 }
             }

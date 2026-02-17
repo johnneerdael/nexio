@@ -113,8 +113,8 @@ fun SyncCodeClaimScreen(
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioColors.Secondary,
                         focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.White
+                        contentColor = NuvioColors.OnAccent,
+                        focusedContentColor = NuvioColors.OnAccent
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()
@@ -181,8 +181,8 @@ fun SyncCodeClaimScreen(
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioColors.Secondary,
                         focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.White
+                        contentColor = NuvioColors.OnAccent,
+                        focusedContentColor = NuvioColors.OnAccent
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()

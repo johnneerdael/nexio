@@ -1075,7 +1075,7 @@ private fun StreamRegexDialog(
                             containerColor = NuvioColors.BackgroundElevated,
                             contentColor = NuvioColors.TextPrimary,
                             focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            focusedContentColor = NuvioColors.OnFocusBackground
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
@@ -1091,7 +1091,7 @@ private fun StreamRegexDialog(
                             containerColor = NuvioColors.BackgroundElevated,
                             contentColor = NuvioColors.TextPrimary,
                             focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            focusedContentColor = NuvioColors.OnFocusBackground
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
@@ -1114,7 +1114,7 @@ private fun StreamRegexDialog(
                             containerColor = NuvioColors.BackgroundCard,
                             contentColor = NuvioColors.TextPrimary,
                             focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            focusedContentColor = NuvioColors.OnFocusBackground
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {

@@ -1285,14 +1285,18 @@ private fun SpeedItem(
             Text(
                 text = if (speed == 1f) "Normal" else "${speed}x",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary
+                color = when {
+                    isFocused -> NuvioColors.OnFocusBackground
+                    isSelected -> NuvioColors.Primary
+                    else -> NuvioColors.TextPrimary
+                }
             )
 
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.Secondary,
+                    tint = if (isFocused) NuvioColors.OnAccent else NuvioColors.Secondary,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -1321,7 +1325,11 @@ internal fun DialogButton(
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = if (isPrimary) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
+            color = when {
+                isPrimary -> NuvioColors.OnAccent
+                isFocused -> NuvioColors.OnFocusBackground
+                else -> NuvioColors.TextPrimary
+            },
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }

@@ -41,7 +41,7 @@ fun ErrorState(
                 containerColor = NuvioColors.BackgroundCard,
                 contentColor = NuvioColors.TextPrimary,
                 focusedContainerColor = NuvioColors.FocusBackground,
-                focusedContentColor = NuvioColors.Primary
+                focusedContentColor = NuvioColors.OnFocusBackground
             ),
             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
         ) {
