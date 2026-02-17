@@ -9,6 +9,7 @@ import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
+import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -154,6 +155,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSubtitleOutlineWidth(width: Int) {
         playerSettingsDataStore.setSubtitleOutlineWidth(width)
+    }
+
+    suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
+        playerSettingsDataStore.setSubtitleOrganizationMode(mode)
     }
 
     // Buffer settings functions

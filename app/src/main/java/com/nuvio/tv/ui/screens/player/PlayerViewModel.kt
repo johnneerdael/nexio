@@ -360,6 +360,7 @@ class PlayerViewModel @Inject constructor(
 
                     state.copy(
                         subtitleStyle = settings.subtitleStyle,
+                        subtitleOrganizationMode = settings.subtitleOrganizationMode,
                         loadingOverlayEnabled = settings.loadingOverlayEnabled,
                         showLoadingOverlay = shouldShowOverlay,
                         pauseOverlayEnabled = settings.pauseOverlayEnabled
@@ -2834,6 +2835,7 @@ class PlayerViewModel @Inject constructor(
     private fun normalizeLanguageCode(lang: String): String {
         val code = lang.lowercase()
         return when (code) {
+            "pt-br", "pt_br", "br", "pob" -> "pt"
             "eng" -> "en"
             "spa" -> "es"
             "fre", "fra" -> "fr"
