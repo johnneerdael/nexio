@@ -71,7 +71,8 @@ sealed class LayoutSettingsEvent {
 @HiltViewModel
 class LayoutSettingsViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val metaRepository: com.nuvio.tv.domain.repository.MetaRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LayoutSettingsUiState())
@@ -329,6 +330,7 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setPreferExternalMetaAddonDetail(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setPreferExternalMetaAddonDetail(enabled)
+            metaRepository.clearCache()
         }
     }
 
