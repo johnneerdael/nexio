@@ -35,7 +35,8 @@ data class LayoutSettingsUiState(
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
     val blurUnwatchedEpisodes: Boolean = false,
-    val detailPageTrailerButtonEnabled: Boolean = false
+    val detailPageTrailerButtonEnabled: Boolean = false,
+    val preferExternalMetaAddonDetail: Boolean = false
 )
 
 data class CatalogInfo(
@@ -63,6 +64,7 @@ sealed class LayoutSettingsEvent {
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
@@ -176,6 +178,11 @@ class LayoutSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(detailPageTrailerButtonEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.preferExternalMetaAddonDetail.collectLatest { enabled ->
+                _uiState.update { it.copy(preferExternalMetaAddonDetail = enabled) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
@@ -199,6 +206,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
             is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
+            is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
@@ -315,6 +323,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setBlurUnwatchedEpisodes(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setBlurUnwatchedEpisodes(enabled)
+        }
+    }
+
+    private fun setPreferExternalMetaAddonDetail(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPreferExternalMetaAddonDetail(enabled)
         }
     }
 

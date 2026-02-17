@@ -208,32 +208,61 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
+            val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
 
-            // 1) Prefer meta from the originating addon (same catalog source)
-            val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
-            val preferredMeta: Meta? = preferred?.let { baseUrl ->
-                when (val result = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
-                    .first { it !is NetworkResult.Loading }) {
-                    is NetworkResult.Success -> result.data
-                    is NetworkResult.Error -> null
-                    NetworkResult.Loading -> null
-                }
-            }
+            if (preferExternal) {
+                // 1) Try meta addons first
+                metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            applyMetaWithEnrichment(result.data)
+                        }
+                        is NetworkResult.Error -> {
+                            // 2) Fallback: try originating addon if meta addons failed
+                            val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
+                            val preferredMeta: Meta? = preferred?.let { baseUrl ->
+                                when (val fallbackResult = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
+                                    .first { it !is NetworkResult.Loading }) {
+                                    is NetworkResult.Success -> fallbackResult.data
+                                    else -> null
+                                }
+                            }
 
-            if (preferredMeta != null) {
-                applyMetaWithEnrichment(preferredMeta)
-                return@launch
-            }
-
-            // 2) Fallback: first addon that can provide meta (often Cinemeta)
-            metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
-                when (result) {
-                    is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
-                    is NetworkResult.Error -> {
-                        _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            if (preferredMeta != null) {
+                                applyMetaWithEnrichment(preferredMeta)
+                            } else {
+                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            }
+                        }
+                        NetworkResult.Loading -> {
+                            _uiState.update { it.copy(isLoading = true) }
+                        }
                     }
-                    NetworkResult.Loading -> {
-                        _uiState.update { it.copy(isLoading = true) }
+                }
+            } else {
+                // Original: prefer catalog addon
+                val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
+                val preferredMeta: Meta? = preferred?.let { baseUrl ->
+                    when (val result = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
+                        .first { it !is NetworkResult.Loading }) {
+                        is NetworkResult.Success -> result.data
+                        else -> null
+                    }
+                }
+
+                if (preferredMeta != null) {
+                    applyMetaWithEnrichment(preferredMeta)
+                } else {
+                    metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
+                        when (result) {
+                            is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
+                            is NetworkResult.Error -> {
+                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            }
+                            NetworkResult.Loading -> {
+                                _uiState.update { it.copy(isLoading = true) }
+                            }
+                        }
                     }
                 }
             }
