@@ -269,7 +269,7 @@ fun AddonManagerScreen(
                                     containerColor = NuvioColors.BackgroundCard,
                                     contentColor = NuvioColors.TextPrimary,
                                     focusedContainerColor = NuvioColors.FocusBackground,
-                                    focusedContentColor = NuvioColors.OnFocusBackground
+                                    focusedContentColor = NuvioColors.Primary
                                 ),
                                 shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                             ) {
@@ -404,23 +404,19 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                     imageVector = Icons.Default.QrCode2,
                     contentDescription = null,
                     modifier = Modifier.size(28.dp),
-                    tint = if (isFocused) NuvioColors.OnFocusBackground else NuvioColors.TextSecondary
+                    tint = if (isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
                         text = "Manage from phone",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = if (isFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary
+                        color = NuvioColors.TextPrimary
                     )
                     Text(
                         text = "Scan a QR code to manage addons and Home catalogs from your phone",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isFocused) {
-                            NuvioColors.OnFocusBackground.copy(alpha = 0.72f)
-                        } else {
-                            NuvioColors.TextSecondary
-                        }
+                        color = NuvioColors.TextSecondary
                     )
                 }
             }
@@ -428,11 +424,7 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                 imageVector = Icons.Default.PhoneAndroid,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = if (isFocused) {
-                    NuvioColors.OnFocusBackground.copy(alpha = 0.72f)
-                } else {
-                    NuvioColors.TextSecondary
-                }
+                tint = NuvioColors.TextSecondary
             )
         }
     }
@@ -473,23 +465,19 @@ private fun CatalogOrderEntryCard(onClick: () -> Unit) {
                     imageVector = Icons.Default.Reorder,
                     contentDescription = null,
                     modifier = Modifier.size(28.dp),
-                    tint = if (isFocused) NuvioColors.OnFocusBackground else NuvioColors.TextSecondary
+                    tint = if (isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
                         text = "Reorder home catalogs",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = if (isFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary
+                        color = NuvioColors.TextPrimary
                     )
                     Text(
                         text = "Controls catalog row order on Home (Classic + Grid)",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isFocused) {
-                            NuvioColors.OnFocusBackground.copy(alpha = 0.72f)
-                        } else {
-                            NuvioColors.TextSecondary
-                        }
+                        color = NuvioColors.TextSecondary
                     )
                 }
             }
@@ -497,11 +485,7 @@ private fun CatalogOrderEntryCard(onClick: () -> Unit) {
                 imageVector = Icons.Default.ArrowDownward,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = if (isFocused) {
-                    NuvioColors.OnFocusBackground.copy(alpha = 0.72f)
-                } else {
-                    NuvioColors.TextSecondary
-                }
+                tint = NuvioColors.TextSecondary
             )
         }
     }
@@ -516,7 +500,6 @@ private fun QrCodeOverlay(
     hasPendingChange: Boolean = false
 ) {
     val focusRequester = remember { FocusRequester() }
-    var isCloseFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(hasPendingChange) {
         if (!hasPendingChange) {
@@ -568,9 +551,7 @@ private fun QrCodeOverlay(
 
             Surface(
                 onClick = onClose,
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { isCloseFocused = it.isFocused },
+                modifier = Modifier.focusRequester(focusRequester),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = NuvioColors.Surface,
                     focusedContainerColor = NuvioColors.FocusBackground
@@ -592,12 +573,12 @@ private fun QrCodeOverlay(
                         imageVector = Icons.Default.Close,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = if (isCloseFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary
+                        tint = NuvioColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Close",
-                        color = if (isCloseFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary
+                        color = NuvioColors.TextPrimary
                     )
                 }
             }
@@ -614,7 +595,6 @@ private fun ConfirmAddonChangesDialog(
 ) {
     val focusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
-    var rejectFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -813,7 +793,6 @@ private fun ConfirmAddonChangesDialog(
                     ) {
                         Surface(
                             onClick = onReject,
-                            modifier = Modifier.onFocusChanged { rejectFocused = it.isFocused },
                             colors = ClickableSurfaceDefaults.colors(
                                 containerColor = NuvioColors.Surface,
                                 focusedContainerColor = NuvioColors.FocusBackground
@@ -834,12 +813,12 @@ private fun ConfirmAddonChangesDialog(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
-                                    tint = if (rejectFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary
+                                    tint = NuvioColors.TextPrimary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "Reject",
-                                    color = if (rejectFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary
+                                    color = NuvioColors.TextPrimary
                                 )
                             }
                         }
@@ -862,7 +841,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = "Confirm",
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                                color = NuvioColors.OnAccent
+                                color = Color.White
                             )
                         }
                     }
@@ -918,7 +897,7 @@ private fun AddonCard(
                             containerColor = NuvioColors.BackgroundCard,
                             contentColor = NuvioColors.TextSecondary,
                             focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.OnFocusBackground
+                            focusedContentColor = NuvioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -931,7 +910,7 @@ private fun AddonCard(
                             containerColor = NuvioColors.BackgroundCard,
                             contentColor = NuvioColors.TextSecondary,
                             focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.OnFocusBackground
+                            focusedContentColor = NuvioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {

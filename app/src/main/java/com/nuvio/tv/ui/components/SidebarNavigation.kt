@@ -143,7 +143,7 @@ private fun SidebarNavItem(
             Icon(
                 imageVector = item.icon,
                 contentDescription = item.label,
-                tint = if (isFocused) NuvioColors.OnFocusBackground else NuvioColors.TextPrimary,
+                tint = NuvioColors.TextPrimary,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -151,11 +151,7 @@ private fun SidebarNavItem(
         Text(
             text = item.label,
             style = MaterialTheme.typography.titleMedium,
-            color = when {
-                isFocused -> NuvioColors.OnFocusBackground
-                isSelected -> NuvioColors.TextPrimary
-                else -> NuvioColors.TextSecondary
-            }
+            color = if (isFocused || isSelected) NuvioColors.TextPrimary else NuvioColors.TextSecondary
         )
     }
 }

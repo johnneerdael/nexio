@@ -59,7 +59,7 @@ internal fun StreamItem(
             .then(if (requestInitialFocus) Modifier.focusRequester(focusRequester) else Modifier),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundElevated,
-            focusedContainerColor = NuvioColors.BackgroundElevated
+            focusedContainerColor = NuvioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -68,7 +68,7 @@ internal fun StreamItem(
             )
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.05f)
+        scale = CardDefaults.scale(focusedScale = 1.02f)
     ) {
         Row(
             modifier = Modifier
@@ -101,10 +101,7 @@ internal fun StreamItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (stream.isTorrent()) {
-                        StreamTypeChip(
-                            text = "Torrent",
-                            color = NuvioColors.Secondary
-                        )
+                        StreamTypeChip(text = "Torrent", color = NuvioColors.Secondary)
                     }
                     if (stream.isYouTube()) {
                         StreamTypeChip(text = "YouTube", color = Color(0xFFFF0000))
@@ -211,9 +208,9 @@ internal fun AddonChip(
             selectedContainerColor = NuvioColors.Secondary.copy(alpha = 0.3f),
             focusedSelectedContainerColor = NuvioColors.Secondary,
             contentColor = NuvioColors.TextSecondary,
-            focusedContentColor = NuvioColors.OnAccent,
-            selectedContentColor = NuvioColors.OnAccent,
-            focusedSelectedContentColor = NuvioColors.OnAccent
+            focusedContentColor = NuvioColors.OnPrimary,
+            selectedContentColor = Color.White,
+            focusedSelectedContentColor = NuvioColors.OnPrimary
         ),
         border = FilterChipDefaults.border(
             border = Border(
@@ -237,7 +234,8 @@ internal fun AddonChip(
     ) {
         Text(
             text = name,
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White
         )
     }
 }

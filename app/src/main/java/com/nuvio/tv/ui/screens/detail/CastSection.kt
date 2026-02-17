@@ -164,8 +164,6 @@ private fun CastMemberItem(
     cardSize: Dp = 100.dp,
     onClick: () -> Unit = {}
 ) {
-    val hasPhoto = !member.photo.isNullOrBlank()
-
     Column(
         modifier = Modifier.width(itemWidth),
         horizontalAlignment = Alignment.Start
@@ -180,11 +178,7 @@ private fun CastMemberItem(
             ),
             colors = CardDefaults.colors(
                 containerColor = NuvioColors.SurfaceVariant,
-                focusedContainerColor = if (hasPhoto) {
-                    NuvioColors.FocusBackground
-                } else {
-                    NuvioColors.SurfaceVariant
-                }
+                focusedContainerColor = NuvioColors.FocusBackground
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(

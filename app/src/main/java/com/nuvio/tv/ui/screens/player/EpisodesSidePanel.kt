@@ -436,7 +436,7 @@ private fun EpisodesSeasonTabs(
                     style = MaterialTheme.typography.labelLarge,
                     color = when {
                         isSelected -> Color.Black
-                        isFocused -> NuvioColors.OnAccent
+                        isFocused -> NuvioColors.OnPrimary
                         else -> NuvioTheme.extendedColors.textSecondary
                     },
                     modifier = Modifier.padding(vertical = 10.dp, horizontal = 20.dp)

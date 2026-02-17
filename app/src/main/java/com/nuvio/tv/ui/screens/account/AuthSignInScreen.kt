@@ -69,8 +69,8 @@ fun AuthSignInScreen(
                 colors = ButtonDefaults.colors(
                     containerColor = NuvioColors.Secondary,
                     focusedContainerColor = NuvioColors.SecondaryVariant,
-                    contentColor = NuvioColors.OnAccent,
-                    focusedContentColor = NuvioColors.OnAccent
+                    contentColor = Color.White,
+                    focusedContentColor = Color.White
                 ),
                 shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                 modifier = Modifier.fillMaxWidth()
@@ -84,3 +84,4 @@ fun AuthSignInScreen(
         }
     }
 }
+

@@ -595,12 +595,12 @@ private fun AddonChip(
         colors = FilterChipDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
-            selectedContainerColor = NuvioColors.Secondary,
+            selectedContainerColor = NuvioColors.Secondary.copy(alpha = 0.3f),
             focusedSelectedContainerColor = NuvioColors.Secondary,
             contentColor = NuvioColors.TextSecondary,
-            focusedContentColor = NuvioColors.OnAccent,
-            selectedContentColor = NuvioColors.OnAccent,
-            focusedSelectedContentColor = NuvioColors.OnAccent
+            focusedContentColor = NuvioColors.OnPrimary,
+            selectedContentColor = NuvioColors.Secondary,
+            focusedSelectedContentColor = NuvioColors.OnPrimary
         ),
         border = FilterChipDefaults.border(
             border = Border(
@@ -683,7 +683,7 @@ private fun ErrorState(
             Text(
                 text = "Retry",
                 style = MaterialTheme.typography.labelLarge,
-                color = if (isFocused) NuvioColors.OnAccent else NuvioColors.TextPrimary,
+                color = if (isFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
             )
         }
@@ -799,7 +799,7 @@ private fun StreamCard(
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundElevated,
-            focusedContainerColor = NuvioColors.BackgroundElevated
+            focusedContainerColor = NuvioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -961,7 +961,7 @@ private fun PlayerChoiceDialog(
                         Text(
                             text = "Internal",
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (internalFocused) NuvioColors.OnAccent else NuvioColors.TextPrimary,
+                            color = if (internalFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                                 .fillMaxWidth(),
@@ -991,7 +991,7 @@ private fun PlayerChoiceDialog(
                         Text(
                             text = "External",
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (externalFocused) NuvioColors.OnAccent else NuvioColors.TextPrimary,
+                            color = if (externalFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                                 .fillMaxWidth(),

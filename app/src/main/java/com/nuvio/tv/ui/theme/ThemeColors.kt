@@ -12,8 +12,6 @@ data class ThemeColorPalette(
     val secondaryVariant: Color,
     val focusRing: Color,
     val focusBackground: Color,
-    val onFocusBackground: Color = Color(0xFFFFFFFF),
-    val onAccent: Color = Color(0xFFFFFFFF),
     // Background colors with subtle theme tinting
     val background: Color = Color(0xFF0D0D0D),
     val backgroundElevated: Color = Color(0xFF1A1A1A),
@@ -21,17 +19,6 @@ data class ThemeColorPalette(
 )
 
 object ThemeColors {
-    val Default = ThemeColorPalette(
-        secondary = Color(0xFFFFFFFF),
-        secondaryVariant = Color(0xFFF2F2F2),
-        focusRing = Color(0xFFFFFFFF),
-        focusBackground = Color(0xFFFFFFFF),
-        onFocusBackground = Color(0xFF000000),
-        onAccent = Color(0xFF000000),
-        background = Color(0xFF0D0D0F),
-        backgroundElevated = Color(0xFF1A1A1E),
-        backgroundCard = Color(0xFF1A1F24)
-    )
 
     val Crimson = ThemeColorPalette(
         secondary = Color(0xFFE53935),
@@ -95,7 +82,6 @@ object ThemeColors {
 
     fun getColorPalette(theme: AppTheme): ThemeColorPalette {
         return when (theme) {
-            AppTheme.DEFAULT -> Default
             AppTheme.CRIMSON -> Crimson
             AppTheme.OCEAN -> Ocean
             AppTheme.VIOLET -> Violet

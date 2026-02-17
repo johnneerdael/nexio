@@ -115,7 +115,7 @@ data class DrawerItem(
 )
 
 private data class MainUiPrefs(
-    val theme: AppTheme = AppTheme.DEFAULT,
+    val theme: AppTheme = AppTheme.OCEAN,
     val hasChosenLayout: Boolean? = true,
     val sidebarCollapsed: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
@@ -417,7 +417,7 @@ private fun LegacySidebarButton(
     )
     val contentColor by animateColorAsState(
         targetValue = when {
-            isFocused -> NuvioColors.OnFocusBackground
+            isFocused -> NuvioColors.TextPrimary
             selected -> NuvioColors.TextPrimary
             else -> NuvioColors.TextSecondary
         },

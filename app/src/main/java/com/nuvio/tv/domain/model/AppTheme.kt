@@ -1,7 +1,6 @@
 package com.nuvio.tv.domain.model
 
 enum class AppTheme(val displayName: String) {
-    DEFAULT("Default"),
     CRIMSON("Crimson"),
     OCEAN("Ocean"),
     VIOLET("Violet"),

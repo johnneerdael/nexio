@@ -120,7 +120,7 @@ fun SeasonTabs(
                     text = if (season == 0) "Specials" else "Season $season",
                     style = MaterialTheme.typography.titleMedium,
                     color = when {
-                        isFocused -> NuvioColors.OnAccent
+                        isFocused -> NuvioColors.OnPrimary
                         isSelected -> NuvioColors.TextPrimary
                         else -> NuvioTheme.extendedColors.textSecondary
                     },
