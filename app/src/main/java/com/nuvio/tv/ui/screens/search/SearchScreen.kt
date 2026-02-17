@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -67,6 +68,7 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
+    var isSearchFieldAttached by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
@@ -175,6 +177,7 @@ fun SearchScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 48.dp)
+                        .onGloballyPositioned { isSearchFieldAttached = true }
                         .focusRequester(searchFocusRequester)
                         .onPreviewKeyEvent { keyEvent ->
                             if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
@@ -332,7 +335,7 @@ fun SearchScreen(
                                         focusResults = false
                                     }
                                 },
-                                upFocusRequester = if (index == 0) searchFocusRequester else null,
+                                upFocusRequester = if (index == 0 && isSearchFieldAttached) searchFocusRequester else null,
                                 onItemClick = { id, type, addonBaseUrl ->
                                     onNavigateToDetail(id, type, addonBaseUrl)
                                 },
