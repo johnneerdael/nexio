@@ -12,6 +12,7 @@ import android.util.Log
 import android.view.Display
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -23,6 +24,8 @@ object FrameRateUtils {
     private const val TAG = "FrameRateUtils"
     private const val SWITCH_TIMEOUT_MS = 5000L
     private const val REFRESH_MATCH_MIN_TOLERANCE_HZ = 0.08f
+    private const val NTSC_FILM_FPS = 24000f / 1001f
+    private const val CINEMA_24_FPS = 24f
 
     private var displayManager: DisplayManager? = null
     private var displayListener: DisplayManager.DisplayListener? = null
@@ -86,6 +89,50 @@ object FrameRateUtils {
     private fun recordOriginalMode(display: Display) {
         if (originalModeId == null) {
             originalModeId = display.mode.modeId
+        }
+    }
+
+    /**
+     * Refine ambiguous cinema rates for the current display capabilities.
+     * Useful when probe reports ~24.x but panel supports both 23.976 and 24.000.
+     */
+    fun refineFrameRateForDisplay(
+        activity: Activity,
+        detectedFps: Float,
+        prefer23976Near24: Boolean = false
+    ): Float {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return detectedFps
+        if (detectedFps !in 23.5f..24.5f) return detectedFps
+
+        return try {
+            val window = activity.window ?: return detectedFps
+            val display = window.decorView.display ?: return detectedFps
+            val activeMode = display.mode
+            val sameSizeModes = display.supportedModes.filter {
+                it.physicalWidth == activeMode.physicalWidth &&
+                    it.physicalHeight == activeMode.physicalHeight
+            }
+            if (sameSizeModes.isEmpty()) return detectedFps
+
+            val has23976 = pickBestForTarget(sameSizeModes, NTSC_FILM_FPS) != null
+            val has24 = pickBestForTarget(sameSizeModes, CINEMA_24_FPS) != null
+
+            when {
+                has23976 && has24 -> {
+                    if (prefer23976Near24) {
+                        NTSC_FILM_FPS
+                    } else if (abs(detectedFps - NTSC_FILM_FPS) <= abs(detectedFps - CINEMA_24_FPS)) {
+                        NTSC_FILM_FPS
+                    } else {
+                        CINEMA_24_FPS
+                    }
+                }
+                has23976 -> NTSC_FILM_FPS
+                has24 -> CINEMA_24_FPS
+                else -> detectedFps
+            }
+        } catch (_: Exception) {
+            detectedFps
         }
     }
 
@@ -225,8 +272,8 @@ object FrameRateUtils {
     fun snapToStandardRate(formatFrameRate: Float): Float {
         if (formatFrameRate <= 0f) return formatFrameRate
         return when {
-            formatFrameRate in 23.90f..23.988f -> 24000f / 1001f
-            formatFrameRate in 23.988f..24.1f -> 24f
+            formatFrameRate in 23.90f..23.988f -> NTSC_FILM_FPS
+            formatFrameRate in 23.988f..24.1f -> CINEMA_24_FPS
             formatFrameRate in 24.9f..25.1f -> 25f
             formatFrameRate in 29.90f..29.985f -> 30000f / 1001f
             formatFrameRate in 29.985f..30.1f -> 30f
@@ -235,6 +282,23 @@ object FrameRateUtils {
             formatFrameRate in 59.97f..60.1f -> 60f
             else -> formatFrameRate
         }
+    }
+
+    private fun snapProbeRateByFrameDuration(measuredFps: Float, averageFrameDurationUs: Float): Float {
+        if (measuredFps in 23.5f..24.5f) {
+            val frameUs23976 = 1_000_000f / NTSC_FILM_FPS
+            val frameUs24 = 1_000_000f / CINEMA_24_FPS
+            val diff23976 = abs(averageFrameDurationUs - frameUs23976)
+            val diff24 = abs(averageFrameDurationUs - frameUs24)
+            val nearestCinema = if (diff23976 <= diff24) NTSC_FILM_FPS else CINEMA_24_FPS
+            val nearestDiff = min(diff23976, diff24)
+
+            // If probe timing is reasonably close to cinema cadence, trust frame-duration matching.
+            if (nearestDiff <= 120f) {
+                return nearestCinema
+            }
+        }
+        return snapToStandardRate(measuredFps)
     }
 
     fun detectFrameRateFromSource(
@@ -289,7 +353,10 @@ object FrameRateUtils {
             val measured = 1_000_000f / averageFrameDurationUs
             if (measured < 10f || measured > 120f) return null
 
-            FrameRateDetection(raw = measured, snapped = snapToStandardRate(measured))
+            FrameRateDetection(
+                raw = measured,
+                snapped = snapProbeRateByFrameDuration(measured, averageFrameDurationUs)
+            )
         } catch (e: Exception) {
             Log.w(TAG, "Frame rate probe failed: ${e.message}")
             null

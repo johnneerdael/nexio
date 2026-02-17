@@ -158,26 +158,56 @@ fun PlayerScreen(
     }
 
     // Frame rate matching: switch display refresh rate to match video frame rate.
-    // Track gets priority; probe is fallback. Prevent a second startup switch (anti-flapping).
+    // Track gets priority; probe is fallback.
+    // Allow one correction if probe was applied first and track later disagrees.
     val activity = LocalContext.current as? android.app.Activity
     val coroutineScope = rememberCoroutineScope()
-    var afrDecisionLocked by remember { mutableStateOf(false) }
-    LaunchedEffect(uiState.detectedFrameRate, uiState.frameRateMatchingMode) {
+    var afrAppliedSource by remember { mutableStateOf<FrameRateSource?>(null) }
+    var afrAppliedRate by remember { mutableStateOf(0f) }
+    var afrTrackCorrectionUsed by remember { mutableStateOf(false) }
+    LaunchedEffect(
+        uiState.detectedFrameRate,
+        uiState.detectedFrameRateRaw,
+        uiState.detectedFrameRateSource,
+        uiState.frameRateMatchingMode
+    ) {
         if (uiState.frameRateMatchingMode == com.nuvio.tv.data.local.FrameRateMatchingMode.OFF) {
-            afrDecisionLocked = false
+            afrAppliedSource = null
+            afrAppliedRate = 0f
+            afrTrackCorrectionUsed = false
             return@LaunchedEffect
         }
         if (uiState.detectedFrameRate <= 0f) {
-            afrDecisionLocked = false
+            afrAppliedSource = null
+            afrAppliedRate = 0f
+            afrTrackCorrectionUsed = false
             return@LaunchedEffect
         }
-        if (afrDecisionLocked) return@LaunchedEffect
+        val source = uiState.detectedFrameRateSource ?: return@LaunchedEffect
+        val allowFirstDecision = afrAppliedSource == null
+        val allowTrackCorrection = source == FrameRateSource.TRACK &&
+            afrAppliedSource == FrameRateSource.PROBE &&
+            !afrTrackCorrectionUsed &&
+            kotlin.math.abs(uiState.detectedFrameRate - afrAppliedRate) > 0.015f
+        if (!allowFirstDecision && !allowTrackCorrection) return@LaunchedEffect
 
         if (activity != null) {
+            val probeRaw = if (uiState.detectedFrameRateRaw > 0f) {
+                uiState.detectedFrameRateRaw
+            } else {
+                uiState.detectedFrameRate
+            }
+            val prefer23976ProbeBias = source == FrameRateSource.PROBE &&
+                probeRaw in 23.95f..24.12f
+            val targetFrameRate = com.nuvio.tv.core.player.FrameRateUtils.refineFrameRateForDisplay(
+                activity = activity,
+                detectedFps = uiState.detectedFrameRate,
+                prefer23976Near24 = prefer23976ProbeBias
+            )
             val wasPlaying = uiState.isPlaying
             val switched = com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(
                 activity,
-                uiState.detectedFrameRate,
+                targetFrameRate,
                 onBeforeSwitch = { if (wasPlaying) viewModel.exoPlayer?.pause() },
                 onAfterSwitch = { mode ->
                     if (wasPlaying) {
@@ -211,7 +241,11 @@ fun PlayerScreen(
                     )
                 }
             }
-            afrDecisionLocked = switched || uiState.detectedFrameRateSource == FrameRateSource.TRACK
+            if (allowTrackCorrection) {
+                afrTrackCorrectionUsed = true
+            }
+            afrAppliedSource = source
+            afrAppliedRate = targetFrameRate
         }
     }
     LaunchedEffect(uiState.frameRateMatchingMode) {
