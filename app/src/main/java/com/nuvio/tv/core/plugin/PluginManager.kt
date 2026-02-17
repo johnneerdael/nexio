@@ -35,6 +35,7 @@ private const val TAG = "PluginManager"
 private const val MAX_CONCURRENT_SCRAPERS = 5
 private const val MAX_RESULT_ITEMS = 150
 private const val MAX_RESPONSE_SIZE = 5 * 1024 * 1024L
+private const val MANIFEST_SUFFIX = "/manifest.json"
 
 @Singleton
 class PluginManager @Inject constructor(
@@ -64,7 +65,16 @@ class PluginManager @Inject constructor(
         return sb.toString()
     }
 
-    private fun normalizeUrl(url: String): String = url.trimEnd('/').lowercase()
+    private fun canonicalizeManifestUrl(url: String): String {
+        val trimmed = url.trim().trimEnd('/')
+        return if (trimmed.endsWith(MANIFEST_SUFFIX, ignoreCase = true)) {
+            trimmed
+        } else {
+            "$trimmed$MANIFEST_SUFFIX"
+        }
+    }
+
+    private fun normalizeUrl(url: String): String = canonicalizeManifestUrl(url).lowercase()
     
     // Single-flight map to prevent duplicate scraper executions
     private val inFlightScrapers = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<List<LocalScraperResult>>>()
@@ -112,17 +122,18 @@ class PluginManager @Inject constructor(
      */
     suspend fun addRepository(manifestUrl: String): Result<PluginRepository> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Adding repository from: $manifestUrl")
+            val canonicalManifestUrl = canonicalizeManifestUrl(manifestUrl)
+            Log.d(TAG, "Adding repository from: $canonicalManifestUrl")
             
             // Fetch manifest
-            val manifest = fetchManifest(manifestUrl)
+            val manifest = fetchManifest(canonicalManifestUrl)
                 ?: return@withContext Result.failure(Exception("Failed to fetch manifest"))
             
             // Create repository
             val repo = PluginRepository(
                 id = UUID.randomUUID().toString(),
                 name = manifest.name,
-                url = manifestUrl,
+                url = canonicalManifestUrl,
                 enabled = true,
                 lastUpdated = System.currentTimeMillis(),
                 scraperCount = manifest.scrapers.size
@@ -132,7 +143,7 @@ class PluginManager @Inject constructor(
             dataStore.addRepository(repo)
             
             // Download and save scrapers
-            downloadScrapers(repo.id, manifestUrl, manifest.scrapers)
+            downloadScrapers(repo.id, canonicalManifestUrl, manifest.scrapers)
             
             Log.d(TAG, "Repository added: ${repo.name} with ${manifest.scrapers.size} scrapers")
             triggerRemoteSync()
@@ -170,7 +181,7 @@ class PluginManager @Inject constructor(
         removeMissingLocal: Boolean = true
     ) {
         val normalizedRemote = remoteUrls
-            .map { it.trim() }
+            .map { canonicalizeManifestUrl(it) }
             .filter { it.isNotEmpty() }
             .distinctBy { normalizeUrl(it) }
         val remoteUrlSet = normalizedRemote.map { normalizeUrl(it) }.toSet()

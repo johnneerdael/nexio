@@ -25,6 +25,16 @@ class AddonPreferences @Inject constructor(
     private val gson = Gson()
     private val orderedUrlsKey = stringPreferencesKey("installed_addon_urls_ordered")
     private val legacyUrlsKey = stringSetPreferencesKey("installed_addon_urls")
+    private val manifestSuffix = "/manifest.json"
+
+    private fun canonicalizeUrl(url: String): String {
+        val trimmed = url.trim().trimEnd('/')
+        return if (trimmed.endsWith(manifestSuffix, ignoreCase = true)) {
+            trimmed.dropLast(manifestSuffix.length).trimEnd('/')
+        } else {
+            trimmed
+        }
+    }
 
     val installedAddonUrls: Flow<List<String>> = context.dataStore.data
         .map { preferences ->
@@ -51,8 +61,8 @@ class AddonPreferences @Inject constructor(
     suspend fun addAddon(url: String) {
         context.dataStore.edit { preferences ->
             val current = getCurrentList(preferences)
-            val normalizedUrl = url.trimEnd('/')
-            if (current.any { it.trimEnd('/').equals(normalizedUrl, ignoreCase = true) }) return@edit
+            val normalizedUrl = canonicalizeUrl(url)
+            if (current.any { canonicalizeUrl(it).equals(normalizedUrl, ignoreCase = true) }) return@edit
             preferences[orderedUrlsKey] = gson.toJson(current + normalizedUrl)
         }
     }
@@ -60,9 +70,11 @@ class AddonPreferences @Inject constructor(
     suspend fun removeAddon(url: String) {
         context.dataStore.edit { preferences ->
             val current = getCurrentList(preferences).toMutableList()
-            val normalizedUrl = url.trimEnd('/')
+            val normalizedUrl = canonicalizeUrl(url)
             
-            val indexToRemove = current.indexOfFirst { it.trimEnd('/') == normalizedUrl }
+            val indexToRemove = current.indexOfFirst {
+                canonicalizeUrl(it).equals(normalizedUrl, ignoreCase = true)
+            }
             if (indexToRemove != -1) {
                 current.removeAt(indexToRemove)
             }
@@ -72,7 +84,7 @@ class AddonPreferences @Inject constructor(
 
     suspend fun setAddonOrder(urls: List<String>) {
         context.dataStore.edit { preferences ->
-            preferences[orderedUrlsKey] = gson.toJson(urls)
+            preferences[orderedUrlsKey] = gson.toJson(urls.map(::canonicalizeUrl))
         }
     }
 
