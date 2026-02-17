@@ -371,10 +371,14 @@ fun LayoutSettingsContent(
                         SliderSettingsItem(
                             icon = Icons.Default.Timer,
                             title = "Backdrop Expand Delay",
-                            subtitle = "How long to wait before expanding focused cards.",
+                            subtitle = "How long to wait before expanding focused cards (0 = immediate).",
                             value = uiState.focusedPosterBackdropExpandDelaySeconds,
-                            valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
-                            minValue = 1,
+                            valueText = if (uiState.focusedPosterBackdropExpandDelaySeconds == 0) {
+                                "Immediate"
+                            } else {
+                                "${uiState.focusedPosterBackdropExpandDelaySeconds}s"
+                            },
+                            minValue = 0,
                             maxValue = 10,
                             step = 1,
                             onValueChange = { seconds ->

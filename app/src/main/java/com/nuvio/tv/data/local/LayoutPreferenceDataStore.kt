@@ -55,7 +55,7 @@ class LayoutPreferenceDataStore @Inject constructor(
         const val DEFAULT_POSTER_CARD_HEIGHT_DP = 189
         const val DEFAULT_POSTER_CARD_CORNER_RADIUS_DP = 12
         const val DEFAULT_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 3
-        const val MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 1
+        const val MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 0
     }
 
     val selectedLayout: Flow<HomeLayout> = dataStore.data.map { prefs ->
