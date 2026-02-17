@@ -1109,7 +1109,11 @@ class PlayerViewModel @Inject constructor(
 
     @androidx.annotation.OptIn(UnstableApi::class)
     @OptIn(UnstableApi::class)
-    private fun createMediaSource(url: String, headers: Map<String, String>): MediaSource {
+    private fun createMediaSource(
+        url: String,
+        headers: Map<String, String>,
+        subtitleConfigurations: List<MediaItem.SubtitleConfiguration> = emptyList()
+    ): MediaSource {
         val sanitizedHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }
         val okHttpFactory = OkHttpDataSource.Factory(getOrCreateOkHttpClient()).apply {
             setDefaultRequestProperties(sanitizedHeaders)
@@ -1128,6 +1132,10 @@ class PlayerViewModel @Inject constructor(
         when {
             isHls -> mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
             isDash -> mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
+        }
+
+        if (subtitleConfigurations.isNotEmpty()) {
+            mediaItemBuilder.setSubtitleConfigurations(subtitleConfigurations)
         }
 
         val mediaItem = mediaItemBuilder.build()
@@ -2784,7 +2792,6 @@ class PlayerViewModel @Inject constructor(
             pendingAddonSubtitleLanguage = normalizedLang
 
             
-            val currentItem = player.currentMediaItem ?: return@let
             val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(
                 android.net.Uri.parse(subtitle.url)
             )
@@ -2792,15 +2799,18 @@ class PlayerViewModel @Inject constructor(
                 .setLanguage(subtitle.lang)
                 .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                 .build()
-            
-            val newMediaItem = currentItem.buildUpon()
-                .setSubtitleConfigurations(listOf(subtitleConfig))
-                .build()
-            
+
             val currentPosition = player.currentPosition
             val playWhenReady = player.playWhenReady
 
-            player.setMediaItem(newMediaItem, currentPosition)
+            player.setMediaSource(
+                createMediaSource(
+                    url = currentStreamUrl,
+                    headers = currentHeaders,
+                    subtitleConfigurations = listOf(subtitleConfig)
+                ),
+                currentPosition
+            )
             player.prepare()
             player.playWhenReady = playWhenReady
 

@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -64,9 +65,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,8 +78,6 @@ import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.ModalNavigationDrawer
-import androidx.tv.material3.NavigationDrawerItem
-import androidx.tv.material3.NavigationDrawerItemDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
@@ -273,7 +272,7 @@ private fun LegacySidebarScaffold(
     }
 
     val closedDrawerWidth = if (sidebarCollapsed) 0.dp else 72.dp
-    val openDrawerWidth = 260.dp
+    val openDrawerWidth = 216.dp
 
     val focusManager = LocalFocusManager.current
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
@@ -317,38 +316,22 @@ private fun LegacySidebarScaffold(
                             }
                         }
                 ) {
-                    val sidebarLogoTopPadding = 20.dp
-
-                    if (drawerValue == DrawerValue.Open) {
-                        Image(
-                            painter = painterResource(id = R.drawable.app_logo_wordmark),
-                            contentDescription = "NuvioTV",
-                            modifier = Modifier
-                                .fillMaxWidth(0.9f)
-                                .aspectRatio(1214f / 408f)
-                                .padding(top = sidebarLogoTopPadding),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-
                     Spacer(modifier = Modifier.weight(1f))
 
-                    val itemColors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = NuvioColors.BackgroundCard,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        pressedContainerColor = NuvioColors.FocusBackground,
-                        selectedContentColor = NuvioColors.TextPrimary,
-                        focusedContentColor = NuvioColors.FocusRing,
-                        pressedContentColor = NuvioColors.FocusRing
-                    )
+                    val isExpanded = drawerValue == DrawerValue.Open
+                    val itemWidth = if (isExpanded) 176.dp else 48.dp
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         drawerItems.forEach { item ->
-                            NavigationDrawerItem(
+                            LegacySidebarButton(
+                                label = item.label,
+                                iconRes = item.iconRes,
+                                icon = item.icon,
                                 selected = selectedDrawerRoute == item.route,
+                                expanded = isExpanded,
                                 onClick = {
                                     navigateToDrawerRoute(
                                         navController = navController,
@@ -358,22 +341,10 @@ private fun LegacySidebarScaffold(
                                     drawerState.setValue(DrawerValue.Closed)
                                     pendingContentFocusTransfer = true
                                 },
-                                colors = itemColors,
                                 modifier = Modifier.focusRequester(
                                     drawerItemFocusRequesters.getValue(item.route)
-                                ),
-                                leadingContent = {
-                                    DrawerItemIcon(
-                                        iconRes = item.iconRes,
-                                        icon = item.icon,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            ) {
-                                if (drawerValue == DrawerValue.Open) {
-                                    Text(item.label)
-                                }
-                            }
+                                ).width(itemWidth)
+                            )
                         }
                     }
 
@@ -392,6 +363,73 @@ private fun LegacySidebarScaffold(
                 navController = navController,
                 startDestination = startDestination,
                 hideBuiltInHeaders = hideBuiltInHeaders
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegacySidebarButton(
+    label: String,
+    iconRes: Int?,
+    icon: ImageVector?,
+    selected: Boolean,
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val itemShape = RoundedCornerShape(32.dp)
+    val backgroundColor by animateColorAsState(
+        targetValue = when {
+            isFocused -> NuvioColors.FocusBackground
+            selected -> NuvioColors.BackgroundCard
+            else -> Color.Transparent
+        },
+        label = "legacySidebarItemBackground"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when {
+            isFocused -> NuvioColors.TextPrimary
+            selected -> NuvioColors.TextPrimary
+            else -> NuvioColors.TextSecondary
+        },
+        label = "legacySidebarItemContent"
+    )
+
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .clip(itemShape)
+            .background(color = backgroundColor, shape = itemShape)
+            .onFocusChanged { isFocused = it.isFocused }
+            .clickable(onClick = onClick),
+    ) {
+        DrawerItemIcon(
+            iconRes = iconRes,
+            icon = icon,
+            tint = contentColor,
+            modifier = if (expanded) {
+                Modifier
+                    .size(22.dp)
+                    .align(Alignment.CenterStart)
+                    .offset(x = 18.dp)
+            } else {
+                Modifier
+                    .size(22.dp)
+                    .align(Alignment.Center)
+            }
+        )
+        if (expanded) {
+            Text(
+                text = label,
+                color = contentColor,
+                maxLines = 1,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .padding(start = 54.dp, end = 14.dp)
             )
         }
     }
