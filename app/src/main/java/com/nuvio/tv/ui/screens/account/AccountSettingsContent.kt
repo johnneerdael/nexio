@@ -21,8 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,11 +33,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -56,10 +50,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 fun AccountSettingsContent(
     uiState: AccountUiState,
     viewModel: AccountViewModel,
-    showSyncCodeFeatures: Boolean = false,
-    onNavigateToAuthSignIn: () -> Unit = {},
-    onNavigateToSyncGenerate: () -> Unit = {},
-    onNavigateToSyncClaim: () -> Unit = {}
+    onNavigateToAuthQrSignIn: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -92,29 +83,11 @@ fun AccountSettingsContent(
                 }
                 item {
                     SettingsActionButton(
-                        icon = Icons.Default.Person,
-                        title = "Sign In / Create Account",
-                        subtitle = "Use email and password to sign in or create an account",
-                        onClick = onNavigateToAuthSignIn
+                        icon = Icons.Default.VpnKey,
+                        title = "Sign In with QR",
+                        subtitle = "Scan a QR code and complete email login on your phone",
+                        onClick = onNavigateToAuthQrSignIn
                     )
-                }
-                if (showSyncCodeFeatures) {
-                    item {
-                        SettingsActionButton(
-                            icon = Icons.Default.VpnKey,
-                            title = "Generate Sync Code",
-                            subtitle = "Create a code to share with your other devices",
-                            onClick = onNavigateToSyncGenerate
-                        )
-                    }
-                    item {
-                        SettingsActionButton(
-                            icon = Icons.Default.Sync,
-                            title = "Enter Sync Code",
-                            subtitle = "Link this device using a code from another device",
-                            onClick = onNavigateToSyncClaim
-                        )
-                    }
                 }
             }
 
@@ -134,24 +107,6 @@ fun AccountSettingsContent(
                         ownerId = ownerId
                     )
                 }
-                if (showSyncCodeFeatures) {
-                    item {
-                        SettingsActionButton(
-                            icon = Icons.Default.VpnKey,
-                            title = "Generate Sync Code",
-                            subtitle = "Share a code so other devices can link to this account",
-                            onClick = onNavigateToSyncGenerate
-                        )
-                    }
-                    item {
-                        SettingsActionButton(
-                            icon = Icons.Default.Sync,
-                            title = "Enter Sync Code",
-                            subtitle = "Link this device using a code from another device",
-                            onClick = onNavigateToSyncClaim
-                        )
-                    }
-                }
                 item {
                     SignOutSettingsButton(onClick = { viewModel.signOut() })
                 }
@@ -161,8 +116,8 @@ fun AccountSettingsContent(
                 val ownerId = uiState.effectiveOwnerId ?: authState.userId
                 item {
                     StatusCard(
-                        label = "Synced",
-                        value = "Using sync code for cross-device sync"
+                        label = "Signed in anonymously",
+                        value = "Upgrade with QR to link an email account"
                     )
                 }
                 item {
@@ -174,177 +129,16 @@ fun AccountSettingsContent(
                 }
                 item {
                     SettingsActionButton(
-                        icon = Icons.Default.Person,
-                        title = "Upgrade to Full Account",
-                        subtitle = "Sign in with email to use a normal account",
-                        onClick = onNavigateToAuthSignIn
+                        icon = Icons.Default.VpnKey,
+                        title = "Upgrade with QR",
+                        subtitle = "Scan a QR code and sign in from your phone",
+                        onClick = onNavigateToAuthQrSignIn
                     )
-                }
-                if (showSyncCodeFeatures) {
-                    item {
-                        ShowSyncCodeSection(
-                            uiState = uiState,
-                            viewModel = viewModel
-                        )
-                    }
                 }
                 item {
                     SignOutSettingsButton(onClick = { viewModel.signOut() })
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ShowSyncCodeSection(
-    uiState: AccountUiState,
-    viewModel: AccountViewModel
-) {
-    var expanded by remember { mutableStateOf(false) }
-    var pin by remember { mutableStateOf("") }
-
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        if (uiState.generatedSyncCode != null) {
-            // Show the revealed sync code
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = NuvioColors.Secondary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Your Sync Code",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = NuvioColors.TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = uiState.generatedSyncCode ?: "",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            letterSpacing = 1.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = NuvioColors.Secondary,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Enter this code and your PIN on your other device.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextTertiary,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = {
-                            viewModel.clearGeneratedSyncCode()
-                            expanded = false
-                            pin = ""
-                        },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContentColor = NuvioColors.TextPrimary
-                        ),
-                        shape = ButtonDefaults.shape(RoundedCornerShape(50))
-                    ) {
-                        Text("Hide Code", modifier = Modifier.padding(vertical = 2.dp))
-                    }
-                }
-            }
-        } else if (expanded) {
-            // PIN entry to reveal the code
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = NuvioColors.BackgroundCard,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .padding(20.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "Enter your PIN to reveal sync code",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    InputField(
-                        value = pin,
-                        onValueChange = { if (it.length <= 8) pin = it },
-                        placeholder = "Enter PIN",
-                        keyboardType = KeyboardType.NumberPassword,
-                        isPassword = true,
-                        imeAction = ImeAction.Done,
-                        onImeAction = {
-                            if (pin.length >= 4) viewModel.getSyncCode(pin)
-                        }
-                    )
-                    if (uiState.error != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = uiState.error ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFF44336)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(
-                            onClick = { viewModel.getSyncCode(pin) },
-                            enabled = !uiState.isLoading && pin.length >= 4,
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.Secondary,
-                                focusedContainerColor = NuvioColors.SecondaryVariant,
-                                contentColor = Color.White,
-                                focusedContentColor = Color.White
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(50))
-                        ) {
-                            Text(
-                                text = if (uiState.isLoading) "Loading..." else "Show Code",
-                                modifier = Modifier.padding(vertical = 2.dp),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        Button(
-                            onClick = {
-                                expanded = false
-                                pin = ""
-                                viewModel.clearError()
-                            },
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                contentColor = NuvioColors.TextSecondary,
-                                focusedContentColor = NuvioColors.TextPrimary
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(50))
-                        ) {
-                            Text("Cancel", modifier = Modifier.padding(vertical = 2.dp))
-                        }
-                    }
-                }
-            }
-        } else {
-            // Collapsed state — show the action button
-            SettingsActionButton(
-                icon = Icons.Default.VpnKey,
-                title = "Show Sync Code",
-                subtitle = "Enter your PIN to reveal your sync code",
-                onClick = { expanded = true }
-            )
         }
     }
 }

@@ -58,8 +58,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.screens.account.AccountSettingsContent
-import com.nuvio.tv.ui.screens.account.AccountViewModel
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.screens.plugin.PluginViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -102,21 +100,16 @@ internal data class SettingsSectionSpec(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTrakt: () -> Unit = {},
-    onNavigateToAuthSignIn: () -> Unit = {},
-    onNavigateToSyncGenerate: () -> Unit = {},
-    onNavigateToSyncClaim: () -> Unit = {}
+    onNavigateToAuthQrSignIn: () -> Unit = {}
 ) {
-    val debugSettingsViewModel: DebugSettingsViewModel = hiltViewModel()
-    val debugUiState by debugSettingsViewModel.uiState.collectAsState()
-
     val sectionSpecs = remember {
         listOf(
             SettingsSectionSpec(
                 category = SettingsCategory.ACCOUNT,
                 title = "Account",
                 icon = Icons.Default.Person,
-                subtitle = "Sync status and account controls.",
-                destination = SettingsSectionDestination.Inline
+                subtitle = "Open QR sign-in screen.",
+                destination = SettingsSectionDestination.External
             ),
             SettingsSectionSpec(
                 category = SettingsCategory.APPEARANCE,
@@ -177,11 +170,11 @@ fun SettingsScreen(
         )
     }
 
-    val visibleSections = remember(debugUiState.accountTabEnabled) {
+    val visibleSections = remember(sectionSpecs) {
         sectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
-                SettingsCategory.ACCOUNT -> BuildConfig.IS_DEBUG_BUILD && debugUiState.accountTabEnabled
+                SettingsCategory.ACCOUNT -> true
                 else -> true
             }
         }
@@ -210,8 +203,6 @@ fun SettingsScreen(
 
     val pluginViewModel: PluginViewModel = hiltViewModel()
     val pluginUiState by pluginViewModel.uiState.collectAsState()
-    val accountViewModel: AccountViewModel = hiltViewModel()
-    val accountUiState by accountViewModel.uiState.collectAsState()
 
     LaunchedEffect(visibleSections) {
         if (visibleSections.none { it.category == selectedCategory }) {
@@ -285,6 +276,7 @@ fun SettingsScreen(
                             onClick = {
                                 if (section.destination == SettingsSectionDestination.External) {
                                     when (section.category) {
+                                        SettingsCategory.ACCOUNT -> onNavigateToAuthQrSignIn()
                                         SettingsCategory.TRAKT -> onNavigateToTrakt()
                                         else -> Unit
                                     }
@@ -382,34 +374,7 @@ fun SettingsScreen(
                                     }
                                 }
                             }
-                            SettingsCategory.ACCOUNT -> {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    SettingsDetailHeader(
-                                        title = "Account",
-                                        subtitle = "Sync status, devices, and sign-in."
-                                    )
-                                    SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .weight(1f),
-                                            contentAlignment = Alignment.TopStart
-                                        ) {
-                                            AccountSettingsContent(
-                                                uiState = accountUiState,
-                                                viewModel = accountViewModel,
-                                                showSyncCodeFeatures = debugUiState.syncCodeFeaturesEnabled,
-                                                onNavigateToAuthSignIn = onNavigateToAuthSignIn,
-                                                onNavigateToSyncGenerate = onNavigateToSyncGenerate,
-                                                onNavigateToSyncClaim = onNavigateToSyncClaim
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            SettingsCategory.ACCOUNT -> Unit
                             SettingsCategory.DEBUG -> DebugSettingsContent()
                             SettingsCategory.TRAKT -> Unit
                         }

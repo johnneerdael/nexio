@@ -1,18 +1,30 @@
 package com.nuvio.tv.core.auth
 
 import android.util.Log
+import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.data.remote.supabase.TvLoginExchangeResult
+import com.nuvio.tv.data.remote.supabase.TvLoginPollResult
+import com.nuvio.tv.data.remote.supabase.TvLoginStartResult
 import com.nuvio.tv.domain.model.AuthState
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,9 +33,11 @@ private const val TAG = "AuthManager"
 @Singleton
 class AuthManager @Inject constructor(
     private val auth: Auth,
-    private val postgrest: Postgrest
+    private val postgrest: Postgrest,
+    private val httpClient: OkHttpClient
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val json = Json { ignoreUnknownKeys = true }
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -138,5 +152,70 @@ class AuthManager @Inject constructor(
 
     fun clearEffectiveUserIdCache() {
         cachedEffectiveUserId = null
+    }
+
+    suspend fun startTvLoginSession(deviceNonce: String, deviceName: String?, redirectBaseUrl: String): Result<TvLoginStartResult> {
+        return try {
+            val params = buildJsonObject {
+                put("p_device_nonce", deviceNonce)
+                put("p_redirect_base_url", redirectBaseUrl)
+                if (!deviceName.isNullOrBlank()) put("p_device_name", deviceName)
+            }
+            val response = postgrest.rpc("start_tv_login_session", params)
+            val result = response.decodeList<TvLoginStartResult>().firstOrNull()
+                ?: return Result.failure(Exception("Empty response from start_tv_login_session"))
+            Result.success(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start TV login session", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun pollTvLoginSession(code: String, deviceNonce: String): Result<TvLoginPollResult> {
+        return try {
+            val params = buildJsonObject {
+                put("p_code", code)
+                put("p_device_nonce", deviceNonce)
+            }
+            val response = postgrest.rpc("poll_tv_login_session", params)
+            val result = response.decodeList<TvLoginPollResult>().firstOrNull()
+                ?: return Result.failure(Exception("Empty response from poll_tv_login_session"))
+            Result.success(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to poll TV login session", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun exchangeTvLoginSession(code: String, deviceNonce: String): Result<Unit> {
+        return try {
+            val token = auth.currentAccessTokenOrNull()
+                ?: return Result.failure(Exception("Not authenticated"))
+            val payload = buildJsonObject {
+                put("code", code)
+                put("device_nonce", deviceNonce)
+            }.toString()
+            val request = Request.Builder()
+                .url("${BuildConfig.SUPABASE_URL}/functions/v1/tv-logins-exchange")
+                .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                .header("Authorization", "Bearer $token")
+                .post(payload.toRequestBody("application/json".toMediaType()))
+                .build()
+            val body = withContext(Dispatchers.IO) {
+                httpClient.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        throw IllegalStateException("TV login exchange failed (${response.code}): $responseBody")
+                    }
+                    responseBody
+                }
+            }
+            val result = json.decodeFromString<TvLoginExchangeResult>(body)
+            auth.importAuthToken(result.accessToken, result.refreshToken)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to exchange TV login session", e)
+            Result.failure(e)
+        }
     }
 }

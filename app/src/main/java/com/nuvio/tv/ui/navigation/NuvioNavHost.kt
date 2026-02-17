@@ -4,7 +4,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -30,8 +29,7 @@ import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
 import com.nuvio.tv.ui.screens.stream.StreamScreen
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import com.nuvio.tv.ui.screens.account.AuthSignInScreen
-import com.nuvio.tv.ui.screens.account.SyncCodeGenerateScreen
-import com.nuvio.tv.ui.screens.account.SyncCodeClaimScreen
+import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.cast.CastDetailScreen
 
 @Composable
@@ -383,9 +381,7 @@ fun NuvioNavHost(
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
-                onNavigateToAuthSignIn = { navController.navigate(Screen.AuthSignIn.route) },
-                onNavigateToSyncGenerate = { navController.navigate(Screen.SyncCodeGenerate.route) },
-                onNavigateToSyncClaim = { navController.navigate(Screen.SyncCodeClaim.route) }
+                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) }
             )
         }
 
@@ -439,31 +435,21 @@ fun NuvioNavHost(
         }
 
         composable(Screen.Account.route) {
-            
-            // AccountScreen(...)
-            LaunchedEffect(Unit) {
-                navController.navigate(Screen.Settings.route) {
-                    popUpTo(Screen.Account.route) { inclusive = true }
-                    launchSingleTop = true
-                }
-            }
+            AuthQrSignInScreen(
+                onBackPress = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.AuthSignIn.route) {
             AuthSignInScreen(
                 onBackPress = { navController.popBackStack() },
+                onNavigateToQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
                 onSuccess = { navController.popBackStack() }
             )
         }
 
-        composable(Screen.SyncCodeGenerate.route) {
-            SyncCodeGenerateScreen(
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.SyncCodeClaim.route) {
-            SyncCodeClaimScreen(
+        composable(Screen.AuthQrSignIn.route) {
+            AuthQrSignInScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }
