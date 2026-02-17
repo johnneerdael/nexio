@@ -53,28 +53,23 @@ class PluginSyncService @Inject constructor(
         }
     }
 
-    /**
-     * Returns remote plugin repo URLs that are not present locally.
-     * The caller should use PluginManager.addRepository() to install each.
-     */
-    suspend fun getNewRemoteRepoUrls(): List<String> = withContext(Dispatchers.IO) {
+    suspend fun getRemoteRepoUrls(): Result<List<String>> = withContext(Dispatchers.IO) {
         try {
-            val effectiveUserId = authManager.getEffectiveUserId() ?: return@withContext emptyList()
+            val effectiveUserId = authManager.getEffectiveUserId()
+                ?: return@withContext Result.success(emptyList())
 
             val remotePlugins = postgrest.from("plugins")
                 .select { filter { eq("user_id", effectiveUserId) } }
                 .decodeList<SupabasePlugin>()
 
-            val localRepos = pluginDataStore.repositories.first()
-            val localUrls = localRepos.map { it.url.trimEnd('/').lowercase() }.toSet()
-
-            remotePlugins
-                .filter { it.url.trimEnd('/').lowercase() !in localUrls }
+            Result.success(
+                remotePlugins
                 .sortedBy { it.sortOrder }
                 .map { it.url }
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get remote repo URLs", e)
-            emptyList()
+            Result.failure(e)
         }
     }
 }

@@ -3,10 +3,11 @@ package com.nuvio.tv.ui.screens.search
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,6 +22,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +39,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -50,7 +56,6 @@ import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
-import kotlin.math.max
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -69,7 +74,8 @@ internal fun DiscoverSection(
     onSelectCatalog: (String) -> Unit,
     onSelectGenre: (String?) -> Unit,
     onShowMore: () -> Unit,
-    onLoadMore: () -> Unit
+    onLoadMore: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val selectedCatalog = uiState.discoverCatalogs.firstOrNull { it.key == uiState.selectedDiscoverCatalogKey }
     val filteredCatalogs = uiState.discoverCatalogs.filter { it.type == uiState.selectedDiscoverType }
@@ -84,7 +90,7 @@ internal fun DiscoverSection(
     val selectedGenreLabel = uiState.selectedDiscoverGenre ?: "Default"
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 48.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -150,9 +156,16 @@ internal fun DiscoverSection(
             )
         }
 
-        selectedCatalog?.let {
+        selectedCatalog?.let { catalog ->
+            val metadataSegments = buildList {
+                add(catalog.addonName)
+                if (uiState.catalogTypeSuffixEnabled) {
+                    add(catalog.type.replaceFirstChar { c -> c.uppercase() })
+                }
+                uiState.selectedDiscoverGenre?.let(::add)
+            }
             Text(
-                text = "${it.addonName} • ${it.type.replaceFirstChar { c -> c.uppercase() }}${uiState.selectedDiscoverGenre?.let { g -> " • $g" } ?: ""}",
+                text = metadataSegments.joinToString(" • "),
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextSecondary
             )
@@ -331,7 +344,7 @@ private data class DiscoverOption(
 )
 
 @Composable
-private fun DiscoverGrid(
+internal fun DiscoverGrid(
     items: List<MetaPreview>,
     posterCardStyle: PosterCardStyle,
     focusResults: Boolean,
@@ -349,6 +362,7 @@ private fun DiscoverGrid(
     onItemClick: (Int, MetaPreview) -> Unit
 ) {
     val restoreFocusRequester = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
     val actionType = when {
         pendingCount > 0 -> DiscoverGridAction.ShowMore(pendingCount)
         isLoadingMore -> DiscoverGridAction.Loading
@@ -356,8 +370,17 @@ private fun DiscoverGrid(
         else -> DiscoverGridAction.None
     }
     val totalCells = items.size + if (actionType != DiscoverGridAction.None) 1 else 0
+    val hasActionCell = actionType != DiscoverGridAction.None
 
-    androidx.compose.runtime.LaunchedEffect(shouldRestoreFocusedItem, focusedItemIndex, totalCells) {
+    val adaptiveStyle = remember(posterCardStyle) {
+        val cardWidth = posterCardStyle.width
+        posterCardStyle.copy(
+            width = cardWidth,
+            height = cardWidth * 1.5f
+        )
+    }
+
+    LaunchedEffect(shouldRestoreFocusedItem, focusedItemIndex, totalCells) {
         if (!shouldRestoreFocusedItem) return@LaunchedEffect
         if (focusedItemIndex !in 0 until totalCells) {
             onRestoreFocusedItemHandled()
@@ -375,78 +398,61 @@ private fun DiscoverGrid(
         onRestoreFocusedItemHandled()
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val horizontalSpacing = 10.dp
-        val preferredCardWidth = 120.dp
-        val minCardWidth = 108.dp
-        val maxCardWidth = 132.dp
-
-        fun widthForColumns(columns: Int) =
-            (maxWidth - (horizontalSpacing * (columns - 1))) / columns
-
-        var columns = max(
-            1,
-            ((maxWidth + horizontalSpacing) / (preferredCardWidth + horizontalSpacing)).toInt()
-        )
-
-        while (columns > 1 && widthForColumns(columns) < minCardWidth) {
-            columns--
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Adaptive(minSize = adaptiveStyle.width),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        itemsIndexed(
+            items = items,
+            key = { index, item -> item.id.ifEmpty { "discover_$index" } },
+            contentType = { _, _ -> "content_card" }
+        ) { index, item ->
+            val focusReq = when {
+                shouldRestoreFocusedItem && index == focusedItemIndex -> restoreFocusRequester
+                focusResults && index == 0 -> firstItemFocusRequester
+                else -> null
+            }
+            GridContentCard(
+                item = item,
+                onClick = { onItemClick(index, item) },
+                posterCardStyle = adaptiveStyle,
+                modifier = Modifier.width(adaptiveStyle.width),
+                focusRequester = focusReq,
+                onFocused = { onItemFocused(index) }
+            )
         }
-        while (widthForColumns(columns) > maxCardWidth) {
-            columns++
-        }
 
-        val cardWidth = widthForColumns(columns).coerceIn(minCardWidth, maxCardWidth)
-        val adaptiveStyle = posterCardStyle.copy(
-            width = cardWidth,
-            height = cardWidth * 1.5f
-        )
-
-        val cellIndices = (0 until totalCells).toList()
-        val rows = cellIndices.chunked(columns)
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            rows.forEachIndexed { rowIndex, rowIndices ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(horizontalSpacing)
-                ) {
-                    rowIndices.forEachIndexed { column, absoluteIndex ->
-                        val focusRequester = when {
-                            shouldRestoreFocusedItem && absoluteIndex == focusedItemIndex -> restoreFocusRequester
-                            focusResults && rowIndex == 0 && column == 0 -> firstItemFocusRequester
-                            else -> null
-                        }
-
-                        if (absoluteIndex < items.size) {
-                            val item = items[absoluteIndex]
-                            GridContentCard(
-                                item = item,
-                                onClick = { onItemClick(absoluteIndex, item) },
-                                posterCardStyle = adaptiveStyle,
-                                modifier = Modifier.width(adaptiveStyle.width),
-                                focusRequester = focusRequester,
-                                onFocused = { onItemFocused(absoluteIndex) }
-                            )
-                        } else {
-                            DiscoverActionCard(
-                                actionType = actionType,
-                                posterCardStyle = adaptiveStyle,
-                                modifier = Modifier.width(adaptiveStyle.width),
-                                focusRequester = focusRequester,
-                                onFocused = { onItemFocused(absoluteIndex) },
-                                onClick = {
-                                    onRequestRestoreFocus((items.lastIndex).coerceAtLeast(0))
-                                    when (actionType) {
-                                        is DiscoverGridAction.ShowMore -> onShowMore()
-                                        DiscoverGridAction.LoadMore -> onLoadMore()
-                                        DiscoverGridAction.Loading -> Unit
-                                        DiscoverGridAction.None -> Unit
-                                    }
-                                }
-                            )
+        if (hasActionCell) {
+            item(
+                key = "discover_action",
+                contentType = "action_card"
+            ) {
+                val actionIndex = items.size
+                val focusReq = when {
+                    shouldRestoreFocusedItem && actionIndex == focusedItemIndex -> restoreFocusRequester
+                    focusResults && items.isEmpty() -> firstItemFocusRequester
+                    else -> null
+                }
+                DiscoverActionCard(
+                    actionType = actionType,
+                    posterCardStyle = adaptiveStyle,
+                    modifier = Modifier.width(adaptiveStyle.width),
+                    focusRequester = focusReq,
+                    onFocused = { onItemFocused(actionIndex) },
+                    onClick = {
+                        onRequestRestoreFocus((items.lastIndex).coerceAtLeast(0))
+                        when (actionType) {
+                            is DiscoverGridAction.ShowMore -> onShowMore()
+                            DiscoverGridAction.LoadMore -> onLoadMore()
+                            DiscoverGridAction.Loading -> Unit
+                            DiscoverGridAction.None -> Unit
                         }
                     }
-                }
+                )
             }
         }
     }

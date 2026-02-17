@@ -103,4 +103,16 @@ class WatchedItemsPreferences @Inject constructor(
             }
         }
     }
+
+    suspend fun replaceWithRemoteItems(remoteItems: List<WatchedItem>) {
+        context.watchedItemsDataStore.edit { preferences ->
+            val deduped = linkedMapOf<Triple<String, Int?, Int?>, WatchedItem>()
+            remoteItems.forEach { item ->
+                deduped[Triple(item.contentId, item.season, item.episode)] = item
+            }
+            preferences[watchedItemsKey] = deduped.values
+                .map { gson.toJson(it) }
+                .toSet()
+        }
+    }
 }

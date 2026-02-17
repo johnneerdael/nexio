@@ -186,9 +186,14 @@ fun LayoutSettingsContent(
 
                     if (uiState.heroSectionEnabled && uiState.availableCatalogs.isNotEmpty()) {
                         Text(
-                            text = "Hero Catalog",
+                            text = "Hero Catalogs",
                             style = MaterialTheme.typography.labelLarge,
                             color = NuvioColors.TextSecondary
+                        )
+                        Text(
+                            text = "Select one or more catalogs for hero content.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioColors.TextTertiary
                         )
                         LazyRow(
                             contentPadding = PaddingValues(end = 8.dp),
@@ -197,9 +202,9 @@ fun LayoutSettingsContent(
                             items(uiState.availableCatalogs) { catalog ->
                                 CatalogChip(
                                     catalogInfo = catalog,
-                                    isSelected = catalog.key == uiState.heroCatalogKey,
+                                    isSelected = catalog.key in uiState.heroCatalogKeys,
                                     onClick = {
-                                        viewModel.onEvent(LayoutSettingsEvent.SelectHeroCatalog(catalog.key))
+                                        viewModel.onEvent(LayoutSettingsEvent.ToggleHeroCatalog(catalog.key))
                                     },
                                     onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                                 )
@@ -295,6 +300,17 @@ fun LayoutSettingsContent(
                         onToggle = {
                             viewModel.onEvent(
                                 LayoutSettingsEvent.SetCatalogAddonNameEnabled(!uiState.catalogAddonNameEnabled)
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    )
+                    CompactToggleRow(
+                        title = "Show Catalog Type",
+                        subtitle = "Show type suffix next to catalog name (Movie/Series).",
+                        checked = uiState.catalogTypeSuffixEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetCatalogTypeSuffixEnabled(!uiState.catalogTypeSuffixEnabled)
                             )
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }

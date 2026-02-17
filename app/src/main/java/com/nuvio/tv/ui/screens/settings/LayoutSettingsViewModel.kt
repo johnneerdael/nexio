@@ -18,7 +18,7 @@ data class LayoutSettingsUiState(
     val selectedLayout: HomeLayout = HomeLayout.CLASSIC,
     val hasChosen: Boolean = false,
     val availableCatalogs: List<CatalogInfo> = emptyList(),
-    val heroCatalogKey: String? = null,
+    val heroCatalogKeys: List<String> = emptyList(),
     val sidebarCollapsedByDefault: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
     val modernSidebarBlurEnabled: Boolean = false,
@@ -26,6 +26,7 @@ data class LayoutSettingsUiState(
     val searchDiscoverEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
+    val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
     val focusedPosterBackdropTrailerEnabled: Boolean = false,
@@ -45,7 +46,7 @@ data class CatalogInfo(
 
 sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
-    data class SelectHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
+    data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -53,6 +54,7 @@ sealed class LayoutSettingsEvent {
     data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetCatalogAddonNameEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetCatalogTypeSuffixEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandDelaySeconds(val seconds: Int) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropTrailerEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -85,8 +87,8 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.heroCatalogSelection.collectLatest { key ->
-                _uiState.update { it.copy(heroCatalogKey = key) }
+            layoutPreferenceDataStore.heroCatalogSelections.collectLatest { keys ->
+                _uiState.update { it.copy(heroCatalogKeys = keys) }
             }
         }
         viewModelScope.launch {
@@ -122,6 +124,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(catalogTypeSuffixEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -175,7 +182,7 @@ class LayoutSettingsViewModel @Inject constructor(
     fun onEvent(event: LayoutSettingsEvent) {
         when (event) {
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
-            is LayoutSettingsEvent.SelectHeroCatalog -> selectHeroCatalog(event.catalogKey)
+            is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
             is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
@@ -183,6 +190,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
             is LayoutSettingsEvent.SetCatalogAddonNameEnabled -> setCatalogAddonNameEnabled(event.enabled)
+            is LayoutSettingsEvent.SetCatalogTypeSuffixEnabled -> setCatalogTypeSuffixEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandEnabled -> setFocusedPosterBackdropExpandEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds -> setFocusedPosterBackdropExpandDelaySeconds(event.seconds)
             is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled -> setFocusedPosterBackdropTrailerEnabled(event.enabled)
@@ -201,9 +209,15 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
-    private fun selectHeroCatalog(catalogKey: String) {
+    private fun toggleHeroCatalog(catalogKey: String) {
         viewModelScope.launch {
-            layoutPreferenceDataStore.setHeroCatalogKey(catalogKey)
+            val selected = _uiState.value.heroCatalogKeys.toMutableList()
+            if (catalogKey in selected) {
+                selected.remove(catalogKey)
+            } else {
+                selected.add(catalogKey)
+            }
+            layoutPreferenceDataStore.setHeroCatalogKeys(selected)
         }
     }
 
@@ -246,6 +260,12 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setCatalogAddonNameEnabled(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setCatalogAddonNameEnabled(enabled)
+        }
+    }
+
+    private fun setCatalogTypeSuffixEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCatalogTypeSuffixEnabled(enabled)
         }
     }
 

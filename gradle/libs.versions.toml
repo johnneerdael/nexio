@@ -4,11 +4,11 @@ cryptoJs = "4.2.0"
 kotlin = "2.3.0"
 coreKtx = "1.10.1"
 appcompat = "1.6.1"
-composeBom = "2024.09.00"
+composeBom = "2025.01.01"
 tvFoundation = "1.0.0-alpha11"
 tvMaterial = "1.0.1"
-lifecycleRuntimeKtx = "2.6.1"
-activityCompose = "1.8.0"
+lifecycleRuntimeKtx = "2.8.7"
+activityCompose = "1.9.3"
 
 # New dependencies
 hilt = "2.58"
@@ -17,10 +17,10 @@ retrofit = "2.9.0"
 okhttp = "4.12.0"
 moshi = "1.15.1"
 coroutines = "1.8.1"
-coil = "2.6.0"
+coil = "2.7.0"
 navigationCompose = "2.7.7"
 datastore = "1.1.1"
-lifecycleViewModelCompose = "2.8.0"
+lifecycleViewModelCompose = "2.8.7"
 ksp = "2.3.0"
 media3 = "1.9.2"
 quickjsKt = "1.0.1"
@@ -32,6 +32,12 @@ zxing = "3.5.3"
 supabase = "3.1.4"
 ktor = "3.1.1"
 kotlinxSerialization = "1.7.3"
+benchmarkMacro = "1.4.1"
+androidxTestExtJunit = "1.2.1"
+androidxTestRunner = "1.6.2"
+uiautomator = "2.3.0"
+profileinstaller = "1.4.1"
+baselineProfilePlugin = "1.4.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -112,13 +118,19 @@ ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.r
 
 # Kotlinx Serialization
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmarkMacro" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "uiautomator" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+android-test = { id = "com.android.test", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-
+androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineProfilePlugin" }

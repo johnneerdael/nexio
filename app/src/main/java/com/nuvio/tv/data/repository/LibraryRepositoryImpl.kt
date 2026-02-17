@@ -48,7 +48,7 @@ class LibraryRepositoryImpl @Inject constructor(
         if (!authManager.isAuthenticated) return
         syncJob?.cancel()
         syncJob = syncScope.launch {
-            delay(2000)
+            delay(500)
             librarySyncService.pushToRemote()
         }
     }

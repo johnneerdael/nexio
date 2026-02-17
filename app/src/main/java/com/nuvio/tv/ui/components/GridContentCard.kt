@@ -81,12 +81,17 @@ fun GridContentCard(
                     .fillMaxSize()
                     .clip(cardShape)
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                val context = LocalContext.current
+                val imageModel = remember(context, item.poster, requestWidthPx, requestHeightPx) {
+                    ImageRequest.Builder(context)
                         .data(item.poster)
                         .crossfade(false)
                         .size(width = requestWidthPx, height = requestHeightPx)
-                        .build(),
+                        .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}")
+                        .build()
+                }
+                AsyncImage(
+                    model = imageModel,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

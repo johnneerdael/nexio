@@ -40,7 +40,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
@@ -94,10 +93,6 @@ fun HeroContentSection(
     restorePlayFocusToken: Int = 0,
     onPlayFocusRestored: () -> Unit = {}
 ) {
-    var isDescriptionExpanded by remember(meta.id) { mutableStateOf(false) }
-    var descriptionHasOverflow by remember(meta.id) { mutableStateOf(false) }
-    var isShowMoreFocused by remember { mutableStateOf(false) }
-
     // Animate logo properties for trailer mode
     val logoHeight by animateDpAsState(
         targetValue = if (isTrailerPlaying) 60.dp else 100.dp,
@@ -284,57 +279,11 @@ fun HeroContentSection(
                             text = meta.description,
                             style = MaterialTheme.typography.bodyMedium,
                             color = NuvioColors.TextPrimary,
-                            maxLines = if (isDescriptionExpanded) Int.MAX_VALUE else 2,
-                            overflow = TextOverflow.Ellipsis,
-                            onTextLayout = { result ->
-                                if (!isDescriptionExpanded) {
-                                    descriptionHasOverflow = result.hasVisualOverflow
-                                }
-                            },
+                            overflow = TextOverflow.Clip,
                             modifier = Modifier
                                 .fillMaxWidth(0.6f)
                                 .padding(bottom = 12.dp)
                         )
-
-                        val showMoreFocusRing = NuvioColors.FocusRing
-                        val showMoreFocusBg = NuvioColors.FocusBackground
-
-                        if (descriptionHasOverflow || isDescriptionExpanded) {
-                            Text(
-                                text = if (isDescriptionExpanded) "Show less" else "Show more",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isShowMoreFocused) NuvioColors.TextPrimary else NuvioColors.TextTertiary,
-                                modifier = Modifier
-                                    .padding(bottom = 12.dp)
-                                    .drawBehind {
-                                        if (isShowMoreFocused) {
-                                            val insetX = 8.dp.toPx()
-                                            val insetY = 2.dp.toPx()
-                                            val radius = 6.dp.toPx()
-                                            val stroke = 2.dp.toPx()
-                                            val topLeft = Offset(-insetX, -insetY)
-                                            val size = Size(size.width + insetX * 2, size.height + insetY * 2)
-
-                                            drawRoundRect(
-                                                color = showMoreFocusBg.copy(alpha = 0.35f),
-                                                topLeft = topLeft,
-                                                size = size,
-                                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius)
-                                            )
-                                            drawRoundRect(
-                                                color = showMoreFocusRing,
-                                                topLeft = topLeft,
-                                                size = size,
-                                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius),
-                                                style = Stroke(width = stroke)
-                                            )
-                                        }
-                                    }
-                                    .focusProperties { canFocus = true }
-                                    .onFocusChanged { focusState -> isShowMoreFocused = focusState.hasFocus }
-                                    .clickable { isDescriptionExpanded = !isDescriptionExpanded }
-                            )
-                        }
                     }
 
                     MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb)

@@ -35,11 +35,6 @@ class WatchedItemsSyncService @Inject constructor(
             val items = watchedItemsPreferences.getAllItems()
             Log.d(TAG, "pushToRemote: ${items.size} watched items to push")
 
-            if (items.isEmpty()) {
-                Log.d(TAG, "pushToRemote: nothing to push, skipping RPC")
-                return@withContext Result.success(Unit)
-            }
-
             val params = buildJsonObject {
                 put("p_items", buildJsonArray {
                     items.forEach { item ->
@@ -66,11 +61,11 @@ class WatchedItemsSyncService @Inject constructor(
         }
     }
 
-    suspend fun pullFromRemote(): List<WatchedItem> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemote(): Result<List<WatchedItem>> = withContext(Dispatchers.IO) {
         try {
             if (traktAuthDataStore.isAuthenticated.first()) {
                 Log.d(TAG, "Trakt connected, skipping watched items pull")
-                return@withContext emptyList()
+                return@withContext Result.success(emptyList())
             }
 
             val response = postgrest.rpc("sync_pull_watched_items")
@@ -78,7 +73,7 @@ class WatchedItemsSyncService @Inject constructor(
 
             Log.d(TAG, "pullFromRemote: fetched ${remote.size} watched items from Supabase")
 
-            remote.map { entry ->
+            Result.success(remote.map { entry ->
                 WatchedItem(
                     contentId = entry.contentId,
                     contentType = entry.contentType,
@@ -87,10 +82,10 @@ class WatchedItemsSyncService @Inject constructor(
                     episode = entry.episode,
                     watchedAt = entry.watchedAt
                 )
-            }
+            })
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull watched items from remote", e)
-            emptyList()
+            Result.failure(e)
         }
     }
 }

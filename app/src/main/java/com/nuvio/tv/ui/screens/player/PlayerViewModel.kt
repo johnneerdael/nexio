@@ -249,6 +249,7 @@ class PlayerViewModel @Inject constructor(
     private val pauseOverlayDelayMs = 5000L
     private var pendingPreviewSeekPosition: Long? = null
     private var pendingResumeProgress: WatchProgress? = null
+    private var hasRetriedCurrentStreamAfter416: Boolean = false
     private var currentScrobbleItem: TraktScrobbleItem? = null
     private var hasSentScrobbleStartForCurrentItem: Boolean = false
     private var hasSentCompletionScrobbleForCurrentItem: Boolean = false
@@ -368,6 +369,7 @@ class PlayerViewModel @Inject constructor(
 
                     state.copy(
                         subtitleStyle = settings.subtitleStyle,
+                        subtitleOrganizationMode = settings.subtitleOrganizationMode,
                         loadingOverlayEnabled = settings.loadingOverlayEnabled,
                         showLoadingOverlay = shouldShowOverlay,
                         pauseOverlayEnabled = settings.pauseOverlayEnabled,
@@ -482,6 +484,11 @@ class PlayerViewModel @Inject constructor(
 
     private fun tryApplyPendingResumeProgress(player: Player) {
         val saved = pendingResumeProgress ?: return
+        if (!player.isCurrentMediaItemSeekable) {
+            pendingResumeProgress = null
+            _uiState.update { it.copy(pendingSeekPosition = null) }
+            return
+        }
         val duration = player.duration
         val target = when {
             duration > 0L -> saved.resolveResumePosition(duration)
@@ -493,6 +500,39 @@ class PlayerViewModel @Inject constructor(
             player.seekTo(target)
             _uiState.update { it.copy(pendingSeekPosition = null) }
             pendingResumeProgress = null
+        }
+    }
+
+    @androidx.annotation.OptIn(UnstableApi::class)
+    @OptIn(UnstableApi::class)
+    private fun retryCurrentStreamFromStartAfter416() {
+        if (hasRetriedCurrentStreamAfter416) return
+        hasRetriedCurrentStreamAfter416 = true
+        pendingResumeProgress = null
+        _uiState.update {
+            it.copy(
+                pendingSeekPosition = null,
+                error = null,
+                showLoadingOverlay = it.loadingOverlayEnabled
+            )
+        }
+        _exoPlayer?.let { player ->
+            runCatching {
+                player.stop()
+                player.clearMediaItems()
+                player.setMediaSource(createMediaSource(currentStreamUrl, currentHeaders))
+                player.seekTo(0L)
+                player.prepare()
+                player.playWhenReady = true
+            }.onFailure { e ->
+                _uiState.update {
+                    it.copy(
+                        error = e.message ?: "Playback error",
+                        showLoadingOverlay = false,
+                        showPauseOverlay = false
+                    )
+                }
+            }
         }
     }
 
@@ -1032,6 +1072,12 @@ class PlayerViewModel @Inject constructor(
                                 }
                                 append(" [${error.errorCode}]")
                             }
+                            val responseCode =
+                                (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                            if (responseCode == 416 && !hasRetriedCurrentStreamAfter416) {
+                                retryCurrentStreamFromStartAfter416()
+                                return
+                            }
                             _uiState.update {
                                 it.copy(
                                     error = detailedError,
@@ -1095,9 +1141,14 @@ class PlayerViewModel @Inject constructor(
 
     @androidx.annotation.OptIn(UnstableApi::class)
     @OptIn(UnstableApi::class)
-    private fun createMediaSource(url: String, headers: Map<String, String>): MediaSource {
+    private fun createMediaSource(
+        url: String,
+        headers: Map<String, String>,
+        subtitleConfigurations: List<MediaItem.SubtitleConfiguration> = emptyList()
+    ): MediaSource {
+        val sanitizedHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }
         val okHttpFactory = OkHttpDataSource.Factory(getOrCreateOkHttpClient()).apply {
-            setDefaultRequestProperties(headers)
+            setDefaultRequestProperties(sanitizedHeaders)
             setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         }
 
@@ -1113,6 +1164,10 @@ class PlayerViewModel @Inject constructor(
         when {
             isHls -> mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
             isDash -> mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
+        }
+
+        if (subtitleConfigurations.isNotEmpty()) {
+            mediaItemBuilder.setSubtitleConfigurations(subtitleConfigurations)
         }
 
         val mediaItem = mediaItemBuilder.build()
@@ -1310,9 +1365,11 @@ class PlayerViewModel @Inject constructor(
         emitStopScrobbleForCurrentProgress()
         saveWatchProgress()
 
-        val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
+        val newHeaders = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
+            .filterKeys { !it.equals("Range", ignoreCase = true) }
         currentStreamUrl = url
         currentHeaders = newHeaders
+        hasRetriedCurrentStreamAfter416 = false
         lastSavedPosition = 0L
         resetLoadingOverlayForNewStream()
 
@@ -1577,12 +1634,14 @@ class PlayerViewModel @Inject constructor(
         emitStopScrobbleForCurrentProgress()
         saveWatchProgress()
 
-        val newHeaders = stream.behaviorHints?.proxyHeaders?.request ?: emptyMap()
+        val newHeaders = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
+            .filterKeys { !it.equals("Range", ignoreCase = true) }
         val targetVideo = forcedTargetVideo
             ?: _uiState.value.episodes.firstOrNull { it.id == _uiState.value.episodeStreamsForVideoId }
 
         currentStreamUrl = url
         currentHeaders = newHeaders
+        hasRetriedCurrentStreamAfter416 = false
         currentVideoId = targetVideo?.id ?: _uiState.value.episodeStreamsForVideoId ?: currentVideoId
         currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
         currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
@@ -2314,11 +2373,16 @@ class PlayerViewModel @Inject constructor(
     private fun emitPeriodicScrobblePause() {
         val item = currentScrobbleItem ?: return
         if (!hasSentScrobbleStartForCurrentItem) return
+        val progressPercent = currentPlaybackProgressPercent()
+        if (progressPercent >= 80f) {
+            emitCompletionScrobbleStop(progressPercent = progressPercent)
+            return
+        }
 
         viewModelScope.launch {
             traktScrobbleService.scrobblePause(
                 item = item,
-                progressPercent = currentPlaybackProgressPercent()
+                progressPercent = progressPercent
             )
         }
     }
@@ -2609,6 +2673,7 @@ class PlayerViewModel @Inject constructor(
             }
             PlayerEvent.OnRetry -> {
                 hasRenderedFirstFrame = false
+                hasRetriedCurrentStreamAfter416 = false
                 resetNextEpisodeCardState(clearEpisode = false)
                 _uiState.update { state ->
                     state.copy(
@@ -2856,7 +2921,6 @@ class PlayerViewModel @Inject constructor(
             pendingAddonSubtitleLanguage = normalizedLang
 
             
-            val currentItem = player.currentMediaItem ?: return@let
             val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(
                 android.net.Uri.parse(subtitle.url)
             )
@@ -2864,15 +2928,18 @@ class PlayerViewModel @Inject constructor(
                 .setLanguage(subtitle.lang)
                 .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                 .build()
-            
-            val newMediaItem = currentItem.buildUpon()
-                .setSubtitleConfigurations(listOf(subtitleConfig))
-                .build()
-            
+
             val currentPosition = player.currentPosition
             val playWhenReady = player.playWhenReady
 
-            player.setMediaItem(newMediaItem, currentPosition)
+            player.setMediaSource(
+                createMediaSource(
+                    url = currentStreamUrl,
+                    headers = currentHeaders,
+                    subtitleConfigurations = listOf(subtitleConfig)
+                ),
+                currentPosition
+            )
             player.prepare()
             player.playWhenReady = playWhenReady
 
@@ -2896,6 +2963,7 @@ class PlayerViewModel @Inject constructor(
     private fun normalizeLanguageCode(lang: String): String {
         val code = lang.lowercase()
         return when (code) {
+            "pt-br", "pt_br", "br", "pob" -> "pt"
             "eng" -> "en"
             "spa" -> "es"
             "fre", "fra" -> "fr"

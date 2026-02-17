@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
@@ -80,15 +80,15 @@ fun CastSection(
             val deadSpace = itemWidth - cardSize
 
             if (leadingCast.isNotEmpty()) {
-                items(
+                itemsIndexed(
                     items = leadingCast,
-                    key = { member ->
-                        "leading|" + (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
+                    key = { index, member ->
+                        "leading|" + index + "|" + (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
                     }
-                ) { member ->
+                ) { index, member ->
                     val isLastLeading = member == leadingCast.last()
                     val endPadding = if (isLastLeading && cast.isNotEmpty()) 0.dp else standardGap
-                    val focusRequester = remember(member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
+                    val focusRequester = remember(index, member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
                     val shouldRestoreFocus = preferredFocusedCastTmdbId != null && member.tmdbId == preferredFocusedCastTmdbId
 
                     LaunchedEffect(shouldRestoreFocus) {
@@ -126,13 +126,13 @@ fun CastSection(
                 }
             }
 
-            items(
+            itemsIndexed(
                 items = cast,
-                key = { member ->
-                    (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
+                key = { index, member ->
+                    index.toString() + "|" + (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
                 }
-            ) { member ->
-                val focusRequester = remember(member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
+            ) { index, member ->
+                val focusRequester = remember(index, member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
                 val shouldRestoreFocus = preferredFocusedCastTmdbId != null && member.tmdbId == preferredFocusedCastTmdbId
 
                 LaunchedEffect(shouldRestoreFocus) {

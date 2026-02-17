@@ -7,10 +7,14 @@ import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,7 +25,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -64,9 +68,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,8 +81,6 @@ import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.ModalNavigationDrawer
-import androidx.tv.material3.NavigationDrawerItem
-import androidx.tv.material3.NavigationDrawerItemDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
@@ -86,6 +88,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppTheme
+import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -98,6 +101,7 @@ import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -108,6 +112,14 @@ data class DrawerItem(
     val label: String,
     val iconRes: Int? = null,
     val icon: ImageVector? = null
+)
+
+private data class MainUiPrefs(
+    val theme: AppTheme = AppTheme.OCEAN,
+    val hasChosenLayout: Boolean? = true,
+    val sidebarCollapsed: Boolean = false,
+    val modernSidebarEnabled: Boolean = false,
+    val modernSidebarBlurPref: Boolean = false
 )
 
 @AndroidEntryPoint
@@ -122,24 +134,42 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var traktProgressService: TraktProgressService
 
+    @Inject
+    lateinit var startupSyncService: StartupSyncService
+
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val currentTheme by themeDataStore.selectedTheme.collectAsState(initial = AppTheme.OCEAN)
-            val hasChosenLayout by layoutPreferenceDataStore.hasChosenLayout.collectAsState(initial = true)
+            val mainUiPrefsFlow = remember(themeDataStore, layoutPreferenceDataStore) {
+                combine(
+                    themeDataStore.selectedTheme,
+                    layoutPreferenceDataStore.hasChosenLayout,
+                    layoutPreferenceDataStore.sidebarCollapsedByDefault,
+                    layoutPreferenceDataStore.modernSidebarEnabled,
+                    layoutPreferenceDataStore.modernSidebarBlurEnabled
+                ) { theme, hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref ->
+                    MainUiPrefs(
+                        theme = theme,
+                        hasChosenLayout = hasChosenLayout,
+                        sidebarCollapsed = sidebarCollapsed,
+                        modernSidebarEnabled = modernSidebarEnabled,
+                        modernSidebarBlurPref = modernSidebarBlurPref
+                    )
+                }
+            }
+            val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs())
 
-            NuvioTheme(appTheme = currentTheme) {
+            NuvioTheme(appTheme = mainUiPrefs.theme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
-                    val layoutChosen = hasChosenLayout ?: false
-
-                    val sidebarCollapsed by layoutPreferenceDataStore.sidebarCollapsedByDefault.collectAsState(initial = false)
-                    val modernSidebarEnabled by layoutPreferenceDataStore.modernSidebarEnabled.collectAsState(initial = false)
-                    val modernSidebarBlurPref by layoutPreferenceDataStore.modernSidebarBlurEnabled.collectAsState(initial = false)
-                    val modernSidebarBlurEnabled = modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                    val layoutChosen = mainUiPrefs.hasChosenLayout ?: false
+                    val sidebarCollapsed = mainUiPrefs.sidebarCollapsed
+                    val modernSidebarEnabled = mainUiPrefs.modernSidebarEnabled
+                    val modernSidebarBlurEnabled =
+                        mainUiPrefs.modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
@@ -235,6 +265,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        startupSyncService.requestSyncNow()
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }
@@ -263,15 +294,17 @@ private fun LegacySidebarScaffold(
         drawerState.setValue(DrawerValue.Closed)
     }
 
-    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
-        drawerState.setValue(DrawerValue.Open)
-    }
-
     val closedDrawerWidth = if (sidebarCollapsed) 0.dp else 72.dp
-    val openDrawerWidth = 260.dp
+    val openDrawerWidth = 216.dp
 
     val focusManager = LocalFocusManager.current
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
+    var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
+        pendingSidebarFocusRequest = true
+        drawerState.setValue(DrawerValue.Open)
+    }
 
     LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
         if (!pendingContentFocusTransfer || drawerState.currentValue != DrawerValue.Closed) {
@@ -282,12 +315,21 @@ private fun LegacySidebarScaffold(
         pendingContentFocusTransfer = false
     }
 
-    LaunchedEffect(drawerState.currentValue, selectedDrawerRoute, showSidebar) {
-        if (!showSidebar || drawerState.currentValue != DrawerValue.Open) return@LaunchedEffect
-        val targetRoute = selectedDrawerRoute ?: return@LaunchedEffect
-        val requester = drawerItemFocusRequesters[targetRoute] ?: return@LaunchedEffect
+    LaunchedEffect(drawerState.currentValue, selectedDrawerRoute, showSidebar, pendingSidebarFocusRequest) {
+        if (!showSidebar || !pendingSidebarFocusRequest || drawerState.currentValue != DrawerValue.Open) {
+            return@LaunchedEffect
+        }
+        val targetRoute = selectedDrawerRoute ?: run {
+            pendingSidebarFocusRequest = false
+            return@LaunchedEffect
+        }
+        val requester = drawerItemFocusRequesters[targetRoute] ?: run {
+            pendingSidebarFocusRequest = false
+            return@LaunchedEffect
+        }
         repeat(2) { withFrameNanos { } }
         runCatching { requester.requestFocus() }
+        pendingSidebarFocusRequest = false
     }
 
     ModalNavigationDrawer(
@@ -312,38 +354,34 @@ private fun LegacySidebarScaffold(
                             }
                         }
                 ) {
-                    val sidebarLogoTopPadding = 20.dp
-
-                    if (drawerValue == DrawerValue.Open) {
+                    val isExpanded = drawerValue == DrawerValue.Open
+                    if (isExpanded) {
+                        Spacer(modifier = Modifier.height(30.dp))
                         Image(
                             painter = painterResource(id = R.drawable.app_logo_wordmark),
                             contentDescription = "NuvioTV",
                             modifier = Modifier
-                                .fillMaxWidth(0.9f)
-                                .aspectRatio(1214f / 408f)
-                                .padding(top = sidebarLogoTopPadding),
-                            contentScale = ContentScale.Fit
+                                .fillMaxWidth()
+                                .height(42.dp)
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    val itemColors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = NuvioColors.BackgroundCard,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        pressedContainerColor = NuvioColors.FocusBackground,
-                        selectedContentColor = NuvioColors.TextPrimary,
-                        focusedContentColor = NuvioColors.FocusRing,
-                        pressedContentColor = NuvioColors.FocusRing
-                    )
+                    val itemWidth = if (isExpanded) 176.dp else 48.dp
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         drawerItems.forEach { item ->
-                            NavigationDrawerItem(
+                            LegacySidebarButton(
+                                label = item.label,
+                                iconRes = item.iconRes,
+                                icon = item.icon,
                                 selected = selectedDrawerRoute == item.route,
+                                expanded = isExpanded,
                                 onClick = {
                                     navigateToDrawerRoute(
                                         navController = navController,
@@ -353,22 +391,10 @@ private fun LegacySidebarScaffold(
                                     drawerState.setValue(DrawerValue.Closed)
                                     pendingContentFocusTransfer = true
                                 },
-                                colors = itemColors,
                                 modifier = Modifier.focusRequester(
                                     drawerItemFocusRequesters.getValue(item.route)
-                                ),
-                                leadingContent = {
-                                    DrawerItemIcon(
-                                        iconRes = item.iconRes,
-                                        icon = item.icon,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            ) {
-                                if (drawerValue == DrawerValue.Open) {
-                                    Text(item.label)
-                                }
-                            }
+                                ).width(itemWidth)
+                            )
                         }
                     }
 
@@ -382,11 +408,97 @@ private fun LegacySidebarScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = contentStartPadding)
+                .onKeyEvent { keyEvent ->
+                    if (
+                        showSidebar &&
+                        drawerState.currentValue == DrawerValue.Closed &&
+                        keyEvent.type == KeyEventType.KeyDown &&
+                        keyEvent.key == Key.DirectionLeft
+                    ) {
+                        if (focusManager.moveFocus(FocusDirection.Left)) {
+                            true
+                        } else {
+                            pendingSidebarFocusRequest = true
+                            drawerState.setValue(DrawerValue.Open)
+                            true
+                        }
+                    } else {
+                        false
+                    }
+                }
         ) {
             NuvioNavHost(
                 navController = navController,
                 startDestination = startDestination,
                 hideBuiltInHeaders = hideBuiltInHeaders
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegacySidebarButton(
+    label: String,
+    iconRes: Int?,
+    icon: ImageVector?,
+    selected: Boolean,
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val itemShape = RoundedCornerShape(32.dp)
+    val backgroundColor by animateColorAsState(
+        targetValue = when {
+            isFocused -> NuvioColors.FocusBackground
+            selected -> NuvioColors.BackgroundCard
+            else -> Color.Transparent
+        },
+        label = "legacySidebarItemBackground"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when {
+            isFocused -> NuvioColors.TextPrimary
+            selected -> NuvioColors.TextPrimary
+            else -> NuvioColors.TextSecondary
+        },
+        label = "legacySidebarItemContent"
+    )
+
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .focusProperties { canFocus = expanded }
+            .clip(itemShape)
+            .background(color = backgroundColor, shape = itemShape)
+            .onFocusChanged { isFocused = it.isFocused }
+            .clickable(onClick = onClick),
+    ) {
+        DrawerItemIcon(
+            iconRes = iconRes,
+            icon = icon,
+            tint = contentColor,
+            modifier = if (expanded) {
+                Modifier
+                    .size(22.dp)
+                    .align(Alignment.CenterStart)
+                    .offset(x = 18.dp)
+            } else {
+                Modifier
+                    .size(22.dp)
+                    .align(Alignment.Center)
+            }
+        )
+        if (expanded) {
+            Text(
+                text = label,
+                color = contentColor,
+                maxLines = 1,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .padding(start = 54.dp, end = 14.dp)
             )
         }
     }
@@ -488,56 +600,82 @@ private fun ModernSidebarScaffold(
         animationSpec = tween(durationMillis = 135, easing = FastOutSlowInEasing),
         label = "sidebarSurfaceAlpha"
     )
-    val sidebarLabelAlpha by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0f,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 125, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 145, easing = LinearOutSlowInEasing)
+    val shouldApplySidebarHaze = showSidebar && (
+        sidebarVisible ||
+            isSidebarExpanded ||
+            sidebarCollapsePending ||
+            sidebarWidth > 0.dp
+        )
+    val sidebarTransition = updateTransition(
+        targetState = isSidebarExpanded,
+        label = "sidebarTransition"
+    )
+    val sidebarLabelAlpha by sidebarTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 125, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 145, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarLabelAlpha"
-    )
-    val sidebarExpandProgress by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0f,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 385, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 1f else 0f
+    }
+    val sidebarExpandProgress by sidebarTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 385, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarExpandProgress"
-    )
-    val sidebarIconScale by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0.92f,
-        animationSpec = tween(durationMillis = 145, easing = FastOutSlowInEasing),
+    ) { expanded ->
+        if (expanded) 1f else 0f
+    }
+    val sidebarIconScale by sidebarTransition.animateFloat(
+        transitionSpec = { tween(durationMillis = 145, easing = FastOutSlowInEasing) },
         label = "sidebarIconScale"
-    )
-    val sidebarBloomScale by animateFloatAsState(
-        targetValue = if (isSidebarExpanded) 1f else 0.9f,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 1f else 0.92f
+    }
+    val sidebarBloomScale by sidebarTransition.animateFloat(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarBloomScale"
-    )
-    val sidebarDeflateOffsetX by animateDpAsState(
-        targetValue = if (isSidebarExpanded) 0.dp else (-10).dp,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 1f else 0.9f
+    }
+    val sidebarDeflateOffsetX by sidebarTransition.animateDp(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarDeflateOffsetX"
-    )
-    val sidebarDeflateOffsetY by animateDpAsState(
-        targetValue = if (isSidebarExpanded) 0.dp else (-8).dp,
-        animationSpec = if (isSidebarExpanded) {
-            tween(durationMillis = 345, easing = FastOutSlowInEasing)
-        } else {
-            tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+    ) { expanded ->
+        if (expanded) 0.dp else (-10).dp
+    }
+    val sidebarDeflateOffsetY by sidebarTransition.animateDp(
+        transitionSpec = {
+            if (targetState) {
+                tween(durationMillis = 345, easing = FastOutSlowInEasing)
+            } else {
+                tween(durationMillis = 395, easing = LinearOutSlowInEasing)
+            }
         },
         label = "sidebarDeflateOffsetY"
-    )
+    ) { expanded ->
+        if (expanded) 0.dp else (-8).dp
+    }
 
     LaunchedEffect(isSidebarExpanded, sidebarCollapsePending, pendingContentFocusTransfer, showSidebar) {
         if (!showSidebar || !pendingContentFocusTransfer || isSidebarExpanded || sidebarCollapsePending) {
@@ -569,7 +707,13 @@ private fun ModernSidebarScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .haze(sidebarHazeState)
+                .then(
+                    if (shouldApplySidebarHaze) {
+                        Modifier.haze(sidebarHazeState)
+                    } else {
+                        Modifier
+                    }
+                )
                 .onPreviewKeyEvent { keyEvent ->
                     if (
                         isSidebarExpanded &&
@@ -686,7 +830,11 @@ private fun ModernSidebarScaffold(
                 }
             }
 
-            if (!sidebarCollapsed) {
+            if (
+                !sidebarCollapsed &&
+                sidebarExpandProgress < 0.98f &&
+                selectedDrawerRoute != Screen.Search.route
+            ) {
                 CollapsedSidebarPill(
                     label = selectedDrawerItem.label,
                     iconRes = selectedDrawerItem.iconRes,

@@ -41,11 +41,6 @@ class WatchProgressSyncService @Inject constructor(
                 Log.d(TAG, "  push entry: key=$key contentId=${progress.contentId} type=${progress.contentType} pos=${progress.position} dur=${progress.duration} lastWatched=${progress.lastWatched}")
             }
 
-            if (entries.isEmpty()) {
-                Log.d(TAG, "pushToRemote: nothing to push, skipping RPC")
-                return@withContext Result.success(Unit)
-            }
-
             val params = buildJsonObject {
                 put("p_entries", buildJsonArray {
                     entries.forEach { (key, progress) ->
@@ -79,11 +74,11 @@ class WatchProgressSyncService @Inject constructor(
      * bypassing RLS (which would block linked devices from reading owner data).
      * Skips if Trakt is connected. Caller is responsible for merging into local.
      */
-    suspend fun pullFromRemote(): List<Pair<String, WatchProgress>> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemote(): Result<List<Pair<String, WatchProgress>>> = withContext(Dispatchers.IO) {
         try {
             if (traktAuthDataStore.isAuthenticated.first()) {
                 Log.d(TAG, "Trakt connected, skipping watch progress pull")
-                return@withContext emptyList()
+                return@withContext Result.success(emptyList())
             }
 
             val response = postgrest.rpc("sync_pull_watch_progress")
@@ -94,7 +89,7 @@ class WatchProgressSyncService @Inject constructor(
                 Log.d(TAG, "  pull entry: key=${entry.progressKey} contentId=${entry.contentId} type=${entry.contentType} pos=${entry.position} dur=${entry.duration} lastWatched=${entry.lastWatched}")
             }
 
-            remote.map { entry ->
+            Result.success(remote.map { entry ->
                 entry.progressKey to WatchProgress(
                     contentId = entry.contentId,
                     contentType = entry.contentType,
@@ -111,10 +106,10 @@ class WatchProgressSyncService @Inject constructor(
                     lastWatched = entry.lastWatched,
                     source = WatchProgress.SOURCE_LOCAL
                 )
-            }
+            })
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull watch progress from remote", e)
-            emptyList()
+            Result.failure(e)
         }
     }
 }

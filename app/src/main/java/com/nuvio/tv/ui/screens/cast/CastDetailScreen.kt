@@ -25,9 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -132,12 +133,6 @@ private fun CastDetailContent(
     }
 
     val firstPosterFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(allCredits) {
-        if (allCredits.isNotEmpty()) {
-            firstPosterFocusRequester.requestFocus()
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Left accent gradient overlay
@@ -399,6 +394,8 @@ private fun FilmographyRow(
     firstItemFocusRequester: FocusRequester,
     onItemClick: (MetaPreview) -> Unit
 ) {
+    val hasRequestedInitialFocus = remember(credits) { mutableStateOf(false) }
+
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 4.dp),
@@ -411,6 +408,16 @@ private fun FilmographyRow(
             GridContentCard(
                 item = item,
                 onClick = { onItemClick(item) },
+                modifier = if (index == 0) {
+                    Modifier.onGloballyPositioned {
+                        if (!hasRequestedInitialFocus.value) {
+                            hasRequestedInitialFocus.value = true
+                            runCatching { firstItemFocusRequester.requestFocus() }
+                        }
+                    }
+                } else {
+                    Modifier
+                },
                 posterCardStyle = posterCardStyle,
                 showLabel = true,
                 focusRequester = if (index == 0) firstItemFocusRequester else null

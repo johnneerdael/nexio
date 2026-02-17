@@ -85,7 +85,7 @@ class HomeViewModel @Inject constructor(
     private var addonsCache: List<Addon> = emptyList()
     private var homeCatalogOrderKeys: List<String> = emptyList()
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
-    private var currentHeroCatalogKey: String? = null
+    private var currentHeroCatalogKeys: List<String> = emptyList()
     private var catalogUpdateJob: Job? = null
     private var hasRenderedFirstCatalog = false
     private val catalogLoadSemaphore = Semaphore(6)
@@ -96,102 +96,144 @@ class HomeViewModel @Inject constructor(
     private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     private var activeTrailerPreviewItemId: String? = null
     private var trailerPreviewRequestVersion: Long = 0L
+    private var currentTmdbSettings: TmdbSettings = TmdbSettings()
+    private var lastHeroEnrichmentSignature: String? = null
+    private var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     private val dismissedNextUpKeys = MutableStateFlow<Set<String>>(emptySet())
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
 
     init {
-        loadLayoutPreference()
-        loadHeroCatalogPreference()
-        loadHeroSectionPreference()
-        loadPosterLabelPreference()
-        loadCatalogAddonNamePreference()
-        loadFocusedPosterBackdropExpandPreference()
-        loadFocusedPosterBackdropExpandDelayPreference()
-        loadFocusedPosterBackdropTrailerPreference()
-        loadFocusedPosterBackdropTrailerMutedPreference()
+        observeLayoutPreferences()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
-        loadPosterCardStylePreferences()
         observeTmdbSettings()
         loadContinueWatching()
         observeInstalledAddons()
     }
 
-    private fun loadLayoutPreference() {
+    private fun observeLayoutPreferences() {
+        val coreLayoutPrefsFlow = combine(
+            combine(
+                layoutPreferenceDataStore.selectedLayout,
+                layoutPreferenceDataStore.heroCatalogSelections,
+                layoutPreferenceDataStore.heroSectionEnabled,
+                layoutPreferenceDataStore.posterLabelsEnabled,
+                layoutPreferenceDataStore.catalogAddonNameEnabled
+            ) { layout, heroCatalogKeys, heroSectionEnabled, posterLabelsEnabled, catalogAddonNameEnabled ->
+                CoreLayoutPrefs(
+                    layout = layout,
+                    heroCatalogKeys = heroCatalogKeys,
+                    heroSectionEnabled = heroSectionEnabled,
+                    posterLabelsEnabled = posterLabelsEnabled,
+                    catalogAddonNameEnabled = catalogAddonNameEnabled,
+                    catalogTypeSuffixEnabled = true
+                )
+            },
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled
+        ) { corePrefs, catalogTypeSuffixEnabled ->
+            corePrefs.copy(catalogTypeSuffixEnabled = catalogTypeSuffixEnabled)
+        }
+
+        val focusedBackdropPrefsFlow = combine(
+            layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled,
+            layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds,
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled,
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted
+        ) { expandEnabled, expandDelaySeconds, trailerEnabled, trailerMuted ->
+            FocusedBackdropPrefs(
+                expandEnabled = expandEnabled,
+                expandDelaySeconds = expandDelaySeconds,
+                trailerEnabled = trailerEnabled,
+                trailerMuted = trailerMuted
+            )
+        }
+
         viewModelScope.launch {
-            layoutPreferenceDataStore.selectedLayout.collectLatest { layout ->
-                _uiState.update { it.copy(homeLayout = layout) }
+            combine(
+                coreLayoutPrefsFlow,
+                focusedBackdropPrefsFlow,
+                layoutPreferenceDataStore.posterCardWidthDp,
+                layoutPreferenceDataStore.posterCardHeightDp,
+                layoutPreferenceDataStore.posterCardCornerRadiusDp
+            ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
+                LayoutUiPrefs(
+                    layout = corePrefs.layout,
+                    heroCatalogKeys = corePrefs.heroCatalogKeys,
+                    heroSectionEnabled = corePrefs.heroSectionEnabled,
+                    posterLabelsEnabled = corePrefs.posterLabelsEnabled,
+                    catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
+                    catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
+                    focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
+                    focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
+                    focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
+                    focusedBackdropTrailerMuted = focusedBackdropPrefs.trailerMuted,
+                    posterCardWidthDp = posterCardWidthDp,
+                    posterCardHeightDp = posterCardHeightDp,
+                    posterCardCornerRadiusDp = posterCardCornerRadiusDp
+                )
+            }.collectLatest { prefs ->
+                val previousState = _uiState.value
+                val shouldRefreshCatalogPresentation =
+                    currentHeroCatalogKeys != prefs.heroCatalogKeys ||
+                        previousState.heroSectionEnabled != prefs.heroSectionEnabled ||
+                        previousState.homeLayout != prefs.layout
+                currentHeroCatalogKeys = prefs.heroCatalogKeys
+                _uiState.update {
+                    it.copy(
+                        homeLayout = prefs.layout,
+                        heroCatalogKeys = prefs.heroCatalogKeys,
+                        heroSectionEnabled = prefs.heroSectionEnabled,
+                        posterLabelsEnabled = prefs.posterLabelsEnabled,
+                        catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
+                        catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
+                        focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
+                        focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
+                        focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
+                        focusedPosterBackdropTrailerMuted = prefs.focusedBackdropTrailerMuted,
+                        posterCardWidthDp = prefs.posterCardWidthDp,
+                        posterCardHeightDp = prefs.posterCardHeightDp,
+                        posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp
+                    )
+                }
+                if (shouldRefreshCatalogPresentation) {
+                    scheduleUpdateCatalogRows()
+                }
             }
         }
     }
 
-    private fun loadHeroCatalogPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.heroCatalogSelection.collectLatest { key ->
-                currentHeroCatalogKey = key
-                _uiState.update { it.copy(heroCatalogKey = key) }
-                scheduleUpdateCatalogRows()
-            }
-        }
-    }
+    private data class CoreLayoutPrefs(
+        val layout: HomeLayout,
+        val heroCatalogKeys: List<String>,
+        val heroSectionEnabled: Boolean,
+        val posterLabelsEnabled: Boolean,
+        val catalogAddonNameEnabled: Boolean,
+        val catalogTypeSuffixEnabled: Boolean
+    )
 
-    private fun loadHeroSectionPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.heroSectionEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(heroSectionEnabled = enabled) }
-                scheduleUpdateCatalogRows()
-            }
-        }
-    }
+    private data class FocusedBackdropPrefs(
+        val expandEnabled: Boolean,
+        val expandDelaySeconds: Int,
+        val trailerEnabled: Boolean,
+        val trailerMuted: Boolean
+    )
 
-    private fun loadPosterLabelPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterLabelsEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(posterLabelsEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadCatalogAddonNamePreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropExpandPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropExpandDelayPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds.collectLatest { seconds ->
-                _uiState.update { it.copy(focusedPosterBackdropExpandDelaySeconds = seconds) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropTrailerPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(focusedPosterBackdropTrailerEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropTrailerMutedPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted.collectLatest { muted ->
-                _uiState.update { it.copy(focusedPosterBackdropTrailerMuted = muted) }
-            }
-        }
-    }
+    private data class LayoutUiPrefs(
+        val layout: HomeLayout,
+        val heroCatalogKeys: List<String>,
+        val heroSectionEnabled: Boolean,
+        val posterLabelsEnabled: Boolean,
+        val catalogAddonNameEnabled: Boolean,
+        val catalogTypeSuffixEnabled: Boolean,
+        val focusedBackdropExpandEnabled: Boolean,
+        val focusedBackdropExpandDelaySeconds: Int,
+        val focusedBackdropTrailerEnabled: Boolean,
+        val focusedBackdropTrailerMuted: Boolean,
+        val posterCardWidthDp: Int,
+        val posterCardHeightDp: Int,
+        val posterCardCornerRadiusDp: Int
+    )
 
     fun requestTrailerPreview(item: MetaPreview) {
         val itemId = item.id
@@ -257,29 +299,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun loadPosterCardStylePreferences() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
-                _uiState.update { it.copy(posterCardWidthDp = widthDp) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
-                _uiState.update { it.copy(posterCardHeightDp = heightDp) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
-                _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
-            }
-        }
-    }
-
     private fun observeTmdbSettings() {
         viewModelScope.launch {
             tmdbSettingsDataStore.settings
                 .distinctUntilChanged()
-                .collectLatest {
+                .collectLatest { settings ->
+                    currentTmdbSettings = settings
                     scheduleUpdateCatalogRows()
                 }
         }
@@ -534,6 +559,8 @@ class HomeViewModel @Inject constructor(
         trailerPreviewUrlsState.clear()
         activeTrailerPreviewItemId = null
         trailerPreviewRequestVersion = 0L
+        lastHeroEnrichmentSignature = null
+        lastHeroEnrichedItems = emptyList()
 
         try {
             if (addons.isEmpty()) {
@@ -686,24 +713,33 @@ class HomeViewModel @Inject constructor(
         // Snapshot mutable state before entering background context
         val orderedKeys = catalogOrder.toList()
         val catalogSnapshot = catalogsMap.toMap()
-        val heroCatalogKey = currentHeroCatalogKey
+        val heroCatalogKeys = currentHeroCatalogKeys
         val currentLayout = _uiState.value.homeLayout
         val currentGridItems = _uiState.value.gridItems
         val heroSectionEnabled = _uiState.value.heroSectionEnabled
 
         val (displayRows, baseHeroItems, baseGridItems) = withContext(Dispatchers.Default) {
             val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
-
-            val heroSourceRow = if (heroCatalogKey != null) {
-                catalogSnapshot[heroCatalogKey]
+            val selectedHeroCatalogSet = heroCatalogKeys.toSet()
+            val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
+                orderedRows.filter { row ->
+                    val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
+                    key in selectedHeroCatalogSet
+                }
             } else {
-                orderedRows.firstOrNull { row -> row.items.any { it.hasHeroArtwork() } }
+                emptyList()
             }
-
-            val heroItemsFromSelectedCatalog = heroSourceRow
-                ?.items
-                .orEmpty()
-                .filter { it.hasHeroArtwork() }
+            val heroItemsFromSelectedCatalogs = selectedHeroRows
+                .asSequence()
+                .flatMap { row -> row.items.asSequence() }
+                .filter { item -> item.hasHeroArtwork() }
+                .take(7)
+                .toList()
+            val fallbackHeroItemsFromSelectedCatalogs = selectedHeroRows
+                .asSequence()
+                .flatMap { row -> row.items.asSequence() }
+                .take(7)
+                .toList()
 
             val fallbackHeroItemsWithArtwork = orderedRows
                 .asSequence()
@@ -713,7 +749,8 @@ class HomeViewModel @Inject constructor(
                 .toList()
 
             val computedHeroItems = when {
-                heroItemsFromSelectedCatalog.isNotEmpty() -> heroItemsFromSelectedCatalog.take(7)
+                heroItemsFromSelectedCatalogs.isNotEmpty() -> heroItemsFromSelectedCatalogs
+                fallbackHeroItemsFromSelectedCatalogs.isNotEmpty() -> fallbackHeroItemsFromSelectedCatalogs
                 fallbackHeroItemsWithArtwork.isNotEmpty() -> fallbackHeroItemsWithArtwork
                 else -> orderedRows.flatMap { it.items }.take(7)
             }
@@ -782,28 +819,42 @@ class HomeViewModel @Inject constructor(
         // Full (untruncated) rows for CatalogSeeAllScreen
         val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
 
-        val tmdbSettings = tmdbSettingsDataStore.settings.first()
+        val tmdbSettings = currentTmdbSettings
         val shouldUseEnrichedHeroItems = tmdbSettings.enabled &&
             (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
 
         val resolvedHeroItems = if (shouldUseEnrichedHeroItems) {
-            enrichHeroItems(baseHeroItems, tmdbSettings)
+            val enrichmentSignature = heroEnrichmentSignature(baseHeroItems, tmdbSettings)
+            if (lastHeroEnrichmentSignature == enrichmentSignature) {
+                lastHeroEnrichedItems
+            } else {
+                val enrichedItems = enrichHeroItems(baseHeroItems, tmdbSettings)
+                lastHeroEnrichmentSignature = enrichmentSignature
+                lastHeroEnrichedItems = enrichedItems
+                enrichedItems
+            }
         } else {
+            lastHeroEnrichmentSignature = null
+            lastHeroEnrichedItems = emptyList()
             baseHeroItems
         }
 
-        // Render hero from a single source per update cycle.
-        _uiState.value = _uiState.value.copy(
-            catalogRows = displayRows,
-            fullCatalogRows = fullRows,
-            heroItems = resolvedHeroItems,
-            gridItems = if (currentLayout == HomeLayout.GRID) {
-                replaceGridHeroItems(baseGridItems, resolvedHeroItems)
-            } else {
-                baseGridItems
-            },
-            isLoading = false
-        )
+        val nextGridItems = if (currentLayout == HomeLayout.GRID) {
+            replaceGridHeroItems(baseGridItems, resolvedHeroItems)
+        } else {
+            baseGridItems
+        }
+
+        // Preserve references when values are structurally equal to reduce unnecessary recomposition.
+        _uiState.update { state ->
+            state.copy(
+                catalogRows = if (state.catalogRows == displayRows) state.catalogRows else displayRows,
+                fullCatalogRows = if (state.fullCatalogRows == fullRows) state.fullCatalogRows else fullRows,
+                heroItems = if (state.heroItems == resolvedHeroItems) state.heroItems else resolvedHeroItems,
+                gridItems = if (state.gridItems == nextGridItems) state.gridItems else nextGridItems,
+                isLoading = false
+            )
+        }
     }
 
     private fun navigateToDetail(itemId: String, itemType: String) {
@@ -874,6 +925,25 @@ class HomeViewModel @Inject constructor(
             } else {
                 item
             }
+        }
+    }
+
+    private fun heroEnrichmentSignature(items: List<MetaPreview>, settings: TmdbSettings): String {
+        val itemSignature = items.joinToString(separator = "|") { item ->
+            "${item.id}:${item.apiType}:${item.name}:${item.background}:${item.logo}:${item.poster}"
+        }
+        return buildString {
+            append(settings.enabled)
+            append(':')
+            append(settings.language)
+            append(':')
+            append(settings.useArtwork)
+            append(':')
+            append(settings.useBasicInfo)
+            append(':')
+            append(settings.useDetails)
+            append("::")
+            append(itemSignature)
         }
     }
 
