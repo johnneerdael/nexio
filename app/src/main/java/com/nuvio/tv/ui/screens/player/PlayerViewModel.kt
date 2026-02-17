@@ -85,6 +85,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URLDecoder
 import java.util.Locale
+import kotlin.math.abs
 import javax.inject.Inject
 
 @HiltViewModel
@@ -108,6 +109,10 @@ class PlayerViewModel @Inject constructor(
     companion object {
         private const val TAG = "PlayerViewModel"
         private const val TRACK_FRAME_RATE_GRACE_MS = 1500L
+        private const val AMBIGUOUS_CINEMA_TRACK_MIN = 23.95f
+        private const val AMBIGUOUS_CINEMA_TRACK_MAX = 24.05f
+        private const val FRAME_RATE_CORRECTION_EPSILON = 0.015f
+        private const val NTSC_FILM_FPS = 24000f / 1001f
     }
 
     private val initialStreamUrl: String = savedStateHandle.get<String>("streamUrl") ?: ""
@@ -1813,12 +1818,28 @@ class PlayerViewModel @Inject constructor(
                             if (format.frameRate > 0f) {
                                 val raw = format.frameRate
                                 val snapped = FrameRateUtils.snapToStandardRate(raw)
-                                frameRateProbeJob?.cancel()
+                                val ambiguousCinemaTrack = isAmbiguousCinema24(raw)
+                                if (!ambiguousCinemaTrack) {
+                                    frameRateProbeJob?.cancel()
+                                }
                                 _uiState.update {
                                     it.copy(
                                         detectedFrameRateRaw = raw,
                                         detectedFrameRate = snapped,
                                         detectedFrameRateSource = FrameRateSource.TRACK
+                                    )
+                                }
+                                if (ambiguousCinemaTrack &&
+                                    _uiState.value.frameRateMatchingMode != FrameRateMatchingMode.OFF &&
+                                    currentStreamUrl.isNotBlank() &&
+                                    frameRateProbeJob?.isActive != true
+                                ) {
+                                    startFrameRateProbe(
+                                        url = currentStreamUrl,
+                                        headers = currentHeaders,
+                                        frameRateMatchingEnabled = true,
+                                        preserveCurrentDetection = true,
+                                        allowAmbiguousTrackOverride = true
                                     )
                                 }
                             }
@@ -2027,15 +2048,19 @@ class PlayerViewModel @Inject constructor(
     private fun startFrameRateProbe(
         url: String,
         headers: Map<String, String>,
-        frameRateMatchingEnabled: Boolean
+        frameRateMatchingEnabled: Boolean,
+        preserveCurrentDetection: Boolean = false,
+        allowAmbiguousTrackOverride: Boolean = false
     ) {
         frameRateProbeJob?.cancel()
-        _uiState.update {
-            it.copy(
-                detectedFrameRateRaw = 0f,
-                detectedFrameRate = 0f,
-                detectedFrameRateSource = null
-            )
+        if (!preserveCurrentDetection) {
+            _uiState.update {
+                it.copy(
+                    detectedFrameRateRaw = 0f,
+                    detectedFrameRate = 0f,
+                    detectedFrameRateSource = null
+                )
+            }
         }
         if (!frameRateMatchingEnabled) return
 
@@ -2047,23 +2072,53 @@ class PlayerViewModel @Inject constructor(
                 _uiState.value.detectedFrameRateSource == FrameRateSource.TRACK &&
                     _uiState.value.detectedFrameRate > 0f
             }
-            if (trackAlreadySet) return@launch
+            if (trackAlreadySet && !allowAmbiguousTrackOverride) return@launch
 
             val detection = FrameRateUtils.detectFrameRateFromSource(context, url, headers)
                 ?: return@launch
             if (!isActive) return@launch
             withContext(Dispatchers.Main) {
-                if (token == frameRateProbeToken && _uiState.value.detectedFrameRate <= 0f) {
-                    _uiState.update {
-                        it.copy(
-                            detectedFrameRateRaw = detection.raw,
-                            detectedFrameRate = detection.snapped,
-                            detectedFrameRateSource = FrameRateSource.PROBE
-                        )
+                if (token == frameRateProbeToken) {
+                    val state = _uiState.value
+                    val shouldApplyInitial = state.detectedFrameRate <= 0f
+                    val shouldOverrideAmbiguousTrack = allowAmbiguousTrackOverride &&
+                        shouldProbeOverrideTrack(state, detection)
+
+                    if (shouldApplyInitial || shouldOverrideAmbiguousTrack) {
+                        _uiState.update {
+                            it.copy(
+                                detectedFrameRateRaw = detection.raw,
+                                detectedFrameRate = detection.snapped,
+                                detectedFrameRateSource = FrameRateSource.PROBE
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    private fun isAmbiguousCinema24(value: Float): Boolean {
+        return value in AMBIGUOUS_CINEMA_TRACK_MIN..AMBIGUOUS_CINEMA_TRACK_MAX
+    }
+
+    private fun shouldProbeOverrideTrack(
+        state: PlayerUiState,
+        detection: FrameRateUtils.FrameRateDetection
+    ): Boolean {
+        if (state.detectedFrameRateSource != FrameRateSource.TRACK) return false
+
+        val trackRaw = if (state.detectedFrameRateRaw > 0f) {
+            state.detectedFrameRateRaw
+        } else {
+            state.detectedFrameRate
+        }
+        val trackIsAmbiguous = isAmbiguousCinema24(trackRaw) || isAmbiguousCinema24(state.detectedFrameRate)
+        if (!trackIsAmbiguous) return false
+
+        val probeIsNtscFilm = abs(detection.snapped - NTSC_FILM_FPS) < 0.01f
+        val differsEnough = abs(detection.snapped - state.detectedFrameRate) > FRAME_RATE_CORRECTION_EPSILON
+        return probeIsNtscFilm && differsEnough
     }
 
     private fun applySubtitlePreferences(preferred: String, secondary: String?) {

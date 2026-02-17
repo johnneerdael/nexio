@@ -159,12 +159,12 @@ fun PlayerScreen(
 
     // Frame rate matching: switch display refresh rate to match video frame rate.
     // Track gets priority; probe is fallback.
-    // Allow one correction if probe was applied first and track later disagrees.
+    // Allow one correction if source/decision changes after first switch.
     val activity = LocalContext.current as? android.app.Activity
     val coroutineScope = rememberCoroutineScope()
     var afrAppliedSource by remember { mutableStateOf<FrameRateSource?>(null) }
     var afrAppliedRate by remember { mutableStateOf(0f) }
-    var afrTrackCorrectionUsed by remember { mutableStateOf(false) }
+    var afrCorrectionUsed by remember { mutableStateOf(false) }
     LaunchedEffect(
         uiState.detectedFrameRate,
         uiState.detectedFrameRateRaw,
@@ -174,22 +174,22 @@ fun PlayerScreen(
         if (uiState.frameRateMatchingMode == com.nuvio.tv.data.local.FrameRateMatchingMode.OFF) {
             afrAppliedSource = null
             afrAppliedRate = 0f
-            afrTrackCorrectionUsed = false
+            afrCorrectionUsed = false
             return@LaunchedEffect
         }
         if (uiState.detectedFrameRate <= 0f) {
             afrAppliedSource = null
             afrAppliedRate = 0f
-            afrTrackCorrectionUsed = false
+            afrCorrectionUsed = false
             return@LaunchedEffect
         }
         val source = uiState.detectedFrameRateSource ?: return@LaunchedEffect
         val allowFirstDecision = afrAppliedSource == null
-        val allowTrackCorrection = source == FrameRateSource.TRACK &&
-            afrAppliedSource == FrameRateSource.PROBE &&
-            !afrTrackCorrectionUsed &&
+        val allowSourceCorrection = afrAppliedSource != null &&
+            !afrCorrectionUsed &&
+            source != afrAppliedSource &&
             kotlin.math.abs(uiState.detectedFrameRate - afrAppliedRate) > 0.015f
-        if (!allowFirstDecision && !allowTrackCorrection) return@LaunchedEffect
+        if (!allowFirstDecision && !allowSourceCorrection) return@LaunchedEffect
 
         if (activity != null) {
             val probeRaw = if (uiState.detectedFrameRateRaw > 0f) {
@@ -241,8 +241,8 @@ fun PlayerScreen(
                     )
                 }
             }
-            if (allowTrackCorrection) {
-                afrTrackCorrectionUsed = true
+            if (allowSourceCorrection) {
+                afrCorrectionUsed = true
             }
             afrAppliedSource = source
             afrAppliedRate = targetFrameRate
