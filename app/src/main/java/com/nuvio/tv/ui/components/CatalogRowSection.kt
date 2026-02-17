@@ -30,7 +30,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,7 +72,6 @@ fun CatalogRowSection(
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
-    val rowFocusRequester = remember { FocusRequester() }
     val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     LaunchedEffect(catalogRow.items.size) {
         itemFocusRequesters.keys.removeAll { it >= catalogRow.items.size }
@@ -117,18 +115,12 @@ fun CatalogRowSection(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(rowFocusRequester)
                 .then(
                     if (enableRowFocusRestorer && focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
                         Modifier.focusRestorer {
-                            val visibleIndex = listState.layoutInfo.visibleItemsInfo
-                                .firstOrNull()
-                                ?.index
-                            if (visibleIndex != null && visibleIndex < catalogRow.items.size) {
-                                itemFocusRequesters.getOrPut(visibleIndex) { FocusRequester() }
-                            } else {
-                                rowFocusRequester
-                            }
+                            val fallbackIndex = listState.firstVisibleItemIndex
+                                .coerceIn(0, (catalogRow.items.size - 1).coerceAtLeast(0))
+                            itemFocusRequesters.getOrPut(fallbackIndex) { FocusRequester() }
                         }
                     } else {
                         Modifier
