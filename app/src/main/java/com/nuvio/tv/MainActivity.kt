@@ -294,15 +294,17 @@ private fun LegacySidebarScaffold(
         drawerState.setValue(DrawerValue.Closed)
     }
 
-    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
-        drawerState.setValue(DrawerValue.Open)
-    }
-
     val closedDrawerWidth = if (sidebarCollapsed) 0.dp else 72.dp
     val openDrawerWidth = 216.dp
 
     val focusManager = LocalFocusManager.current
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
+    var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
+        pendingSidebarFocusRequest = true
+        drawerState.setValue(DrawerValue.Open)
+    }
 
     LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
         if (!pendingContentFocusTransfer || drawerState.currentValue != DrawerValue.Closed) {
@@ -313,12 +315,21 @@ private fun LegacySidebarScaffold(
         pendingContentFocusTransfer = false
     }
 
-    LaunchedEffect(drawerState.currentValue, selectedDrawerRoute, showSidebar) {
-        if (!showSidebar || drawerState.currentValue != DrawerValue.Open) return@LaunchedEffect
-        val targetRoute = selectedDrawerRoute ?: return@LaunchedEffect
-        val requester = drawerItemFocusRequesters[targetRoute] ?: return@LaunchedEffect
+    LaunchedEffect(drawerState.currentValue, selectedDrawerRoute, showSidebar, pendingSidebarFocusRequest) {
+        if (!showSidebar || !pendingSidebarFocusRequest || drawerState.currentValue != DrawerValue.Open) {
+            return@LaunchedEffect
+        }
+        val targetRoute = selectedDrawerRoute ?: run {
+            pendingSidebarFocusRequest = false
+            return@LaunchedEffect
+        }
+        val requester = drawerItemFocusRequesters[targetRoute] ?: run {
+            pendingSidebarFocusRequest = false
+            return@LaunchedEffect
+        }
         repeat(2) { withFrameNanos { } }
         runCatching { requester.requestFocus() }
+        pendingSidebarFocusRequest = false
     }
 
     ModalNavigationDrawer(
@@ -385,6 +396,20 @@ private fun LegacySidebarScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = contentStartPadding)
+                .onKeyEvent { keyEvent ->
+                    if (
+                        showSidebar &&
+                        drawerState.currentValue == DrawerValue.Closed &&
+                        keyEvent.type == KeyEventType.KeyDown &&
+                        keyEvent.key == Key.DirectionLeft
+                    ) {
+                        pendingSidebarFocusRequest = true
+                        drawerState.setValue(DrawerValue.Open)
+                        true
+                    } else {
+                        false
+                    }
+                }
         ) {
             NuvioNavHost(
                 navController = navController,

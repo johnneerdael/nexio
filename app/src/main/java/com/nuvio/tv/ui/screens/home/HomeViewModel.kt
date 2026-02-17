@@ -85,7 +85,7 @@ class HomeViewModel @Inject constructor(
     private var addonsCache: List<Addon> = emptyList()
     private var homeCatalogOrderKeys: List<String> = emptyList()
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
-    private var currentHeroCatalogKey: String? = null
+    private var currentHeroCatalogKeys: List<String> = emptyList()
     private var catalogUpdateJob: Job? = null
     private var hasRenderedFirstCatalog = false
     private val catalogLoadSemaphore = Semaphore(6)
@@ -115,14 +115,14 @@ class HomeViewModel @Inject constructor(
     private fun observeLayoutPreferences() {
         val coreLayoutPrefsFlow = combine(
             layoutPreferenceDataStore.selectedLayout,
-            layoutPreferenceDataStore.heroCatalogSelection,
+            layoutPreferenceDataStore.heroCatalogSelections,
             layoutPreferenceDataStore.heroSectionEnabled,
             layoutPreferenceDataStore.posterLabelsEnabled,
             layoutPreferenceDataStore.catalogAddonNameEnabled
-        ) { layout, heroCatalogKey, heroSectionEnabled, posterLabelsEnabled, catalogAddonNameEnabled ->
+        ) { layout, heroCatalogKeys, heroSectionEnabled, posterLabelsEnabled, catalogAddonNameEnabled ->
             CoreLayoutPrefs(
                 layout = layout,
-                heroCatalogKey = heroCatalogKey,
+                heroCatalogKeys = heroCatalogKeys,
                 heroSectionEnabled = heroSectionEnabled,
                 posterLabelsEnabled = posterLabelsEnabled,
                 catalogAddonNameEnabled = catalogAddonNameEnabled
@@ -153,7 +153,7 @@ class HomeViewModel @Inject constructor(
             ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
                 LayoutUiPrefs(
                     layout = corePrefs.layout,
-                    heroCatalogKey = corePrefs.heroCatalogKey,
+                    heroCatalogKeys = corePrefs.heroCatalogKeys,
                     heroSectionEnabled = corePrefs.heroSectionEnabled,
                     posterLabelsEnabled = corePrefs.posterLabelsEnabled,
                     catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
@@ -168,14 +168,14 @@ class HomeViewModel @Inject constructor(
             }.collectLatest { prefs ->
                 val previousState = _uiState.value
                 val shouldRefreshCatalogPresentation =
-                    currentHeroCatalogKey != prefs.heroCatalogKey ||
+                    currentHeroCatalogKeys != prefs.heroCatalogKeys ||
                         previousState.heroSectionEnabled != prefs.heroSectionEnabled ||
                         previousState.homeLayout != prefs.layout
-                currentHeroCatalogKey = prefs.heroCatalogKey
+                currentHeroCatalogKeys = prefs.heroCatalogKeys
                 _uiState.update {
                     it.copy(
                         homeLayout = prefs.layout,
-                        heroCatalogKey = prefs.heroCatalogKey,
+                        heroCatalogKeys = prefs.heroCatalogKeys,
                         heroSectionEnabled = prefs.heroSectionEnabled,
                         posterLabelsEnabled = prefs.posterLabelsEnabled,
                         catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
@@ -197,7 +197,7 @@ class HomeViewModel @Inject constructor(
 
     private data class CoreLayoutPrefs(
         val layout: HomeLayout,
-        val heroCatalogKey: String?,
+        val heroCatalogKeys: List<String>,
         val heroSectionEnabled: Boolean,
         val posterLabelsEnabled: Boolean,
         val catalogAddonNameEnabled: Boolean
@@ -212,7 +212,7 @@ class HomeViewModel @Inject constructor(
 
     private data class LayoutUiPrefs(
         val layout: HomeLayout,
-        val heroCatalogKey: String?,
+        val heroCatalogKeys: List<String>,
         val heroSectionEnabled: Boolean,
         val posterLabelsEnabled: Boolean,
         val catalogAddonNameEnabled: Boolean,
@@ -703,24 +703,33 @@ class HomeViewModel @Inject constructor(
         // Snapshot mutable state before entering background context
         val orderedKeys = catalogOrder.toList()
         val catalogSnapshot = catalogsMap.toMap()
-        val heroCatalogKey = currentHeroCatalogKey
+        val heroCatalogKeys = currentHeroCatalogKeys
         val currentLayout = _uiState.value.homeLayout
         val currentGridItems = _uiState.value.gridItems
         val heroSectionEnabled = _uiState.value.heroSectionEnabled
 
         val (displayRows, baseHeroItems, baseGridItems) = withContext(Dispatchers.Default) {
             val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
-
-            val heroSourceRow = if (heroCatalogKey != null) {
-                catalogSnapshot[heroCatalogKey]
+            val selectedHeroCatalogSet = heroCatalogKeys.toSet()
+            val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
+                orderedRows.filter { row ->
+                    val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
+                    key in selectedHeroCatalogSet
+                }
             } else {
-                orderedRows.firstOrNull { row -> row.items.any { it.hasHeroArtwork() } }
+                emptyList()
             }
-
-            val heroItemsFromSelectedCatalog = heroSourceRow
-                ?.items
-                .orEmpty()
-                .filter { it.hasHeroArtwork() }
+            val heroItemsFromSelectedCatalogs = selectedHeroRows
+                .asSequence()
+                .flatMap { row -> row.items.asSequence() }
+                .filter { item -> item.hasHeroArtwork() }
+                .take(7)
+                .toList()
+            val fallbackHeroItemsFromSelectedCatalogs = selectedHeroRows
+                .asSequence()
+                .flatMap { row -> row.items.asSequence() }
+                .take(7)
+                .toList()
 
             val fallbackHeroItemsWithArtwork = orderedRows
                 .asSequence()
@@ -730,7 +739,8 @@ class HomeViewModel @Inject constructor(
                 .toList()
 
             val computedHeroItems = when {
-                heroItemsFromSelectedCatalog.isNotEmpty() -> heroItemsFromSelectedCatalog.take(7)
+                heroItemsFromSelectedCatalogs.isNotEmpty() -> heroItemsFromSelectedCatalogs
+                fallbackHeroItemsFromSelectedCatalogs.isNotEmpty() -> fallbackHeroItemsFromSelectedCatalogs
                 fallbackHeroItemsWithArtwork.isNotEmpty() -> fallbackHeroItemsWithArtwork
                 else -> orderedRows.flatMap { it.items }.take(7)
             }

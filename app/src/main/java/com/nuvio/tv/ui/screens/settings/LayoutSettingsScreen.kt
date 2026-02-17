@@ -186,9 +186,14 @@ fun LayoutSettingsContent(
 
                     if (uiState.heroSectionEnabled && uiState.availableCatalogs.isNotEmpty()) {
                         Text(
-                            text = "Hero Catalog",
+                            text = "Hero Catalogs",
                             style = MaterialTheme.typography.labelLarge,
                             color = NuvioColors.TextSecondary
+                        )
+                        Text(
+                            text = "Select one or more catalogs for hero content.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioColors.TextTertiary
                         )
                         LazyRow(
                             contentPadding = PaddingValues(end = 8.dp),
@@ -197,9 +202,9 @@ fun LayoutSettingsContent(
                             items(uiState.availableCatalogs) { catalog ->
                                 CatalogChip(
                                     catalogInfo = catalog,
-                                    isSelected = catalog.key == uiState.heroCatalogKey,
+                                    isSelected = catalog.key in uiState.heroCatalogKeys,
                                     onClick = {
-                                        viewModel.onEvent(LayoutSettingsEvent.SelectHeroCatalog(catalog.key))
+                                        viewModel.onEvent(LayoutSettingsEvent.ToggleHeroCatalog(catalog.key))
                                     },
                                     onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
                                 )

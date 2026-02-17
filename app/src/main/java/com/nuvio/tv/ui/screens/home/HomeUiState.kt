@@ -17,7 +17,7 @@ data class HomeUiState(
     val installedAddonsCount: Int = 0,
     val homeLayout: HomeLayout = HomeLayout.CLASSIC,
     val heroItems: List<MetaPreview> = emptyList(),
-    val heroCatalogKey: String? = null,
+    val heroCatalogKeys: List<String> = emptyList(),
     val heroSectionEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
