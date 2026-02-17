@@ -139,12 +139,28 @@ class StartupSyncService @Inject constructor(
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
             Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")
             if (!isTraktConnected) {
+                // Re-check before each pull to avoid stale decisions when Trakt auth flips mid-sync.
+                if (traktAuthDataStore.isAuthenticated.first()) {
+                    Log.d(TAG, "Skipping watch progress & library sync (Trakt connected during startup sync)")
+                    return Result.success(Unit)
+                }
+
                 watchProgressRepository.isSyncingFromRemote = true
                 val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
+                if (traktAuthDataStore.isAuthenticated.first()) {
+                    Log.d(TAG, "Discarding account watch progress pull (Trakt connected during pull)")
+                    watchProgressRepository.isSyncingFromRemote = false
+                    return Result.success(Unit)
+                }
                 Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
                 watchProgressPreferences.replaceWithRemoteEntries(remoteEntries.toMap())
                 Log.d(TAG, "Reconciled local watch progress with ${remoteEntries.size} remote entries")
                 watchProgressRepository.isSyncingFromRemote = false
+
+                if (traktAuthDataStore.isAuthenticated.first()) {
+                    Log.d(TAG, "Skipping library/watch history sync (Trakt connected during startup sync)")
+                    return Result.success(Unit)
+                }
 
                 libraryRepository.isSyncingFromRemote = true
                 val remoteLibraryItems = librarySyncService.pullFromRemote().getOrElse { throw it }

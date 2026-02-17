@@ -215,14 +215,10 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 if (isAuthenticated) {
                     combine(
                         traktProgressService.observeAllProgress(),
-                        watchProgressPreferences.allProgress,
                         metadataState
-                    ) { remoteItems, localItems, metadataMap ->
+                    ) { remoteItems, metadataMap ->
                         val mergedByKey = linkedMapOf<String, WatchProgress>()
                         remoteItems.forEach { mergedByKey[progressKey(it)] = it }
-                        localItems.forEach { local ->
-                            mergedByKey.putIfAbsent(progressKey(local), local)
-                        }
                         val merged = mergedByKey.values
                             .sortedByDescending { it.lastWatched }
                         hydrateMetadata(merged)

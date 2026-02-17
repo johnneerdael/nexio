@@ -43,6 +43,7 @@ class AuthManager @Inject constructor(
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     private var cachedEffectiveUserId: String? = null
+    private var cachedEffectiveUserSourceUserId: String? = null
 
     init {
         observeSessionStatus()
@@ -55,6 +56,10 @@ class AuthManager @Inject constructor(
                     is SessionStatus.Authenticated -> {
                         val user = auth.currentUserOrNull()
                         if (user != null) {
+                            if (cachedEffectiveUserSourceUserId != user.id) {
+                                cachedEffectiveUserId = null
+                                cachedEffectiveUserSourceUserId = null
+                            }
                             val isAnonymous = user.email.isNullOrBlank()
                             _authState.value = if (isAnonymous) {
                                 AuthState.Anonymous(userId = user.id)
@@ -65,6 +70,7 @@ class AuthManager @Inject constructor(
                     }
                     is SessionStatus.NotAuthenticated -> {
                         cachedEffectiveUserId = null
+                        cachedEffectiveUserSourceUserId = null
                         _authState.value = AuthState.SignedOut
                     }
                     is SessionStatus.Initializing -> {
@@ -92,12 +98,17 @@ class AuthManager @Inject constructor(
      * For direct users, returns their own user ID.
      */
     suspend fun getEffectiveUserId(): String? {
-        cachedEffectiveUserId?.let { return it }
         val userId = currentUserId ?: return null
+        if (cachedEffectiveUserSourceUserId != userId) {
+            cachedEffectiveUserId = null
+            cachedEffectiveUserSourceUserId = null
+        }
+        cachedEffectiveUserId?.let { return it }
         return try {
             val result = postgrest.rpc("get_sync_owner")
             val effectiveId = result.decodeAs<String>()
             cachedEffectiveUserId = effectiveId
+            cachedEffectiveUserSourceUserId = userId
             effectiveId
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get effective user ID, falling back to own ID", e)
@@ -148,27 +159,64 @@ class AuthManager @Inject constructor(
             Log.e(TAG, "Sign out failed", e)
         }
         cachedEffectiveUserId = null
+        cachedEffectiveUserSourceUserId = null
     }
 
     fun clearEffectiveUserIdCache() {
         cachedEffectiveUserId = null
+        cachedEffectiveUserSourceUserId = null
     }
 
     suspend fun startTvLoginSession(deviceNonce: String, deviceName: String?, redirectBaseUrl: String): Result<TvLoginStartResult> {
         return try {
-            val params = buildJsonObject {
-                put("p_device_nonce", deviceNonce)
-                put("p_redirect_base_url", redirectBaseUrl)
-                if (!deviceName.isNullOrBlank()) put("p_device_name", deviceName)
-            }
-            val response = postgrest.rpc("start_tv_login_session", params)
-            val result = response.decodeList<TvLoginStartResult>().firstOrNull()
-                ?: return Result.failure(Exception("Empty response from start_tv_login_session"))
-            Result.success(result)
+            Result.success(
+                startTvLoginSessionRpc(
+                    deviceNonce = deviceNonce,
+                    deviceName = deviceName,
+                    redirectBaseUrl = redirectBaseUrl
+                )
+            )
         } catch (e: Exception) {
+            val message = e.message.orEmpty().lowercase()
+            val shouldRetryLegacySignature = !deviceName.isNullOrBlank() &&
+                message.contains("could not find the function") &&
+                message.contains("start_tv_login_session") &&
+                message.contains("p_device_name")
+
+            if (shouldRetryLegacySignature) {
+                return try {
+                    Log.w(TAG, "start_tv_login_session legacy signature detected; retrying without p_device_name")
+                    Result.success(
+                        startTvLoginSessionRpc(
+                            deviceNonce = deviceNonce,
+                            deviceName = null,
+                            redirectBaseUrl = redirectBaseUrl
+                        )
+                    )
+                } catch (retryError: Exception) {
+                    Log.e(TAG, "Failed to start TV login session after legacy retry", retryError)
+                    Result.failure(retryError)
+                }
+            }
+
             Log.e(TAG, "Failed to start TV login session", e)
             Result.failure(e)
         }
+    }
+
+    private suspend fun startTvLoginSessionRpc(
+        deviceNonce: String,
+        deviceName: String?,
+        redirectBaseUrl: String
+    ): TvLoginStartResult {
+        val params = buildJsonObject {
+            put("p_device_nonce", deviceNonce)
+            put("p_redirect_base_url", redirectBaseUrl)
+            if (!deviceName.isNullOrBlank()) put("p_device_name", deviceName)
+        }
+        val response = postgrest.rpc("start_tv_login_session", params)
+        return response.decodeList<TvLoginStartResult>().firstOrNull()
+            ?: throw Exception("Empty response from start_tv_login_session")
     }
 
     suspend fun pollTvLoginSession(code: String, deviceNonce: String): Result<TvLoginPollResult> {

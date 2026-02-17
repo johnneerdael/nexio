@@ -104,6 +104,7 @@ class AccountViewModel @Inject constructor(
             authManager.signInWithEmail(email, password).fold(
                 onSuccess = {
                     pullRemoteData()
+                    loadConnectedStats()
                     _uiState.update { it.copy(isLoading = false) }
                 },
                 onFailure = { e ->
@@ -291,6 +292,7 @@ class AccountViewModel @Inject constructor(
             authManager.exchangeTvLoginSession(code = code, deviceNonce = nonce).fold(
                 onSuccess = {
                     pullRemoteData()
+                    loadConnectedStats()
                     _uiState.update { it.copy(isLoading = false, qrLoginStatus = "Signed in successfully") }
                 },
                 onFailure = { e ->
@@ -361,7 +363,8 @@ class AccountViewModel @Inject constructor(
     private fun userFriendlyError(e: Throwable): String {
         val raw = e.message ?: ""
         val message = raw.lowercase()
-        Log.w("AccountViewModel", "Raw error: $raw", e)
+        val compactRaw = raw.lineSequence().firstOrNull()?.trim().orEmpty()
+        Log.w("AccountViewModel", "Raw error: $compactRaw")
 
         return when {
             // PIN errors (from PG RAISE EXCEPTION or any wrapper)
@@ -386,6 +389,14 @@ class AccountViewModel @Inject constructor(
             message.contains("tv login") && message.contains("expired") -> "QR login expired. Please try again."
             message.contains("tv login") && message.contains("invalid") -> "Invalid QR login code."
             message.contains("tv login") && message.contains("nonce") -> "This QR login was requested from another device."
+            message.contains("start_tv_login_session") && message.contains("could not find the function") ->
+                "QR login service is outdated. Reapply TV login SQL setup."
+            message.contains("gen_random_bytes") && message.contains("does not exist") ->
+                "QR login backend is missing setup. Update TV login SQL setup."
+            message.contains("invalid tv login redirect base url") ->
+                "QR login URL is misconfigured."
+            message.contains("invalid device nonce") ->
+                "QR login request was invalid. Please retry."
 
             // Network errors
             message.contains("unable to resolve host") || message.contains("no address associated") -> "No internet connection."
