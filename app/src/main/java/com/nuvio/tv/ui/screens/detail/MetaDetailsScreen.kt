@@ -776,7 +776,7 @@ private fun MetaDetailsContent(
                 item(key = "cast", contentType = "horizontal_row") {
                     CastSection(
                         cast = normalCastMembers,
-                        title = "Creator and Casts",
+                        title = "Creator and Cast",
                         leadingCast = directorWriterMembers,
                         preferredFocusedCastTmdbId = lastOpenedCastTmdbId,
                         onCastMemberClick = { member ->
