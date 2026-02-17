@@ -91,8 +91,8 @@ fun SearchScreen(
 
     val trimmedQuery = remember(uiState.query) { uiState.query.trim() }
     val trimmedSubmittedQuery = remember(uiState.submittedQuery) { uiState.submittedQuery.trim() }
-    val isDiscoverMode = remember(uiState.discoverEnabled, trimmedQuery) {
-        uiState.discoverEnabled && trimmedQuery.isEmpty()
+    val isDiscoverMode = remember(uiState.discoverEnabled, trimmedSubmittedQuery) {
+        uiState.discoverEnabled && trimmedSubmittedQuery.isEmpty()
     }
     val hasPendingUnsubmittedQuery = remember(isDiscoverMode, trimmedQuery, trimmedSubmittedQuery) {
         !isDiscoverMode && trimmedQuery.length >= 2 && trimmedQuery != trimmedSubmittedQuery
@@ -342,8 +342,7 @@ private fun SearchInputField(
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_ENTER,
-                        KeyEvent.KEYCODE_NUMPAD_ENTER,
-                        KeyEvent.KEYCODE_DPAD_CENTER -> {
+                        KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                             onSubmit()
                             return@onPreviewKeyEvent true
                         }

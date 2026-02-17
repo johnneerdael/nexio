@@ -354,9 +354,21 @@ private fun LegacySidebarScaffold(
                             }
                         }
                 ) {
+                    val isExpanded = drawerValue == DrawerValue.Open
+                    if (isExpanded) {
+                        Spacer(modifier = Modifier.height(30.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.app_logo_wordmark),
+                            contentDescription = "NuvioTV",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     Spacer(modifier = Modifier.weight(1f))
 
-                    val isExpanded = drawerValue == DrawerValue.Open
                     val itemWidth = if (isExpanded) 176.dp else 48.dp
                     Column(
                         modifier = Modifier.fillMaxWidth(),
