@@ -11,20 +11,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardStyle
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MoreLikeThisSection(
     items: List<MetaPreview>,
     upFocusRequester: FocusRequester? = null,
-    entryFocusRequester: FocusRequester? = null,
     restoreItemId: String? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {},
@@ -33,7 +29,6 @@ fun MoreLikeThisSection(
 ) {
     if (items.isEmpty()) return
 
-    val firstItemFocusRequester = entryFocusRequester ?: remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(restoreFocusToken, restoreItemId, items) {
@@ -58,9 +53,7 @@ fun MoreLikeThisSection(
             .padding(top = 8.dp, bottom = 8.dp)
     ) {
         LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRestorer { firstItemFocusRequester },
+            modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -69,11 +62,8 @@ fun MoreLikeThisSection(
                 key = { index, item -> item.id + "|" + item.name + "|" + index }
             ) { index, item ->
                 val isRestoreTarget = item.id == restoreItemId
-                val isFirstItem = index == 0
                 val focusRequester = if (isRestoreTarget) {
                     restoreFocusRequester
-                } else if (isFirstItem) {
-                    firstItemFocusRequester
                 } else {
                     remember(index, item.id, item.name) { FocusRequester() }
                 }

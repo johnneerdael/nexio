@@ -35,14 +35,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -93,7 +91,6 @@ import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 
 private enum class RestoreTarget {
@@ -498,8 +495,6 @@ private fun MetaDetailsContent(
     val heroPlayFocusRequester = remember { FocusRequester() }
     val castTabFocusRequester = remember { FocusRequester() }
     val moreLikeTabFocusRequester = remember { FocusRequester() }
-    val castSectionEntryFocusRequester = remember { FocusRequester() }
-    val moreLikeSectionEntryFocusRequester = remember { FocusRequester() }
     var pendingRestoreType by rememberSaveable { mutableStateOf<RestoreTarget?>(null) }
     var pendingRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingRestoreCastPersonId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -614,12 +609,6 @@ private fun MetaDetailsContent(
         castTabFocusRequester
     } else {
         moreLikeTabFocusRequester
-    }
-    val episodesDownFocusRequester = when {
-        hasPeopleTabs -> activePeopleTabFocusRequester
-        hasCastSection -> castSectionEntryFocusRequester
-        hasMoreLikeThisSection -> moreLikeSectionEntryFocusRequester
-        else -> null
     }
 
     LaunchedEffect(hasCastSection, hasMoreLikeThisSection) {
@@ -845,7 +834,7 @@ private fun MetaDetailsContent(
                         onEpisodeClick = episodeClick,
                         onToggleEpisodeWatched = onToggleEpisodeWatched,
                         upFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = episodesDownFocusRequester,
+                        downFocusRequester = activePeopleTabFocusRequester.takeIf { hasPeopleTabs },
                         restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
                         onRestoreFocusHandled = {
@@ -863,8 +852,6 @@ private fun MetaDetailsContent(
                             activeTab = activePeopleTab,
                             castTabFocusRequester = castTabFocusRequester,
                             moreLikeTabFocusRequester = moreLikeTabFocusRequester,
-                            castDownFocusRequester = castSectionEntryFocusRequester,
-                            moreLikeDownFocusRequester = moreLikeSectionEntryFocusRequester,
                             onTabFocused = { tab ->
                                 activePeopleTab = tab
                             }
@@ -893,7 +880,6 @@ private fun MetaDetailsContent(
                                     title = if (hasPeopleTabs) "" else "Creator and Cast",
                                     leadingCast = directorWriterMembers,
                                     upFocusRequester = castTabFocusRequester.takeIf { hasPeopleTabs },
-                                    entryFocusRequester = castSectionEntryFocusRequester,
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -915,7 +901,6 @@ private fun MetaDetailsContent(
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
                                     upFocusRequester = moreLikeTabFocusRequester.takeIf { hasPeopleTabs },
-                                    entryFocusRequester = moreLikeSectionEntryFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -959,12 +944,8 @@ private fun PeopleSectionTabs(
     activeTab: PeopleSectionTab,
     castTabFocusRequester: FocusRequester,
     moreLikeTabFocusRequester: FocusRequester,
-    castDownFocusRequester: FocusRequester,
-    moreLikeDownFocusRequester: FocusRequester,
     onTabFocused: (PeopleSectionTab) -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -982,12 +963,6 @@ private fun PeopleSectionTabs(
             label = "Creator and Cast",
             selected = activeTab == PeopleSectionTab.CAST,
             focusRequester = castTabFocusRequester,
-            onMoveDown = {
-                onTabFocused(PeopleSectionTab.CAST)
-                scope.launch {
-                    runCatching { castDownFocusRequester.requestFocusAfterFrames() }
-                }
-            },
             onFocused = { onTabFocused(PeopleSectionTab.CAST) }
         )
 
@@ -1002,12 +977,6 @@ private fun PeopleSectionTabs(
             label = "More like this",
             selected = activeTab == PeopleSectionTab.MORE_LIKE_THIS,
             focusRequester = moreLikeTabFocusRequester,
-            onMoveDown = {
-                onTabFocused(PeopleSectionTab.MORE_LIKE_THIS)
-                scope.launch {
-                    runCatching { moreLikeDownFocusRequester.requestFocusAfterFrames() }
-                }
-            },
             onFocused = { onTabFocused(PeopleSectionTab.MORE_LIKE_THIS) }
         )
     }
@@ -1019,7 +988,6 @@ private fun PeopleSectionTabButton(
     label: String,
     selected: Boolean,
     focusRequester: FocusRequester,
-    onMoveDown: () -> Unit,
     onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -1028,15 +996,6 @@ private fun PeopleSectionTabButton(
         onClick = onFocused,
         modifier = Modifier
             .focusRequester(focusRequester)
-            .onPreviewKeyEvent { event ->
-                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    onMoveDown()
-                    true
-                } else {
-                    false
-                }
-            }
             .onFocusChanged { state ->
                 val focusedNow = state.isFocused
                 isFocused = focusedNow

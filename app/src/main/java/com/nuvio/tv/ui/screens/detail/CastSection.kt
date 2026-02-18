@@ -18,10 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +43,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.ui.theme.NuvioColors
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun CastSection(
     cast: List<MetaCastMember>,
@@ -53,7 +51,6 @@ fun CastSection(
     title: String = "Cast",
     leadingCast: List<MetaCastMember> = emptyList(),
     upFocusRequester: FocusRequester? = null,
-    entryFocusRequester: FocusRequester? = null,
     restorePersonId: Int? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {},
@@ -62,7 +59,6 @@ fun CastSection(
 ) {
     if (cast.isEmpty() && leadingCast.isEmpty()) return
 
-    val firstItemFocusRequester = entryFocusRequester ?: remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(restoreFocusToken, restorePersonId, leadingCast, cast) {
@@ -98,9 +94,7 @@ fun CastSection(
         }
 
         LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRestorer { firstItemFocusRequester },
+            modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.Start
         ) {
@@ -117,11 +111,8 @@ fun CastSection(
                     val isLastLeading = member == leadingCast.last()
                     val endPadding = if (isLastLeading && cast.isNotEmpty()) 0.dp else standardGap
                     val isRestoreTarget = member.tmdbId == restorePersonId
-                    val isFirstFocusable = index == 0
                     val focusRequester = if (isRestoreTarget) {
                         restoreFocusRequester
-                    } else if (isFirstFocusable) {
-                        firstItemFocusRequester
                     } else {
                         remember(index, member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
                     }
@@ -170,11 +161,8 @@ fun CastSection(
                 }
             ) { index, member ->
                 val isRestoreTarget = member.tmdbId == restorePersonId
-                val isFirstFocusable = leadingCast.isEmpty() && index == 0
                 val focusRequester = if (isRestoreTarget) {
                     restoreFocusRequester
-                } else if (isFirstFocusable) {
-                    firstItemFocusRequester
                 } else {
                     remember(index, member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
                 }
