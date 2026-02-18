@@ -99,7 +99,6 @@ class HomeViewModel @Inject constructor(
     private var currentTmdbSettings: TmdbSettings = TmdbSettings()
     private var lastHeroEnrichmentSignature: String? = null
     private var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
-    private val dismissedNextUpKeys = MutableStateFlow<Set<String>>(emptySet())
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
 
@@ -370,7 +369,7 @@ class HomeViewModel @Inject constructor(
             combine(
                 watchProgressRepository.allProgress,
                 traktSettingsDataStore.continueWatchingDaysCap,
-                dismissedNextUpKeys
+                traktSettingsDataStore.dismissedNextUpKeys
             ) { items, daysCap, dismissedNextUp ->
                 Triple(items, daysCap, dismissedNextUp)
             }.collectLatest { (items, daysCap, dismissedNextUp) ->
@@ -549,7 +548,6 @@ class HomeViewModel @Inject constructor(
     ) {
         if (isNextUp) {
             val dismissKey = nextUpDismissKey(contentId)
-            dismissedNextUpKeys.update { it + dismissKey }
             _uiState.update { state ->
                 state.copy(
                     continueWatchingItems = state.continueWatchingItems.filterNot { item ->
@@ -560,6 +558,9 @@ class HomeViewModel @Inject constructor(
                         }
                     }
                 )
+            }
+            viewModelScope.launch {
+                traktSettingsDataStore.addDismissedNextUpKey(dismissKey)
             }
             return
         }

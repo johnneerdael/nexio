@@ -59,7 +59,7 @@ data class TmdbSettingsUiState(
     val useProductions: Boolean = true,
     val useNetworks: Boolean = true,
     val useEpisodes: Boolean = true,
-    val useMoreLikeThis: Boolean = false
+    val useMoreLikeThis: Boolean = true
 ) {
     fun fromSettings(settings: TmdbSettings): TmdbSettingsUiState = copy(
         enabled = settings.enabled,

@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +22,7 @@ class TraktSettingsDataStore @Inject constructor(
     private val dataStore = context.traktSettingsDataStore
 
     private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
+    private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
 
     companion object {
         const val DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
@@ -33,10 +35,22 @@ class TraktSettingsDataStore @Inject constructor(
             .coerceIn(MIN_CONTINUE_WATCHING_DAYS_CAP, MAX_CONTINUE_WATCHING_DAYS_CAP)
     }
 
+    val dismissedNextUpKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[dismissedNextUpKeysKey] ?: emptySet()
+    }
+
     suspend fun setContinueWatchingDaysCap(days: Int) {
         dataStore.edit { prefs ->
             prefs[continueWatchingDaysCapKey] =
                 days.coerceIn(MIN_CONTINUE_WATCHING_DAYS_CAP, MAX_CONTINUE_WATCHING_DAYS_CAP)
+        }
+    }
+
+    suspend fun addDismissedNextUpKey(key: String) {
+        if (key.isBlank()) return
+        dataStore.edit { prefs ->
+            val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
+            prefs[dismissedNextUpKeysKey] = current + key
         }
     }
 }
