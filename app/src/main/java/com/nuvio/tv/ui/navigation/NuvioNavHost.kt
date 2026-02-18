@@ -1,6 +1,8 @@
 package com.nuvio.tv.ui.navigation
 
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
@@ -38,13 +40,65 @@ fun NuvioNavHost(
     startDestination: String = Screen.Home.route,
     hideBuiltInHeaders: Boolean = false
 ) {
+    fun isStreamToPlayer(from: String, to: String): Boolean {
+        return from.startsWith("stream/") && to.startsWith("player/")
+    }
+
+    fun isPlayerToStream(from: String, to: String): Boolean {
+        return from.startsWith("player/") && to.startsWith("stream/")
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        enterTransition = { fadeIn(animationSpec = tween(150)) },
-        exitTransition = { fadeOut(animationSpec = tween(150)) },
-        popEnterTransition = { fadeIn(animationSpec = tween(150)) },
-        popExitTransition = { fadeOut(animationSpec = tween(150)) }
+        enterTransition = {
+            val from = initialState.destination.route.orEmpty()
+            val to = targetState.destination.route.orEmpty()
+            val isAutoPlayNav = targetState.arguments
+                ?.getString("autoPlayNav")
+                ?.toBooleanStrictOrNull() == true
+            if (isStreamToPlayer(from, to) && isAutoPlayNav) {
+                EnterTransition.None
+            } else {
+                fadeIn(animationSpec = tween(150))
+            }
+        },
+        exitTransition = {
+            val from = initialState.destination.route.orEmpty()
+            val to = targetState.destination.route.orEmpty()
+            val isAutoPlayNav = targetState.arguments
+                ?.getString("autoPlayNav")
+                ?.toBooleanStrictOrNull() == true
+            if (isStreamToPlayer(from, to) && isAutoPlayNav) {
+                ExitTransition.None
+            } else {
+                fadeOut(animationSpec = tween(150))
+            }
+        },
+        popEnterTransition = {
+            val from = initialState.destination.route.orEmpty()
+            val to = targetState.destination.route.orEmpty()
+            val isAutoPlayNav = initialState.arguments
+                ?.getString("autoPlayNav")
+                ?.toBooleanStrictOrNull() == true
+            if (isPlayerToStream(from, to) && isAutoPlayNav) {
+                EnterTransition.None
+            } else {
+                fadeIn(animationSpec = tween(150))
+            }
+        },
+        popExitTransition = {
+            val from = initialState.destination.route.orEmpty()
+            val to = targetState.destination.route.orEmpty()
+            val isAutoPlayNav = initialState.arguments
+                ?.getString("autoPlayNav")
+                ?.toBooleanStrictOrNull() == true
+            if (isPlayerToStream(from, to) && isAutoPlayNav) {
+                ExitTransition.None
+            } else {
+                fadeOut(animationSpec = tween(150))
+            }
+        }
     ) {
         composable(Screen.LayoutSelection.route) {
             LayoutSelectionScreen(
@@ -234,7 +288,8 @@ fun NuvioNavHost(
                                 episode = playbackInfo.episode,
                                 episodeTitle = playbackInfo.episodeTitle,
                                 rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
-                                rememberedAudioName = playbackInfo.rememberedAudioName
+                                rememberedAudioName = playbackInfo.rememberedAudioName,
+                                autoPlayNav = false
                             )
                         )
                     }
@@ -259,7 +314,8 @@ fun NuvioNavHost(
                                 episode = playbackInfo.episode,
                                 episodeTitle = playbackInfo.episodeTitle,
                                 rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
-                                rememberedAudioName = playbackInfo.rememberedAudioName
+                                rememberedAudioName = playbackInfo.rememberedAudioName,
+                                autoPlayNav = true
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -348,6 +404,11 @@ fun NuvioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("autoPlayNav") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
         ) { backStackEntry ->

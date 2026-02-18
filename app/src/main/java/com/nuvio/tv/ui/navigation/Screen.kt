@@ -50,7 +50,7 @@ sealed class Screen(val route: String) {
             return "stream/$encodedVideoId/$encodedContentTypePath/$encodedTitle?poster=$encodedPoster&backdrop=$encodedBackdrop&logo=$encodedLogo&season=${season ?: ""}&episode=${episode ?: ""}&episodeName=$encodedEpisodeName&genres=$encodedGenres&year=$encodedYear&contentId=$encodedContentId&contentName=$encodedContentName&runtime=${runtime ?: ""}&manualSelection=$manualSelection"
         }
     }
-    data object Player : Screen("player/{streamUrl}/{title}?streamName={streamName}&year={year}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&season={season}&episode={episode}&episodeTitle={episodeTitle}&rememberedAudioLanguage={rememberedAudioLanguage}&rememberedAudioName={rememberedAudioName}") {
+    data object Player : Screen("player/{streamUrl}/{title}?streamName={streamName}&year={year}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&season={season}&episode={episode}&episodeTitle={episodeTitle}&rememberedAudioLanguage={rememberedAudioLanguage}&rememberedAudioName={rememberedAudioName}&autoPlayNav={autoPlayNav}") {
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
@@ -71,7 +71,8 @@ sealed class Screen(val route: String) {
             episode: Int? = null,
             episodeTitle: String? = null,
             rememberedAudioLanguage: String? = null,
-            rememberedAudioName: String? = null
+            rememberedAudioName: String? = null,
+            autoPlayNav: Boolean = false
         ): String {
             val encodedUrl = encode(streamUrl)
             val encodedTitle = encode(title)
@@ -90,7 +91,7 @@ sealed class Screen(val route: String) {
             val encodedEpisodeTitle = episodeTitle?.let { encode(it) } ?: ""
             val encodedRememberedAudioLanguage = rememberedAudioLanguage?.let { encode(it) } ?: ""
             val encodedRememberedAudioName = rememberedAudioName?.let { encode(it) } ?: ""
-            return "player/$encodedUrl/$encodedTitle?streamName=$encodedStreamName&year=$encodedYear&headers=$encodedHeaders&contentId=$encodedContentId&contentType=$encodedContentType&contentName=$encodedContentName&poster=$encodedPoster&backdrop=$encodedBackdrop&logo=$encodedLogo&videoId=$encodedVideoId&season=${season ?: ""}&episode=${episode ?: ""}&episodeTitle=$encodedEpisodeTitle&rememberedAudioLanguage=$encodedRememberedAudioLanguage&rememberedAudioName=$encodedRememberedAudioName"
+            return "player/$encodedUrl/$encodedTitle?streamName=$encodedStreamName&year=$encodedYear&headers=$encodedHeaders&contentId=$encodedContentId&contentType=$encodedContentType&contentName=$encodedContentName&poster=$encodedPoster&backdrop=$encodedBackdrop&logo=$encodedLogo&videoId=$encodedVideoId&season=${season ?: ""}&episode=${episode ?: ""}&episodeTitle=$encodedEpisodeTitle&rememberedAudioLanguage=$encodedRememberedAudioLanguage&rememberedAudioName=$encodedRememberedAudioName&autoPlayNav=$autoPlayNav"
         }
     }
     data object Search : Screen("search")
