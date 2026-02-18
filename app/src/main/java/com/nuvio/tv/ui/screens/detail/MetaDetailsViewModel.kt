@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,11 +11,13 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.NextToWatch
+import com.nuvio.tv.domain.model.TmdbSettings
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
@@ -34,6 +37,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val TAG = "MetaDetailsViewModel"
 
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
@@ -59,6 +64,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
+    private var moreLikeThisJob: Job? = null
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -203,7 +209,8 @@ class MetaDetailsViewModel @Inject constructor(
                     isLoading = true,
                     error = null,
                     mdbListRatings = null,
-                    showMdbListImdb = false
+                    showMdbListImdb = false,
+                    moreLikeThis = emptyList()
                 )
             }
 
@@ -311,9 +318,54 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
+        // Start recommendations fetch early so it can run in parallel with enrichment.
+        loadMoreLikeThisAsync(meta)
         val enriched = enrichMeta(meta)
         applyMeta(enriched)
         loadMDBListRatings(enriched)
+    }
+
+    private fun loadMoreLikeThisAsync(meta: Meta) {
+        moreLikeThisJob?.cancel()
+        moreLikeThisJob = viewModelScope.launch {
+            val settings = tmdbSettingsDataStore.settings.first()
+            if (!shouldLoadMoreLikeThis(settings)) {
+                _uiState.update { it.copy(moreLikeThis = emptyList()) }
+                return@launch
+            }
+
+            val tmdbContentType = resolveTmdbContentType(meta)
+            val tmdbLookupType = tmdbContentType.toApiString()
+            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                ?: tmdbService.ensureTmdbId(itemId, itemType)
+            if (tmdbId.isNullOrBlank()) {
+                _uiState.update { it.copy(moreLikeThis = emptyList()) }
+                return@launch
+            }
+
+            val recommendations = runCatching {
+                tmdbMetadataService.fetchMoreLikeThis(
+                    tmdbId = tmdbId,
+                    contentType = tmdbContentType,
+                    language = settings.language
+                )
+            }.getOrElse {
+                Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
+                emptyList()
+            }
+
+            _uiState.update { state ->
+                if (state.meta == null || state.meta.id == meta.id) {
+                    state.copy(moreLikeThis = recommendations)
+                } else {
+                    state
+                }
+            }
+        }
+    }
+
+    private fun shouldLoadMoreLikeThis(settings: TmdbSettings): Boolean {
+        return settings.enabled && settings.useMoreLikeThis
     }
 
     private suspend fun loadMDBListRatings(meta: Meta) {
@@ -337,13 +389,15 @@ class MetaDetailsViewModel @Inject constructor(
         val settings = tmdbSettingsDataStore.settings.first()
         if (!settings.enabled) return meta
 
-        val tmdbId = tmdbService.ensureTmdbId(meta.id, meta.apiType)
+        val tmdbContentType = resolveTmdbContentType(meta)
+        val tmdbLookupType = tmdbContentType.toApiString()
+        val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
             ?: tmdbService.ensureTmdbId(itemId, itemType)
             ?: return meta
 
         val enrichment = tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId,
-            contentType = meta.type,
+            contentType = tmdbContentType,
             language = settings.language
         )
 
@@ -440,6 +494,29 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         return updated
+    }
+
+    private fun resolveTmdbContentType(meta: Meta): ContentType {
+        val fromRoute = parseApiTypeToContentType(itemType)
+        if (fromRoute != null) return fromRoute
+
+        val fromMetaApi = parseApiTypeToContentType(meta.apiType)
+        if (fromMetaApi != null) return fromMetaApi
+
+        return when (meta.type) {
+            ContentType.SERIES, ContentType.TV -> ContentType.SERIES
+            ContentType.MOVIE -> ContentType.MOVIE
+            else -> ContentType.MOVIE
+        }
+    }
+
+    private fun parseApiTypeToContentType(apiType: String?): ContentType? {
+        val normalized = apiType?.trim()?.lowercase().orEmpty()
+        return when (normalized) {
+            "movie", "film" -> ContentType.MOVIE
+            "series", "tv", "show", "tvshow" -> ContentType.SERIES
+            else -> null
+        }
     }
 
     private fun selectSeason(season: Int) {

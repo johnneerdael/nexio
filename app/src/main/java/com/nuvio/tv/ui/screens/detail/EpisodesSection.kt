@@ -142,6 +142,7 @@ fun EpisodesRow(
     onEpisodeClick: (Video) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     upFocusRequester: FocusRequester,
+    downFocusRequester: FocusRequester? = null,
     restoreEpisodeId: String? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {}
@@ -181,6 +182,7 @@ fun EpisodesRow(
                 onClick = { onEpisodeClick(episode) },
                 onLongPress = { optionsEpisode = episode },
                 upFocusRequester = upFocusRequester,
+                downFocusRequester = downFocusRequester,
                 dimmed = focusedEpisodeId != null && focusedEpisodeId != episode.id,
                 onFocused = { focusedEpisodeId = episode.id },
                 onFocusCleared = {
@@ -228,6 +230,7 @@ private fun EpisodeCard(
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
+    downFocusRequester: FocusRequester? = null,
     dimmed: Boolean = false,
     onFocused: () -> Unit = {},
     onFocusCleared: () -> Unit = {},
@@ -366,7 +369,12 @@ private fun EpisodeCard(
                 }
                 false
             }
-            .focusProperties { up = upFocusRequester },
+            .focusProperties {
+                up = upFocusRequester
+                if (downFocusRequester != null) {
+                    down = downFocusRequester
+                }
+            },
         shape = CardDefaults.shape(
             shape = RoundedCornerShape(8.dp)
         ),

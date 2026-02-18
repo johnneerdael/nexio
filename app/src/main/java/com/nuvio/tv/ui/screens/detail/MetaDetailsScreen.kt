@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.detail
 
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -10,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -39,7 +41,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,6 +61,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.clip
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -73,6 +80,7 @@ import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaCastMember
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.Video
@@ -87,7 +95,14 @@ import androidx.compose.ui.window.Dialog
 
 private enum class RestoreTarget {
     HERO,
-    EPISODE
+    EPISODE,
+    CAST_MEMBER,
+    MORE_LIKE_THIS
+}
+
+private enum class PeopleSectionTab {
+    CAST,
+    MORE_LIKE_THIS
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -96,6 +111,7 @@ fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
+    onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onPlayClick: (
         videoId: String,
         contentType: String,
@@ -237,6 +253,7 @@ fun MetaDetailsScreen(
                     blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
+                    moreLikeThis = uiState.moreLikeThis,
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
@@ -335,7 +352,8 @@ fun MetaDetailsScreen(
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
                     onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
                     restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
-                    onNavigateToCastDetail = onNavigateToCastDetail
+                    onNavigateToCastDetail = onNavigateToCastDetail,
+                    onNavigateToDetail = onNavigateToDetail
                 )
             }
         }
@@ -423,6 +441,7 @@ private fun MetaDetailsContent(
     blurUnwatchedEpisodes: Boolean,
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
+    moreLikeThis: List<MetaPreview>,
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
@@ -445,7 +464,8 @@ private fun MetaDetailsContent(
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
     restorePlayFocusAfterTrailerBackToken: Int,
-    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> }
+    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
+    onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> }
 ) {
     val isSeries = remember(meta.type, meta.videos) {
         meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
@@ -473,8 +493,12 @@ private fun MetaDetailsContent(
     }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
     val heroPlayFocusRequester = remember { FocusRequester() }
+    val castTabFocusRequester = remember { FocusRequester() }
+    val moreLikeTabFocusRequester = remember { FocusRequester() }
     var pendingRestoreType by rememberSaveable { mutableStateOf<RestoreTarget?>(null) }
     var pendingRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingRestoreCastPersonId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var pendingRestoreMoreLikeItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -482,23 +506,47 @@ private fun MetaDetailsContent(
     fun clearPendingRestore() {
         pendingRestoreType = null
         pendingRestoreEpisodeId = null
+        pendingRestoreCastPersonId = null
+        pendingRestoreMoreLikeItemId = null
     }
 
     fun markHeroRestore() {
         pendingRestoreType = RestoreTarget.HERO
         pendingRestoreEpisodeId = null
+        pendingRestoreCastPersonId = null
+        pendingRestoreMoreLikeItemId = null
     }
 
     fun markEpisodeRestore(episodeId: String) {
         pendingRestoreType = RestoreTarget.EPISODE
         pendingRestoreEpisodeId = episodeId
+        pendingRestoreCastPersonId = null
+        pendingRestoreMoreLikeItemId = null
     }
 
-    androidx.compose.runtime.DisposableEffect(lifecycleOwner, pendingRestoreType, pendingRestoreEpisodeId) {
+    fun markCastMemberRestore(personId: Int) {
+        pendingRestoreType = RestoreTarget.CAST_MEMBER
+        pendingRestoreEpisodeId = null
+        pendingRestoreCastPersonId = personId
+        pendingRestoreMoreLikeItemId = null
+    }
+
+    fun markMoreLikeThisRestore(itemId: String) {
+        pendingRestoreType = RestoreTarget.MORE_LIKE_THIS
+        pendingRestoreEpisodeId = null
+        pendingRestoreCastPersonId = null
+        pendingRestoreMoreLikeItemId = itemId
+    }
+
+    androidx.compose.runtime.DisposableEffect(
+        lifecycleOwner,
+        pendingRestoreType,
+        pendingRestoreEpisodeId,
+        pendingRestoreCastPersonId,
+        pendingRestoreMoreLikeItemId
+    ) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME &&
-                (pendingRestoreType != null || pendingRestoreEpisodeId != null)
-            ) {
+            if (event == Lifecycle.Event.ON_RESUME && pendingRestoreType != null) {
                 restoreFocusToken += 1
             }
         }
@@ -548,6 +596,29 @@ private fun MetaDetailsContent(
         castMembersToShow.filterNot {
             val id = it.tmdbId
             id != null && id in leadingIds && isLeadCreditRole(it.character)
+        }
+    }
+    val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
+    val hasMoreLikeThisSection = moreLikeThis.isNotEmpty()
+    val hasPeopleTabs = hasCastSection && hasMoreLikeThisSection
+    val initialPeopleTab = if (hasCastSection) PeopleSectionTab.CAST else PeopleSectionTab.MORE_LIKE_THIS
+    var activePeopleTab by rememberSaveable(meta.id) {
+        mutableStateOf(initialPeopleTab)
+    }
+    val activePeopleTabFocusRequester = if (activePeopleTab == PeopleSectionTab.CAST) {
+        castTabFocusRequester
+    } else {
+        moreLikeTabFocusRequester
+    }
+
+    LaunchedEffect(hasCastSection, hasMoreLikeThisSection) {
+        when {
+            hasCastSection && !hasMoreLikeThisSection -> {
+                activePeopleTab = PeopleSectionTab.CAST
+            }
+            !hasCastSection && hasMoreLikeThisSection -> {
+                activePeopleTab = PeopleSectionTab.MORE_LIKE_THIS
+            }
         }
     }
 
@@ -619,8 +690,11 @@ private fun MetaDetailsContent(
             pendingRestoreEpisodeId == null &&
             !isTrailerPlaying
         ) {
-            heroPlayFocusRequester.requestFocusAfterFrames()
-            initialHeroFocusRequested = true
+            repeat(3) {
+                if (initialHeroFocusRequested) return@repeat
+                heroPlayFocusRequester.requestFocusAfterFrames()
+                delay(80)
+            }
         }
     }
 
@@ -699,8 +773,6 @@ private fun MetaDetailsContent(
             )
         }
 
-        var lastOpenedCastTmdbId by rememberSaveable(meta.id) { mutableStateOf<Int?>(null) }
-
         // Single scrollable column with hero + content
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -762,6 +834,7 @@ private fun MetaDetailsContent(
                         onEpisodeClick = episodeClick,
                         onToggleEpisodeWatched = onToggleEpisodeWatched,
                         upFocusRequester = selectedSeasonFocusRequester,
+                        downFocusRequester = activePeopleTabFocusRequester.takeIf { hasPeopleTabs },
                         restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
                         onRestoreFocusHandled = {
@@ -771,24 +844,76 @@ private fun MetaDetailsContent(
                 }
             }
 
-            // Cast section below episodes
-            if (directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()) {
-                item(key = "cast", contentType = "horizontal_row") {
-                    CastSection(
-                        cast = normalCastMembers,
-                        title = "Creator and Cast",
-                        leadingCast = directorWriterMembers,
-                        preferredFocusedCastTmdbId = lastOpenedCastTmdbId,
-                        onCastMemberClick = { member ->
-                            member.tmdbId?.let { id ->
-                                lastOpenedCastTmdbId = id
-                                val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
-                                    member.character.equals("Director", ignoreCase = true) ||
-                                    member.character.equals("Writer", ignoreCase = true)
-                                onNavigateToCastDetail(id, member.name, preferCrew)
+            // Cast / More like this section
+            if (hasCastSection || hasMoreLikeThisSection) {
+                if (hasPeopleTabs) {
+                    item(key = "cast_more_like_tabs", contentType = "horizontal_row") {
+                        PeopleSectionTabs(
+                            activeTab = activePeopleTab,
+                            castTabFocusRequester = castTabFocusRequester,
+                            moreLikeTabFocusRequester = moreLikeTabFocusRequester,
+                            onTabFocused = { tab ->
+                                activePeopleTab = tab
+                            }
+                        )
+                    }
+                }
+
+                item(key = "cast_or_more_like", contentType = "horizontal_row") {
+                    val visiblePeopleSection = if (hasPeopleTabs) {
+                        activePeopleTab
+                    } else if (hasCastSection) {
+                        PeopleSectionTab.CAST
+                    } else {
+                        PeopleSectionTab.MORE_LIKE_THIS
+                    }
+
+                    Crossfade(
+                        targetState = visiblePeopleSection,
+                        animationSpec = tween(durationMillis = 160),
+                        label = "peopleSectionSwitch"
+                    ) { section ->
+                        when (section) {
+                            PeopleSectionTab.CAST -> {
+                                CastSection(
+                                    cast = normalCastMembers,
+                                    title = if (hasPeopleTabs) "" else "Creator and Cast",
+                                    leadingCast = directorWriterMembers,
+                                    upFocusRequester = castTabFocusRequester.takeIf { hasPeopleTabs },
+                                    restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
+                                    restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
+                                    onRestoreFocusHandled = {
+                                        clearPendingRestore()
+                                    },
+                                    onCastMemberClick = { member ->
+                                        member.tmdbId?.let { id ->
+                                            markCastMemberRestore(id)
+                                            val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
+                                                member.character.equals("Director", ignoreCase = true) ||
+                                                member.character.equals("Writer", ignoreCase = true)
+                                            onNavigateToCastDetail(id, member.name, preferCrew)
+                                        }
+                                    }
+                                )
+                            }
+
+                            PeopleSectionTab.MORE_LIKE_THIS -> {
+                                MoreLikeThisSection(
+                                    items = moreLikeThis,
+                                    upFocusRequester = moreLikeTabFocusRequester.takeIf { hasPeopleTabs },
+                                    restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
+                                    restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
+                                    onRestoreFocusHandled = {
+                                        clearPendingRestore()
+                                    },
+                                    onItemClick = { item ->
+                                        markMoreLikeThisRestore(item.id)
+                                        onNavigateToDetail(item.id, item.apiType, null)
+                                    }
+                                )
                             }
                         }
-                    )
+                    }
                 }
             }
 
@@ -810,6 +935,94 @@ private fun MetaDetailsContent(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@Composable
+private fun PeopleSectionTabs(
+    activeTab: PeopleSectionTab,
+    castTabFocusRequester: FocusRequester,
+    moreLikeTabFocusRequester: FocusRequester,
+    onTabFocused: (PeopleSectionTab) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp, start = 48.dp, end = 48.dp)
+            .focusRestorer {
+                if (activeTab == PeopleSectionTab.CAST) {
+                    castTabFocusRequester
+                } else {
+                    moreLikeTabFocusRequester
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PeopleSectionTabButton(
+            label = "Creator and Cast",
+            selected = activeTab == PeopleSectionTab.CAST,
+            focusRequester = castTabFocusRequester,
+            onFocused = { onTabFocused(PeopleSectionTab.CAST) }
+        )
+
+        Text(
+            text = "|",
+            style = MaterialTheme.typography.titleLarge,
+            color = NuvioColors.TextPrimary.copy(alpha = 0.45f),
+            modifier = Modifier.padding(horizontal = 10.dp)
+        )
+
+        PeopleSectionTabButton(
+            label = "More like this",
+            selected = activeTab == PeopleSectionTab.MORE_LIKE_THIS,
+            focusRequester = moreLikeTabFocusRequester,
+            onFocused = { onTabFocused(PeopleSectionTab.MORE_LIKE_THIS) }
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PeopleSectionTabButton(
+    label: String,
+    selected: Boolean,
+    focusRequester: FocusRequester,
+    onFocused: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onFocused,
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .onFocusChanged { state ->
+                val focusedNow = state.isFocused
+                isFocused = focusedNow
+                if (focusedNow) onFocused()
+            },
+        colors = CardDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(0.dp, Color.Transparent),
+                shape = RoundedCornerShape(16.dp)
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = 1f)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleLarge,
+            color = when {
+                isFocused -> NuvioColors.TextPrimary
+                selected -> NuvioColors.TextPrimary.copy(alpha = 0.92f)
+                else -> NuvioColors.TextPrimary.copy(alpha = 0.55f)
+            },
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
+        )
     }
 }
 

@@ -70,6 +70,22 @@ interface TmdbApi {
         @Query("include_image_language") includeImageLanguage: String = "en,null"
     ): Response<TmdbImagesResponse>
 
+    @GET("movie/{movie_id}/recommendations")
+    suspend fun getMovieRecommendations(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("page") page: Int = 1
+    ): Response<TmdbRecommendationsResponse>
+
+    @GET("tv/{tv_id}/recommendations")
+    suspend fun getTvRecommendations(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("page") page: Int = 1
+    ): Response<TmdbRecommendationsResponse>
+
     @GET("tv/{tv_id}/season/{season_number}")
     suspend fun getTvSeasonDetails(
         @Path("tv_id") tvId: Int,
@@ -188,7 +204,8 @@ data class TmdbCrewMember(
 
 @JsonClass(generateAdapter = true)
 data class TmdbImagesResponse(
-    @Json(name = "logos") val logos: List<TmdbImage>? = null
+    @Json(name = "logos") val logos: List<TmdbImage>? = null,
+    @Json(name = "backdrops") val backdrops: List<TmdbImage>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -217,6 +234,29 @@ data class TmdbEpisode(
     @Json(name = "still_path") val stillPath: String? = null,
     @Json(name = "air_date") val airDate: String? = null,
     @Json(name = "runtime") val runtime: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbRecommendationsResponse(
+    @Json(name = "results") val results: List<TmdbRecommendationResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbRecommendationResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "original_title") val originalTitle: String? = null,
+    @Json(name = "original_name") val originalName: String? = null,
+    @Json(name = "media_type") val mediaType: String? = null,
+    @Json(name = "original_language") val originalLanguage: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "backdrop_path") val backdropPath: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "first_air_date") val firstAirDate: String? = null,
+    @Json(name = "vote_average") val voteAverage: Double? = null,
+    @Json(name = "vote_count") val voteCount: Int? = null
 )
 
 // ── Person / Cast Detail DTOs ──
