@@ -102,8 +102,15 @@ private enum class RestoreTarget {
 
 private enum class PeopleSectionTab {
     CAST,
-    MORE_LIKE_THIS
+    MORE_LIKE_THIS,
+    RATINGS
 }
+
+private data class PeopleTabItem(
+    val tab: PeopleSectionTab,
+    val label: String,
+    val focusRequester: FocusRequester
+)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -254,6 +261,9 @@ fun MetaDetailsScreen(
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
                     moreLikeThis = uiState.moreLikeThis,
+                    episodeImdbRatings = uiState.episodeImdbRatings,
+                    isEpisodeRatingsLoading = uiState.isEpisodeRatingsLoading,
+                    episodeRatingsError = uiState.episodeRatingsError,
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
@@ -442,6 +452,9 @@ private fun MetaDetailsContent(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     moreLikeThis: List<MetaPreview>,
+    episodeImdbRatings: Map<Pair<Int, Int>, Double>,
+    isEpisodeRatingsLoading: Boolean,
+    episodeRatingsError: String?,
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
@@ -495,6 +508,8 @@ private fun MetaDetailsContent(
     val heroPlayFocusRequester = remember { FocusRequester() }
     val castTabFocusRequester = remember { FocusRequester() }
     val moreLikeTabFocusRequester = remember { FocusRequester() }
+    val ratingsTabFocusRequester = remember { FocusRequester() }
+    val ratingsContentFocusRequester = remember { FocusRequester() }
     var pendingRestoreType by rememberSaveable { mutableStateOf<RestoreTarget?>(null) }
     var pendingRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingRestoreCastPersonId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -598,27 +613,79 @@ private fun MetaDetailsContent(
             id != null && id in leadingIds && isLeadCreditRole(it.character)
         }
     }
+    val isTvShow = remember(meta.type, meta.apiType) {
+        meta.type == ContentType.SERIES ||
+            meta.type == ContentType.TV ||
+            meta.apiType in listOf("series", "tv")
+    }
     val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
     val hasMoreLikeThisSection = moreLikeThis.isNotEmpty()
-    val hasPeopleTabs = hasCastSection && hasMoreLikeThisSection
-    val initialPeopleTab = if (hasCastSection) PeopleSectionTab.CAST else PeopleSectionTab.MORE_LIKE_THIS
-    var activePeopleTab by rememberSaveable(meta.id) {
-        mutableStateOf(initialPeopleTab)
-    }
-    val activePeopleTabFocusRequester = if (activePeopleTab == PeopleSectionTab.CAST) {
-        castTabFocusRequester
-    } else {
+    val hasRatingsSection = isTvShow
+    val peopleTabItems = remember(
+        hasCastSection,
+        hasMoreLikeThisSection,
+        hasRatingsSection,
+        castTabFocusRequester,
+        ratingsTabFocusRequester,
         moreLikeTabFocusRequester
+    ) {
+        buildList {
+            if (hasCastSection) {
+                add(
+                    PeopleTabItem(
+                        tab = PeopleSectionTab.CAST,
+                        label = "Creator and Cast",
+                        focusRequester = castTabFocusRequester
+                    )
+                )
+            }
+            if (hasRatingsSection) {
+                add(
+                    PeopleTabItem(
+                        tab = PeopleSectionTab.RATINGS,
+                        label = "Ratings",
+                        focusRequester = ratingsTabFocusRequester
+                    )
+                )
+            }
+            if (hasMoreLikeThisSection) {
+                add(
+                    PeopleTabItem(
+                        tab = PeopleSectionTab.MORE_LIKE_THIS,
+                        label = "More like this",
+                        focusRequester = moreLikeTabFocusRequester
+                    )
+                )
+            }
+        }
+    }
+    val availablePeopleTabs = remember(peopleTabItems) { peopleTabItems.map { it.tab } }
+    val hasPeopleSection = availablePeopleTabs.isNotEmpty()
+    val hasPeopleTabs = availablePeopleTabs.size > 1
+    val initialPeopleTab = when {
+        availablePeopleTabs.contains(PeopleSectionTab.CAST) -> PeopleSectionTab.CAST
+        availablePeopleTabs.isNotEmpty() -> availablePeopleTabs.first()
+        else -> PeopleSectionTab.RATINGS
+    }
+    var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
+
+    val activePeopleTabFocusRequester = peopleTabItems
+        .firstOrNull { it.tab == activePeopleTab }
+        ?.focusRequester
+        ?: if (activePeopleTab == PeopleSectionTab.RATINGS && !hasPeopleTabs) {
+            ratingsContentFocusRequester
+        } else {
+            castTabFocusRequester
+        }
+    val episodesDownFocusRequester = when {
+        hasPeopleTabs -> activePeopleTabFocusRequester
+        activePeopleTab == PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
+        else -> null
     }
 
-    LaunchedEffect(hasCastSection, hasMoreLikeThisSection) {
-        when {
-            hasCastSection && !hasMoreLikeThisSection -> {
-                activePeopleTab = PeopleSectionTab.CAST
-            }
-            !hasCastSection && hasMoreLikeThisSection -> {
-                activePeopleTab = PeopleSectionTab.MORE_LIKE_THIS
-            }
+    LaunchedEffect(availablePeopleTabs) {
+        if (availablePeopleTabs.isNotEmpty() && activePeopleTab !in availablePeopleTabs) {
+            activePeopleTab = availablePeopleTabs.first()
         }
     }
 
@@ -834,7 +901,7 @@ private fun MetaDetailsContent(
                         onEpisodeClick = episodeClick,
                         onToggleEpisodeWatched = onToggleEpisodeWatched,
                         upFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = activePeopleTabFocusRequester.takeIf { hasPeopleTabs },
+                        downFocusRequester = episodesDownFocusRequester,
                         restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
                         onRestoreFocusHandled = {
@@ -845,13 +912,12 @@ private fun MetaDetailsContent(
             }
 
             // Cast / More like this section
-            if (hasCastSection || hasMoreLikeThisSection) {
+            if (hasPeopleSection) {
                 if (hasPeopleTabs) {
                     item(key = "cast_more_like_tabs", contentType = "horizontal_row") {
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
-                            castTabFocusRequester = castTabFocusRequester,
-                            moreLikeTabFocusRequester = moreLikeTabFocusRequester,
+                            tabs = peopleTabItems,
                             onTabFocused = { tab ->
                                 activePeopleTab = tab
                             }
@@ -862,10 +928,8 @@ private fun MetaDetailsContent(
                 item(key = "cast_or_more_like", contentType = "horizontal_row") {
                     val visiblePeopleSection = if (hasPeopleTabs) {
                         activePeopleTab
-                    } else if (hasCastSection) {
-                        PeopleSectionTab.CAST
                     } else {
-                        PeopleSectionTab.MORE_LIKE_THIS
+                        availablePeopleTabs.first()
                     }
 
                     Crossfade(
@@ -912,6 +976,22 @@ private fun MetaDetailsContent(
                                     }
                                 )
                             }
+
+                            PeopleSectionTab.RATINGS -> {
+                                EpisodeRatingsSection(
+                                    episodes = meta.videos,
+                                    ratings = episodeImdbRatings,
+                                    isLoading = isEpisodeRatingsLoading,
+                                    error = episodeRatingsError,
+                                    title = if (hasPeopleTabs) "" else "Ratings",
+                                    upFocusRequester = if (hasPeopleTabs) {
+                                        ratingsTabFocusRequester
+                                    } else {
+                                        selectedSeasonFocusRequester
+                                    },
+                                    firstItemFocusRequester = ratingsContentFocusRequester
+                                )
+                            }
                         }
                     }
                 }
@@ -942,43 +1022,40 @@ private fun MetaDetailsContent(
 @Composable
 private fun PeopleSectionTabs(
     activeTab: PeopleSectionTab,
-    castTabFocusRequester: FocusRequester,
-    moreLikeTabFocusRequester: FocusRequester,
+    tabs: List<PeopleTabItem>,
     onTabFocused: (PeopleSectionTab) -> Unit
 ) {
+    if (tabs.isEmpty()) return
+
+    val defaultRequester = tabs.first().focusRequester
+    val restorerRequester = tabs.firstOrNull { it.tab == activeTab }?.focusRequester ?: defaultRequester
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 20.dp, start = 48.dp, end = 48.dp)
             .focusRestorer {
-                if (activeTab == PeopleSectionTab.CAST) {
-                    castTabFocusRequester
-                } else {
-                    moreLikeTabFocusRequester
-                }
+                restorerRequester
             },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        PeopleSectionTabButton(
-            label = "Creator and Cast",
-            selected = activeTab == PeopleSectionTab.CAST,
-            focusRequester = castTabFocusRequester,
-            onFocused = { onTabFocused(PeopleSectionTab.CAST) }
-        )
+        tabs.forEachIndexed { index, item ->
+            if (index > 0) {
+                Text(
+                    text = "|",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = NuvioColors.TextPrimary.copy(alpha = 0.45f),
+                    modifier = Modifier.padding(horizontal = 10.dp)
+                )
+            }
 
-        Text(
-            text = "|",
-            style = MaterialTheme.typography.titleLarge,
-            color = NuvioColors.TextPrimary.copy(alpha = 0.45f),
-            modifier = Modifier.padding(horizontal = 10.dp)
-        )
-
-        PeopleSectionTabButton(
-            label = "More like this",
-            selected = activeTab == PeopleSectionTab.MORE_LIKE_THIS,
-            focusRequester = moreLikeTabFocusRequester,
-            onFocused = { onTabFocused(PeopleSectionTab.MORE_LIKE_THIS) }
-        )
+            PeopleSectionTabButton(
+                label = item.label,
+                selected = activeTab == item.tab,
+                focusRequester = item.focusRequester,
+                onFocused = { onTabFocused(item.tab) }
+            )
+        }
     }
 }
 

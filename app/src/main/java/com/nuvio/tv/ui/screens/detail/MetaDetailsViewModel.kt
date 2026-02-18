@@ -9,6 +9,7 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.ContentType
@@ -27,6 +28,7 @@ import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +48,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val imdbEpisodeRatingsRepository: ImdbEpisodeRatingsRepository,
     private val mdbListRepository: MDBListRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
@@ -65,6 +68,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
     private var moreLikeThisJob: Job? = null
+    private var episodeRatingsJob: Job? = null
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -208,6 +212,9 @@ class MetaDetailsViewModel @Inject constructor(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    episodeImdbRatings = emptyMap(),
+                    isEpisodeRatingsLoading = false,
+                    episodeRatingsError = null,
                     mdbListRatings = null,
                     showMdbListImdb = false,
                     moreLikeThis = emptyList()
@@ -322,6 +329,7 @@ class MetaDetailsViewModel @Inject constructor(
         loadMoreLikeThisAsync(meta)
         val enriched = enrichMeta(meta)
         applyMeta(enriched)
+        loadEpisodeRatingsAsync(enriched)
         loadMDBListRatings(enriched)
     }
 
@@ -382,6 +390,95 @@ class MetaDetailsViewModel @Inject constructor(
                 mdbListRatings = ratingsResult?.ratings,
                 showMdbListImdb = ratingsResult?.hasImdbRating == true
             )
+        }
+    }
+
+    private fun loadEpisodeRatingsAsync(meta: Meta) {
+        episodeRatingsJob?.cancel()
+
+        val isSeries = meta.type == ContentType.SERIES || meta.type == ContentType.TV || meta.apiType in listOf("series", "tv")
+        if (!isSeries) {
+            _uiState.update {
+                it.copy(
+                    episodeImdbRatings = emptyMap(),
+                    isEpisodeRatingsLoading = false,
+                    episodeRatingsError = null
+                )
+            }
+            return
+        }
+
+        episodeRatingsJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    episodeImdbRatings = emptyMap(),
+                    isEpisodeRatingsLoading = true,
+                    episodeRatingsError = null
+                )
+            }
+
+            try {
+                val tmdbContentType = resolveTmdbContentType(meta)
+                if (tmdbContentType !in listOf(ContentType.SERIES, ContentType.TV)) {
+                    _uiState.update {
+                        it.copy(
+                            episodeImdbRatings = emptyMap(),
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = null
+                        )
+                    }
+                    return@launch
+                }
+
+                val tmdbLookupType = tmdbContentType.toApiString()
+                val tmdbIdString = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                    ?: tmdbService.ensureTmdbId(itemId, itemType)
+                val tmdbId = tmdbIdString?.toIntOrNull()
+
+                if (tmdbId == null) {
+                    _uiState.update { state ->
+                        if (state.meta == null || state.meta.id != meta.id) {
+                            state
+                        } else {
+                            state.copy(
+                                episodeImdbRatings = emptyMap(),
+                                isEpisodeRatingsLoading = false,
+                                episodeRatingsError = "Ratings are unavailable for this show."
+                            )
+                        }
+                    }
+                    return@launch
+                }
+
+                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(tmdbId)
+
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            episodeImdbRatings = ratings,
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = null
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to load episode ratings for ${meta.id}: ${error.message}")
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            episodeImdbRatings = emptyMap(),
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = "Unable to load episode ratings."
+                        )
+                    }
+                }
+            }
         }
     }
 
