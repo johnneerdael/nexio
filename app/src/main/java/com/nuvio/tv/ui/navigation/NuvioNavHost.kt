@@ -204,6 +204,11 @@ fun NuvioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("manualSelection") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
         ) {
@@ -345,12 +350,48 @@ fun NuvioNavHost(
                     defaultValue = null
                 }
             )
-        ) {
+        ) { backStackEntry ->
             PlayerScreen(
                 onBackPress = {
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
                     if (!returnedToStream) {
                         navController.popBackStack()
+                    }
+                },
+                onPlaybackErrorBack = {
+                    val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
+                    if (!returnedToStream) {
+                        val args = backStackEntry.arguments
+                        val videoId = args?.getString("videoId").orEmpty()
+                        val contentType = args?.getString("contentType").orEmpty()
+                        val title = args?.getString("title").orEmpty()
+
+                        if (videoId.isBlank() || contentType.isBlank() || title.isBlank()) {
+                            navController.popBackStack()
+                        } else {
+                            val route = Screen.Stream.createRoute(
+                                videoId = videoId,
+                                contentType = contentType,
+                                title = title,
+                                poster = args?.getString("poster"),
+                                backdrop = args?.getString("backdrop"),
+                                logo = args?.getString("logo"),
+                                season = args?.getString("season")?.toIntOrNull(),
+                                episode = args?.getString("episode")?.toIntOrNull(),
+                                episodeName = args?.getString("episodeTitle"),
+                                genres = null,
+                                year = args?.getString("year"),
+                                contentId = args?.getString("contentId"),
+                                contentName = args?.getString("contentName"),
+                                runtime = null,
+                                manualSelection = true
+                            )
+
+                            navController.navigate(route) {
+                                popUpTo(Screen.Player.route) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
                     }
                 }
             )

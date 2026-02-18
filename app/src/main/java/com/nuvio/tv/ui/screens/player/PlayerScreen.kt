@@ -104,7 +104,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
-    onBackPress: () -> Unit
+    onBackPress: () -> Unit,
+    onPlaybackErrorBack: () -> Unit = onBackPress
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -117,7 +118,9 @@ fun PlayerScreen(
     val nextEpisodeFocusRequester = remember { FocusRequester() }
 
     BackHandler {
-        if (uiState.showPauseOverlay) {
+        if (uiState.error != null) {
+            onPlaybackErrorBack()
+        } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showSubtitleStylePanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
@@ -536,7 +539,7 @@ fun PlayerScreen(
         if (uiState.error != null) {
             ErrorOverlay(
                 message = uiState.error!!,
-                onBack = onBackPress
+                onBack = onPlaybackErrorBack
             )
         }
 
