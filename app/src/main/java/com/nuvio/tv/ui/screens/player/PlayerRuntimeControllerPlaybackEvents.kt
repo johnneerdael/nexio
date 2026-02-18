@@ -376,6 +376,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update { it.copy(showAudioDialog = false) }
         }
         is PlayerEvent.OnSelectSubtitleTrack -> {
+            autoSubtitleSelected = true
+            pendingAddonSubtitleLanguage = null
+            pendingAddonSubtitleTrackId = null
+            pendingAudioSelectionAfterSubtitleRefresh = null
             selectSubtitleTrack(event.index)
             _uiState.update { 
                 it.copy(
@@ -386,6 +390,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         PlayerEvent.OnDisableSubtitles -> {
+            autoSubtitleSelected = true
+            pendingAddonSubtitleLanguage = null
+            pendingAddonSubtitleTrackId = null
+            pendingAudioSelectionAfterSubtitleRefresh = null
             disableSubtitles()
             _uiState.update { 
                 it.copy(
@@ -397,6 +405,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         is PlayerEvent.OnSelectAddonSubtitle -> {
+            autoSubtitleSelected = true
             selectAddonSubtitle(event.subtitle)
             _uiState.update { it.copy(showSubtitleDialog = false, showSubtitleStylePanel = false) }
         }

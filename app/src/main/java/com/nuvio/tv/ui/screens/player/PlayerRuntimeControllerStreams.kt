@@ -180,6 +180,9 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
         .filterKeys { !it.equals("Range", ignoreCase = true) }
     currentStreamUrl = url
     currentHeaders = newHeaders
+    pendingAddonSubtitleLanguage = null
+    pendingAddonSubtitleTrackId = null
+    pendingAudioSelectionAfterSubtitleRefresh = null
     hasRetriedCurrentStreamAfter416 = false
     lastSavedPosition = 0L
     resetLoadingOverlayForNewStream()
@@ -452,6 +455,9 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     currentStreamUrl = url
     currentHeaders = newHeaders
+    pendingAddonSubtitleLanguage = null
+    pendingAddonSubtitleTrackId = null
+    pendingAudioSelectionAfterSubtitleRefresh = null
     hasRetriedCurrentStreamAfter416 = false
     currentVideoId = targetVideo?.id ?: _uiState.value.episodeStreamsForVideoId ?: currentVideoId
     currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason

@@ -48,7 +48,20 @@ class PlayerRuntimeController(
     companion object {
         internal const val TAG = "PlayerViewModel"
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
+        internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "nuvio-addon-sub:"
+        internal val PORTUGUESE_BRAZILIAN_TAGS = listOf(
+            "pt-br", "pt_br", "pob", "brazilian", "brazil", "brasil"
+        )
+        internal val PORTUGUESE_EUROPEAN_TAGS = listOf(
+            "pt-pt", "pt_pt", "iberian", "european", "portugal", "europeu"
+        )
     }
+
+    internal data class PendingAudioSelection(
+        val language: String?,
+        val name: String?,
+        val streamUrl: String
+    )
 
     internal val navigationArgs = PlayerNavigationArgs.from(savedStateHandle)
     internal val initialStreamUrl: String = navigationArgs.streamUrl
@@ -140,6 +153,8 @@ class PlayerRuntimeController(
     internal var lastSubtitlePreferredLanguage: String? = null
     internal var lastSubtitleSecondaryLanguage: String? = null
     internal var pendingAddonSubtitleLanguage: String? = null
+    internal var pendingAddonSubtitleTrackId: String? = null
+    internal var pendingAudioSelectionAfterSubtitleRefresh: PendingAudioSelection? = null
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false
     internal var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL

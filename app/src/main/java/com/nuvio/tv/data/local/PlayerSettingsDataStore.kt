@@ -39,7 +39,8 @@ val AVAILABLE_SUBTITLE_LANGUAGES = listOf(
     SubtitleLanguage("fr", "French"),
     SubtitleLanguage("de", "German"),
     SubtitleLanguage("it", "Italian"),
-    SubtitleLanguage("pt", "Portuguese"),
+    SubtitleLanguage("pt", "Portuguese (Portugal)"),
+    SubtitleLanguage("pt-br", "Portuguese (Brazil)"),
     SubtitleLanguage("ru", "Russian"),
     SubtitleLanguage("ja", "Japanese"),
     SubtitleLanguage("ko", "Korean"),
@@ -285,6 +286,33 @@ class PlayerSettingsDataStore @Inject constructor(
                 if (min != null && max != null && max < min) {
                     prefs[maxBufferMsKey] = min
                 }
+
+                val preferredAudioLanguage = prefs[preferredAudioLanguageKey]
+                if (preferredAudioLanguage != null) {
+                    val normalizedPreferredAudioLanguage =
+                        normalizeSelectableLanguageCode(preferredAudioLanguage)
+                    if (normalizedPreferredAudioLanguage != preferredAudioLanguage) {
+                        prefs[preferredAudioLanguageKey] = normalizedPreferredAudioLanguage
+                    }
+                }
+
+                val preferredSubtitleLanguage = prefs[subtitlePreferredLanguageKey]
+                if (preferredSubtitleLanguage != null) {
+                    val normalizedPreferredSubtitleLanguage =
+                        normalizeSelectableLanguageCode(preferredSubtitleLanguage)
+                    if (normalizedPreferredSubtitleLanguage != preferredSubtitleLanguage) {
+                        prefs[subtitlePreferredLanguageKey] = normalizedPreferredSubtitleLanguage
+                    }
+                }
+
+                val secondarySubtitleLanguage = prefs[subtitleSecondaryLanguageKey]
+                if (secondarySubtitleLanguage != null) {
+                    val normalizedSecondarySubtitleLanguage =
+                        normalizeSelectableLanguageCode(secondarySubtitleLanguage)
+                    if (normalizedSecondarySubtitleLanguage != secondarySubtitleLanguage) {
+                        prefs[subtitleSecondaryLanguageKey] = normalizedSecondarySubtitleLanguage
+                    }
+                }
             }
         }
     }
@@ -304,7 +332,9 @@ class PlayerSettingsDataStore @Inject constructor(
             decoderPriority = prefs[decoderPriorityKey] ?: 1,
             tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
             skipSilence = prefs[skipSilenceKey] ?: false,
-            preferredAudioLanguage = prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE,
+            preferredAudioLanguage = normalizeSelectableLanguageCode(
+                prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE
+            ),
             loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
             pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
             skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
@@ -347,8 +377,11 @@ class PlayerSettingsDataStore @Inject constructor(
             streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
             subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
             subtitleStyle = SubtitleStyleSettings(
-                preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
-                secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
+                preferredLanguage = normalizeSelectableLanguageCode(
+                    prefs[subtitlePreferredLanguageKey] ?: "en"
+                ),
+                secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey]
+                    ?.let(::normalizeSelectableLanguageCode),
                 size = prefs[subtitleSizeKey] ?: 100,
                 verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
                 bold = prefs[subtitleBoldKey] ?: false,
@@ -416,7 +449,9 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setPreferredAudioLanguage(language: String) {
         dataStore.edit { prefs ->
-            prefs[preferredAudioLanguageKey] = language
+            prefs[preferredAudioLanguageKey] = normalizeSelectableLanguageCode(
+                language.ifBlank { AudioLanguageOption.DEVICE }
+            )
         }
     }
 
@@ -545,6 +580,15 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    private fun normalizeSelectableLanguageCode(language: String): String {
+        val code = language.trim().lowercase()
+        return when (code) {
+            "pt-br", "pt_br", "br", "pob" -> "pt-br"
+            "pt-pt", "pt_pt", "por" -> "pt"
+            else -> code
+        }
+    }
+
     suspend fun setMapDV7ToHevc(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[mapDV7ToHevcKey] = enabled
@@ -573,14 +617,19 @@ class PlayerSettingsDataStore @Inject constructor(
     
     suspend fun setSubtitlePreferredLanguage(language: String) {
         dataStore.edit { prefs ->
-            prefs[subtitlePreferredLanguageKey] = language
+            prefs[subtitlePreferredLanguageKey] = normalizeSelectableLanguageCode(
+                language.ifBlank { "en" }
+            )
         }
     }
     
     suspend fun setSubtitleSecondaryLanguage(language: String?) {
         dataStore.edit { prefs ->
-            if (language != null) {
-                prefs[subtitleSecondaryLanguageKey] = language
+            val normalizedLanguage = language
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::normalizeSelectableLanguageCode)
+            if (normalizedLanguage != null) {
+                prefs[subtitleSecondaryLanguageKey] = normalizedLanguage
             } else {
                 prefs.remove(subtitleSecondaryLanguageKey)
             }
