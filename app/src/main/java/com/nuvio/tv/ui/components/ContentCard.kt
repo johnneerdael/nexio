@@ -70,6 +70,7 @@ fun ContentCard(
     focusedPosterBackdropTrailerMuted: Boolean = true,
     trailerPreviewUrl: String? = null,
     onRequestTrailerPreview: (MetaPreview) -> Unit = {},
+    onFocus: (MetaPreview) -> Unit = {},
     onClick: () -> Unit = {}
 ) {
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
@@ -171,6 +172,7 @@ fun ContentCard(
                         isFocused = focusedNow
                         if (focusedNow) {
                             interactionNonce++
+                            onFocus(item)
                         } else {
                             isBackdropExpanded = false
                         }

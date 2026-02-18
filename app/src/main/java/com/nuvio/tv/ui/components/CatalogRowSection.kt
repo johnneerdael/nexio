@@ -61,6 +61,7 @@ fun CatalogRowSection(
     focusedPosterBackdropTrailerMuted: Boolean = true,
     trailerPreviewUrls: Map<String, String> = emptyMap(),
     onRequestTrailerPreview: (MetaPreview) -> Unit = {},
+    onItemFocus: (MetaPreview) -> Unit = {},
     modifier: Modifier = Modifier,
     enableRowFocusRestorer: Boolean = true,
     initialScrollIndex: Int = 0,
@@ -152,6 +153,7 @@ fun CatalogRowSection(
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrl = trailerPreviewUrls[item.id],
                     onRequestTrailerPreview = onRequestTrailerPreview,
+                    onFocus = onItemFocus,
                     onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->

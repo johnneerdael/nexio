@@ -178,6 +178,9 @@ private fun ClassicHomeRoute(
         onRequestTrailerPreview = { item ->
             viewModel.requestTrailerPreview(item)
         },
+        onItemFocus = { item ->
+            viewModel.onItemFocus(item)
+        },
         onSaveFocusState = { vi, vo, ri, ii, m ->
             viewModel.saveFocusState(vi, vo, ri, ii, m)
         }
