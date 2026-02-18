@@ -25,6 +25,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCompany
@@ -64,39 +67,57 @@ fun CompanyLogosSection(
 
 @Composable
 private fun CompanyLogoCard(company: MetaCompany) {
-    Box(
+    Card(
+        onClick = { },
         modifier = Modifier
             .width(140.dp)
-            .height(56.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White),
-        contentAlignment = Alignment.Center
+            .height(56.dp),
+        colors = CardDefaults.colors(
+            containerColor = Color.White,
+            focusedContainerColor = Color.White
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = androidx.compose.foundation.BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = 1.03f)
     ) {
-        if (company.logo != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(company.logo)
-                    .crossfade(true)
-                    .size(
-                        width = with(LocalDensity.current) { 140.dp.roundToPx() },
-                        height = with(LocalDensity.current) { 56.dp.roundToPx() }
-                    )
-                    .build(),
-                contentDescription = company.name,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                contentScale = ContentScale.Fit
-            )
-        } else {
-            Text(
-                text = company.name,
-                style = MaterialTheme.typography.labelLarge,
-                color = NuvioTheme.extendedColors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White),
+        contentAlignment = Alignment.Center
+        ) {
+            if (company.logo != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(company.logo)
+                        .crossfade(true)
+                        .size(
+                            width = with(LocalDensity.current) { 140.dp.roundToPx() },
+                            height = with(LocalDensity.current) { 56.dp.roundToPx() }
+                        )
+                        .build(),
+                    contentDescription = company.name,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Text(
+                    text = company.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = NuvioTheme.extendedColors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
         }
     }
 }
