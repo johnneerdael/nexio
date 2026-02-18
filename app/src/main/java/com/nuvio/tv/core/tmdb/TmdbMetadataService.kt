@@ -19,6 +19,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -60,7 +61,7 @@ class TmdbMetadataService @Inject constructor(
                 }
 
                 // Fetch details, credits, and images in parallel
-                val (details, credits, images) = coroutineScope {
+                val (details, credits, images, ageRating) = coroutineScope {
                     val detailsDeferred = async {
                         when (tmdbType) {
                             "tv" -> tmdbApi.getTvDetails(numericId, TMDB_API_KEY, normalizedLanguage)
@@ -79,7 +80,24 @@ class TmdbMetadataService @Inject constructor(
                             else -> tmdbApi.getMovieImages(numericId, TMDB_API_KEY, includeImageLanguage)
                         }.body()
                     }
-                    Triple(detailsDeferred.await(), creditsDeferred.await(), imagesDeferred.await())
+                    val ageRatingDeferred = async {
+                        when (tmdbType) {
+                            "tv" -> {
+                                val ratings = tmdbApi.getTvContentRatings(numericId, TMDB_API_KEY).body()?.results.orEmpty()
+                                selectTvAgeRating(ratings, normalizedLanguage)
+                            }
+                            else -> {
+                                val releases = tmdbApi.getMovieReleaseDates(numericId, TMDB_API_KEY).body()?.results.orEmpty()
+                                selectMovieAgeRating(releases, normalizedLanguage)
+                            }
+                        }
+                    }
+                    Quadruple(
+                        detailsDeferred.await(),
+                        creditsDeferred.await(),
+                        imagesDeferred.await(),
+                        ageRatingDeferred.await()
+                    )
                 }
 
                 val genres = details?.genres?.mapNotNull { genre ->
@@ -241,7 +259,7 @@ class TmdbMetadataService @Inject constructor(
                     genres.isEmpty() && description == null && backdrop == null && logo == null &&
                     poster == null && castMembers.isEmpty() && director.isEmpty() && writer.isEmpty() &&
                     releaseInfo == null && rating == null && runtime == null && countries.isNullOrEmpty() && language == null &&
-                    productionCompanies.isEmpty() && networks.isEmpty()
+                    productionCompanies.isEmpty() && networks.isEmpty() && ageRating == null
                 ) {
                     return@withContext null
                 }
@@ -263,6 +281,7 @@ class TmdbMetadataService @Inject constructor(
                     writer = exposedWriter,
                     productionCompanies = productionCompanies,
                     networks = networks,
+                    ageRating = ageRating,
                     countries = countries,
                     language = language
                 )
@@ -610,6 +629,58 @@ class TmdbMetadataService @Inject constructor(
     }
 }
 
+private data class Quadruple<A, B, C, D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
+
+private fun preferredRegions(normalizedLanguage: String): List<String> {
+    val fromLanguage = normalizedLanguage.substringAfter("-", "").uppercase(Locale.US).takeIf { it.length == 2 }
+    return buildList {
+        if (!fromLanguage.isNullOrBlank()) add(fromLanguage)
+        add("US")
+        add("GB")
+    }.distinct()
+}
+
+private fun selectMovieAgeRating(
+    countries: List<com.nuvio.tv.data.remote.api.TmdbMovieReleaseDateCountry>,
+    normalizedLanguage: String
+): String? {
+    val preferred = preferredRegions(normalizedLanguage)
+    val byRegion = countries.associateBy { it.iso31661?.uppercase(Locale.US) }
+    preferred.forEach { region ->
+        val rating = byRegion[region]
+            ?.releaseDates
+            .orEmpty()
+            .mapNotNull { it.certification?.trim() }
+            .firstOrNull { it.isNotBlank() }
+        if (!rating.isNullOrBlank()) return rating
+    }
+    return countries
+        .asSequence()
+        .flatMap { it.releaseDates.orEmpty().asSequence() }
+        .mapNotNull { it.certification?.trim() }
+        .firstOrNull { it.isNotBlank() }
+}
+
+private fun selectTvAgeRating(
+    ratings: List<com.nuvio.tv.data.remote.api.TmdbTvContentRatingItem>,
+    normalizedLanguage: String
+): String? {
+    val preferred = preferredRegions(normalizedLanguage)
+    val byRegion = ratings.associateBy { it.iso31661?.uppercase(Locale.US) }
+    preferred.forEach { region ->
+        val rating = byRegion[region]?.rating?.trim()
+        if (!rating.isNullOrBlank()) return rating
+    }
+    return ratings
+        .mapNotNull { it.rating?.trim() }
+        .firstOrNull { it.isNotBlank() }
+}
+
 data class TmdbEnrichment(
     val localizedTitle: String?,
     val description: String?,
@@ -627,6 +698,7 @@ data class TmdbEnrichment(
     val writer: List<String>,
     val productionCompanies: List<MetaCompany>,
     val networks: List<MetaCompany>,
+    val ageRating: String?,
     val countries: List<String>?,
     val language: String?
 )

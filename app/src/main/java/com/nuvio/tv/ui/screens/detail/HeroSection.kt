@@ -560,31 +560,27 @@ private fun MetaInfoRow(
             }
         }
 
-        // Secondary row: Country, Language
-        val hasSecondaryInfo = meta.country != null || meta.language != null
+        // Secondary row: Age Rating, Country, Language
+        val hasSecondaryInfo = meta.ageRating != null || meta.country != null || meta.language != null
         if (hasSecondaryInfo) {
+            val secondaryItems = buildList<String> {
+                meta.ageRating?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+                meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+                meta.language?.trim()?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                meta.country?.let { country ->
+                secondaryItems.forEachIndexed { index, value ->
                     Text(
-                        text = country,
+                        text = value,
                         style = MaterialTheme.typography.labelMedium,
                         color = NuvioTheme.extendedColors.textTertiary
                     )
-                }
-
-                if (meta.country != null && meta.language != null) {
-                    MetaInfoDivider()
-                }
-
-                meta.language?.let { language ->
-                    Text(
-                        text = language.uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = NuvioTheme.extendedColors.textTertiary
-                    )
+                    if (index < secondaryItems.lastIndex) {
+                        MetaInfoDivider()
+                    }
                 }
             }
         }

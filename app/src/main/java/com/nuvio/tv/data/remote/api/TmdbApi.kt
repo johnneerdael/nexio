@@ -70,6 +70,18 @@ interface TmdbApi {
         @Query("include_image_language") includeImageLanguage: String = "en,null"
     ): Response<TmdbImagesResponse>
 
+    @GET("movie/{movie_id}/release_dates")
+    suspend fun getMovieReleaseDates(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): Response<TmdbMovieReleaseDatesResponse>
+
+    @GET("tv/{tv_id}/content_ratings")
+    suspend fun getTvContentRatings(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String
+    ): Response<TmdbTvContentRatingsResponse>
+
     @GET("movie/{movie_id}/recommendations")
     suspend fun getMovieRecommendations(
         @Path("movie_id") movieId: Int,
@@ -206,6 +218,33 @@ data class TmdbCrewMember(
 data class TmdbImagesResponse(
     @Json(name = "logos") val logos: List<TmdbImage>? = null,
     @Json(name = "backdrops") val backdrops: List<TmdbImage>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMovieReleaseDatesResponse(
+    @Json(name = "results") val results: List<TmdbMovieReleaseDateCountry>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMovieReleaseDateCountry(
+    @Json(name = "iso_3166_1") val iso31661: String? = null,
+    @Json(name = "release_dates") val releaseDates: List<TmdbMovieReleaseDateItem>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMovieReleaseDateItem(
+    @Json(name = "certification") val certification: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvContentRatingsResponse(
+    @Json(name = "results") val results: List<TmdbTvContentRatingItem>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvContentRatingItem(
+    @Json(name = "iso_3166_1") val iso31661: String? = null,
+    @Json(name = "rating") val rating: String? = null
 )
 
 @JsonClass(generateAdapter = true)
