@@ -120,13 +120,21 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         return
     }
 
+    val hasAired = PlayerNextEpisodeRules.hasEpisodeAired(resolvedNext.released)
     val nextInfo = NextEpisodeInfo(
         videoId = resolvedNext.id,
         season = resolvedNext.season ?: return,
         episode = resolvedNext.episode ?: return,
         title = resolvedNext.title,
         thumbnail = resolvedNext.thumbnail,
-        overview = resolvedNext.overview
+        overview = resolvedNext.overview,
+        released = resolvedNext.released,
+        hasAired = hasAired,
+        unairedMessage = if (hasAired) {
+            null
+        } else {
+            "Next episode hasn't aired yet"
+        }
     )
 
     _uiState.update { state ->
@@ -180,7 +188,11 @@ internal fun PlayerRuntimeController.evaluateNextEpisodeCardVisibility(positionM
 
     if (shouldShow) {
         _uiState.update { it.copy(showNextEpisodeCard = true) }
-        if (streamAutoPlayNextEpisodeEnabledSetting && streamAutoPlayModeSetting != StreamAutoPlayMode.MANUAL) {
+        if (
+            state.nextEpisode.hasAired &&
+            streamAutoPlayNextEpisodeEnabledSetting &&
+            streamAutoPlayModeSetting != StreamAutoPlayMode.MANUAL
+        ) {
             playNextEpisode()
         }
     }

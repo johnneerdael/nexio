@@ -551,6 +551,9 @@ internal fun PlayerRuntimeController.playNextEpisode() {
     val type = contentType ?: return
 
     val state = _uiState.value
+    if (state.nextEpisode?.hasAired == false) {
+        return
+    }
     if (state.nextEpisodeAutoPlaySearching || state.nextEpisodeAutoPlayCountdownSec != null) {
         return
     }

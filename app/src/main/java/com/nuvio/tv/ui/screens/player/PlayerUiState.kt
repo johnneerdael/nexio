@@ -130,7 +130,10 @@ data class NextEpisodeInfo(
     val episode: Int,
     val title: String,
     val thumbnail: String?,
-    val overview: String?
+    val overview: String?,
+    val released: String?,
+    val hasAired: Boolean,
+    val unairedMessage: String?
 )
 
 sealed class PlayerEvent {

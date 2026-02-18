@@ -569,6 +569,8 @@ fun PlayerScreen(
                 !uiState.showSubtitleStylePanel &&
                 !uiState.showSpeedDialog,
             controlsVisible = uiState.showControls,
+            isPlayable = uiState.nextEpisode?.hasAired == true,
+            unairedMessage = uiState.nextEpisode?.unairedMessage,
             isAutoPlaySearching = uiState.nextEpisodeAutoPlaySearching,
             autoPlaySourceName = uiState.nextEpisodeAutoPlaySourceName,
             autoPlayCountdownSec = uiState.nextEpisodeAutoPlayCountdownSec,
