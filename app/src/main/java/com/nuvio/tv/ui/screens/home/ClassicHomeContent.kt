@@ -67,7 +67,6 @@ fun ClassicHomeContent(
     // Store scroll state for each row to persist position during recycling
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
 
-    val catalogRowScrollStates = remember { mutableMapOf<String, Int>() }
     var restoringFocus by remember { mutableStateOf(focusState.hasSavedFocus) }
     val heroFocusRequester = remember { FocusRequester() }
     val shouldRequestInitialFocus = remember(focusState) {
@@ -77,6 +76,13 @@ fun ClassicHomeContent(
     }
     val visibleCatalogRows = remember(uiState.catalogRows) {
         uiState.catalogRows.filter { it.items.isNotEmpty() }
+    }
+    val visibleCatalogKeys = remember(visibleCatalogRows) {
+        visibleCatalogRows.mapTo(mutableSetOf()) { "${it.addonId}_${it.apiType}_${it.catalogId}" }
+    }
+
+    LaunchedEffect(visibleCatalogKeys) {
+        rowStates.keys.retainAll(visibleCatalogKeys)
     }
 
     DisposableEffect(Unit) {
@@ -227,7 +233,6 @@ fun ClassicHomeContent(
                     restoringFocus = false
                     currentFocusSnapshot.rowIndex = index
                     currentFocusSnapshot.itemIndex = itemIndex
-                    catalogRowScrollStates[catalogKey] = itemIndex
                     // Update the state as well, though getOrPut handles creation
                     // rowStates[catalogKey] already holds the live state object
                 }

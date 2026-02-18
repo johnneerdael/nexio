@@ -63,6 +63,7 @@ fun CatalogSeeAllScreen(
     onBackPress: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val fullCatalogRows by viewModel.fullCatalogRows.collectAsState()
     val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
     val posterCardStyle = PosterCardStyle(
         width = uiState.posterCardWidthDp.dp,
@@ -76,7 +77,7 @@ fun CatalogSeeAllScreen(
 
     // Find the matching catalog row from full (untruncated) data
     val catalogKey = "${addonId}_${type}_${catalogId}"
-    val catalogRow = uiState.fullCatalogRows.find {
+    val catalogRow = fullCatalogRows.find {
         "${it.addonId}_${it.apiType}_${it.catalogId}" == catalogKey
     }
 

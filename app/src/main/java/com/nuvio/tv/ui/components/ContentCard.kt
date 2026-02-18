@@ -91,54 +91,64 @@ fun ContentCard(
     var isBackdropExpanded by remember(item.id) { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(item.id, trailerPreviewUrl) { mutableStateOf(false) }
 
-    LaunchedEffect(
-        focusedPosterBackdropExpandEnabled,
-        focusedPosterBackdropExpandDelaySeconds,
-        isFocused,
-        interactionNonce,
-        item.id
-    ) {
-        if (!focusedPosterBackdropExpandEnabled || !isFocused) {
+    if (focusedPosterBackdropExpandEnabled) {
+        LaunchedEffect(
+            focusedPosterBackdropExpandDelaySeconds,
+            isFocused,
+            interactionNonce,
+            item.id
+        ) {
+            if (!isFocused) {
+                isBackdropExpanded = false
+                return@LaunchedEffect
+            }
+
+            val delaySeconds = focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(1)
+
             isBackdropExpanded = false
-            return@LaunchedEffect
-        }
-
-        val delaySeconds = focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(1)
-
-        isBackdropExpanded = false
-        val backdropDelayMs = delaySeconds * 1000L
-        delay(backdropDelayMs)
-        if (isFocused && focusedPosterBackdropExpandEnabled) {
-            isBackdropExpanded = true
+            val backdropDelayMs = delaySeconds * 1000L
+            delay(backdropDelayMs)
+            if (isFocused && focusedPosterBackdropExpandEnabled) {
+                isBackdropExpanded = true
+            }
         }
     }
 
-    LaunchedEffect(
-        item.id,
-        isFocused,
-        focusedPosterBackdropTrailerEnabled,
-        trailerPreviewUrl
-    ) {
-        if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
-        if (!isFocused) return@LaunchedEffect
-        if (trailerPreviewUrl != null) return@LaunchedEffect
-        onRequestTrailerPreview(item)
+    if (focusedPosterBackdropTrailerEnabled) {
+        LaunchedEffect(
+            item.id,
+            isFocused,
+            trailerPreviewUrl
+        ) {
+            if (!isFocused) return@LaunchedEffect
+            if (trailerPreviewUrl != null) return@LaunchedEffect
+            onRequestTrailerPreview(item)
+        }
     }
 
-    val targetCardWidth = if (isBackdropExpanded) expandedCardWidth else baseCardWidth
-    val animatedCardWidth by animateDpAsState(targetValue = targetCardWidth, label = "contentCardWidth")
-    val metaTokens = remember(item.type, item.genres, item.releaseInfo, item.imdbRating) {
-        buildList {
-            add(
-                item.apiType
-                    .replaceFirstChar { ch -> ch.uppercase() }
-            )
-            item.genres.firstOrNull()?.let { add(it) }
-            item.releaseInfo
-                ?.let { YEAR_REGEX.find(it)?.value }
-                ?.let { add(it) }
-            item.imdbRating?.let { add(String.format("%.1f", it)) }
+    val animatedCardWidth = if (focusedPosterBackdropExpandEnabled) {
+        val targetCardWidth = if (isBackdropExpanded) expandedCardWidth else baseCardWidth
+        val width by animateDpAsState(targetValue = targetCardWidth, label = "contentCardWidth")
+        width
+    } else {
+        baseCardWidth
+    }
+    val metaTokens = if (isBackdropExpanded) {
+        remember(item.type, item.genres, item.releaseInfo, item.imdbRating) {
+            buildList {
+                add(
+                    item.apiType
+                        .replaceFirstChar { ch -> ch.uppercase() }
+                )
+                item.genres.firstOrNull()?.let { add(it) }
+                item.releaseInfo
+                    ?.let { YEAR_REGEX.find(it)?.value }
+                    ?.let { add(it) }
+                item.imdbRating?.let { add(String.format("%.1f", it)) }
+            }
         }
+    } else {
+        emptyList()
     }
 
     Column(
@@ -146,13 +156,22 @@ fun ContentCard(
     ) {
         val context = LocalContext.current
         val density = LocalDensity.current
-        val requestWidthPx = remember(targetCardWidth, density) {
-            with(density) { targetCardWidth.roundToPx() }
+        val requestCardWidth = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+            expandedCardWidth
+        } else {
+            baseCardWidth
+        }
+        val requestWidthPx = remember(requestCardWidth, density) {
+            with(density) { requestCardWidth.roundToPx() }
         }
         val requestHeightPx = remember(baseCardHeight, density) {
             with(density) { baseCardHeight.roundToPx() }
         }
-        val imageUrl = if (isBackdropExpanded) item.background ?: item.poster else item.poster
+        val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+            item.background ?: item.poster
+        } else {
+            item.poster
+        }
         val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
             ImageRequest.Builder(context)
                 .data(imageUrl)
@@ -225,17 +244,24 @@ fun ContentCard(
                     isFocused &&
                     trailerPreviewUrl != null
 
-                LaunchedEffect(shouldPlayTrailerPreview) {
-                    if (!shouldPlayTrailerPreview) {
-                        trailerFirstFrameRendered = false
+                if (focusedPosterBackdropTrailerEnabled) {
+                    LaunchedEffect(shouldPlayTrailerPreview) {
+                        if (!shouldPlayTrailerPreview) {
+                            trailerFirstFrameRendered = false
+                        }
                     }
                 }
 
-                val trailerCoverAlpha by animateFloatAsState(
-                    targetValue = if (shouldPlayTrailerPreview && !trailerFirstFrameRendered) 1f else 0f,
-                    animationSpec = tween(durationMillis = 250),
-                    label = "trailerCoverAlpha"
-                )
+                val trailerCoverAlpha = if (focusedPosterBackdropTrailerEnabled) {
+                    val alpha by animateFloatAsState(
+                        targetValue = if (shouldPlayTrailerPreview && !trailerFirstFrameRendered) 1f else 0f,
+                        animationSpec = tween(durationMillis = 250),
+                        label = "trailerCoverAlpha"
+                    )
+                    alpha
+                } else {
+                    0f
+                }
 
                 if (shouldPlayTrailerPreview) {
                     TrailerPlayer(

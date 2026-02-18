@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -74,16 +75,27 @@ fun CatalogRowSection(
 
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
-    val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
-    LaunchedEffect(catalogRow.items.size) {
-        itemFocusRequesters.keys.removeAll { it >= catalogRow.items.size }
+    val itemFocusRequestersById = remember { mutableMapOf<String, FocusRequester>() }
+    LaunchedEffect(catalogRow.items) {
+        val validIds = catalogRow.items.mapTo(mutableSetOf()) { it.id }
+        itemFocusRequestersById.keys.retainAll(validIds)
     }
 
     LaunchedEffect(focusedItemIndex, catalogRow.items.size) {
         if (focusedItemIndex >= 0 && focusedItemIndex < catalogRow.items.size) {
-            val requester = itemFocusRequesters.getOrPut(focusedItemIndex) { FocusRequester() }
-            kotlinx.coroutines.delay(100)
+            val targetItemId = catalogRow.items[focusedItemIndex].id
+            val requester = itemFocusRequestersById.getOrPut(targetItemId) { FocusRequester() }
+            repeat(2) { withFrameNanos { } }
             runCatching { requester.requestFocus() }
+        }
+    }
+
+    val catalogTitle = remember(catalogRow.catalogName, catalogRow.apiType, showCatalogTypeSuffix) {
+        val formattedName = catalogRow.catalogName.replaceFirstChar { it.uppercase() }
+        if (showCatalogTypeSuffix) {
+            "$formattedName - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}"
+        } else {
+            formattedName
         }
     }
 
@@ -96,11 +108,6 @@ fun CatalogRowSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                val catalogTitle = if (showCatalogTypeSuffix) {
-                    "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}"
-                } else {
-                    catalogRow.catalogName.replaceFirstChar { it.uppercase() }
-                }
                 Text(
                     text = catalogTitle,
                     style = MaterialTheme.typography.headlineMedium,
@@ -127,7 +134,12 @@ fun CatalogRowSection(
                         Modifier.focusRestorer {
                             val fallbackIndex = listState.firstVisibleItemIndex
                                 .coerceIn(0, (catalogRow.items.size - 1).coerceAtLeast(0))
-                            itemFocusRequesters.getOrPut(fallbackIndex) { FocusRequester() }
+                            val fallbackItemId = catalogRow.items.getOrNull(fallbackIndex)?.id
+                            if (fallbackItemId != null) {
+                                itemFocusRequestersById.getOrPut(fallbackItemId) { FocusRequester() }
+                            } else {
+                                FocusRequester()
+                            }
                         }
                     } else {
                         Modifier
@@ -138,8 +150,8 @@ fun CatalogRowSection(
         ) {
             itemsIndexed(
                 items = catalogRow.items,
-                key = { index, item ->
-                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}_$index"
+                key = { _, item ->
+                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}"
                 },
                 contentType = { _, _ -> "content_card" }
             ) { index, item ->
@@ -168,7 +180,7 @@ fun CatalogRowSection(
                                 Modifier
                             }
                         ),
-                    focusRequester = itemFocusRequesters.getOrPut(index) { FocusRequester() }
+                    focusRequester = itemFocusRequestersById.getOrPut(item.id) { FocusRequester() }
                 )
             }
 
