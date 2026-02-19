@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +48,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -116,7 +118,7 @@ private data class HeroCarouselRow(
     val items: List<ModernCarouselItem>
 )
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ModernHomeContent(
     uiState: HomeUiState,
@@ -522,7 +524,9 @@ fun ModernHomeContent(
                                     requester.requestFocus()
                                     true
                                 }.getOrDefault(false)
-                                if (didFocus) return@repeat
+                                if (didFocus) {
+                                    return@repeat
+                                }
                                 if (!didScrollToTarget) {
                                     val targetVisible = rowListState.layoutInfo.visibleItemsInfo
                                         .any { it.index == targetIndex }
@@ -552,6 +556,11 @@ fun ModernHomeContent(
 
                         LazyRow(
                             state = rowListState,
+                            modifier = Modifier.focusRestorer {
+                                val restoreIndex = (focusedItemByRow[resolvedRow.key] ?: 0)
+                                    .coerceIn(0, (resolvedRow.items.size - 1).coerceAtLeast(0))
+                                requesterFor(resolvedRow.key, restoreIndex)
+                            },
                             contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
                             horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
                         ) {
