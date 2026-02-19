@@ -253,7 +253,7 @@ fun PlayerRuntimeController.scheduleHideControls() {
         delay(3000)
         if (_uiState.value.isPlaying && !_uiState.value.showAudioDialog &&
             !_uiState.value.showSubtitleDialog && !_uiState.value.showSubtitleStylePanel &&
-            !_uiState.value.showSpeedDialog &&
+            !_uiState.value.showSpeedDialog && !_uiState.value.showMoreDialog &&
             !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel) {
             _uiState.update { it.copy(showControls = false) }
         }
@@ -427,16 +427,31 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
         PlayerEvent.OnShowAudioDialog -> {
-            _uiState.update { it.copy(showAudioDialog = true, showSubtitleStylePanel = false, showControls = true) }
+            _uiState.update {
+                it.copy(
+                    showAudioDialog = true,
+                    showSubtitleStylePanel = false,
+                    showMoreDialog = false,
+                    showControls = true
+                )
+            }
         }
         PlayerEvent.OnShowSubtitleDialog -> {
-            _uiState.update { it.copy(showSubtitleDialog = true, showSubtitleStylePanel = false, showControls = true) }
+            _uiState.update {
+                it.copy(
+                    showSubtitleDialog = true,
+                    showSubtitleStylePanel = false,
+                    showMoreDialog = false,
+                    showControls = true
+                )
+            }
         }
         PlayerEvent.OnOpenSubtitleStylePanel -> {
             _uiState.update {
                 it.copy(
                     showSubtitleDialog = false,
                     showSubtitleStylePanel = true,
+                    showMoreDialog = false,
                     showControls = true
                 )
             }
@@ -446,7 +461,30 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             scheduleHideControls()
         }
         PlayerEvent.OnShowSpeedDialog -> {
-            _uiState.update { it.copy(showSpeedDialog = true, showSubtitleStylePanel = false, showControls = true) }
+            _uiState.update {
+                it.copy(
+                    showSpeedDialog = true,
+                    showSubtitleStylePanel = false,
+                    showMoreDialog = false,
+                    showControls = true
+                )
+            }
+        }
+        PlayerEvent.OnShowMoreDialog -> {
+            _uiState.update {
+                it.copy(
+                    showMoreDialog = true,
+                    showAudioDialog = false,
+                    showSubtitleDialog = false,
+                    showSubtitleStylePanel = false,
+                    showSpeedDialog = false,
+                    showControls = true
+                )
+            }
+        }
+        PlayerEvent.OnDismissMoreDialog -> {
+            _uiState.update { it.copy(showMoreDialog = false) }
+            scheduleHideControls()
         }
         PlayerEvent.OnShowEpisodesPanel -> {
             showEpisodesPanel()
@@ -498,7 +536,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     showAudioDialog = false, 
                     showSubtitleDialog = false, 
                     showSubtitleStylePanel = false,
-                    showSpeedDialog = false
+                    showSpeedDialog = false,
+                    showMoreDialog = false
                 ) 
             }
             scheduleHideControls()
