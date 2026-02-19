@@ -27,7 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -308,7 +308,7 @@ private fun EpisodeCard(
         },
         modifier = Modifier
             .width(cardWidth)
-            .alpha(cardAlpha)
+            .graphicsLayer { alpha = cardAlpha }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged {
                 isFocused = it.isFocused
@@ -444,14 +444,14 @@ private fun EpisodeCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .alpha(overlayAlpha)
+                        .graphicsLayer { alpha = overlayAlpha }
                         .background(overlayBrush)
                 )
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .alpha(overlayAlpha)
+                        .graphicsLayer { alpha = overlayAlpha }
                         .padding(start = 10.dp, end = 10.dp, bottom = 10.dp, top = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
