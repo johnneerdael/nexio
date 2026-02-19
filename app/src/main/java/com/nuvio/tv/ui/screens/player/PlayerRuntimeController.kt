@@ -145,8 +145,8 @@ class PlayerRuntimeController(
     internal var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL
     internal var streamAutoPlayNextEpisodeEnabledSetting: Boolean = false
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
-    internal var nextEpisodeThresholdPercentSetting: Int = 95
-    internal var nextEpisodeThresholdMinutesBeforeEndSetting: Int = 3
+    internal var nextEpisodeThresholdPercentSetting: Float = 98f
+    internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
     internal var hasAppliedRememberedAudioSelection: Boolean = false
 
     internal var lastBufferLogTimeMs: Long = 0L

@@ -63,6 +63,8 @@ import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlin.math.roundToInt
+import java.util.Locale
 
 internal fun LazyListScope.autoPlaySettingsItems(
     playerSettings: PlayerSettings,
@@ -74,8 +76,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
-    onSetNextEpisodeThresholdPercent: (Int) -> Unit,
-    onSetNextEpisodeThresholdMinutesBeforeEnd: (Int) -> Unit,
+    onSetNextEpisodeThresholdPercent: (Float) -> Unit,
+    onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
@@ -151,12 +153,12 @@ internal fun LazyListScope.autoPlaySettingsItems(
                     icon = Icons.Default.Tune,
                     title = "Threshold Percentage",
                     subtitle = "Fallback when no outro timestamp exists.",
-                    value = playerSettings.nextEpisodeThresholdPercent,
-                    valueText = "${playerSettings.nextEpisodeThresholdPercent}%",
-                    minValue = 50,
-                    maxValue = 99,
+                    value = (playerSettings.nextEpisodeThresholdPercent * 2f).roundToInt(),
+                    valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdPercent)}%",
+                    minValue = 194,
+                    maxValue = 199,
                     step = 1,
-                    onValueChange = onSetNextEpisodeThresholdPercent,
+                    onValueChange = { onSetNextEpisodeThresholdPercent(it / 2f) },
                     onFocused = onItemFocused
                 )
             }
@@ -165,12 +167,12 @@ internal fun LazyListScope.autoPlaySettingsItems(
                     icon = Icons.Default.Tune,
                     title = "Threshold Minutes",
                     subtitle = "Fallback when no outro timestamp exists.",
-                    value = playerSettings.nextEpisodeThresholdMinutesBeforeEnd,
-                    valueText = "${playerSettings.nextEpisodeThresholdMinutesBeforeEnd} min",
-                    minValue = 1,
-                    maxValue = 30,
+                    value = (playerSettings.nextEpisodeThresholdMinutesBeforeEnd * 2f).roundToInt(),
+                    valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdMinutesBeforeEnd)} min",
+                    minValue = 2,
+                    maxValue = 7,
                     step = 1,
-                    onValueChange = onSetNextEpisodeThresholdMinutesBeforeEnd,
+                    onValueChange = { onSetNextEpisodeThresholdMinutesBeforeEnd(it / 2f) },
                     onFocused = onItemFocused
                 )
             }
@@ -242,6 +244,14 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
+}
+
+private fun formatHalfStepValue(value: Float): String {
+    return if (value % 1f == 0f) {
+        value.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.1f", value)
     }
 }
 

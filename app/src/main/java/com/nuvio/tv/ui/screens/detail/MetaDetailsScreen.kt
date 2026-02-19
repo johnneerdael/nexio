@@ -1000,21 +1000,41 @@ private fun MetaDetailsContent(
                 }
             }
 
-            if (meta.productionCompanies.isNotEmpty()) {
-                item(key = "production", contentType = "horizontal_row") {
-                    CompanyLogosSection(
-                        title = "Production",
-                        companies = meta.productionCompanies
-                    )
+            if (isTvShow) {
+                if (meta.networks.isNotEmpty()) {
+                    item(key = "networks", contentType = "horizontal_row") {
+                        CompanyLogosSection(
+                            title = "Network",
+                            companies = meta.networks
+                        )
+                    }
                 }
-            }
 
-            if (meta.networks.isNotEmpty()) {
-                item(key = "networks", contentType = "horizontal_row") {
-                    CompanyLogosSection(
-                        title = "Network",
-                        companies = meta.networks
-                    )
+                if (meta.productionCompanies.isNotEmpty()) {
+                    item(key = "production", contentType = "horizontal_row") {
+                        CompanyLogosSection(
+                            title = "Production",
+                            companies = meta.productionCompanies
+                        )
+                    }
+                }
+            } else {
+                if (meta.productionCompanies.isNotEmpty()) {
+                    item(key = "production", contentType = "horizontal_row") {
+                        CompanyLogosSection(
+                            title = "Production",
+                            companies = meta.productionCompanies
+                        )
+                    }
+                }
+
+                if (meta.networks.isNotEmpty()) {
+                    item(key = "networks", contentType = "horizontal_row") {
+                        CompanyLogosSection(
+                            title = "Network",
+                            companies = meta.networks
+                        )
+                    }
                 }
             }
         }

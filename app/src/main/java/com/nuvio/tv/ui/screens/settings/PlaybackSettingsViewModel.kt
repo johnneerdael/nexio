@@ -220,11 +220,11 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setNextEpisodeThresholdMode(mode)
     }
 
-    suspend fun setNextEpisodeThresholdPercent(percent: Int) {
+    suspend fun setNextEpisodeThresholdPercent(percent: Float) {
         playerSettingsDataStore.setNextEpisodeThresholdPercent(percent)
     }
 
-    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Int) {
+    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
         playerSettingsDataStore.setNextEpisodeThresholdMinutesBeforeEnd(minutes)
     }
 

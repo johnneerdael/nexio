@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -143,8 +144,8 @@ data class PlayerSettings(
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
-    val nextEpisodeThresholdPercent: Int = 95,
-    val nextEpisodeThresholdMinutesBeforeEnd: Int = 3,
+    val nextEpisodeThresholdPercent: Float = 98f,
+    val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE
@@ -229,8 +230,10 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
-    private val nextEpisodeThresholdPercentKey = intPreferencesKey("next_episode_threshold_percent")
-    private val nextEpisodeThresholdMinutesBeforeEndKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
+    private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
+    private val nextEpisodeThresholdMinutesBeforeEndLegacyKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
+    private val nextEpisodeThresholdPercentKey = floatPreferencesKey("next_episode_threshold_percent_v2")
+    private val nextEpisodeThresholdMinutesBeforeEndKey = floatPreferencesKey("next_episode_threshold_minutes_before_end_v2")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
@@ -326,8 +329,20 @@ class PlayerSettingsDataStore @Inject constructor(
             nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                 runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
             } ?: NextEpisodeThresholdMode.PERCENTAGE,
-            nextEpisodeThresholdPercent = (prefs[nextEpisodeThresholdPercentKey] ?: 95).coerceIn(50, 99),
-            nextEpisodeThresholdMinutesBeforeEnd = (prefs[nextEpisodeThresholdMinutesBeforeEndKey] ?: 3).coerceIn(1, 30),
+            nextEpisodeThresholdPercent = normalizeHalfStep(
+                value = prefs[nextEpisodeThresholdPercentKey]
+                    ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
+                    ?: 98f,
+                min = 97f,
+                max = 99.5f
+            ),
+            nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStep(
+                value = prefs[nextEpisodeThresholdMinutesBeforeEndKey]
+                    ?: prefs[nextEpisodeThresholdMinutesBeforeEndLegacyKey]?.toFloat()
+                    ?: 2f,
+                min = 1f,
+                max = 3.5f
+            ),
             streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
             streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
             subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
@@ -478,16 +493,29 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun setNextEpisodeThresholdPercent(percent: Int) {
+    suspend fun setNextEpisodeThresholdPercent(percent: Float) {
         dataStore.edit { prefs ->
-            prefs[nextEpisodeThresholdPercentKey] = percent.coerceIn(50, 99)
+            prefs[nextEpisodeThresholdPercentKey] = normalizeHalfStep(
+                value = percent,
+                min = 97f,
+                max = 99.5f
+            )
         }
     }
 
-    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Int) {
+    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
         dataStore.edit { prefs ->
-            prefs[nextEpisodeThresholdMinutesBeforeEndKey] = minutes.coerceIn(1, 30)
+            prefs[nextEpisodeThresholdMinutesBeforeEndKey] = normalizeHalfStep(
+                value = minutes,
+                min = 1f,
+                max = 3.5f
+            )
         }
+    }
+
+    private fun normalizeHalfStep(value: Float, min: Float, max: Float): Float {
+        val clamped = value.coerceIn(min, max)
+        return (clamped * 2f).roundToInt() / 2f
     }
 
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {

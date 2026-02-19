@@ -33,8 +33,8 @@ object PlayerNextEpisodeRules {
         durationMs: Long,
         skipIntervals: List<SkipInterval>,
         thresholdMode: NextEpisodeThresholdMode,
-        thresholdPercent: Int,
-        thresholdMinutesBeforeEnd: Int
+        thresholdPercent: Float,
+        thresholdMinutesBeforeEnd: Float
     ): Boolean {
         val outroInterval = skipIntervals.firstOrNull { it.type == "outro" }
         return if (outroInterval != null) {
@@ -43,13 +43,13 @@ object PlayerNextEpisodeRules {
             if (durationMs <= 0L) return false
             when (thresholdMode) {
                 NextEpisodeThresholdMode.PERCENTAGE -> {
-                    val clampedPercent = thresholdPercent.coerceIn(50, 99)
+                    val clampedPercent = thresholdPercent.coerceIn(97f, 99.5f)
                     (positionMs.toDouble() / durationMs.toDouble()) >= (clampedPercent / 100.0)
                 }
                 NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
-                    val clampedMinutes = thresholdMinutesBeforeEnd.coerceIn(1, 30)
+                    val clampedMinutes = thresholdMinutesBeforeEnd.coerceIn(1f, 3.5f)
                     val remainingMs = durationMs - positionMs
-                    remainingMs <= clampedMinutes * 60_000L
+                    remainingMs <= (clampedMinutes * 60_000f).toLong()
                 }
             }
         }
