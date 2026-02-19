@@ -16,13 +16,16 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -40,11 +43,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -62,12 +70,13 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
-private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.75f
+private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
 
 private data class HeroPreview(
     val title: String,
@@ -94,6 +103,7 @@ private sealed class ModernPayload {
 private data class ModernCarouselItem(
     val key: String,
     val title: String,
+    val subtitle: String?,
     val imageUrl: String?,
     val heroPreview: HeroPreview,
     val payload: ModernPayload
@@ -123,7 +133,8 @@ fun ModernHomeContent(
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
-        useLandscapePosters
+        useLandscapePosters,
+        uiState.catalogTypeSuffixEnabled
     ) {
         buildList {
             if (uiState.continueWatchingItems.isNotEmpty()) {
@@ -147,7 +158,10 @@ fun ModernHomeContent(
                 add(
                     HeroCarouselRow(
                         key = catalogRowKey(row),
-                        title = catalogRowTitle(row),
+                        title = catalogRowTitle(
+                            row = row,
+                            showCatalogTypeSuffix = uiState.catalogTypeSuffixEnabled
+                        ),
                         globalRowIndex = index,
                         items = row.items.mapIndexed { itemIndex, item ->
                             buildCatalogItem(
@@ -317,6 +331,7 @@ fun ModernHomeContent(
         }
         val previewCardWidth = activeCardWidth
         val previewCardHeight = activeCardHeight
+        val cardCornerRadius = uiState.posterCardCornerRadiusDp.dp
         val previewVisibleHeight = if (useLandscapePosters) {
             previewCardHeight * 0.30f
         } else {
@@ -331,75 +346,133 @@ fun ModernHomeContent(
         }
         val heroBackdrop = resolvedHero?.backdrop?.takeIf { it.isNotBlank() } ?: fallbackBackdrop
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
-        val titleY = when {
-            useLandscapePosters -> maxHeight * 0.23f
-            shouldRenderPreviewRow -> maxHeight * 0.16f
-            else -> maxHeight * 0.18f
-        }
+        val catalogBottomPadding = if (shouldRenderPreviewRow) 20.dp else 30.dp
+        val heroToCatalogGap = if (shouldRenderPreviewRow) 10.dp else 12.dp
+        val localContext = LocalContext.current
+        val bgColor = NuvioColors.Background
 
         Crossfade(
             targetState = heroBackdrop,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .fillMaxWidth(0.75f)
+                .fillMaxHeight(1.0f),
             animationSpec = tween(durationMillis = 350),
             label = "modernHeroBackground"
         ) { imageUrl ->
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
-
-        val bgColor = NuvioColors.Background
-        val bottomGradient = remember(bgColor) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.0f to Color.Transparent,
-                    0.5f to Color.Transparent,
-                    0.76f to bgColor.copy(alpha = 0.68f),
-                    1.0f to bgColor
+            Box(modifier = Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(localContext)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.TopCenter
                 )
-            )
+                // Left edge fade - rounded arc inward
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawBehind {
+                            // Strong solid cover at the left edge, then arc inward
+                            drawRect(
+                                brush = Brush.horizontalGradient(
+                                    0.0f to bgColor,
+                                    0.12f to bgColor,
+                                    0.22f to Color.Transparent
+                                ),
+                                size = size
+                            )
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to bgColor,
+                                        0.55f to bgColor.copy(alpha = 0.70f),
+                                        0.80f to bgColor.copy(alpha = 0.20f),
+                                        1.0f to Color.Transparent
+                                    ),
+                                    center = Offset(0f, size.height / 2f),
+                                    radius = size.height * 1.0f
+                                ),
+                                size = size
+                            )
+                        }
+                )
+                // Bottom edge fade
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0.72f to Color.Transparent,
+                                0.88f to bgColor.copy(alpha = 0.6f),
+                                1.0f to bgColor
+                            )
+                        )
+                )
+            }
         }
         val leftGradient = remember(bgColor) {
             Brush.horizontalGradient(
                 colorStops = arrayOf(
-                    0.0f to bgColor.copy(alpha = 0.94f),
-                    0.34f to bgColor.copy(alpha = 0.58f),
-                    0.64f to Color.Transparent,
+                    0.0f to bgColor,
+                    0.20f to bgColor.copy(alpha = 0.95f),
+                    0.35f to bgColor.copy(alpha = 0.8f),
+                    0.45f to bgColor.copy(alpha = 0.6f),
+                    0.55f to bgColor.copy(alpha = 0.4f),
+                    0.65f to bgColor.copy(alpha = 0.2f),
+                    0.75f to Color.Transparent,
                     1.0f to Color.Transparent
                 )
             )
         }
+        val bottomGradient = remember(bgColor) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.0f to Color.Transparent,
+                    0.38f to Color.Transparent,
+                    0.56f to bgColor.copy(alpha = 0.38f),
+                    0.72f to bgColor.copy(alpha = 0.74f),
+                    0.86f to bgColor.copy(alpha = 0.94f),
+                    1.0f to bgColor.copy(alpha = 1.0f)
+                )
+            )
+        }
+        val dimColor = remember(bgColor) { bgColor.copy(alpha = 0.08f) }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(bottomGradient)
+                .background(dimColor)
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(leftGradient)
         )
-
-        HeroTitleBlock(
-            preview = resolvedHero,
-            portraitMode = !useLandscapePosters,
-            shouldRenderPreviewRow = shouldRenderPreviewRow,
+        Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(y = titleY)
-                .padding(start = rowHorizontalPadding, end = 48.dp)
-                .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
+                .fillMaxSize()
+                .background(bottomGradient)
         )
 
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(bottom = if (shouldRenderPreviewRow) 20.dp else 30.dp)
+                .padding(bottom = catalogBottomPadding)
         ) {
+            HeroTitleBlock(
+                preview = resolvedHero,
+                portraitMode = !useLandscapePosters,
+                shouldRenderPreviewRow = shouldRenderPreviewRow,
+                modifier = Modifier
+                    .padding(start = rowHorizontalPadding, end = 48.dp, bottom = heroToCatalogGap)
+                    .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
+            )
+
             AnimatedContent(
                 targetState = activeRow?.key,
                 transitionSpec = {
@@ -490,6 +563,8 @@ fun ModernHomeContent(
                                 ModernCarouselCard(
                                     item = item,
                                     useLandscapePosters = useLandscapePosters,
+                                    showLabels = uiState.posterLabelsEnabled,
+                                    cardCornerRadius = cardCornerRadius,
                                     cardWidth = activeCardWidth,
                                     cardHeight = activeCardHeight,
                                     focusRequester = requester,
@@ -618,6 +693,10 @@ private fun buildContinueWatchingItem(
             is ContinueWatchingItem.InProgress -> item.progress.name
             is ContinueWatchingItem.NextUp -> item.info.name
         },
+        subtitle = when (item) {
+            is ContinueWatchingItem.InProgress -> item.progress.episodeDisplayString ?: item.progress.episodeTitle
+            is ContinueWatchingItem.NextUp -> "S${item.info.season}E${item.info.episode}"
+        },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
         payload = ModernPayload.ContinueWatching(item)
@@ -650,6 +729,7 @@ private fun buildCatalogItem(
     return ModernCarouselItem(
         key = "catalog_${row.key()}_${item.id}_$index",
         title = item.name,
+        subtitle = item.releaseInfo,
         imageUrl = if (useLandscapePosters) {
             item.background ?: item.poster
         } else {
@@ -668,8 +748,16 @@ private fun catalogRowKey(row: CatalogRow): String {
     return "${row.addonId}_${row.apiType}_${row.catalogId}"
 }
 
-private fun catalogRowTitle(row: CatalogRow): String {
-    return "${row.catalogName.replaceFirstChar { it.uppercase() }} - ${row.apiType.replaceFirstChar { it.uppercase() }}"
+private fun catalogRowTitle(
+    row: CatalogRow,
+    showCatalogTypeSuffix: Boolean
+): String {
+    val catalogName = row.catalogName.replaceFirstChar { it.uppercase() }
+    return if (showCatalogTypeSuffix) {
+        "$catalogName - ${row.apiType.replaceFirstChar { it.uppercase() }}"
+    } else {
+        catalogName
+    }
 }
 
 private fun CatalogRow.key(): String {
@@ -690,6 +778,8 @@ private fun extractYear(releaseInfo: String?): String? {
 private fun ModernCarouselCard(
     item: ModernCarouselItem,
     useLandscapePosters: Boolean,
+    showLabels: Boolean,
+    cardCornerRadius: Dp,
     cardWidth: Dp,
     cardHeight: Dp,
     focusRequester: FocusRequester,
@@ -698,12 +788,7 @@ private fun ModernCarouselCard(
     onMoveUp: () -> Boolean,
     onMoveDown: () -> Boolean
 ) {
-    val cardShape = RoundedCornerShape(if (useLandscapePosters) 12.dp else 14.dp)
-    val titleStyle = if (useLandscapePosters) {
-        MaterialTheme.typography.titleSmall
-    } else {
-        MaterialTheme.typography.bodyLarge
-    }
+    val cardShape = RoundedCornerShape(cardCornerRadius)
     val landscapeLogoGradient = remember {
         Brush.verticalGradient(
             colorStops = arrayOf(
@@ -779,14 +864,31 @@ private fun ModernCarouselCard(
             }
         }
 
-        Text(
-            text = item.title,
-            style = titleStyle.copy(fontWeight = FontWeight.Medium),
-            color = NuvioColors.TextPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+        if (showLabels) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+            ) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    color = NuvioColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                item.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NuvioColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -825,7 +927,7 @@ private fun HeroTitleBlock(
 ) {
     if (preview == null) return
 
-    val descriptionMaxLines = if (portraitMode) 2 else 3
+    val descriptionMaxLines = if (portraitMode) 4 else 5
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
     val metaScale = if (portraitMode && shouldRenderPreviewRow) 0.90f else 1f
@@ -841,7 +943,8 @@ private fun HeroTitleBlock(
                 model = preview.logo,
                 contentDescription = preview.title,
                 modifier = Modifier
-                    .height(if (portraitMode) 62.dp else 82.dp)
+                    .height(100.dp)
+                    .widthIn(min = 100.dp, max = 220.dp)
                     .fillMaxWidth(),
                 contentScale = ContentScale.Fit,
                 alignment = Alignment.CenterStart
@@ -939,7 +1042,7 @@ private fun HeroTitleBlock(
                     fontSize = MaterialTheme.typography.bodyMedium.fontSize * descriptionScale,
                     lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * descriptionScale
                 ),
-                color = NuvioColors.TextSecondary,
+                color = NuvioColors.TextPrimary,
                 maxLines = descriptionMaxLines,
                 overflow = TextOverflow.Ellipsis
             )
