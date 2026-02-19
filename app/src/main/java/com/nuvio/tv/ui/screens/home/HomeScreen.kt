@@ -232,6 +232,9 @@ private fun ModernHomeRoute(
         focusState = focusState,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
+        onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
+            viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
+        },
         onSaveFocusState = { vi, vo, ri, ii, m ->
             viewModel.saveFocusState(vi, vo, ri, ii, m)
         }

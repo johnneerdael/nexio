@@ -52,9 +52,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -75,10 +73,13 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.ui.components.ContinueWatchingCard
+import com.nuvio.tv.ui.components.ContinueWatchingOptionsDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
+private const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.72f
 
 private data class HeroPreview(
     val title: String,
@@ -125,18 +126,19 @@ fun ModernHomeContent(
     focusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
+    onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
     val showNextRowPreview = uiState.modernNextRowPreviewEnabled
+    val showCatalogTypeSuffixInModern = false
     val visibleCatalogRows = remember(uiState.catalogRows) {
         uiState.catalogRows.filter { it.items.isNotEmpty() }
     }
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
-        useLandscapePosters,
-        uiState.catalogTypeSuffixEnabled
+        useLandscapePosters
     ) {
         buildList {
             if (uiState.continueWatchingItems.isNotEmpty()) {
@@ -162,7 +164,7 @@ fun ModernHomeContent(
                         key = catalogRowKey(row),
                         title = catalogRowTitle(
                             row = row,
-                            showCatalogTypeSuffix = uiState.catalogTypeSuffixEnabled
+                            showCatalogTypeSuffix = showCatalogTypeSuffixInModern
                         ),
                         globalRowIndex = index,
                         items = row.items.mapIndexed { itemIndex, item ->
@@ -196,6 +198,8 @@ fun ModernHomeContent(
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
+    var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
+    var lastFocusedContinueWatchingIndex by remember { mutableStateOf(-1) }
 
     fun requesterFor(rowKey: String, index: Int): FocusRequester {
         val byIndex = itemFocusRequesters.getOrPut(rowKey) { mutableMapOf() }
@@ -333,6 +337,9 @@ fun ModernHomeContent(
         }
         val previewCardWidth = activeCardWidth
         val previewCardHeight = activeCardHeight
+        val continueWatchingScale = if (previewRowEnabled) 1f else 1.34f
+        val continueWatchingCardWidth = portraitBaseWidth * 1.24f * continueWatchingScale
+        val continueWatchingCardHeight = continueWatchingCardWidth / 1.77f
         val cardCornerRadius = uiState.posterCardCornerRadiusDp.dp
         val previewVisibleHeight = if (useLandscapePosters) {
             previewCardHeight * 0.30f
@@ -348,8 +355,8 @@ fun ModernHomeContent(
         }
         val heroBackdrop = resolvedHero?.backdrop?.takeIf { it.isNotBlank() } ?: fallbackBackdrop
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
-        val catalogBottomPadding = if (shouldRenderPreviewRow) 20.dp else 30.dp
-        val heroToCatalogGap = if (shouldRenderPreviewRow) 10.dp else 12.dp
+        val catalogBottomPadding = if (shouldRenderPreviewRow) 12.dp else 18.dp
+        val heroToCatalogGap = if (shouldRenderPreviewRow) 14.dp else 18.dp
         val localContext = LocalContext.current
         val bgColor = NuvioColors.Background
 
@@ -358,7 +365,7 @@ fun ModernHomeContent(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .fillMaxWidth(0.75f)
-                .fillMaxHeight(1.0f),
+                .fillMaxHeight(MODERN_HERO_BACKDROP_HEIGHT_FRACTION),
             animationSpec = tween(durationMillis = 350),
             label = "modernHeroBackground"
         ) { imageUrl ->
@@ -371,7 +378,7 @@ fun ModernHomeContent(
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
-                    alignment = Alignment.TopCenter
+                    alignment = Alignment.TopEnd
                 )
                 // Left edge fade - rounded arc inward
                 Box(
@@ -569,32 +576,61 @@ fun ModernHomeContent(
                                 key = { index, item -> "${resolvedRow.key}_${item.key}_$index" }
                             ) { index, item ->
                                 val requester = requesterFor(resolvedRow.key, index)
-                                ModernCarouselCard(
-                                    item = item,
-                                    useLandscapePosters = useLandscapePosters,
-                                    showLabels = uiState.posterLabelsEnabled,
-                                    cardCornerRadius = cardCornerRadius,
-                                    cardWidth = activeCardWidth,
-                                    cardHeight = activeCardHeight,
-                                    focusRequester = requester,
-                                    onFocused = {
-                                        focusedItemByRow[resolvedRow.key] = index
-                                        activeRowKey = resolvedRow.key
-                                        heroItem = item.heroPreview
-                                    },
-                                    onClick = {
-                                        when (val payload = item.payload) {
-                                            is ModernPayload.Catalog -> onNavigateToDetail(
-                                                payload.itemId,
-                                                payload.itemType,
-                                                payload.addonBaseUrl
-                                            )
-                                            is ModernPayload.ContinueWatching -> onContinueWatchingClick(payload.item)
-                                        }
-                                    },
-                                    onMoveUp = { moveToRow(-1) },
-                                    onMoveDown = { moveToRow(1) }
-                                )
+                                val onFocused = {
+                                    focusedItemByRow[resolvedRow.key] = index
+                                    activeRowKey = resolvedRow.key
+                                    heroItem = item.heroPreview
+                                    if (resolvedRow.key == "continue_watching") {
+                                        lastFocusedContinueWatchingIndex = index
+                                    }
+                                }
+                                when (val payload = item.payload) {
+                                    is ModernPayload.ContinueWatching -> {
+                                        ContinueWatchingCard(
+                                            item = payload.item,
+                                            onClick = { onContinueWatchingClick(payload.item) },
+                                            onLongPress = { optionsItem = payload.item },
+                                            cardWidth = continueWatchingCardWidth,
+                                            imageHeight = continueWatchingCardHeight,
+                                            modifier = Modifier
+                                                .focusRequester(requester)
+                                                .onFocusChanged {
+                                                    if (it.isFocused) {
+                                                        onFocused()
+                                                    }
+                                                }
+                                                .onPreviewKeyEvent { event ->
+                                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                                    when (event.key) {
+                                                        Key.DirectionUp -> moveToRow(-1)
+                                                        Key.DirectionDown -> moveToRow(1)
+                                                        else -> false
+                                                    }
+                                                }
+                                        )
+                                    }
+                                    is ModernPayload.Catalog -> {
+                                        ModernCarouselCard(
+                                            item = item,
+                                            useLandscapePosters = useLandscapePosters,
+                                            showLabels = uiState.posterLabelsEnabled,
+                                            cardCornerRadius = cardCornerRadius,
+                                            cardWidth = activeCardWidth,
+                                            cardHeight = activeCardHeight,
+                                            focusRequester = requester,
+                                            onFocused = onFocused,
+                                            onClick = {
+                                                onNavigateToDetail(
+                                                    payload.itemId,
+                                                    payload.itemType,
+                                                    payload.addonBaseUrl
+                                                )
+                                            },
+                                            onMoveUp = { moveToRow(-1) },
+                                            onMoveDown = { moveToRow(1) }
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -632,6 +668,39 @@ fun ModernHomeContent(
                 }
             }
         }
+    }
+
+    val selectedOptionsItem = optionsItem
+    if (selectedOptionsItem != null) {
+        ContinueWatchingOptionsDialog(
+            item = selectedOptionsItem,
+            onDismiss = { optionsItem = null },
+            onRemove = {
+                val targetIndex = if (uiState.continueWatchingItems.size <= 1) {
+                    null
+                } else {
+                    minOf(lastFocusedContinueWatchingIndex, uiState.continueWatchingItems.size - 2)
+                        .coerceAtLeast(0)
+                }
+                pendingRowFocusKey = if (targetIndex != null) "continue_watching" else null
+                pendingRowFocusIndex = targetIndex
+                onRemoveContinueWatching(
+                    selectedOptionsItem.contentId(),
+                    selectedOptionsItem.season(),
+                    selectedOptionsItem.episode(),
+                    selectedOptionsItem is ContinueWatchingItem.NextUp
+                )
+                optionsItem = null
+            },
+            onDetails = {
+                onNavigateToDetail(
+                    selectedOptionsItem.contentId(),
+                    selectedOptionsItem.contentType(),
+                    ""
+                )
+                optionsItem = null
+            }
+        )
     }
 }
 
@@ -780,6 +849,34 @@ private fun isSeriesType(type: String?): Boolean {
 private fun extractYear(releaseInfo: String?): String? {
     if (releaseInfo.isNullOrBlank()) return null
     return YEAR_REGEX.find(releaseInfo)?.value
+}
+
+private fun ContinueWatchingItem.contentId(): String {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> progress.contentId
+        is ContinueWatchingItem.NextUp -> info.contentId
+    }
+}
+
+private fun ContinueWatchingItem.contentType(): String {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> progress.contentType
+        is ContinueWatchingItem.NextUp -> info.contentType
+    }
+}
+
+private fun ContinueWatchingItem.season(): Int? {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> progress.season
+        is ContinueWatchingItem.NextUp -> info.season
+    }
+}
+
+private fun ContinueWatchingItem.episode(): Int? {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> progress.episode
+        is ContinueWatchingItem.NextUp -> info.episode
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
