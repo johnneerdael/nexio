@@ -173,8 +173,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
 
-    emitStopScrobbleForCurrentProgress()
-    saveWatchProgress()
+    flushPlaybackSnapshotForSwitchOrExit()
 
     val newHeaders = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
         .filterKeys { !it.equals("Range", ignoreCase = true) }
@@ -442,8 +441,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
 
-    emitStopScrobbleForCurrentProgress()
-    saveWatchProgress()
+    flushPlaybackSnapshotForSwitchOrExit()
 
     val newHeaders = stream.behaviorHints?.proxyHeaders?.request.orEmpty()
         .filterKeys { !it.equals("Range", ignoreCase = true) }

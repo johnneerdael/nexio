@@ -64,9 +64,8 @@ internal fun PlayerRuntimeController.startWatchProgressSaving() {
     watchProgressSaveJob?.cancel()
     watchProgressSaveJob = scope.launch {
         while (isActive) {
-            delay(10000) 
+            delay(10000)
             saveWatchProgressIfNeeded()
-            emitPeriodicScrobblePause()
         }
     }
 }
@@ -188,23 +187,6 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     }
 }
 
-internal fun PlayerRuntimeController.emitPeriodicScrobblePause() {
-    val item = currentScrobbleItem ?: return
-    if (!hasSentScrobbleStartForCurrentItem) return
-    val progressPercent = currentPlaybackProgressPercent()
-    if (progressPercent >= 80f) {
-        emitCompletionScrobbleStop(progressPercent = progressPercent)
-        return
-    }
-
-    scope.launch {
-        traktScrobbleService.scrobblePause(
-            item = item,
-            progressPercent = progressPercent
-        )
-    }
-}
-
 internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = null) {
     val item = currentScrobbleItem ?: return
     if (!hasSentScrobbleStartForCurrentItem && (progressPercent ?: 0f) < 80f) return
@@ -243,6 +225,26 @@ internal fun PlayerRuntimeController.emitStopScrobbleForCurrentProgress() {
     val progressPercent = currentPlaybackProgressPercent()
     emitPauseScrobbleStop(progressPercent = progressPercent)
     emitCompletionScrobbleStop(progressPercent = progressPercent)
+}
+
+internal fun PlayerRuntimeController.flushPlaybackSnapshotForSwitchOrExit() {
+    emitStopScrobbleForCurrentProgress()
+    saveWatchProgress()
+}
+
+internal fun PlayerRuntimeController.scheduleProgressSyncAfterSeek() {
+    seekProgressSyncJob?.cancel()
+    seekProgressSyncJob = scope.launch {
+        delay(seekProgressSyncDebounceMs)
+        saveWatchProgress()
+
+        val progressPercent = currentPlaybackProgressPercent()
+        emitPauseScrobbleStop(progressPercent = progressPercent)
+
+        if (_exoPlayer?.isPlaying == true && progressPercent >= 1f && progressPercent < 80f) {
+            emitScrobbleStart()
+        }
+    }
 }
 
 fun PlayerRuntimeController.scheduleHideControls() {
@@ -325,6 +327,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     .coerceAtMost(maxDuration)
                 player.seekTo(target)
                 _uiState.update { it.copy(currentPosition = target) }
+                scheduleProgressSyncAfterSeek()
             }
             if (_uiState.value.showControls) {
                 showControlsTemporarily()
@@ -354,6 +357,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 _exoPlayer?.seekTo(target)
                 _uiState.update { it.copy(currentPosition = target) }
                 pendingPreviewSeekPosition = null
+                scheduleProgressSyncAfterSeek()
                 if (_uiState.value.showControls) {
                     showControlsTemporarily()
                 } else {
@@ -365,6 +369,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingPreviewSeekPosition = null
             _exoPlayer?.seekTo(event.position)
             _uiState.update { it.copy(currentPosition = event.position) }
+            scheduleProgressSyncAfterSeek()
             if (_uiState.value.showControls) {
                 showControlsTemporarily()
             } else {
@@ -522,6 +527,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnSkipIntro -> {
             _uiState.value.activeSkipInterval?.let { interval ->
                 _exoPlayer?.seekTo((interval.endTime * 1000).toLong())
+                scheduleProgressSyncAfterSeek()
                 _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
             }
         }

@@ -110,6 +110,7 @@ class PlayerRuntimeController(
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null
     internal var watchProgressSaveJob: Job? = null
+    internal var seekProgressSyncJob: Job? = null
     internal var frameRateProbeJob: Job? = null
     internal var frameRateProbeToken: Long = 0L
     internal var hideAspectRatioIndicatorJob: Job? = null
@@ -156,6 +157,7 @@ class PlayerRuntimeController(
     internal var currentMediaSession: MediaSession? = null
     internal var pauseOverlayJob: Job? = null
     internal val pauseOverlayDelayMs = 5000L
+    internal val seekProgressSyncDebounceMs = 700L
     internal var pendingPreviewSeekPosition: Long? = null
     internal var pendingResumeProgress: WatchProgress? = null
     internal var hasRetriedCurrentStreamAfter416: Boolean = false

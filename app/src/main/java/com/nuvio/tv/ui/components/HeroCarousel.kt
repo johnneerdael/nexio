@@ -201,7 +201,7 @@ private fun HeroCarouselSlide(
         // Background image
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(item.background ?: item.poster)
+                .data(item.background)
                 .crossfade(false)
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build(),
