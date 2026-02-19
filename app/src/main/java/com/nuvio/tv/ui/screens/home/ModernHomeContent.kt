@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -76,6 +77,7 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.ContinueWatchingCard
 import com.nuvio.tv.ui.components.ContinueWatchingOptionsDialog
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
@@ -116,7 +118,13 @@ private data class HeroCarouselRow(
     val key: String,
     val title: String,
     val globalRowIndex: Int,
-    val items: List<ModernCarouselItem>
+    val items: List<ModernCarouselItem>,
+    val catalogId: String? = null,
+    val addonId: String? = null,
+    val apiType: String? = null,
+    val supportsSkip: Boolean = false,
+    val hasMore: Boolean = false,
+    val isLoading: Boolean = false
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -126,19 +134,21 @@ fun ModernHomeContent(
     focusState: HomeScreenFocusState,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
+    onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
     val showNextRowPreview = uiState.modernNextRowPreviewEnabled
-    val showCatalogTypeSuffixInModern = false
+    val showCatalogTypeSuffixInModern = uiState.catalogTypeSuffixEnabled
     val visibleCatalogRows = remember(uiState.catalogRows) {
         uiState.catalogRows.filter { it.items.isNotEmpty() }
     }
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
-        useLandscapePosters
+        useLandscapePosters,
+        showCatalogTypeSuffixInModern
     ) {
         buildList {
             if (uiState.continueWatchingItems.isNotEmpty()) {
@@ -167,6 +177,12 @@ fun ModernHomeContent(
                             showCatalogTypeSuffix = showCatalogTypeSuffixInModern
                         ),
                         globalRowIndex = index,
+                        catalogId = row.catalogId,
+                        addonId = row.addonId,
+                        apiType = row.apiType,
+                        supportsSkip = row.supportsSkip,
+                        hasMore = row.hasMore,
+                        isLoading = row.isLoading,
                         items = row.items.mapIndexed { itemIndex, item ->
                             buildCatalogItem(
                                 index = itemIndex,
@@ -388,18 +404,18 @@ fun ModernHomeContent(
                             // Strong solid cover at the left edge, then arc inward
                             drawRect(
                                 brush = Brush.horizontalGradient(
-                                    0.0f to bgColor,
-                                    0.12f to bgColor,
-                                    0.22f to Color.Transparent
+                                    0.0f to bgColor.copy(alpha = 0.96f),
+                                    0.10f to bgColor.copy(alpha = 0.72f),
+                                    0.30f to Color.Transparent
                                 ),
                                 size = size
                             )
                             drawRect(
                                 brush = Brush.radialGradient(
                                     colorStops = arrayOf(
-                                        0.0f to bgColor,
-                                        0.55f to bgColor.copy(alpha = 0.70f),
-                                        0.80f to bgColor.copy(alpha = 0.20f),
+                                        0.0f to bgColor.copy(alpha = 0.78f),
+                                        0.55f to bgColor.copy(alpha = 0.52f),
+                                        0.80f to bgColor.copy(alpha = 0.16f),
                                         1.0f to Color.Transparent
                                     ),
                                     center = Offset(0f, size.height / 2f),
@@ -427,12 +443,12 @@ fun ModernHomeContent(
         val leftGradient = remember(bgColor) {
             Brush.horizontalGradient(
                 colorStops = arrayOf(
-                    0.0f to bgColor,
-                    0.20f to bgColor.copy(alpha = 0.95f),
-                    0.35f to bgColor.copy(alpha = 0.8f),
-                    0.45f to bgColor.copy(alpha = 0.6f),
-                    0.55f to bgColor.copy(alpha = 0.4f),
-                    0.65f to bgColor.copy(alpha = 0.2f),
+                    0.0f to bgColor.copy(alpha = 0.96f),
+                    0.20f to bgColor.copy(alpha = 0.86f),
+                    0.35f to bgColor.copy(alpha = 0.70f),
+                    0.45f to bgColor.copy(alpha = 0.55f),
+                    0.55f to bgColor.copy(alpha = 0.38f),
+                    0.65f to bgColor.copy(alpha = 0.22f),
                     0.75f to Color.Transparent,
                     1.0f to Color.Transparent
                 )
@@ -560,6 +576,38 @@ fun ModernHomeContent(
                                 pendingRowFocusKey = null
                                 pendingRowFocusIndex = null
                             }
+                        }
+
+                        LaunchedEffect(
+                            resolvedRow.key,
+                            rowListState,
+                            resolvedRow.items.size,
+                            resolvedRow.supportsSkip,
+                            resolvedRow.hasMore,
+                            resolvedRow.isLoading
+                        ) {
+                            snapshotFlow {
+                                val lastVisible = rowListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                                val total = rowListState.layoutInfo.totalItemsCount
+                                lastVisible to total
+                            }
+                                .distinctUntilChanged()
+                                .collect { (lastVisible, total) ->
+                                    if (total <= 0) return@collect
+                                    val catalogId = resolvedRow.catalogId
+                                    val addonId = resolvedRow.addonId
+                                    val apiType = resolvedRow.apiType
+                                    if (lastVisible >= total - 4 &&
+                                        resolvedRow.supportsSkip &&
+                                        resolvedRow.hasMore &&
+                                        !resolvedRow.isLoading &&
+                                        !catalogId.isNullOrBlank() &&
+                                        !addonId.isNullOrBlank() &&
+                                        !apiType.isNullOrBlank()
+                                    ) {
+                                        onLoadMoreCatalog(catalogId, addonId, apiType)
+                                    }
+                                }
                         }
 
                         LazyRow(

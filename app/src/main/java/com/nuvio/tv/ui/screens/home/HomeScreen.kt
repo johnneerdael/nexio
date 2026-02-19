@@ -232,6 +232,9 @@ private fun ModernHomeRoute(
         focusState = focusState,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
+        onLoadMoreCatalog = { catalogId, addonId, type ->
+            viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
+        },
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         },

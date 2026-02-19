@@ -1049,7 +1049,8 @@ class HomeViewModel @Inject constructor(
             }
 
             val computedDisplayRows = orderedRows.map { row ->
-                if (row.items.size > 25) {
+                val shouldKeepFullRowInModern = currentLayout == HomeLayout.MODERN && row.supportsSkip
+                if (row.items.size > 25 && !shouldKeepFullRowInModern) {
                     val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
                     val cachedEntry = truncatedRowCache[key]
                     if (cachedEntry != null && cachedEntry.sourceRow === row) {
