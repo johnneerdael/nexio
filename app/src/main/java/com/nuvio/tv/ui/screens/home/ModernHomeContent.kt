@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,7 +51,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -62,7 +62,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -95,7 +94,6 @@ private sealed class ModernPayload {
 private data class ModernCarouselItem(
     val key: String,
     val title: String,
-    val subtitle: String?,
     val imageUrl: String?,
     val heroPreview: HeroPreview,
     val payload: ModernPayload
@@ -166,6 +164,13 @@ fun ModernHomeContent(
     }
 
     if (carouselRows.isEmpty()) return
+    val rowIndexByKey = remember(carouselRows) {
+        buildMap(carouselRows.size) {
+            carouselRows.forEachIndexed { index, row ->
+                put(row.key, index)
+            }
+        }
+    }
 
     val focusedItemByRow = remember { mutableStateMapOf<String, Int>() }
     val itemFocusRequesters = remember { mutableMapOf<String, MutableMap<Int, FocusRequester>>() }
@@ -183,7 +188,7 @@ fun ModernHomeContent(
 
     fun moveToRow(direction: Int): Boolean {
         val currentRowKey = activeRowKey ?: return false
-        val currentIndex = carouselRows.indexOfFirst { it.key == currentRowKey }
+        val currentIndex = rowIndexByKey[currentRowKey] ?: -1
         if (currentIndex < 0) return false
         val targetIndex = currentIndex + direction
         if (targetIndex !in carouselRows.indices) return false
@@ -260,8 +265,8 @@ fun ModernHomeContent(
     val activeItemIndex = activeRow?.let { row ->
         focusedItemByRow[row.key]?.coerceIn(0, (row.items.size - 1).coerceAtLeast(0)) ?: 0
     } ?: 0
-    val nextRow = remember(carouselRows, activeRow?.key) {
-        val index = carouselRows.indexOfFirst { it.key == activeRow?.key }
+    val nextRow = remember(carouselRows, activeRow?.key, rowIndexByKey) {
+        val index = activeRow?.key?.let { key -> rowIndexByKey[key] ?: -1 } ?: -1
         if (index in carouselRows.indices && index + 1 < carouselRows.size) {
             carouselRows[index + 1]
         } else {
@@ -319,10 +324,12 @@ fun ModernHomeContent(
         }
 
         val resolvedHero = heroItem ?: activeRow?.items?.firstOrNull()?.heroPreview
-        val heroBackdrop = resolvedHero?.backdrop?.takeIf { it.isNotBlank() }
-            ?: activeRow?.items?.firstNotNullOfOrNull { item ->
+        val fallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
+            activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
             }
+        }
+        val heroBackdrop = resolvedHero?.backdrop?.takeIf { it.isNotBlank() } ?: fallbackBackdrop
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
         val titleY = when {
             useLandscapePosters -> maxHeight * 0.23f
@@ -336,10 +343,7 @@ fun ModernHomeContent(
             label = "modernHeroBackground"
         ) { imageUrl ->
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageUrl)
-                    .crossfade(false)
-                    .build(),
+                model = imageUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -394,13 +398,13 @@ fun ModernHomeContent(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(bottom = if (shouldRenderPreviewRow) 42.dp else 52.dp)
+                .padding(bottom = if (shouldRenderPreviewRow) 20.dp else 30.dp)
         ) {
             AnimatedContent(
                 targetState = activeRow?.key,
                 transitionSpec = {
-                    val initialIndex = carouselRows.indexOfFirst { it.key == initialState }
-                    val targetIndex = carouselRows.indexOfFirst { it.key == targetState }
+                    val initialIndex = rowIndexByKey[initialState] ?: -1
+                    val targetIndex = rowIndexByKey[targetState] ?: -1
                     val movingDown = targetIndex > initialIndex
                     (
                         slideInVertically(
@@ -437,12 +441,40 @@ fun ModernHomeContent(
                             if (pendingRowFocusKey != resolvedRow.key) return@LaunchedEffect
                             val targetIndex = (pendingRowFocusIndex ?: 0)
                                 .coerceIn(0, (resolvedRow.items.size - 1).coerceAtLeast(0))
-                            runCatching { rowListState.animateScrollToItem(targetIndex) }
                             val requester = requesterFor(resolvedRow.key, targetIndex)
-                            kotlinx.coroutines.delay(100)
-                            runCatching { requester.requestFocus() }
-                            pendingRowFocusKey = null
-                            pendingRowFocusIndex = null
+                            var didFocus = false
+                            var didScrollToTarget = false
+                            repeat(20) {
+                                didFocus = runCatching {
+                                    requester.requestFocus()
+                                    true
+                                }.getOrDefault(false)
+                                if (didFocus) return@repeat
+                                if (!didScrollToTarget) {
+                                    val targetVisible = rowListState.layoutInfo.visibleItemsInfo
+                                        .any { it.index == targetIndex }
+                                    if (!targetVisible) {
+                                        runCatching { rowListState.scrollToItem(targetIndex) }
+                                        didScrollToTarget = true
+                                    }
+                                }
+                                withFrameNanos { }
+                            }
+                            if (!didFocus) {
+                                val fallbackIndex = rowListState.layoutInfo.visibleItemsInfo
+                                    .firstOrNull()
+                                    ?.index
+                                    ?.coerceIn(0, (resolvedRow.items.size - 1).coerceAtLeast(0))
+                                    ?: 0
+                                didFocus = runCatching {
+                                    requesterFor(resolvedRow.key, fallbackIndex).requestFocus()
+                                    true
+                                }.getOrDefault(false)
+                            }
+                            if (didFocus) {
+                                pendingRowFocusKey = null
+                                pendingRowFocusIndex = null
+                            }
                         }
 
                         LazyRow(
@@ -483,7 +515,7 @@ fun ModernHomeContent(
                         }
 
                         if (showNextRowPreview) {
-                            val rowIndex = carouselRows.indexOfFirst { it.key == resolvedRow.key }
+                            val rowIndex = rowIndexByKey[resolvedRow.key] ?: -1
                             val previewRow = carouselRows.getOrNull(rowIndex + 1)
                             if (previewRow != null) {
                                 Box(
@@ -586,10 +618,6 @@ private fun buildContinueWatchingItem(
             is ContinueWatchingItem.InProgress -> item.progress.name
             is ContinueWatchingItem.NextUp -> item.info.name
         },
-        subtitle = when (item) {
-            is ContinueWatchingItem.InProgress -> item.progress.episodeDisplayString ?: item.progress.episodeTitle
-            is ContinueWatchingItem.NextUp -> "S${item.info.season}E${item.info.episode}"
-        },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
         payload = ModernPayload.ContinueWatching(item)
@@ -622,7 +650,6 @@ private fun buildCatalogItem(
     return ModernCarouselItem(
         key = "catalog_${row.key()}_${item.id}_$index",
         title = item.name,
-        subtitle = item.releaseInfo,
         imageUrl = if (useLandscapePosters) {
             item.background ?: item.poster
         } else {
@@ -725,10 +752,7 @@ private fun ModernCarouselCard(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(item.imageUrl)
-                        .crossfade(false)
-                        .build(),
+                    model = item.imageUrl,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -741,10 +765,7 @@ private fun ModernCarouselCard(
                             .background(landscapeLogoGradient)
                     )
                     AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(item.heroPreview.logo)
-                            .crossfade(false)
-                            .build(),
+                        model = item.heroPreview.logo,
                         contentDescription = item.title,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -782,10 +803,7 @@ private fun PreviewCarouselCard(
             .clip(RoundedCornerShape(10.dp))
     ) {
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(imageUrl)
-                .crossfade(false)
-                .build(),
+            model = imageUrl,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
@@ -820,10 +838,7 @@ private fun HeroTitleBlock(
     ) {
         if (!preview.logo.isNullOrBlank()) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(preview.logo)
-                    .crossfade(false)
-                    .build(),
+                model = preview.logo,
                 contentDescription = preview.title,
                 modifier = Modifier
                     .height(if (portraitMode) 62.dp else 82.dp)
