@@ -297,7 +297,11 @@ fun ModernHomeContent(
 
     val activeRow = remember(carouselRows, activeRowKey) {
         val activeKey = activeRowKey
-        carouselRows.firstOrNull { it.key == activeKey } ?: carouselRows.firstOrNull()
+        if (activeKey == null) {
+            null
+        } else {
+            carouselRows.firstOrNull { it.key == activeKey } ?: carouselRows.firstOrNull()
+        }
     }
     val activeItemIndex = activeRow?.let { row ->
         focusedItemByRow[row.key]?.coerceIn(0, (row.items.size - 1).coerceAtLeast(0)) ?: 0
@@ -535,7 +539,11 @@ fun ModernHomeContent(
                     )
 
                     row?.let { resolvedRow ->
-                        val rowListState = rowListStates.getOrPut(resolvedRow.key) { LazyListState() }
+                        val rowListState = rowListStates.getOrPut(resolvedRow.key) {
+                            LazyListState(
+                                firstVisibleItemIndex = focusState.catalogRowScrollStates[resolvedRow.key] ?: 0
+                            )
+                        }
 
                         LaunchedEffect(resolvedRow.key, pendingRowFocusKey, pendingRowFocusIndex) {
                             if (pendingRowFocusKey != resolvedRow.key) return@LaunchedEffect
