@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,7 +50,10 @@ fun LayoutSelectionScreen(
     onContinue: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedLayout by remember { mutableStateOf(HomeLayout.CLASSIC) }
+    var selectedLayout by remember { mutableStateOf(HomeLayout.MODERN) }
+    LaunchedEffect(uiState.selectedLayout) {
+        selectedLayout = uiState.selectedLayout
+    }
 
     Box(
         modifier = Modifier
@@ -87,9 +91,9 @@ fun LayoutSelectionScreen(
                 horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally)
             ) {
                 LayoutOptionCard(
-                    layout = HomeLayout.CLASSIC,
-                    isSelected = selectedLayout == HomeLayout.CLASSIC,
-                    onSelect = { selectedLayout = HomeLayout.CLASSIC },
+                    layout = HomeLayout.MODERN,
+                    isSelected = selectedLayout == HomeLayout.MODERN,
+                    onSelect = { selectedLayout = HomeLayout.MODERN },
                     modifier = Modifier.weight(1f)
                 )
 
@@ -101,9 +105,9 @@ fun LayoutSelectionScreen(
                 )
 
                 LayoutOptionCard(
-                    layout = HomeLayout.MODERN,
-                    isSelected = selectedLayout == HomeLayout.MODERN,
-                    onSelect = { selectedLayout = HomeLayout.MODERN },
+                    layout = HomeLayout.CLASSIC,
+                    isSelected = selectedLayout == HomeLayout.CLASSIC,
+                    onSelect = { selectedLayout = HomeLayout.CLASSIC },
                     modifier = Modifier.weight(1f)
                 )
             }

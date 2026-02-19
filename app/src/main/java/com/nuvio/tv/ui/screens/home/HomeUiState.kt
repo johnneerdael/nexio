@@ -14,7 +14,7 @@ data class HomeUiState(
     val error: String? = null,
     val selectedItemId: String? = null,
     val installedAddonsCount: Int = 0,
-    val homeLayout: HomeLayout = HomeLayout.CLASSIC,
+    val homeLayout: HomeLayout = HomeLayout.MODERN,
     val modernLandscapePostersEnabled: Boolean = true,
     val modernNextRowPreviewEnabled: Boolean = false,
     val heroItems: List<MetaPreview> = emptyList(),

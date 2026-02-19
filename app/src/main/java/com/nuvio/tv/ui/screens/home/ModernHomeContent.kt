@@ -415,8 +415,9 @@ fun ModernHomeContent(
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                0.72f to Color.Transparent,
-                                0.88f to bgColor.copy(alpha = 0.6f),
+                                0.78f to Color.Transparent,
+                                0.90f to bgColor.copy(alpha = 0.72f),
+                                0.96f to bgColor.copy(alpha = 0.98f),
                                 1.0f to bgColor
                             )
                         )

@@ -63,11 +63,11 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val selectedLayout: Flow<HomeLayout> = dataStore.data.map { prefs ->
-        val layoutName = prefs[layoutKey] ?: HomeLayout.CLASSIC.name
+        val layoutName = prefs[layoutKey] ?: HomeLayout.MODERN.name
         try {
             HomeLayout.valueOf(layoutName)
         } catch (e: IllegalArgumentException) {
-            HomeLayout.CLASSIC
+            HomeLayout.MODERN
         }
     }
 

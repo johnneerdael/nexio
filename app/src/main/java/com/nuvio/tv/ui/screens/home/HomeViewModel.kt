@@ -212,6 +212,11 @@ class HomeViewModel @Inject constructor(
                     modernNextRowPreviewEnabled = modernPrefs.second
                 )
             }.collectLatest { prefs ->
+                val effectivePosterLabelsEnabled = if (prefs.layout == HomeLayout.MODERN) {
+                    false
+                } else {
+                    prefs.posterLabelsEnabled
+                }
                 val previousState = _uiState.value
                 val shouldRefreshCatalogPresentation =
                     currentHeroCatalogKeys != prefs.heroCatalogKeys ||
@@ -223,7 +228,7 @@ class HomeViewModel @Inject constructor(
                         homeLayout = prefs.layout,
                         heroCatalogKeys = prefs.heroCatalogKeys,
                         heroSectionEnabled = prefs.heroSectionEnabled,
-                        posterLabelsEnabled = prefs.posterLabelsEnabled,
+                        posterLabelsEnabled = effectivePosterLabelsEnabled,
                         catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
                         catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,

@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class LayoutSettingsUiState(
-    val selectedLayout: HomeLayout = HomeLayout.CLASSIC,
+    val selectedLayout: HomeLayout = HomeLayout.MODERN,
     val hasChosen: Boolean = false,
     val availableCatalogs: List<CatalogInfo> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),
