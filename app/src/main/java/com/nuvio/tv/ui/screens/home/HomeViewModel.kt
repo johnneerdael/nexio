@@ -48,6 +48,12 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Collections
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -458,19 +464,25 @@ class HomeViewModel @Inject constructor(
         inProgressItems: List<ContinueWatchingItem.InProgress>,
         dismissedNextUp: Set<String>
     ) = coroutineScope {
-        val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
-
         val latestCompletedBySeries = allProgress
             .filter { progress ->
                 isSeriesType(progress.contentType) &&
                     progress.season != null &&
                     progress.episode != null &&
                     progress.season != 0 &&
-                    progress.isCompleted()
+                    progress.isCompleted() &&
+                    progress.source != WatchProgress.SOURCE_TRAKT_PLAYBACK
             }
             .groupBy { it.contentId }
-            .mapNotNull { (_, items) -> items.maxByOrNull { it.lastWatched } }
-            .filter { it.contentId !in inProgressIds }
+            .mapNotNull { (_, items) ->
+                items.maxWithOrNull(
+                    compareBy<WatchProgress>(
+                        { it.season ?: -1 },
+                        { it.episode ?: -1 },
+                        { it.lastWatched }
+                    )
+                )
+            }
             .filter { progress -> nextUpDismissKey(progress.contentId) !in dismissedNextUp }
             .sortedByDescending { it.lastWatched }
             .take(MAX_NEXT_UP_LOOKUPS)
@@ -527,9 +539,21 @@ class HomeViewModel @Inject constructor(
         inProgressItems: List<ContinueWatchingItem.InProgress>,
         nextUpItems: List<ContinueWatchingItem.NextUp>
     ): List<ContinueWatchingItem> {
+        val inProgressSeriesIds = inProgressItems
+            .asSequence()
+            .map { it.progress }
+            .filter { isSeriesType(it.contentType) }
+            .map { it.contentId }
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        val filteredNextUpItems = nextUpItems.filter { item ->
+            item.info.contentId !in inProgressSeriesIds
+        }
+
         val combined = mutableListOf<Pair<Long, ContinueWatchingItem>>()
         inProgressItems.forEach { combined.add(it.progress.lastWatched to it) }
-        nextUpItems.forEach { combined.add(it.info.lastWatched to it) }
+        filteredNextUpItems.forEach { combined.add(it.info.lastWatched to it) }
 
         return combined
             .sortedByDescending { it.first }
@@ -589,17 +613,63 @@ class HomeViewModel @Inject constructor(
             .filter { it.season != null && it.episode != null && it.season != 0 }
             .sortedWith(compareBy<Video> { it.season }.thenBy { it.episode })
 
-        val currentIndex = episodes.indexOfFirst {
-            it.season == progress.season && it.episode == progress.episode
-        }
+        val currentSeason = progress.season ?: return null
+        val currentEpisode = progress.episode ?: return null
+        val maxEpisodeInSeason = episodes
+            .asSequence()
+            .filter { it.season == currentSeason }
+            .mapNotNull { it.episode }
+            .maxOrNull()
+            ?: return null
 
-        if (currentIndex == -1 || currentIndex + 1 >= episodes.size) return null
+        val isSeasonJump = currentEpisode >= maxEpisodeInSeason
+        val targetSeason = if (isSeasonJump) currentSeason + 1 else currentSeason
+        val targetEpisode = if (isSeasonJump) 1 else currentEpisode + 1
 
-        return meta to episodes[currentIndex + 1]
+        val nextEpisode = episodes.firstOrNull {
+            it.season == targetSeason && it.episode == targetEpisode
+        } ?: return null
+
+        if (!shouldIncludeNextUpEpisode(nextEpisode, isSeasonJump)) return null
+
+        return meta to nextEpisode
     }
 
     private fun isSeriesType(type: String?): Boolean {
         return type == "series" || type == "tv"
+    }
+
+    private fun shouldIncludeNextUpEpisode(
+        nextEpisode: Video,
+        isSeasonJump: Boolean
+    ): Boolean {
+        val releaseDate = parseEpisodeReleaseDate(nextEpisode.released)
+            ?: return !isSeasonJump
+        val todayUtc = LocalDate.now(ZoneOffset.UTC)
+        if (!releaseDate.isAfter(todayUtc)) return true
+        if (!isSeasonJump) return true
+
+        val daysUntilRelease = ChronoUnit.DAYS.between(todayUtc, releaseDate)
+        return daysUntilRelease <= 7
+    }
+
+    private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
+        if (raw.isNullOrBlank()) return null
+        val value = raw.trim()
+
+        return runCatching {
+            Instant.parse(value).atOffset(ZoneOffset.UTC).toLocalDate()
+        }.getOrNull() ?: runCatching {
+            OffsetDateTime.parse(value).toLocalDate()
+        }.getOrNull() ?: runCatching {
+            LocalDateTime.parse(value).toLocalDate()
+        }.getOrNull() ?: runCatching {
+            LocalDate.parse(value)
+        }.getOrNull() ?: runCatching {
+            val datePortion = Regex("\\b\\d{4}-\\d{2}-\\d{2}\\b").find(value)?.value
+                ?: return@runCatching null
+            LocalDate.parse(datePortion)
+        }.getOrNull()
     }
 
     private fun removeContinueWatching(

@@ -128,53 +128,56 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
 
-        item {
-            val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
-                NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
-                NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
-            }
-            NavigationSettingsItem(
-                icon = Icons.Default.Tune,
-                title = "Next Episode Threshold Mode",
-                subtitle = thresholdModeSubtitle,
-                onClick = onShowNextEpisodeThresholdModeDialog,
-                onFocused = onItemFocused
-            )
+    item {
+        val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
+            NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
+            NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
         }
+        NavigationSettingsItem(
+            icon = Icons.Default.Tune,
+            title = "Next Episode Threshold Mode",
+            subtitle = thresholdModeSubtitle,
+            onClick = onShowNextEpisodeThresholdModeDialog,
+            onFocused = onItemFocused
+        )
+    }
 
-        item {
-            when (playerSettings.nextEpisodeThresholdMode) {
-                NextEpisodeThresholdMode.PERCENTAGE -> {
-                    SliderSettingsItem(
-                        icon = Icons.Default.Tune,
-                        title = "Threshold Percentage",
-                        subtitle = "Fallback when no outro timestamp exists.",
-                        value = playerSettings.nextEpisodeThresholdPercent,
-                        valueText = "${playerSettings.nextEpisodeThresholdPercent}%",
-                        minValue = 50,
-                        maxValue = 99,
-                        step = 1,
-                        onValueChange = onSetNextEpisodeThresholdPercent,
-                        onFocused = onItemFocused
-                    )
-                }
-                NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
-                    SliderSettingsItem(
-                        icon = Icons.Default.Tune,
-                        title = "Threshold Minutes",
-                        subtitle = "Fallback when no outro timestamp exists.",
-                        value = playerSettings.nextEpisodeThresholdMinutesBeforeEnd,
-                        valueText = "${playerSettings.nextEpisodeThresholdMinutesBeforeEnd} min",
-                        minValue = 1,
-                        maxValue = 30,
-                        step = 1,
-                        onValueChange = onSetNextEpisodeThresholdMinutesBeforeEnd,
-                        onFocused = onItemFocused
-                    )
-                }
+    item {
+        when (playerSettings.nextEpisodeThresholdMode) {
+            NextEpisodeThresholdMode.PERCENTAGE -> {
+                SliderSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = "Threshold Percentage",
+                    subtitle = "Fallback when no outro timestamp exists.",
+                    value = playerSettings.nextEpisodeThresholdPercent,
+                    valueText = "${playerSettings.nextEpisodeThresholdPercent}%",
+                    minValue = 50,
+                    maxValue = 99,
+                    step = 1,
+                    onValueChange = onSetNextEpisodeThresholdPercent,
+                    onFocused = onItemFocused
+                )
+            }
+            NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
+                SliderSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = "Threshold Minutes",
+                    subtitle = "Fallback when no outro timestamp exists.",
+                    value = playerSettings.nextEpisodeThresholdMinutesBeforeEnd,
+                    valueText = "${playerSettings.nextEpisodeThresholdMinutesBeforeEnd} min",
+                    minValue = 1,
+                    maxValue = 30,
+                    step = 1,
+                    onValueChange = onSetNextEpisodeThresholdMinutesBeforeEnd,
+                    onFocused = onItemFocused
+                )
             }
         }
+    }
+
+    if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
 
         item {
             val sourceLabel = when (playerSettings.streamAutoPlaySource) {
