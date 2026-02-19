@@ -16,6 +16,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistorySeasonRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktMovieDto
+import com.nuvio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
@@ -786,7 +787,7 @@ class TraktProgressService @Inject constructor(
         title: String?,
         year: Int?
     ): TraktHistoryAddRequestDto? {
-        val ids = toTraktIds(parseContentIds(progress.contentId))
+        val ids = resolveHistoryIds(progress)
         if (!ids.hasAnyId()) return null
         val watchedAt = toTraktUtcDateTime(progress.lastWatched)
 
@@ -827,6 +828,16 @@ class TraktProgressService @Inject constructor(
                 )
             )
         }
+    }
+
+    private fun resolveHistoryIds(progress: WatchProgress): TraktIdsDto {
+        val contentIds = toTraktIds(parseContentIds(progress.contentId))
+        if (contentIds.hasAnyId()) return contentIds
+
+        val videoIds = toTraktIds(parseContentIds(progress.videoId))
+        if (videoIds.hasAnyId()) return videoIds
+
+        return contentIds
     }
 
     private fun toTraktUtcDateTime(lastWatchedMs: Long): String {

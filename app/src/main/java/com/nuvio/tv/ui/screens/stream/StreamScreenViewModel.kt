@@ -51,6 +51,9 @@ class StreamScreenViewModel @Inject constructor(
     private val year: String? = savedStateHandle.getOptionalString("year")
     private val contentId: String? = savedStateHandle.getOptionalString("contentId")
     private val contentName: String? = savedStateHandle.getOptionalString("contentName")
+    private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
+        ?.toBooleanStrictOrNull()
+        ?: false
     private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
 
     private val _uiState = MutableStateFlow(
@@ -75,6 +78,21 @@ class StreamScreenViewModel @Inject constructor(
         .map { it.playerPreference }
 
     init {
+        if (manualSelection) {
+            // Returning from a playback error: keep the user on stream selection.
+            autoPlayHandledForSession = true
+            directAutoPlayModeInitializedForSession = true
+            directAutoPlayFlowEnabledForSession = false
+            _uiState.update {
+                it.copy(
+                    isDirectAutoPlayFlow = false,
+                    showDirectAutoPlayOverlay = false,
+                    autoPlayStream = null,
+                    autoPlayPlaybackInfo = null,
+                    directAutoPlayMessage = null
+                )
+            }
+        }
         loadMissingMetaDetailsIfNeeded()
         loadStreams()
     }
@@ -112,7 +130,11 @@ class StreamScreenViewModel @Inject constructor(
     private fun loadStreams() {
         viewModelScope.launch {
             val playerSettings = playerSettingsDataStore.playerSettings.first()
-            if (!directAutoPlayModeInitializedForSession) {
+            if (manualSelection) {
+                directAutoPlayModeInitializedForSession = true
+                directAutoPlayFlowEnabledForSession = false
+                autoPlayHandledForSession = true
+            } else if (!directAutoPlayModeInitializedForSession) {
                 directAutoPlayFlowEnabledForSession = shouldUseDirectAutoPlayFlow(
                     playerPreference = playerSettings.playerPreference,
                     streamAutoPlayMode = playerSettings.streamAutoPlayMode

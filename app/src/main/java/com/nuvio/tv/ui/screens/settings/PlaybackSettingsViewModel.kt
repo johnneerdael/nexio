@@ -6,9 +6,11 @@ import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.data.local.PlayerPreference
+import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
+import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.domain.repository.AddonRepository
@@ -92,8 +94,8 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSkipIntroEnabled(enabled)
     }
 
-    suspend fun setFrameRateMatching(enabled: Boolean) {
-        playerSettingsDataStore.setFrameRateMatching(enabled)
+    suspend fun setFrameRateMatchingMode(mode: FrameRateMatchingMode) {
+        playerSettingsDataStore.setFrameRateMatchingMode(mode)
     }
 
     suspend fun setMapDV7ToHevc(enabled: Boolean) {
@@ -156,6 +158,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setSubtitleOutlineWidth(width)
     }
 
+    suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
+        playerSettingsDataStore.setSubtitleOrganizationMode(mode)
+    }
+
     // Buffer settings functions
 
     suspend fun setBufferMinBufferMs(ms: Int) {
@@ -214,11 +220,11 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setNextEpisodeThresholdMode(mode)
     }
 
-    suspend fun setNextEpisodeThresholdPercent(percent: Int) {
+    suspend fun setNextEpisodeThresholdPercent(percent: Float) {
         playerSettingsDataStore.setNextEpisodeThresholdPercent(percent)
     }
 
-    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Int) {
+    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
         playerSettingsDataStore.setNextEpisodeThresholdMinutesBeforeEnd(minutes)
     }
 

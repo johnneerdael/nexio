@@ -54,6 +54,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,11 +99,13 @@ import com.nuvio.tv.core.player.ExternalPlayerLauncher
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
-    onBackPress: () -> Unit
+    onBackPress: () -> Unit,
+    onPlaybackErrorBack: () -> Unit = onBackPress
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -115,7 +118,9 @@ fun PlayerScreen(
     val nextEpisodeFocusRequester = remember { FocusRequester() }
 
     BackHandler {
-        if (uiState.showPauseOverlay) {
+        if (uiState.error != null) {
+            onPlaybackErrorBack()
+        } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showSubtitleStylePanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
@@ -155,24 +160,114 @@ fun PlayerScreen(
         }
     }
 
-    // Frame rate matching: switch display refresh rate to match video frame rate
-    // Like Just Player, we pause playback during the switch and resume when the display settles.
+    // Frame rate matching: switch display refresh rate to match video frame rate.
+    // Track gets priority; probe is fallback.
+    // Allow one correction if source/decision changes after first switch.
     val activity = LocalContext.current as? android.app.Activity
-    LaunchedEffect(uiState.detectedFrameRate, uiState.frameRateMatchingEnabled) {
-        if (activity != null && uiState.frameRateMatchingEnabled && uiState.detectedFrameRate > 0f) {
+    val coroutineScope = rememberCoroutineScope()
+    var afrAppliedSource by remember { mutableStateOf<FrameRateSource?>(null) }
+    var afrAppliedRate by remember { mutableStateOf(0f) }
+    var afrCorrectionUsed by remember { mutableStateOf(false) }
+    LaunchedEffect(
+        uiState.detectedFrameRate,
+        uiState.detectedFrameRateRaw,
+        uiState.detectedFrameRateSource,
+        uiState.frameRateMatchingMode
+    ) {
+        if (uiState.frameRateMatchingMode == com.nuvio.tv.data.local.FrameRateMatchingMode.OFF) {
+            afrAppliedSource = null
+            afrAppliedRate = 0f
+            afrCorrectionUsed = false
+            return@LaunchedEffect
+        }
+        if (uiState.detectedFrameRate <= 0f) {
+            afrAppliedSource = null
+            afrAppliedRate = 0f
+            afrCorrectionUsed = false
+            return@LaunchedEffect
+        }
+        val source = uiState.detectedFrameRateSource ?: return@LaunchedEffect
+        val allowFirstDecision = afrAppliedSource == null
+        val allowSourceCorrection = afrAppliedSource != null &&
+            !afrCorrectionUsed &&
+            source != afrAppliedSource &&
+            kotlin.math.abs(uiState.detectedFrameRate - afrAppliedRate) > 0.015f
+        if (!allowFirstDecision && !allowSourceCorrection) return@LaunchedEffect
+
+        if (activity != null) {
+            val probeRaw = if (uiState.detectedFrameRateRaw > 0f) {
+                uiState.detectedFrameRateRaw
+            } else {
+                uiState.detectedFrameRate
+            }
+            val prefer23976ProbeBias = source == FrameRateSource.PROBE &&
+                probeRaw in 23.95f..24.12f
+            val targetFrameRate = com.nuvio.tv.core.player.FrameRateUtils.refineFrameRateForDisplay(
+                activity = activity,
+                detectedFps = uiState.detectedFrameRate,
+                prefer23976Near24 = prefer23976ProbeBias
+            )
+            val wasPlaying = uiState.isPlaying
             val switched = com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(
                 activity,
-                uiState.detectedFrameRate,
-                onBeforeSwitch = { viewModel.exoPlayer?.pause() },
-                onAfterSwitch = { viewModel.exoPlayer?.play() }
+                targetFrameRate,
+                onBeforeSwitch = { if (wasPlaying) viewModel.exoPlayer?.pause() },
+                onAfterSwitch = { mode ->
+                    if (wasPlaying) {
+                        coroutineScope.launch {
+                            kotlinx.coroutines.delay(2000)
+                            viewModel.exoPlayer?.play()
+                        }
+                    }
+                    viewModel.onEvent(
+                        PlayerEvent.OnShowDisplayModeInfo(
+                            DisplayModeInfo(
+                                width = mode.physicalWidth,
+                                height = mode.physicalHeight,
+                                refreshRate = mode.refreshRate
+                            )
+                        )
+                    )
+                }
             )
+            if (!switched) {
+                val mode = activity.window?.decorView?.display?.mode
+                if (mode != null) {
+                    viewModel.onEvent(
+                        PlayerEvent.OnShowDisplayModeInfo(
+                            DisplayModeInfo(
+                                width = mode.physicalWidth,
+                                height = mode.physicalHeight,
+                                refreshRate = mode.refreshRate
+                            )
+                        )
+                    )
+                }
+            }
+            if (allowSourceCorrection) {
+                afrCorrectionUsed = true
+            }
+            afrAppliedSource = source
+            afrAppliedRate = targetFrameRate
+        }
+    }
+    LaunchedEffect(uiState.frameRateMatchingMode) {
+        if (activity != null &&
+            uiState.frameRateMatchingMode == com.nuvio.tv.data.local.FrameRateMatchingMode.OFF
+        ) {
+            com.nuvio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
         }
     }
     // Restore original display mode when leaving the player
-    DisposableEffect(activity) {
+    DisposableEffect(activity, uiState.frameRateMatchingMode) {
         onDispose {
             if (activity != null) {
-                com.nuvio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
+                if (uiState.frameRateMatchingMode == com.nuvio.tv.data.local.FrameRateMatchingMode.START_STOP) {
+                    com.nuvio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
+                } else {
+                    com.nuvio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
+                    com.nuvio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
+                }
             }
         }
     }
@@ -444,7 +539,7 @@ fun PlayerScreen(
         if (uiState.error != null) {
             ErrorOverlay(
                 message = uiState.error!!,
-                onBack = onBackPress
+                onBack = onPlaybackErrorBack
             )
         }
 
@@ -474,6 +569,8 @@ fun PlayerScreen(
                 !uiState.showSubtitleStylePanel &&
                 !uiState.showSpeedDialog,
             controlsVisible = uiState.showControls,
+            isPlayable = uiState.nextEpisode?.hasAired == true,
+            unairedMessage = uiState.nextEpisode?.unairedMessage,
             isAutoPlaySearching = uiState.nextEpisodeAutoPlaySearching,
             autoPlaySourceName = uiState.nextEpisodeAutoPlaySourceName,
             autoPlayCountdownSec = uiState.nextEpisodeAutoPlayCountdownSec,
@@ -493,6 +590,17 @@ fun PlayerScreen(
                 viewModel.onEvent(PlayerEvent.OnParentalGuideHide)
             },
             modifier = Modifier.align(Alignment.TopStart)
+        )
+
+        DisplayModeOverlay(
+            info = uiState.displayModeInfo,
+            isVisible = uiState.showDisplayModeInfo,
+            onAnimationComplete = {
+                viewModel.onEvent(PlayerEvent.OnHideDisplayModeInfo)
+            },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .zIndex(2.2f)
         )
 
         // Controls overlay
@@ -714,6 +822,7 @@ fun PlayerScreen(
                 addonSubtitles = uiState.addonSubtitles,
                 selectedAddonSubtitle = uiState.selectedAddonSubtitle,
                 preferredLanguage = uiState.subtitleStyle.preferredLanguage,
+                subtitleOrganizationMode = uiState.subtitleOrganizationMode,
                 isLoadingAddons = uiState.isLoadingAddonSubtitles,
                 onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
                 onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },

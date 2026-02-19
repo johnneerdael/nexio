@@ -11,6 +11,7 @@ import com.nuvio.tv.data.remote.api.TrailerApi
 import com.nuvio.tv.data.remote.api.IntroDbApi
 import com.nuvio.tv.data.remote.api.MDBListApi
 import com.nuvio.tv.data.remote.api.ParentalGuideApi
+import com.nuvio.tv.data.remote.api.SeriesGraphApi
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -229,4 +230,25 @@ object NetworkModule {
     @Singleton
     fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
         retrofit.create(MDBListApi::class.java)
+
+    // --- SeriesGraph API ---
+
+    @Provides
+    @Singleton
+    @Named("seriesGraph")
+    fun provideSeriesGraphRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
+        val rawBaseUrl = BuildConfig.IMDB_RATINGS_API_BASE_URL
+        require(rawBaseUrl.isNotBlank()) { "IMDB_RATINGS_API_BASE_URL must be set in local properties." }
+        val normalizedBaseUrl = if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        return Retrofit.Builder()
+            .baseUrl(normalizedBaseUrl)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSeriesGraphApi(@Named("seriesGraph") retrofit: Retrofit): SeriesGraphApi =
+        retrofit.create(SeriesGraphApi::class.java)
 }

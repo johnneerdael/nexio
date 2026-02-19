@@ -3,6 +3,12 @@ package com.nuvio.tv.ui.screens.player
 import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.repository.SkipInterval
 import com.nuvio.tv.domain.model.Video
+import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 
 object PlayerNextEpisodeRules {
     fun resolveNextEpisode(
@@ -27,8 +33,8 @@ object PlayerNextEpisodeRules {
         durationMs: Long,
         skipIntervals: List<SkipInterval>,
         thresholdMode: NextEpisodeThresholdMode,
-        thresholdPercent: Int,
-        thresholdMinutesBeforeEnd: Int
+        thresholdPercent: Float,
+        thresholdMinutesBeforeEnd: Float
     ): Boolean {
         val outroInterval = skipIntervals.firstOrNull { it.type == "outro" }
         return if (outroInterval != null) {
@@ -37,15 +43,29 @@ object PlayerNextEpisodeRules {
             if (durationMs <= 0L) return false
             when (thresholdMode) {
                 NextEpisodeThresholdMode.PERCENTAGE -> {
-                    val clampedPercent = thresholdPercent.coerceIn(50, 99)
+                    val clampedPercent = thresholdPercent.coerceIn(97f, 99.5f)
                     (positionMs.toDouble() / durationMs.toDouble()) >= (clampedPercent / 100.0)
                 }
                 NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
-                    val clampedMinutes = thresholdMinutesBeforeEnd.coerceIn(1, 30)
+                    val clampedMinutes = thresholdMinutesBeforeEnd.coerceIn(1f, 3.5f)
                     val remainingMs = durationMs - positionMs
-                    remainingMs <= clampedMinutes * 60_000L
+                    remainingMs <= (clampedMinutes * 60_000f).toLong()
                 }
             }
         }
+    }
+
+    fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
+        val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+
+        return runCatching { LocalDate.parse(value) }.getOrNull()
+            ?: runCatching { Instant.parse(value).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(value).toLocalDate() }.getOrNull()
+            ?: runCatching { LocalDateTime.parse(value).toLocalDate() }.getOrNull()
+    }
+
+    fun hasEpisodeAired(raw: String?, clock: Clock = Clock.systemDefaultZone()): Boolean {
+        val releasedDate = parseEpisodeReleaseDate(raw) ?: return true
+        return !releasedDate.isAfter(LocalDate.now(clock))
     }
 }

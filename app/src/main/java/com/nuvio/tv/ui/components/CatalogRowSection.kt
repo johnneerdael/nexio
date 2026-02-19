@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -55,12 +56,14 @@ fun CatalogRowSection(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showPosterLabels: Boolean = true,
     showAddonName: Boolean = true,
+    showCatalogTypeSuffix: Boolean = true,
     focusedPosterBackdropExpandEnabled: Boolean = false,
     focusedPosterBackdropExpandDelaySeconds: Int = 3,
     focusedPosterBackdropTrailerEnabled: Boolean = false,
     focusedPosterBackdropTrailerMuted: Boolean = true,
     trailerPreviewUrls: Map<String, String> = emptyMap(),
     onRequestTrailerPreview: (MetaPreview) -> Unit = {},
+    onItemFocus: (MetaPreview) -> Unit = {},
     modifier: Modifier = Modifier,
     enableRowFocusRestorer: Boolean = true,
     initialScrollIndex: Int = 0,
@@ -72,20 +75,21 @@ fun CatalogRowSection(
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
     val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
-
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
 
     val internalRowFocusRequester = remember { FocusRequester() }
     val resolvedRowFocusRequester = rowFocusRequester ?: internalRowFocusRequester
-    val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
-    LaunchedEffect(catalogRow.items.size) {
-        itemFocusRequesters.keys.removeAll { it >= catalogRow.items.size }
+    val itemFocusRequestersById = remember { mutableMapOf<String, FocusRequester>() }
+    LaunchedEffect(catalogRow.items) {
+        val validIds = catalogRow.items.mapTo(mutableSetOf()) { it.id }
+        itemFocusRequestersById.keys.retainAll(validIds)
     }
 
-    LaunchedEffect(focusedItemIndex, catalogRow.items.size) {
+    LaunchedEffect(focusedItemIndex, catalogRow.items) {
         if (focusedItemIndex >= 0 && focusedItemIndex < catalogRow.items.size) {
-            val requester = itemFocusRequesters.getOrPut(focusedItemIndex) { FocusRequester() }
-            kotlinx.coroutines.delay(100)
+            val targetItemId = catalogRow.items[focusedItemIndex].id
+            val requester = itemFocusRequestersById.getOrPut(targetItemId) { FocusRequester() }
+            repeat(2) { withFrameNanos { } }
             runCatching { requester.requestFocus() }
         }
     }
@@ -99,6 +103,15 @@ fun CatalogRowSection(
         Modifier
     }
 
+    val catalogTitle = remember(catalogRow.catalogName, catalogRow.apiType, showCatalogTypeSuffix) {
+        val formattedName = catalogRow.catalogName.replaceFirstChar { it.uppercase() }
+        if (showCatalogTypeSuffix) {
+            "$formattedName - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}"
+        } else {
+            formattedName
+        }
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -109,7 +122,7 @@ fun CatalogRowSection(
         ) {
             Column {
                 Text(
-                    text = "${catalogRow.catalogName.replaceFirstChar { it.uppercase() }} - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}",
+                    text = catalogTitle,
                     style = MaterialTheme.typography.headlineMedium,
                     color = NuvioColors.TextPrimary,
                     maxLines = 3,
@@ -133,11 +146,11 @@ fun CatalogRowSection(
                 .then(
                     if (enableRowFocusRestorer && focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
                         Modifier.focusRestorer {
-                            val visibleIndex = listState.layoutInfo.visibleItemsInfo
-                                .firstOrNull()
-                                ?.index
-                            if (visibleIndex != null && visibleIndex < catalogRow.items.size) {
-                                itemFocusRequesters.getOrPut(visibleIndex) { FocusRequester() }
+                            val fallbackIndex = listState.firstVisibleItemIndex
+                                .coerceIn(0, (catalogRow.items.size - 1).coerceAtLeast(0))
+                            val fallbackItemId = catalogRow.items.getOrNull(fallbackIndex)?.id
+                            if (fallbackItemId != null) {
+                                itemFocusRequestersById.getOrPut(fallbackItemId) { FocusRequester() }
                             } else {
                                 resolvedRowFocusRequester
                             }
@@ -151,8 +164,8 @@ fun CatalogRowSection(
         ) {
             itemsIndexed(
                 items = catalogRow.items,
-                key = { index, item ->
-                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}_$index"
+                key = { _, item ->
+                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}"
                 },
                 contentType = { _, _ -> "content_card" }
             ) { index, item ->
@@ -166,6 +179,7 @@ fun CatalogRowSection(
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrl = trailerPreviewUrls[item.id],
                     onRequestTrailerPreview = onRequestTrailerPreview,
+                    onFocus = onItemFocus,
                     onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
@@ -174,11 +188,10 @@ fun CatalogRowSection(
                             }
                         }
                         .then(directionalFocusModifier),
-                    focusRequester = itemFocusRequesters.getOrPut(index) { FocusRequester() }
+                    focusRequester = itemFocusRequestersById.getOrPut(item.id) { FocusRequester() }
                 )
             }
 
-            // "See All" card
             if (catalogRow.items.size >= 15) {
                 item(key = "${catalogRow.type}_${catalogRow.catalogId}_see_all") {
                     Card(

@@ -9,6 +9,7 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
@@ -34,9 +35,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -44,6 +47,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -54,6 +64,7 @@ class HomeViewModel @Inject constructor(
     private val metaRepository: MetaRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val traktSettingsDataStore: TraktSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val trailerService: TrailerService
@@ -64,10 +75,13 @@ class HomeViewModel @Inject constructor(
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
+        private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    private val _fullCatalogRows = MutableStateFlow<List<CatalogRow>>(emptyList())
+    val fullCatalogRows: StateFlow<List<CatalogRow>> = _fullCatalogRows.asStateFlow()
 
     private val _focusState = MutableStateFlow(HomeScreenFocusState())
     val focusState: StateFlow<HomeScreenFocusState> = _focusState.asStateFlow()
@@ -83,130 +97,176 @@ class HomeViewModel @Inject constructor(
     private var addonsCache: List<Addon> = emptyList()
     private var homeCatalogOrderKeys: List<String> = emptyList()
     private var disabledHomeCatalogKeys: Set<String> = emptySet()
-    private var currentHeroCatalogKey: String? = null
+    private var currentHeroCatalogKeys: List<String> = emptyList()
     private var catalogUpdateJob: Job? = null
     private var hasRenderedFirstCatalog = false
-    private val catalogLoadSemaphore = Semaphore(6)
+    private val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
     private var pendingCatalogLoads = 0
-    private val truncatedItemsCache = mutableMapOf<String, List<MetaPreview>>()
+    private data class TruncatedRowCacheEntry(
+        val sourceRow: CatalogRow,
+        val truncatedRow: CatalogRow
+    )
+    private val truncatedRowCache = mutableMapOf<String, TruncatedRowCacheEntry>()
     private val trailerPreviewLoadingIds = mutableSetOf<String>()
     private val trailerPreviewNegativeCache = mutableSetOf<String>()
     private val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     private var activeTrailerPreviewItemId: String? = null
     private var trailerPreviewRequestVersion: Long = 0L
+    private var currentTmdbSettings: TmdbSettings = TmdbSettings()
+    private var lastHeroEnrichmentSignature: String? = null
+    private var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
+    private val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
+    private val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
+    @Volatile
+    private var externalMetaPrefetchEnabled: Boolean = false
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
 
     init {
-        loadLayoutPreference()
-        loadModernLandscapePostersPreference()
-        loadModernNextRowPreviewPreference()
-        loadHeroCatalogPreference()
-        loadHeroSectionPreference()
-        loadPosterLabelPreference()
-        loadCatalogAddonNamePreference()
-        loadFocusedPosterBackdropExpandPreference()
-        loadFocusedPosterBackdropExpandDelayPreference()
-        loadFocusedPosterBackdropTrailerPreference()
-        loadFocusedPosterBackdropTrailerMutedPreference()
+        observeLayoutPreferences()
+        observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
-        loadPosterCardStylePreferences()
         observeTmdbSettings()
         loadContinueWatching()
         observeInstalledAddons()
     }
 
-    private fun loadLayoutPreference() {
+    private fun observeLayoutPreferences() {
+        val coreLayoutPrefsFlow = combine(
+            combine(
+                layoutPreferenceDataStore.selectedLayout,
+                layoutPreferenceDataStore.heroCatalogSelections,
+                layoutPreferenceDataStore.heroSectionEnabled,
+                layoutPreferenceDataStore.posterLabelsEnabled,
+                layoutPreferenceDataStore.catalogAddonNameEnabled
+            ) { layout, heroCatalogKeys, heroSectionEnabled, posterLabelsEnabled, catalogAddonNameEnabled ->
+                CoreLayoutPrefs(
+                    layout = layout,
+                    heroCatalogKeys = heroCatalogKeys,
+                    heroSectionEnabled = heroSectionEnabled,
+                    posterLabelsEnabled = posterLabelsEnabled,
+                    catalogAddonNameEnabled = catalogAddonNameEnabled,
+                    catalogTypeSuffixEnabled = true
+                )
+            },
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled
+        ) { corePrefs, catalogTypeSuffixEnabled ->
+            corePrefs.copy(catalogTypeSuffixEnabled = catalogTypeSuffixEnabled)
+        }
+
+        val focusedBackdropPrefsFlow = combine(
+            layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled,
+            layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds,
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled,
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted
+        ) { expandEnabled, expandDelaySeconds, trailerEnabled, trailerMuted ->
+            FocusedBackdropPrefs(
+                expandEnabled = expandEnabled,
+                expandDelaySeconds = expandDelaySeconds,
+                trailerEnabled = trailerEnabled,
+                trailerMuted = trailerMuted
+            )
+        }
+
         viewModelScope.launch {
-            layoutPreferenceDataStore.selectedLayout.collectLatest { layout ->
-                _uiState.update { it.copy(homeLayout = layout) }
+            combine(
+                coreLayoutPrefsFlow,
+                focusedBackdropPrefsFlow,
+                layoutPreferenceDataStore.posterCardWidthDp,
+                layoutPreferenceDataStore.posterCardHeightDp,
+                layoutPreferenceDataStore.posterCardCornerRadiusDp
+            ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
+                LayoutUiPrefs(
+                    layout = corePrefs.layout,
+                    heroCatalogKeys = corePrefs.heroCatalogKeys,
+                    heroSectionEnabled = corePrefs.heroSectionEnabled,
+                    posterLabelsEnabled = corePrefs.posterLabelsEnabled,
+                    catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
+                    catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
+                    focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
+                    focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
+                    focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
+                    focusedBackdropTrailerMuted = focusedBackdropPrefs.trailerMuted,
+                    posterCardWidthDp = posterCardWidthDp,
+                    posterCardHeightDp = posterCardHeightDp,
+                    posterCardCornerRadiusDp = posterCardCornerRadiusDp
+                )
+            }.collectLatest { prefs ->
+                val previousState = _uiState.value
+                val shouldRefreshCatalogPresentation =
+                    currentHeroCatalogKeys != prefs.heroCatalogKeys ||
+                        previousState.heroSectionEnabled != prefs.heroSectionEnabled ||
+                        previousState.homeLayout != prefs.layout
+                currentHeroCatalogKeys = prefs.heroCatalogKeys
+                _uiState.update {
+                    it.copy(
+                        homeLayout = prefs.layout,
+                        heroCatalogKeys = prefs.heroCatalogKeys,
+                        heroSectionEnabled = prefs.heroSectionEnabled,
+                        posterLabelsEnabled = prefs.posterLabelsEnabled,
+                        catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
+                        catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
+                        focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
+                        focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
+                        focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
+                        focusedPosterBackdropTrailerMuted = prefs.focusedBackdropTrailerMuted,
+                        posterCardWidthDp = prefs.posterCardWidthDp,
+                        posterCardHeightDp = prefs.posterCardHeightDp,
+                        posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp
+                    )
+                }
+                if (shouldRefreshCatalogPresentation) {
+                    scheduleUpdateCatalogRows()
+                }
             }
         }
     }
 
-    private fun loadModernLandscapePostersPreference() {
+    private fun observeExternalMetaPrefetchPreference() {
         viewModelScope.launch {
-            layoutPreferenceDataStore.modernLandscapePostersEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(modernLandscapePostersEnabled = enabled) }
-            }
+            layoutPreferenceDataStore.preferExternalMetaAddonDetail
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    externalMetaPrefetchEnabled = enabled
+                    if (!enabled) {
+                        externalMetaPrefetchInFlightIds.clear()
+                    }
+                }
         }
     }
 
-    private fun loadModernNextRowPreviewPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.modernNextRowPreviewEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(modernNextRowPreviewEnabled = enabled) }
-            }
-        }
-    }
+    private data class CoreLayoutPrefs(
+        val layout: HomeLayout,
+        val heroCatalogKeys: List<String>,
+        val heroSectionEnabled: Boolean,
+        val posterLabelsEnabled: Boolean,
+        val catalogAddonNameEnabled: Boolean,
+        val catalogTypeSuffixEnabled: Boolean
+    )
 
-    private fun loadHeroCatalogPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.heroCatalogSelection.collectLatest { key ->
-                currentHeroCatalogKey = key
-                _uiState.update { it.copy(heroCatalogKey = key) }
-                scheduleUpdateCatalogRows()
-            }
-        }
-    }
+    private data class FocusedBackdropPrefs(
+        val expandEnabled: Boolean,
+        val expandDelaySeconds: Int,
+        val trailerEnabled: Boolean,
+        val trailerMuted: Boolean
+    )
 
-    private fun loadHeroSectionPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.heroSectionEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(heroSectionEnabled = enabled) }
-                scheduleUpdateCatalogRows()
-            }
-        }
-    }
-
-    private fun loadPosterLabelPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterLabelsEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(posterLabelsEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadCatalogAddonNamePreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropExpandPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropExpandDelayPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds.collectLatest { seconds ->
-                _uiState.update { it.copy(focusedPosterBackdropExpandDelaySeconds = seconds) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropTrailerPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(focusedPosterBackdropTrailerEnabled = enabled) }
-            }
-        }
-    }
-
-    private fun loadFocusedPosterBackdropTrailerMutedPreference() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted.collectLatest { muted ->
-                _uiState.update { it.copy(focusedPosterBackdropTrailerMuted = muted) }
-            }
-        }
-    }
+    private data class LayoutUiPrefs(
+        val layout: HomeLayout,
+        val heroCatalogKeys: List<String>,
+        val heroSectionEnabled: Boolean,
+        val posterLabelsEnabled: Boolean,
+        val catalogAddonNameEnabled: Boolean,
+        val catalogTypeSuffixEnabled: Boolean,
+        val focusedBackdropExpandEnabled: Boolean,
+        val focusedBackdropExpandDelaySeconds: Int,
+        val focusedBackdropTrailerEnabled: Boolean,
+        val focusedBackdropTrailerMuted: Boolean,
+        val posterCardWidthDp: Int,
+        val posterCardHeightDp: Int,
+        val posterCardCornerRadiusDp: Int
+    )
 
     fun requestTrailerPreview(item: MetaPreview) {
         val itemId = item.id
@@ -248,6 +308,61 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun onItemFocus(item: MetaPreview) {
+        if (!externalMetaPrefetchEnabled) return
+        if (item.id in prefetchedExternalMetaIds) return
+        if (!externalMetaPrefetchInFlightIds.add(item.id)) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
+                    .first { it is NetworkResult.Success || it is NetworkResult.Error }
+
+                if (result is NetworkResult.Success) {
+                    prefetchedExternalMetaIds.add(item.id)
+                    updateCatalogItemWithMeta(item.id, result.data)
+                }
+            } finally {
+                externalMetaPrefetchInFlightIds.remove(item.id)
+            }
+        }
+    }
+
+    private fun updateCatalogItemWithMeta(itemId: String, meta: Meta) {
+        _uiState.update { state ->
+            var changed = false
+            val updatedRows = state.catalogRows.map { row ->
+                val itemIndex = row.items.indexOfFirst { it.id == itemId }
+                if (itemIndex < 0) {
+                    row
+                } else {
+                    val currentItem = row.items[itemIndex]
+                    val mergedItem = currentItem.copy(
+                        background = meta.background ?: currentItem.background,
+                        logo = meta.logo ?: currentItem.logo,
+                        description = meta.description ?: currentItem.description,
+                        releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
+                        imdbRating = meta.imdbRating ?: currentItem.imdbRating,
+                        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
+                    )
+                    if (mergedItem == currentItem) {
+                        row
+                    } else {
+                        changed = true
+                        val mutableItems = row.items.toMutableList()
+                        mutableItems[itemIndex] = mergedItem
+                        row.copy(items = mutableItems)
+                    }
+                }
+            }
+            if (changed) {
+                state.copy(catalogRows = updatedRows)
+            } else {
+                state
+            }
+        }
+    }
+
     private fun loadHomeCatalogOrderPreference() {
         viewModelScope.launch {
             layoutPreferenceDataStore.homeCatalogOrderKeys.collectLatest { keys ->
@@ -272,29 +387,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun loadPosterCardStylePreferences() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
-                _uiState.update { it.copy(posterCardWidthDp = widthDp) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
-                _uiState.update { it.copy(posterCardHeightDp = heightDp) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
-                _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
-            }
-        }
-    }
-
     private fun observeTmdbSettings() {
         viewModelScope.launch {
             tmdbSettingsDataStore.settings
                 .distinctUntilChanged()
-                .collectLatest {
+                .collectLatest { settings ->
+                    currentTmdbSettings = settings
                     scheduleUpdateCatalogRows()
                 }
         }
@@ -316,8 +414,15 @@ class HomeViewModel @Inject constructor(
 
     private fun loadContinueWatching() {
         viewModelScope.launch {
-            watchProgressRepository.allProgress.collectLatest { items ->
-                val cutoffMs = System.currentTimeMillis() - CONTINUE_WATCHING_WINDOW_MS
+            combine(
+                watchProgressRepository.allProgress,
+                traktSettingsDataStore.continueWatchingDaysCap,
+                traktSettingsDataStore.dismissedNextUpKeys
+            ) { items, daysCap, dismissedNextUp ->
+                Triple(items, daysCap, dismissedNextUp)
+            }.collectLatest { (items, daysCap, dismissedNextUp) ->
+                val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
+                val cutoffMs = System.currentTimeMillis() - windowMs
                 val recentItems = items
                     .asSequence()
                     .filter { it.lastWatched >= cutoffMs }
@@ -350,7 +455,8 @@ class HomeViewModel @Inject constructor(
                 // Then enrich Next Up in background with bounded concurrency.
                 enrichContinueWatchingProgressively(
                     allProgress = recentItems,
-                    inProgressItems = inProgressOnly
+                    inProgressItems = inProgressOnly,
+                    dismissedNextUp = dismissedNextUp
                 )
             }
         }
@@ -404,9 +510,13 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun enrichContinueWatchingProgressively(
         allProgress: List<WatchProgress>,
-        inProgressItems: List<ContinueWatchingItem.InProgress>
+        inProgressItems: List<ContinueWatchingItem.InProgress>,
+        dismissedNextUp: Set<String>
     ) = coroutineScope {
-        val inProgressIds = inProgressItems.map { it.progress.contentId }.toSet()
+        val inProgressIds = inProgressItems
+            .map { it.progress.contentId }
+            .filter { it.isNotBlank() }
+            .toSet()
 
         val latestCompletedBySeries = allProgress
             .filter { progress ->
@@ -414,11 +524,21 @@ class HomeViewModel @Inject constructor(
                     progress.season != null &&
                     progress.episode != null &&
                     progress.season != 0 &&
-                    progress.isCompleted()
+                    progress.isCompleted() &&
+                    progress.source != WatchProgress.SOURCE_TRAKT_PLAYBACK
             }
             .groupBy { it.contentId }
-            .mapNotNull { (_, items) -> items.maxByOrNull { it.lastWatched } }
+            .mapNotNull { (_, items) ->
+                items.maxWithOrNull(
+                    compareBy<WatchProgress>(
+                        { it.lastWatched },
+                        { it.season ?: -1 },
+                        { it.episode ?: -1 }
+                    )
+                )
+            }
             .filter { it.contentId !in inProgressIds }
+            .filter { progress -> nextUpDismissKey(progress.contentId) !in dismissedNextUp }
             .sortedByDescending { it.lastWatched }
             .take(MAX_NEXT_UP_LOOKUPS)
 
@@ -430,22 +550,42 @@ class HomeViewModel @Inject constructor(
         val mergeMutex = Mutex()
         val nextUpByContent = linkedMapOf<String, ContinueWatchingItem.NextUp>()
         val metaCache = mutableMapOf<String, Meta?>()
+        var lastEmittedNextUpCount = 0
 
-        latestCompletedBySeries.forEach { progress ->
+        val jobs = latestCompletedBySeries.map { progress ->
             launch(Dispatchers.IO) {
                 lookupSemaphore.withPermit {
                     val nextUp = buildNextUpItem(progress, metaCache) ?: return@withPermit
                     mergeMutex.withLock {
                         nextUpByContent[progress.contentId] = nextUp
-                        _uiState.update {
-                            it.copy(
-                                continueWatchingItems = mergeContinueWatchingItems(
-                                    inProgressItems = inProgressItems,
-                                    nextUpItems = nextUpByContent.values.toList()
+                        if (nextUpByContent.size - lastEmittedNextUpCount >= 2) {
+                            val nextUpItems = nextUpByContent.values.toList()
+                            _uiState.update {
+                                it.copy(
+                                    continueWatchingItems = mergeContinueWatchingItems(
+                                        inProgressItems = inProgressItems,
+                                        nextUpItems = nextUpItems
+                                    )
                                 )
-                            )
+                            }
+                            lastEmittedNextUpCount = nextUpByContent.size
                         }
                     }
+                }
+            }
+        }
+        jobs.joinAll()
+
+        mergeMutex.withLock {
+            if (nextUpByContent.size != lastEmittedNextUpCount) {
+                val nextUpItems = nextUpByContent.values.toList()
+                _uiState.update {
+                    it.copy(
+                        continueWatchingItems = mergeContinueWatchingItems(
+                            inProgressItems = inProgressItems,
+                            nextUpItems = nextUpItems
+                        )
+                    )
                 }
             }
         }
@@ -455,9 +595,21 @@ class HomeViewModel @Inject constructor(
         inProgressItems: List<ContinueWatchingItem.InProgress>,
         nextUpItems: List<ContinueWatchingItem.NextUp>
     ): List<ContinueWatchingItem> {
+        val inProgressSeriesIds = inProgressItems
+            .asSequence()
+            .map { it.progress }
+            .filter { isSeriesType(it.contentType) }
+            .map { it.contentId }
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        val filteredNextUpItems = nextUpItems.filter { item ->
+            item.info.contentId !in inProgressSeriesIds
+        }
+
         val combined = mutableListOf<Pair<Long, ContinueWatchingItem>>()
         inProgressItems.forEach { combined.add(it.progress.lastWatched to it) }
-        nextUpItems.forEach { combined.add(it.info.lastWatched to it) }
+        filteredNextUpItems.forEach { combined.add(it.info.lastWatched to it) }
 
         return combined
             .sortedByDescending { it.first }
@@ -501,13 +653,26 @@ class HomeViewModel @Inject constructor(
             .filter { it.season != null && it.episode != null && it.season != 0 }
             .sortedWith(compareBy<Video> { it.season }.thenBy { it.episode })
 
-        val currentIndex = episodes.indexOfFirst {
-            it.season == progress.season && it.episode == progress.episode
-        }
+        val currentSeason = progress.season ?: return null
+        val currentEpisode = progress.episode ?: return null
+        val maxEpisodeInSeason = episodes
+            .asSequence()
+            .filter { it.season == currentSeason }
+            .mapNotNull { it.episode }
+            .maxOrNull()
+            ?: return null
 
-        if (currentIndex == -1 || currentIndex + 1 >= episodes.size) return null
+        val isSeasonJump = currentEpisode >= maxEpisodeInSeason
+        val targetSeason = if (isSeasonJump) currentSeason + 1 else currentSeason
+        val targetEpisode = if (isSeasonJump) 1 else currentEpisode + 1
 
-        return meta to episodes[currentIndex + 1]
+        val nextEpisode = episodes.firstOrNull {
+            it.season == targetSeason && it.episode == targetEpisode
+        } ?: return null
+
+        if (!shouldIncludeNextUpEpisode(nextEpisode, isSeasonJump)) return null
+
+        return meta to nextEpisode
     }
 
     private suspend fun resolveMetaForProgress(
@@ -556,12 +721,67 @@ class HomeViewModel @Inject constructor(
         return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
     }
 
+    private fun shouldIncludeNextUpEpisode(
+        nextEpisode: Video,
+        isSeasonJump: Boolean
+    ): Boolean {
+        val releaseDate = parseEpisodeReleaseDate(nextEpisode.released)
+            ?: return !isSeasonJump
+        val todayUtc = LocalDate.now(ZoneOffset.UTC)
+        if (!releaseDate.isAfter(todayUtc)) return true
+        if (!isSeasonJump) return true
+
+        val daysUntilRelease = ChronoUnit.DAYS.between(todayUtc, releaseDate)
+        return daysUntilRelease <= 7
+    }
+
+    private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
+        if (raw.isNullOrBlank()) return null
+        val value = raw.trim()
+
+        return runCatching {
+            Instant.parse(value).atOffset(ZoneOffset.UTC).toLocalDate()
+        }.getOrNull() ?: runCatching {
+            OffsetDateTime.parse(value).toLocalDate()
+        }.getOrNull() ?: runCatching {
+            LocalDateTime.parse(value).toLocalDate()
+        }.getOrNull() ?: runCatching {
+            LocalDate.parse(value)
+        }.getOrNull() ?: runCatching {
+            val datePortion = Regex("\\b\\d{4}-\\d{2}-\\d{2}\\b").find(value)?.value
+                ?: return@runCatching null
+            LocalDate.parse(datePortion)
+        }.getOrNull()
+    }
+
+    private fun nextUpDismissKey(contentId: String): String {
+        return contentId.trim()
+    }
+
     private fun removeContinueWatching(
         contentId: String,
         season: Int? = null,
         episode: Int? = null,
         isNextUp: Boolean = false
     ) {
+        if (isNextUp) {
+            val dismissKey = nextUpDismissKey(contentId)
+            _uiState.update { state ->
+                state.copy(
+                    continueWatchingItems = state.continueWatchingItems.filterNot { item ->
+                        when (item) {
+                            is ContinueWatchingItem.NextUp ->
+                                nextUpDismissKey(item.info.contentId) == dismissKey
+                            is ContinueWatchingItem.InProgress -> false
+                        }
+                    }
+                )
+            }
+            viewModelScope.launch {
+                traktSettingsDataStore.addDismissedNextUpKey(dismissKey)
+            }
+            return
+        }
         viewModelScope.launch {
             val targetSeason = if (isNextUp) season else null
             val targetEpisode = if (isNextUp) episode else null
@@ -594,13 +814,18 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
-        truncatedItemsCache.clear()
+        _fullCatalogRows.value = emptyList()
+        truncatedRowCache.clear()
         hasRenderedFirstCatalog = false
         trailerPreviewLoadingIds.clear()
         trailerPreviewNegativeCache.clear()
         trailerPreviewUrlsState.clear()
         activeTrailerPreviewItemId = null
         trailerPreviewRequestVersion = 0L
+        prefetchedExternalMetaIds.clear()
+        externalMetaPrefetchInFlightIds.clear()
+        lastHeroEnrichmentSignature = null
+        lastHeroEnrichedItems = emptyList()
 
         try {
             if (addons.isEmpty()) {
@@ -740,8 +965,8 @@ class HomeViewModel @Inject constructor(
                 return@launch
             }
             val debounceMs = when {
-                pendingCatalogLoads > 5 -> 300L
-                pendingCatalogLoads > 0 -> 150L
+                pendingCatalogLoads > 5 -> 450L
+                pendingCatalogLoads > 0 -> 250L
                 else -> 100L
             }
             delay(debounceMs)
@@ -753,24 +978,33 @@ class HomeViewModel @Inject constructor(
         // Snapshot mutable state before entering background context
         val orderedKeys = catalogOrder.toList()
         val catalogSnapshot = catalogsMap.toMap()
-        val heroCatalogKey = currentHeroCatalogKey
+        val heroCatalogKeys = currentHeroCatalogKeys
         val currentLayout = _uiState.value.homeLayout
         val currentGridItems = _uiState.value.gridItems
         val heroSectionEnabled = _uiState.value.heroSectionEnabled
 
         val (displayRows, baseHeroItems, baseGridItems) = withContext(Dispatchers.Default) {
             val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
-
-            val heroSourceRow = if (heroCatalogKey != null) {
-                catalogSnapshot[heroCatalogKey]
+            val selectedHeroCatalogSet = heroCatalogKeys.toSet()
+            val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
+                orderedRows.filter { row ->
+                    val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
+                    key in selectedHeroCatalogSet
+                }
             } else {
-                orderedRows.firstOrNull { row -> row.items.any { it.hasHeroArtwork() } }
+                emptyList()
             }
-
-            val heroItemsFromSelectedCatalog = heroSourceRow
-                ?.items
-                .orEmpty()
-                .filter { it.hasHeroArtwork() }
+            val heroItemsFromSelectedCatalogs = selectedHeroRows
+                .asSequence()
+                .flatMap { row -> row.items.asSequence() }
+                .filter { item -> item.hasHeroArtwork() }
+                .take(7)
+                .toList()
+            val fallbackHeroItemsFromSelectedCatalogs = selectedHeroRows
+                .asSequence()
+                .flatMap { row -> row.items.asSequence() }
+                .take(7)
+                .toList()
 
             val fallbackHeroItemsWithArtwork = orderedRows
                 .asSequence()
@@ -780,7 +1014,8 @@ class HomeViewModel @Inject constructor(
                 .toList()
 
             val computedHeroItems = when {
-                heroItemsFromSelectedCatalog.isNotEmpty() -> heroItemsFromSelectedCatalog.take(7)
+                heroItemsFromSelectedCatalogs.isNotEmpty() -> heroItemsFromSelectedCatalogs
+                fallbackHeroItemsFromSelectedCatalogs.isNotEmpty() -> fallbackHeroItemsFromSelectedCatalogs
                 fallbackHeroItemsWithArtwork.isNotEmpty() -> fallbackHeroItemsWithArtwork
                 else -> emptyList()
             }
@@ -788,15 +1023,20 @@ class HomeViewModel @Inject constructor(
             val computedDisplayRows = orderedRows.map { row ->
                 if (row.items.size > 25) {
                     val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
-                    val cached = truncatedItemsCache[key]
-                    if (cached != null && cached.size == 25 && row.items.take(25) == cached) {
-                        row.copy(items = cached)
+                    val cachedEntry = truncatedRowCache[key]
+                    if (cachedEntry != null && cachedEntry.sourceRow === row) {
+                        cachedEntry.truncatedRow
                     } else {
-                        val truncated = row.items.take(25)
-                        truncatedItemsCache[key] = truncated
-                        row.copy(items = truncated)
+                        val truncatedRow = row.copy(items = row.items.take(25))
+                        truncatedRowCache[key] = TruncatedRowCacheEntry(
+                            sourceRow = row,
+                            truncatedRow = truncatedRow
+                        )
+                        truncatedRow
                     }
                 } else {
+                    val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
+                    truncatedRowCache.remove(key)
                     row
                 }
             }
@@ -848,29 +1088,45 @@ class HomeViewModel @Inject constructor(
 
         // Full (untruncated) rows for CatalogSeeAllScreen
         val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+        _fullCatalogRows.update { rows ->
+            if (rows == fullRows) rows else fullRows
+        }
 
-        val tmdbSettings = tmdbSettingsDataStore.settings.first()
+        val tmdbSettings = currentTmdbSettings
         val shouldUseEnrichedHeroItems = tmdbSettings.enabled &&
             (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
 
         val resolvedHeroItems = if (shouldUseEnrichedHeroItems) {
-            enrichHeroItems(baseHeroItems, tmdbSettings)
+            val enrichmentSignature = heroEnrichmentSignature(baseHeroItems, tmdbSettings)
+            if (lastHeroEnrichmentSignature == enrichmentSignature) {
+                lastHeroEnrichedItems
+            } else {
+                val enrichedItems = enrichHeroItems(baseHeroItems, tmdbSettings)
+                lastHeroEnrichmentSignature = enrichmentSignature
+                lastHeroEnrichedItems = enrichedItems
+                enrichedItems
+            }
         } else {
+            lastHeroEnrichmentSignature = null
+            lastHeroEnrichedItems = emptyList()
             baseHeroItems
         }
 
-        // Render hero from a single source per update cycle.
-        _uiState.value = _uiState.value.copy(
-            catalogRows = displayRows,
-            fullCatalogRows = fullRows,
-            heroItems = resolvedHeroItems,
-            gridItems = if (currentLayout == HomeLayout.GRID) {
-                replaceGridHeroItems(baseGridItems, resolvedHeroItems)
-            } else {
-                baseGridItems
-            },
-            isLoading = false
-        )
+        val nextGridItems = if (currentLayout == HomeLayout.GRID) {
+            replaceGridHeroItems(baseGridItems, resolvedHeroItems)
+        } else {
+            baseGridItems
+        }
+
+        // Preserve references when values are structurally equal to reduce unnecessary recomposition.
+        _uiState.update { state ->
+            state.copy(
+                catalogRows = if (state.catalogRows == displayRows) state.catalogRows else displayRows,
+                heroItems = if (state.heroItems == resolvedHeroItems) state.heroItems else resolvedHeroItems,
+                gridItems = if (state.gridItems == nextGridItems) state.gridItems else nextGridItems,
+                isLoading = false
+            )
+        }
     }
 
     private fun navigateToDetail(itemId: String, itemType: String) {
@@ -941,6 +1197,25 @@ class HomeViewModel @Inject constructor(
             } else {
                 item
             }
+        }
+    }
+
+    private fun heroEnrichmentSignature(items: List<MetaPreview>, settings: TmdbSettings): String {
+        val itemSignature = items.joinToString(separator = "|") { item ->
+            "${item.id}:${item.apiType}:${item.name}:${item.background}:${item.logo}:${item.poster}"
+        }
+        return buildString {
+            append(settings.enabled)
+            append(':')
+            append(settings.language)
+            append(':')
+            append(settings.useArtwork)
+            append(':')
+            append(settings.useBasicInfo)
+            append(':')
+            append(settings.useDetails)
+            append("::")
+            append(itemSignature)
         }
     }
 

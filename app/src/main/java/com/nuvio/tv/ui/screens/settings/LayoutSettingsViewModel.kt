@@ -18,7 +18,7 @@ data class LayoutSettingsUiState(
     val selectedLayout: HomeLayout = HomeLayout.CLASSIC,
     val hasChosen: Boolean = false,
     val availableCatalogs: List<CatalogInfo> = emptyList(),
-    val heroCatalogKey: String? = null,
+    val heroCatalogKeys: List<String> = emptyList(),
     val sidebarCollapsedByDefault: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
     val modernSidebarBlurEnabled: Boolean = false,
@@ -28,6 +28,7 @@ data class LayoutSettingsUiState(
     val searchDiscoverEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
+    val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
     val focusedPosterBackdropTrailerEnabled: Boolean = false,
@@ -36,7 +37,8 @@ data class LayoutSettingsUiState(
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
     val blurUnwatchedEpisodes: Boolean = false,
-    val detailPageTrailerButtonEnabled: Boolean = false
+    val detailPageTrailerButtonEnabled: Boolean = false,
+    val preferExternalMetaAddonDetail: Boolean = false
 )
 
 data class CatalogInfo(
@@ -47,7 +49,7 @@ data class CatalogInfo(
 
 sealed class LayoutSettingsEvent {
     data class SelectLayout(val layout: HomeLayout) : LayoutSettingsEvent()
-    data class SelectHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
+    data class ToggleHeroCatalog(val catalogKey: String) : LayoutSettingsEvent()
     data class SetSidebarCollapsed(val collapsed: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetModernSidebarBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -57,6 +59,7 @@ sealed class LayoutSettingsEvent {
     data class SetSearchDiscoverEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPosterLabelsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetCatalogAddonNameEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetCatalogTypeSuffixEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandDelaySeconds(val seconds: Int) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropTrailerEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -65,13 +68,15 @@ sealed class LayoutSettingsEvent {
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
 @HiltViewModel
 class LayoutSettingsViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val metaRepository: com.nuvio.tv.domain.repository.MetaRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LayoutSettingsUiState())
@@ -89,8 +94,8 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.heroCatalogSelection.collectLatest { key ->
-                _uiState.update { it.copy(heroCatalogKey = key) }
+            layoutPreferenceDataStore.heroCatalogSelections.collectLatest { keys ->
+                _uiState.update { it.copy(heroCatalogKeys = keys) }
             }
         }
         viewModelScope.launch {
@@ -139,6 +144,11 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(catalogTypeSuffixEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(focusedPosterBackdropExpandEnabled = enabled) }
             }
@@ -183,13 +193,18 @@ class LayoutSettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(detailPageTrailerButtonEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.preferExternalMetaAddonDetail.collectLatest { enabled ->
+                _uiState.update { it.copy(preferExternalMetaAddonDetail = enabled) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
     fun onEvent(event: LayoutSettingsEvent) {
         when (event) {
             is LayoutSettingsEvent.SelectLayout -> selectLayout(event.layout)
-            is LayoutSettingsEvent.SelectHeroCatalog -> selectHeroCatalog(event.catalogKey)
+            is LayoutSettingsEvent.ToggleHeroCatalog -> toggleHeroCatalog(event.catalogKey)
             is LayoutSettingsEvent.SetSidebarCollapsed -> setSidebarCollapsed(event.collapsed)
             is LayoutSettingsEvent.SetModernSidebarEnabled -> setModernSidebarEnabled(event.enabled)
             is LayoutSettingsEvent.SetModernSidebarBlurEnabled -> setModernSidebarBlurEnabled(event.enabled)
@@ -199,6 +214,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetSearchDiscoverEnabled -> setSearchDiscoverEnabled(event.enabled)
             is LayoutSettingsEvent.SetPosterLabelsEnabled -> setPosterLabelsEnabled(event.enabled)
             is LayoutSettingsEvent.SetCatalogAddonNameEnabled -> setCatalogAddonNameEnabled(event.enabled)
+            is LayoutSettingsEvent.SetCatalogTypeSuffixEnabled -> setCatalogTypeSuffixEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandEnabled -> setFocusedPosterBackdropExpandEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds -> setFocusedPosterBackdropExpandDelaySeconds(event.seconds)
             is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled -> setFocusedPosterBackdropTrailerEnabled(event.enabled)
@@ -207,6 +223,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
             is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
+            is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
@@ -217,9 +234,15 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
-    private fun selectHeroCatalog(catalogKey: String) {
+    private fun toggleHeroCatalog(catalogKey: String) {
         viewModelScope.launch {
-            layoutPreferenceDataStore.setHeroCatalogKey(catalogKey)
+            val selected = _uiState.value.heroCatalogKeys.toMutableList()
+            if (catalogKey in selected) {
+                selected.remove(catalogKey)
+            } else {
+                selected.add(catalogKey)
+            }
+            layoutPreferenceDataStore.setHeroCatalogKeys(selected)
         }
     }
 
@@ -277,6 +300,12 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun setCatalogTypeSuffixEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setCatalogTypeSuffixEnabled(enabled)
+        }
+    }
+
     private fun setFocusedPosterBackdropExpandEnabled(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setFocusedPosterBackdropExpandEnabled(enabled)
@@ -323,6 +352,13 @@ class LayoutSettingsViewModel @Inject constructor(
     private fun setBlurUnwatchedEpisodes(enabled: Boolean) {
         viewModelScope.launch {
             layoutPreferenceDataStore.setBlurUnwatchedEpisodes(enabled)
+        }
+    }
+
+    private fun setPreferExternalMetaAddonDetail(enabled: Boolean) {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setPreferExternalMetaAddonDetail(enabled)
+            metaRepository.clearCache()
         }
     }
 

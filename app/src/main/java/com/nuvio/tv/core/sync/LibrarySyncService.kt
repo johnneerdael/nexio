@@ -35,11 +35,6 @@ class LibrarySyncService @Inject constructor(
             val items = libraryPreferences.getAllItems()
             Log.d(TAG, "pushToRemote: ${items.size} local library items to push")
 
-            if (items.isEmpty()) {
-                Log.d(TAG, "pushToRemote: nothing to push, skipping RPC")
-                return@withContext Result.success(Unit)
-            }
-
             val params = buildJsonObject {
                 put("p_items", buildJsonArray {
                     items.forEach { item ->
@@ -71,11 +66,11 @@ class LibrarySyncService @Inject constructor(
         }
     }
 
-    suspend fun pullFromRemote(): List<SavedLibraryItem> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemote(): Result<List<SavedLibraryItem>> = withContext(Dispatchers.IO) {
         try {
             if (traktAuthDataStore.isAuthenticated.first()) {
                 Log.d(TAG, "Trakt connected, skipping library pull")
-                return@withContext emptyList()
+                return@withContext Result.success(emptyList())
             }
 
             val response = postgrest.rpc("sync_pull_library")
@@ -83,7 +78,7 @@ class LibrarySyncService @Inject constructor(
 
             Log.d(TAG, "pullFromRemote: fetched ${remote.size} library items from Supabase")
 
-            remote.map { entry ->
+            Result.success(remote.map { entry ->
                 SavedLibraryItem(
                     id = entry.contentId,
                     type = entry.contentType,
@@ -97,10 +92,10 @@ class LibrarySyncService @Inject constructor(
                     genres = entry.genres,
                     addonBaseUrl = entry.addonBaseUrl
                 )
-            }
+            })
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull library from remote", e)
-            emptyList()
+            Result.failure(e)
         }
     }
 }

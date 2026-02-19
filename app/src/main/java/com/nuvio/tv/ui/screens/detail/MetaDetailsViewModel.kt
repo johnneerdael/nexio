@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,13 +9,16 @@ import com.nuvio.tv.core.tmdb.TmdbMetadataService
 import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
+import com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.parseContentIds
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.NextToWatch
+import com.nuvio.tv.domain.model.TmdbSettings
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
@@ -24,6 +28,7 @@ import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,12 +40,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "MetaDetailsViewModel"
+
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
     private val metaRepository: MetaRepository,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val imdbEpisodeRatingsRepository: ImdbEpisodeRatingsRepository,
     private val mdbListRepository: MDBListRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
@@ -59,6 +67,8 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
+    private var moreLikeThisJob: Job? = null
+    private var episodeRatingsJob: Job? = null
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -202,38 +212,71 @@ class MetaDetailsViewModel @Inject constructor(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    episodeImdbRatings = emptyMap(),
+                    isEpisodeRatingsLoading = false,
+                    episodeRatingsError = null,
                     mdbListRatings = null,
-                    showMdbListImdb = false
+                    showMdbListImdb = false,
+                    moreLikeThis = emptyList()
                 )
             }
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
+            val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
 
-            // 1) Prefer meta from the originating addon (same catalog source)
-            val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
-            val preferredMeta: Meta? = preferred?.let { baseUrl ->
-                when (val result = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
-                    .first { it !is NetworkResult.Loading }) {
-                    is NetworkResult.Success -> result.data
-                    is NetworkResult.Error -> null
-                    NetworkResult.Loading -> null
-                }
-            }
+            if (preferExternal) {
+                // 1) Try meta addons first
+                metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            applyMetaWithEnrichment(result.data)
+                        }
+                        is NetworkResult.Error -> {
+                            // 2) Fallback: try originating addon if meta addons failed
+                            val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
+                            val preferredMeta: Meta? = preferred?.let { baseUrl ->
+                                when (val fallbackResult = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
+                                    .first { it !is NetworkResult.Loading }) {
+                                    is NetworkResult.Success -> fallbackResult.data
+                                    else -> null
+                                }
+                            }
 
-            if (preferredMeta != null) {
-                applyMetaWithEnrichment(preferredMeta)
-                return@launch
-            }
-
-            // 2) Fallback: first addon that can provide meta (often Cinemeta)
-            metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
-                when (result) {
-                    is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
-                    is NetworkResult.Error -> {
-                        _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            if (preferredMeta != null) {
+                                applyMetaWithEnrichment(preferredMeta)
+                            } else {
+                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            }
+                        }
+                        NetworkResult.Loading -> {
+                            _uiState.update { it.copy(isLoading = true) }
+                        }
                     }
-                    NetworkResult.Loading -> {
-                        _uiState.update { it.copy(isLoading = true) }
+                }
+            } else {
+                // Original: prefer catalog addon
+                val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
+                val preferredMeta: Meta? = preferred?.let { baseUrl ->
+                    when (val result = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
+                        .first { it !is NetworkResult.Loading }) {
+                        is NetworkResult.Success -> result.data
+                        else -> null
+                    }
+                }
+
+                if (preferredMeta != null) {
+                    applyMetaWithEnrichment(preferredMeta)
+                } else {
+                    metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
+                        when (result) {
+                            is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
+                            is NetworkResult.Error -> {
+                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                            }
+                            NetworkResult.Loading -> {
+                                _uiState.update { it.copy(isLoading = true) }
+                            }
+                        }
                     }
                 }
             }
@@ -282,9 +325,55 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
+        // Start recommendations fetch early so it can run in parallel with enrichment.
+        loadMoreLikeThisAsync(meta)
         val enriched = enrichMeta(meta)
         applyMeta(enriched)
+        loadEpisodeRatingsAsync(enriched)
         loadMDBListRatings(enriched)
+    }
+
+    private fun loadMoreLikeThisAsync(meta: Meta) {
+        moreLikeThisJob?.cancel()
+        moreLikeThisJob = viewModelScope.launch {
+            val settings = tmdbSettingsDataStore.settings.first()
+            if (!shouldLoadMoreLikeThis(settings)) {
+                _uiState.update { it.copy(moreLikeThis = emptyList()) }
+                return@launch
+            }
+
+            val tmdbContentType = resolveTmdbContentType(meta)
+            val tmdbLookupType = tmdbContentType.toApiString()
+            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                ?: tmdbService.ensureTmdbId(itemId, itemType)
+            if (tmdbId.isNullOrBlank()) {
+                _uiState.update { it.copy(moreLikeThis = emptyList()) }
+                return@launch
+            }
+
+            val recommendations = runCatching {
+                tmdbMetadataService.fetchMoreLikeThis(
+                    tmdbId = tmdbId,
+                    contentType = tmdbContentType,
+                    language = settings.language
+                )
+            }.getOrElse {
+                Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
+                emptyList()
+            }
+
+            _uiState.update { state ->
+                if (state.meta == null || state.meta.id == meta.id) {
+                    state.copy(moreLikeThis = recommendations)
+                } else {
+                    state
+                }
+            }
+        }
+    }
+
+    private fun shouldLoadMoreLikeThis(settings: TmdbSettings): Boolean {
+        return settings.enabled && settings.useMoreLikeThis
     }
 
     private suspend fun loadMDBListRatings(meta: Meta) {
@@ -304,17 +393,108 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun loadEpisodeRatingsAsync(meta: Meta) {
+        episodeRatingsJob?.cancel()
+
+        val isSeries = meta.type == ContentType.SERIES || meta.type == ContentType.TV || meta.apiType in listOf("series", "tv")
+        if (!isSeries) {
+            _uiState.update {
+                it.copy(
+                    episodeImdbRatings = emptyMap(),
+                    isEpisodeRatingsLoading = false,
+                    episodeRatingsError = null
+                )
+            }
+            return
+        }
+
+        episodeRatingsJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    episodeImdbRatings = emptyMap(),
+                    isEpisodeRatingsLoading = true,
+                    episodeRatingsError = null
+                )
+            }
+
+            try {
+                val tmdbContentType = resolveTmdbContentType(meta)
+                if (tmdbContentType !in listOf(ContentType.SERIES, ContentType.TV)) {
+                    _uiState.update {
+                        it.copy(
+                            episodeImdbRatings = emptyMap(),
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = null
+                        )
+                    }
+                    return@launch
+                }
+
+                val tmdbLookupType = tmdbContentType.toApiString()
+                val tmdbIdString = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                    ?: tmdbService.ensureTmdbId(itemId, itemType)
+                val tmdbId = tmdbIdString?.toIntOrNull()
+
+                if (tmdbId == null) {
+                    _uiState.update { state ->
+                        if (state.meta == null || state.meta.id != meta.id) {
+                            state
+                        } else {
+                            state.copy(
+                                episodeImdbRatings = emptyMap(),
+                                isEpisodeRatingsLoading = false,
+                                episodeRatingsError = "Ratings are unavailable for this show."
+                            )
+                        }
+                    }
+                    return@launch
+                }
+
+                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(tmdbId)
+
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            episodeImdbRatings = ratings,
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = null
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to load episode ratings for ${meta.id}: ${error.message}")
+                _uiState.update { state ->
+                    if (state.meta == null || state.meta.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            episodeImdbRatings = emptyMap(),
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = "Unable to load episode ratings."
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun enrichMeta(meta: Meta): Meta {
         val settings = tmdbSettingsDataStore.settings.first()
         if (!settings.enabled) return meta
 
-        val tmdbId = tmdbService.ensureTmdbId(meta.id, meta.apiType)
+        val tmdbContentType = resolveTmdbContentType(meta)
+        val tmdbLookupType = tmdbContentType.toApiString()
+        val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
             ?: tmdbService.ensureTmdbId(itemId, itemType)
             ?: return meta
 
         val enrichment = tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId,
-            contentType = meta.type,
+            contentType = tmdbContentType,
             language = settings.language
         )
 
@@ -345,6 +525,7 @@ class MetaDetailsViewModel @Inject constructor(
             updated = updated.copy(
                 runtime = enrichment.runtimeMinutes?.toString() ?: updated.runtime,
                 releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo,
+                ageRating = enrichment.ageRating ?: updated.ageRating,
                 country = enrichment.countries?.joinToString(", ") ?: updated.country,
                 language = enrichment.language ?: updated.language
             )
@@ -411,6 +592,29 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         return updated
+    }
+
+    private fun resolveTmdbContentType(meta: Meta): ContentType {
+        val fromRoute = parseApiTypeToContentType(itemType)
+        if (fromRoute != null) return fromRoute
+
+        val fromMetaApi = parseApiTypeToContentType(meta.apiType)
+        if (fromMetaApi != null) return fromMetaApi
+
+        return when (meta.type) {
+            ContentType.SERIES, ContentType.TV -> ContentType.SERIES
+            ContentType.MOVIE -> ContentType.MOVIE
+            else -> ContentType.MOVIE
+        }
+    }
+
+    private fun parseApiTypeToContentType(apiType: String?): ContentType? {
+        val normalized = apiType?.trim()?.lowercase().orEmpty()
+        return when (normalized) {
+            "movie", "film" -> ContentType.MOVIE
+            "series", "tv", "show", "tvshow" -> ContentType.SERIES
+            else -> null
+        }
     }
 
     private fun selectSeason(season: Int) {

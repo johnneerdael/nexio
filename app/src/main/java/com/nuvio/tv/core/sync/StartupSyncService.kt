@@ -13,7 +13,9 @@ import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nuvio.tv.domain.model.AuthState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,81 +41,149 @@ class StartupSyncService @Inject constructor(
     private val watchedItemsPreferences: WatchedItemsPreferences
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var startupPullJob: Job? = null
+    private var lastPulledUserId: String? = null
+    @Volatile
+    private var forceSyncRequested: Boolean = false
 
     init {
         scope.launch {
-            val state = authManager.authState.first { it !is AuthState.Loading }
-            if (state is AuthState.Anonymous || state is AuthState.FullAccount) {
-                pullRemoteData()
+            authManager.authState.collect { state ->
+                when (state) {
+                    is AuthState.Anonymous -> {
+                        val force = forceSyncRequested
+                        val started = scheduleStartupPull(state.userId, force = force)
+                        if (force && started) forceSyncRequested = false
+                    }
+                    is AuthState.FullAccount -> {
+                        val force = forceSyncRequested
+                        val started = scheduleStartupPull(state.userId, force = force)
+                        if (force && started) forceSyncRequested = false
+                    }
+                    is AuthState.SignedOut -> {
+                        startupPullJob?.cancel()
+                        startupPullJob = null
+                        lastPulledUserId = null
+                        forceSyncRequested = false
+                    }
+                    is AuthState.Loading -> Unit
+                }
             }
         }
     }
 
-    private suspend fun pullRemoteData() {
+    fun requestSyncNow() {
+        forceSyncRequested = true
+        when (val state = authManager.authState.value) {
+            is AuthState.Anonymous -> {
+                val started = scheduleStartupPull(state.userId, force = true)
+                if (started) forceSyncRequested = false
+            }
+            is AuthState.FullAccount -> {
+                val started = scheduleStartupPull(state.userId, force = true)
+                if (started) forceSyncRequested = false
+            }
+            else -> Unit
+        }
+    }
+
+    private fun scheduleStartupPull(userId: String, force: Boolean = false): Boolean {
+        if (!force && lastPulledUserId == userId) return false
+        if (force && startupPullJob?.isActive == true) {
+            startupPullJob?.cancel()
+        } else if (startupPullJob?.isActive == true) {
+            return false
+        }
+
+        startupPullJob = scope.launch {
+            val maxAttempts = 3
+            repeat(maxAttempts) { index ->
+                val attempt = index + 1
+                Log.d(TAG, "Startup sync attempt $attempt/$maxAttempts for user=$userId")
+                val result = pullRemoteData()
+                if (result.isSuccess) {
+                    lastPulledUserId = userId
+                    Log.d(TAG, "Startup sync completed for user=$userId")
+                    return@launch
+                }
+
+                Log.w(TAG, "Startup sync attempt $attempt failed for user=$userId", result.exceptionOrNull())
+                if (attempt < maxAttempts) {
+                    delay(3000)
+                }
+            }
+        }
+        return true
+    }
+
+    private suspend fun pullRemoteData(): Result<Unit> {
         try {
             pluginManager.isSyncingFromRemote = true
-            val newPluginUrls = pluginSyncService.getNewRemoteRepoUrls()
-            for (url in newPluginUrls) {
-                pluginManager.addRepository(url)
-            }
+            val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
+            pluginManager.reconcileWithRemoteRepoUrls(
+                remoteUrls = remotePluginUrls,
+                removeMissingLocal = false
+            )
             pluginManager.isSyncingFromRemote = false
-            Log.d(TAG, "Pulled ${newPluginUrls.size} new plugin repos from remote")
+            Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote")
 
             addonRepository.isSyncingFromRemote = true
-            val newAddonUrls = addonSyncService.getNewRemoteAddonUrls()
-            for (url in newAddonUrls) {
-                addonRepository.addAddon(url)
-            }
+            val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
+            addonRepository.reconcileWithRemoteAddonUrls(
+                remoteUrls = remoteAddonUrls,
+                removeMissingLocal = false
+            )
             addonRepository.isSyncingFromRemote = false
-            Log.d(TAG, "Pulled ${newAddonUrls.size} new addons from remote")
+            Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote")
 
-            // Sync watch progress only if Trakt is NOT connected
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
             Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")
             if (!isTraktConnected) {
-                watchProgressRepository.isSyncingFromRemote = true
-                val remoteEntries = watchProgressSyncService.pullFromRemote()
-                Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
-                if (remoteEntries.isNotEmpty()) {
-                    watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
-                    Log.d(TAG, "Merged ${remoteEntries.size} watch progress entries into local")
-                } else {
-                    Log.d(TAG, "No remote watch progress entries to merge")
+                // Re-check before each pull to avoid stale decisions when Trakt auth flips mid-sync.
+                if (traktAuthDataStore.isAuthenticated.first()) {
+                    Log.d(TAG, "Skipping watch progress & library sync (Trakt connected during startup sync)")
+                    return Result.success(Unit)
                 }
+
+                watchProgressRepository.isSyncingFromRemote = true
+                val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
+                if (traktAuthDataStore.isAuthenticated.first()) {
+                    Log.d(TAG, "Discarding account watch progress pull (Trakt connected during pull)")
+                    watchProgressRepository.isSyncingFromRemote = false
+                    return Result.success(Unit)
+                }
+                Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
+                watchProgressPreferences.replaceWithRemoteEntries(remoteEntries.toMap())
+                Log.d(TAG, "Reconciled local watch progress with ${remoteEntries.size} remote entries")
                 watchProgressRepository.isSyncingFromRemote = false
 
-                // Push local watch progress so linked devices can pull it
-                Log.d(TAG, "Pushing local watch progress to remote")
-                watchProgressSyncService.pushToRemote()
+                if (traktAuthDataStore.isAuthenticated.first()) {
+                    Log.d(TAG, "Skipping library/watch history sync (Trakt connected during startup sync)")
+                    return Result.success(Unit)
+                }
 
-                // Sync library items
                 libraryRepository.isSyncingFromRemote = true
-                val remoteLibraryItems = librarySyncService.pullFromRemote()
+                val remoteLibraryItems = librarySyncService.pullFromRemote().getOrElse { throw it }
                 Log.d(TAG, "Pulled ${remoteLibraryItems.size} library items from remote")
-                if (remoteLibraryItems.isNotEmpty()) {
-                    libraryPreferences.mergeRemoteItems(remoteLibraryItems)
-                    Log.d(TAG, "Merged ${remoteLibraryItems.size} library items into local")
-                }
+                libraryPreferences.mergeRemoteItems(remoteLibraryItems)
+                Log.d(TAG, "Reconciled local library with ${remoteLibraryItems.size} remote items")
                 libraryRepository.isSyncingFromRemote = false
-                librarySyncService.pushToRemote()
 
-                // Sync watched items
-                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote()
+                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote().getOrElse { throw it }
                 Log.d(TAG, "Pulled ${remoteWatchedItems.size} watched items from remote")
-                if (remoteWatchedItems.isNotEmpty()) {
-                    watchedItemsPreferences.mergeRemoteItems(remoteWatchedItems)
-                    Log.d(TAG, "Merged ${remoteWatchedItems.size} watched items into local")
-                }
-                watchedItemsSyncService.pushToRemote()
+                watchedItemsPreferences.replaceWithRemoteItems(remoteWatchedItems)
+                Log.d(TAG, "Reconciled local watched items with ${remoteWatchedItems.size} remote items")
             } else {
                 Log.d(TAG, "Skipping watch progress & library sync (Trakt connected)")
             }
+            return Result.success(Unit)
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
             watchProgressRepository.isSyncingFromRemote = false
             libraryRepository.isSyncingFromRemote = false
             Log.e(TAG, "Startup sync failed", e)
+            return Result.failure(e)
         }
     }
 }

@@ -63,6 +63,8 @@ import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlin.math.roundToInt
+import java.util.Locale
 
 internal fun LazyListScope.autoPlaySettingsItems(
     playerSettings: PlayerSettings,
@@ -74,8 +76,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
-    onSetNextEpisodeThresholdPercent: (Int) -> Unit,
-    onSetNextEpisodeThresholdMinutesBeforeEnd: (Int) -> Unit,
+    onSetNextEpisodeThresholdPercent: (Float) -> Unit,
+    onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
@@ -128,53 +130,56 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
 
-        item {
-            val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
-                NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
-                NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
-            }
-            NavigationSettingsItem(
-                icon = Icons.Default.Tune,
-                title = "Next Episode Threshold Mode",
-                subtitle = thresholdModeSubtitle,
-                onClick = onShowNextEpisodeThresholdModeDialog,
-                onFocused = onItemFocused
-            )
+    item {
+        val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
+            NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
+            NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
         }
+        NavigationSettingsItem(
+            icon = Icons.Default.Tune,
+            title = "Next Episode Threshold Mode",
+            subtitle = thresholdModeSubtitle,
+            onClick = onShowNextEpisodeThresholdModeDialog,
+            onFocused = onItemFocused
+        )
+    }
 
-        item {
-            when (playerSettings.nextEpisodeThresholdMode) {
-                NextEpisodeThresholdMode.PERCENTAGE -> {
-                    SliderSettingsItem(
-                        icon = Icons.Default.Tune,
-                        title = "Threshold Percentage",
-                        subtitle = "Fallback when no outro timestamp exists.",
-                        value = playerSettings.nextEpisodeThresholdPercent,
-                        valueText = "${playerSettings.nextEpisodeThresholdPercent}%",
-                        minValue = 50,
-                        maxValue = 99,
-                        step = 1,
-                        onValueChange = onSetNextEpisodeThresholdPercent,
-                        onFocused = onItemFocused
-                    )
-                }
-                NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
-                    SliderSettingsItem(
-                        icon = Icons.Default.Tune,
-                        title = "Threshold Minutes",
-                        subtitle = "Fallback when no outro timestamp exists.",
-                        value = playerSettings.nextEpisodeThresholdMinutesBeforeEnd,
-                        valueText = "${playerSettings.nextEpisodeThresholdMinutesBeforeEnd} min",
-                        minValue = 1,
-                        maxValue = 30,
-                        step = 1,
-                        onValueChange = onSetNextEpisodeThresholdMinutesBeforeEnd,
-                        onFocused = onItemFocused
-                    )
-                }
+    item {
+        when (playerSettings.nextEpisodeThresholdMode) {
+            NextEpisodeThresholdMode.PERCENTAGE -> {
+                SliderSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = "Threshold Percentage",
+                    subtitle = "Fallback when no outro timestamp exists.",
+                    value = (playerSettings.nextEpisodeThresholdPercent * 2f).roundToInt(),
+                    valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdPercent)}%",
+                    minValue = 194,
+                    maxValue = 199,
+                    step = 1,
+                    onValueChange = { onSetNextEpisodeThresholdPercent(it / 2f) },
+                    onFocused = onItemFocused
+                )
+            }
+            NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
+                SliderSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = "Threshold Minutes",
+                    subtitle = "Fallback when no outro timestamp exists.",
+                    value = (playerSettings.nextEpisodeThresholdMinutesBeforeEnd * 2f).roundToInt(),
+                    valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdMinutesBeforeEnd)} min",
+                    minValue = 2,
+                    maxValue = 7,
+                    step = 1,
+                    onValueChange = { onSetNextEpisodeThresholdMinutesBeforeEnd(it / 2f) },
+                    onFocused = onItemFocused
+                )
             }
         }
+    }
+
+    if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
 
         item {
             val sourceLabel = when (playerSettings.streamAutoPlaySource) {
@@ -239,6 +244,14 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
+}
+
+private fun formatHalfStepValue(value: Float): String {
+    return if (value % 1f == 0f) {
+        value.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.1f", value)
     }
 }
 

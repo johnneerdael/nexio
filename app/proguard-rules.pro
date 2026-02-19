@@ -63,6 +63,15 @@
 
 # ── ExoPlayer / Media3 ────────────────────────────────────────────────────────
 -dontwarn androidx.media3.**
+-keep class androidx.media3.** { *; }
+-keep interface androidx.media3.** { *; }
+-keep class androidx.media.** { *; }
+-keep class androidx.media3.decoder.** { *; }
+-keep class androidx.media3.exoplayer.** { *; }
+-keep class androidx.media3.ui.** { *; }
+-keep class com.google.android.exoplayer2.** { *; }
+-keep interface com.google.android.exoplayer2.** { *; }
+-keep class com.google.android.exoplayer2.ext.** { *; }
 
 # ── Supabase / Ktor / Kotlinx Serialization ───────────────────────────────────
 -keep class io.github.jan.supabase.** { *; }

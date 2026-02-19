@@ -133,6 +133,7 @@ fun PlaybackSettingsContent(
     // Dialog states
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showSecondaryLanguageDialog by remember { mutableStateOf(false) }
+    var showSubtitleOrganizationDialog by remember { mutableStateOf(false) }
     var showTextColorDialog by remember { mutableStateOf(false) }
     var showBackgroundColorDialog by remember { mutableStateOf(false) }
     var showOutlineColorDialog by remember { mutableStateOf(false) }
@@ -150,6 +151,7 @@ fun PlaybackSettingsContent(
     fun dismissAllDialogs() {
         showLanguageDialog = false
         showSecondaryLanguageDialog = false
+        showSubtitleOrganizationDialog = false
         showTextColorDialog = false
         showBackgroundColorDialog = false
         showOutlineColorDialog = false
@@ -193,6 +195,7 @@ fun PlaybackSettingsContent(
                 onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
                 onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
                 onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
+                onShowSubtitleOrganizationDialog = { openDialog { showSubtitleOrganizationDialog = true } },
                 onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
                 onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
                 onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
@@ -216,7 +219,7 @@ fun PlaybackSettingsContent(
                 onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
                 onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
-                onSetFrameRateMatching = { enabled -> coroutineScope.launch { viewModel.setFrameRateMatching(enabled) } },
+                onSetFrameRateMatchingMode = { mode -> coroutineScope.launch { viewModel.setFrameRateMatchingMode(mode) } },
                 onSetTrailerEnabled = { enabled -> coroutineScope.launch { viewModel.setTrailerEnabled(enabled) } },
                 onSetTrailerDelaySeconds = { seconds -> coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) } },
                 onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
@@ -239,6 +242,7 @@ fun PlaybackSettingsContent(
         showPlayerPreferenceDialog = showPlayerPreferenceDialog,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
+        showSubtitleOrganizationDialog = showSubtitleOrganizationDialog,
         showTextColorDialog = showTextColorDialog,
         showBackgroundColorDialog = showBackgroundColorDialog,
         showOutlineColorDialog = showOutlineColorDialog,
@@ -260,6 +264,9 @@ fun PlaybackSettingsContent(
         },
         onSetSubtitleSecondaryLanguage = { language ->
             coroutineScope.launch { viewModel.setSubtitleSecondaryLanguage(language) }
+        },
+        onSetSubtitleOrganizationMode = { mode ->
+            coroutineScope.launch { viewModel.setSubtitleOrganizationMode(mode) }
         },
         onSetSubtitleTextColor = { color ->
             coroutineScope.launch { viewModel.setSubtitleTextColor(color.toArgb()) }
@@ -299,6 +306,7 @@ fun PlaybackSettingsContent(
         },
         onDismissLanguageDialog = ::dismissAllDialogs,
         onDismissSecondaryLanguageDialog = ::dismissAllDialogs,
+        onDismissSubtitleOrganizationDialog = ::dismissAllDialogs,
         onDismissTextColorDialog = ::dismissAllDialogs,
         onDismissBackgroundColorDialog = ::dismissAllDialogs,
         onDismissOutlineColorDialog = ::dismissAllDialogs,
@@ -403,12 +411,14 @@ internal fun RenderTypeSettingsItem(
     subtitle: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onFocused: () -> Unit = {}
+    onFocused: () -> Unit = {},
+    enabled: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val contentAlpha = if (enabled) 1f else 0.4f
     
     Card(
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
             .onFocusChanged {
@@ -416,16 +426,24 @@ internal fun RenderTypeSettingsItem(
                 if (it.isFocused) onFocused()
             },
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.15f) else NuvioColors.BackgroundCard,
-            focusedContainerColor = if (isSelected) NuvioColors.Primary.copy(alpha = 0.15f) else NuvioColors.BackgroundCard
+            containerColor = if (isSelected) {
+                NuvioColors.Primary.copy(alpha = 0.15f * contentAlpha)
+            } else {
+                NuvioColors.BackgroundCard
+            },
+            focusedContainerColor = if (isSelected) {
+                NuvioColors.Primary.copy(alpha = 0.15f * contentAlpha)
+            } else {
+                NuvioColors.BackgroundCard
+            }
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NuvioColors.FocusRing.copy(alpha = contentAlpha)),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ),
             border = if (isSelected) Border(
-                border = BorderStroke(2.dp, NuvioColors.Primary),
+                border = BorderStroke(2.dp, NuvioColors.Primary.copy(alpha = contentAlpha)),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ) else Border.None
         ),
@@ -442,7 +460,7 @@ internal fun RenderTypeSettingsItem(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                    color = (if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary).copy(alpha = contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -450,7 +468,7 @@ internal fun RenderTypeSettingsItem(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary,
+                    color = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -461,7 +479,7 @@ internal fun RenderTypeSettingsItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.Primary,
+                    tint = NuvioColors.Primary.copy(alpha = contentAlpha),
                     modifier = Modifier.size(24.dp)
                 )
             }

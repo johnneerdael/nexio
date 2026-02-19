@@ -171,6 +171,7 @@ fun LibraryScreen(
             LibrarySelectorsRow(
                 sourceMode = uiState.sourceMode,
                 listTabs = uiState.listTabs,
+                typeTabs = uiState.availableTypeTabs,
                 selectedListKey = uiState.selectedListKey,
                 selectedTypeTab = uiState.selectedTypeTab,
                 primaryFocusRequester = primaryFocusRequester,
@@ -202,9 +203,10 @@ fun LibraryScreen(
 
         item {
             if (uiState.visibleItems.isEmpty()) {
+                val selectedTypeLabel = uiState.selectedTypeTab?.label?.lowercase() ?: "items"
                 val title = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> "No ${uiState.selectedTypeTab.label.lowercase()} yet"
-                    LibrarySourceMode.TRAKT -> "No ${uiState.selectedTypeTab.label.lowercase()} in this list"
+                    LibrarySourceMode.LOCAL -> "No $selectedTypeLabel yet"
+                    LibrarySourceMode.TRAKT -> "No $selectedTypeLabel in this list"
                 }
                 val subtitle = when (uiState.sourceMode) {
                     LibrarySourceMode.LOCAL -> "Start saving your favorites to see them here"
@@ -305,8 +307,9 @@ fun LibraryScreen(
 private fun LibrarySelectorsRow(
     sourceMode: LibrarySourceMode,
     listTabs: List<LibraryListTab>,
+    typeTabs: List<LibraryTypeTab>,
     selectedListKey: String?,
-    selectedTypeTab: LibraryTypeTab,
+    selectedTypeTab: LibraryTypeTab?,
     primaryFocusRequester: FocusRequester,
     expandedPicker: String?,
     onExpandedChange: (String, Boolean) -> Unit,
@@ -314,7 +317,7 @@ private fun LibrarySelectorsRow(
     onSelectType: (LibraryTypeTab) -> Unit
 ) {
     val selectedListLabel = listTabs.firstOrNull { it.key == selectedListKey }?.title ?: "Select"
-    val selectedTypeLabel = selectedTypeTab.label
+    val selectedTypeLabel = selectedTypeTab?.label ?: "All"
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -349,10 +352,10 @@ private fun LibrarySelectorsRow(
             title = "Type",
             value = selectedTypeLabel,
             expanded = expandedPicker == "type",
-            options = LibraryTypeTab.entries.map { LibraryOption(it.label, it.name) },
+            options = typeTabs.map { LibraryOption(it.label, it.key) },
             onExpandedChange = { onExpandedChange("type", it) },
             onSelect = { option ->
-                LibraryTypeTab.entries.firstOrNull { it.name == option.value }?.let(onSelectType)
+                typeTabs.firstOrNull { it.key == option.value }?.let(onSelectType)
             }
         )
     }

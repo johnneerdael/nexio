@@ -42,6 +42,7 @@ fun MetaDto.toDomain(): Meta {
         videos = videos?.map { it.toDomain() } ?: emptyList(),
         productionCompanies = emptyList(),
         networks = emptyList(),
+        ageRating = null,
         country = country,
         awards = awards,
         language = language,

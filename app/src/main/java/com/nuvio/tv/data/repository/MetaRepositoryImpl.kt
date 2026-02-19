@@ -209,4 +209,8 @@ class MetaRepositoryImpl @Inject constructor(
     private fun encodePathSegment(value: String): String {
         return URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
+    
+    override fun clearCache() {
+        metaCache.clear()
+    }
 }

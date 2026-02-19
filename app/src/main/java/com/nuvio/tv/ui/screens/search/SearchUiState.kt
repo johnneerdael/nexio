@@ -27,6 +27,7 @@ data class SearchUiState(
     val discoverPage: Int = 1,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
+    val catalogTypeSuffixEnabled: Boolean = true,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12

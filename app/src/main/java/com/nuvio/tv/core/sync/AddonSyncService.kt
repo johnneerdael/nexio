@@ -51,28 +51,23 @@ class AddonSyncService @Inject constructor(
         }
     }
 
-    /**
-     * Returns remote addon URLs that are not present locally.
-     * The caller should use AddonRepository.addAddon() to install each.
-     */
-    suspend fun getNewRemoteAddonUrls(): List<String> = withContext(Dispatchers.IO) {
+    suspend fun getRemoteAddonUrls(): Result<List<String>> = withContext(Dispatchers.IO) {
         try {
-            val effectiveUserId = authManager.getEffectiveUserId() ?: return@withContext emptyList()
+            val effectiveUserId = authManager.getEffectiveUserId()
+                ?: return@withContext Result.success(emptyList())
 
             val remoteAddons = postgrest.from("addons")
                 .select { filter { eq("user_id", effectiveUserId) } }
                 .decodeList<SupabaseAddon>()
 
-            val localUrls = addonPreferences.installedAddonUrls.first()
-                .map { it.trimEnd('/').lowercase() }.toSet()
-
-            remoteAddons
-                .filter { it.url.trimEnd('/').lowercase() !in localUrls }
+            Result.success(
+                remoteAddons
                 .sortedBy { it.sortOrder }
                 .map { it.url }
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get remote addon URLs", e)
-            emptyList()
+            Result.failure(e)
         }
     }
 }

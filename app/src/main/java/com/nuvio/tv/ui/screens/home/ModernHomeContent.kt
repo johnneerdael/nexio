@@ -1,10 +1,15 @@
 package com.nuvio.tv.ui.screens.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,7 +35,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -166,13 +170,10 @@ fun ModernHomeContent(
     val focusedItemByRow = remember { mutableStateMapOf<String, Int>() }
     val itemFocusRequesters = remember { mutableMapOf<String, MutableMap<Int, FocusRequester>>() }
     val rowListStates = remember { mutableMapOf<String, LazyListState>() }
-    val transitionFocusRequester = remember { FocusRequester() }
-
     var activeRowKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
-    var rowTransitionInProgress by remember { mutableStateOf(false) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
 
     fun requesterFor(rowKey: String, index: Int): FocusRequester {
@@ -181,7 +182,6 @@ fun ModernHomeContent(
     }
 
     fun moveToRow(direction: Int): Boolean {
-        if (rowTransitionInProgress) return true
         val currentRowKey = activeRowKey ?: return false
         val currentIndex = carouselRows.indexOfFirst { it.key == currentRowKey }
         if (currentIndex < 0) return false
@@ -189,13 +189,17 @@ fun ModernHomeContent(
         if (targetIndex !in carouselRows.indices) return false
         val targetRow = carouselRows[targetIndex]
         if (targetRow.items.isEmpty()) return false
+        val currentItemIndex = focusedItemByRow[currentRowKey] ?: 0
+        val rememberedTargetIndex = focusedItemByRow[targetRow.key]
+        val targetItemIndex = (rememberedTargetIndex ?: currentItemIndex)
+            .coerceIn(0, (targetRow.items.size - 1).coerceAtLeast(0))
 
-        rowTransitionInProgress = true
         activeRowKey = targetRow.key
-        focusedItemByRow[targetRow.key] = 0
-        heroItem = targetRow.items.firstOrNull()?.heroPreview
+        focusedItemByRow[targetRow.key] = targetItemIndex
+        heroItem = targetRow.items.getOrNull(targetItemIndex)?.heroPreview
+            ?: targetRow.items.firstOrNull()?.heroPreview
         pendingRowFocusKey = targetRow.key
-        pendingRowFocusIndex = 0
+        pendingRowFocusIndex = targetItemIndex
         return true
     }
 
@@ -287,7 +291,11 @@ fun ModernHomeContent(
         modifier = Modifier.fillMaxSize()
     ) {
         val previewRowEnabled = showNextRowPreview
-        val posterScale = if (previewRowEnabled) 1f else 1.34f
+        val posterScale = when {
+            previewRowEnabled -> 1f
+            useLandscapePosters -> 1.34f
+            else -> 1.08f
+        }
         val rowHorizontalPadding = 52.dp
         val rowItemSpacing = 12.dp
         val portraitBaseWidth = uiState.posterCardWidthDp.dp
@@ -388,127 +396,126 @@ fun ModernHomeContent(
                 .fillMaxWidth()
                 .padding(bottom = if (shouldRenderPreviewRow) 42.dp else 52.dp)
         ) {
-            Text(
-                text = activeRow?.title.orEmpty(),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = NuvioColors.TextPrimary,
-                modifier = Modifier.padding(start = rowHorizontalPadding, bottom = 6.dp)
-            )
+            AnimatedContent(
+                targetState = activeRow?.key,
+                transitionSpec = {
+                    val initialIndex = carouselRows.indexOfFirst { it.key == initialState }
+                    val targetIndex = carouselRows.indexOfFirst { it.key == targetState }
+                    val movingDown = targetIndex > initialIndex
+                    (
+                        slideInVertically(
+                            animationSpec = tween(durationMillis = 240),
+                            initialOffsetY = { fullHeight ->
+                                if (movingDown) fullHeight / 4 else -fullHeight / 4
+                            }
+                        ) + fadeIn(animationSpec = tween(durationMillis = 200))
+                    ) togetherWith (
+                        slideOutVertically(
+                            animationSpec = tween(durationMillis = 200),
+                            targetOffsetY = { fullHeight ->
+                                if (movingDown) -fullHeight / 4 else fullHeight / 4
+                            }
+                        ) + fadeOut(animationSpec = tween(durationMillis = 180))
+                    )
+                },
+                label = "modernActiveRowContent"
+            ) { activeRowStateKey ->
+                val row = carouselRows.firstOrNull { it.key == activeRowStateKey }
 
-            activeRow?.let { row ->
-                val rowListState = rowListStates.getOrPut(row.key) { LazyListState() }
+                Column {
+                    Text(
+                        text = row?.title.orEmpty(),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = NuvioColors.TextPrimary,
+                        modifier = Modifier.padding(start = rowHorizontalPadding, bottom = 6.dp)
+                    )
 
-                LaunchedEffect(row.key, pendingRowFocusKey, pendingRowFocusIndex) {
-                    if (pendingRowFocusKey != row.key) return@LaunchedEffect
-                    val targetIndex = (pendingRowFocusIndex ?: 0)
-                        .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                    runCatching { rowListState.scrollToItem(targetIndex) }
-                }
+                    row?.let { resolvedRow ->
+                        val rowListState = rowListStates.getOrPut(resolvedRow.key) { LazyListState() }
 
-                LazyRow(
-                    state = rowListState,
-                    contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
-                    horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
-                ) {
-                    itemsIndexed(
-                        items = row.items,
-                        key = { index, item -> "${row.key}_${item.key}_$index" }
-                    ) { index, item ->
-                        val requester = requesterFor(row.key, index)
-                        if (pendingRowFocusKey == row.key && pendingRowFocusIndex == index) {
-                            LaunchedEffect(row.key, pendingRowFocusKey, pendingRowFocusIndex, index) {
-                                repeat(24) {
-                                    val didFocus = runCatching {
-                                        requester.requestFocus()
-                                        true
-                                    }.getOrDefault(false)
-                                    if (didFocus) {
-                                        pendingRowFocusKey = null
-                                        pendingRowFocusIndex = null
-                                        rowTransitionInProgress = false
-                                        return@LaunchedEffect
-                                    }
-                                    withFrameNanos { }
-                                }
-                                pendingRowFocusKey = null
-                                pendingRowFocusIndex = null
-                                rowTransitionInProgress = false
+                        LaunchedEffect(resolvedRow.key, pendingRowFocusKey, pendingRowFocusIndex) {
+                            if (pendingRowFocusKey != resolvedRow.key) return@LaunchedEffect
+                            val targetIndex = (pendingRowFocusIndex ?: 0)
+                                .coerceIn(0, (resolvedRow.items.size - 1).coerceAtLeast(0))
+                            runCatching { rowListState.animateScrollToItem(targetIndex) }
+                            val requester = requesterFor(resolvedRow.key, targetIndex)
+                            kotlinx.coroutines.delay(100)
+                            runCatching { requester.requestFocus() }
+                            pendingRowFocusKey = null
+                            pendingRowFocusIndex = null
+                        }
+
+                        LazyRow(
+                            state = rowListState,
+                            contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
+                            horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
+                        ) {
+                            itemsIndexed(
+                                items = resolvedRow.items,
+                                key = { index, item -> "${resolvedRow.key}_${item.key}_$index" }
+                            ) { index, item ->
+                                val requester = requesterFor(resolvedRow.key, index)
+                                ModernCarouselCard(
+                                    item = item,
+                                    useLandscapePosters = useLandscapePosters,
+                                    cardWidth = activeCardWidth,
+                                    cardHeight = activeCardHeight,
+                                    focusRequester = requester,
+                                    onFocused = {
+                                        focusedItemByRow[resolvedRow.key] = index
+                                        activeRowKey = resolvedRow.key
+                                        heroItem = item.heroPreview
+                                    },
+                                    onClick = {
+                                        when (val payload = item.payload) {
+                                            is ModernPayload.Catalog -> onNavigateToDetail(
+                                                payload.itemId,
+                                                payload.itemType,
+                                                payload.addonBaseUrl
+                                            )
+                                            is ModernPayload.ContinueWatching -> onContinueWatchingClick(payload.item)
+                                        }
+                                    },
+                                    onMoveUp = { moveToRow(-1) },
+                                    onMoveDown = { moveToRow(1) }
+                                )
                             }
                         }
-                        ModernCarouselCard(
-                            item = item,
-                            useLandscapePosters = useLandscapePosters,
-                            cardWidth = activeCardWidth,
-                            cardHeight = activeCardHeight,
-                            focusRequester = requester,
-                            onFocused = {
-                                focusedItemByRow[row.key] = index
-                                activeRowKey = row.key
-                                heroItem = item.heroPreview
-                            },
-                            onClick = {
-                                when (val payload = item.payload) {
-                                    is ModernPayload.Catalog -> onNavigateToDetail(
-                                        payload.itemId,
-                                        payload.itemType,
-                                        payload.addonBaseUrl
-                                    )
-                                    is ModernPayload.ContinueWatching -> onContinueWatchingClick(payload.item)
-                                }
-                            },
-                            onMoveUp = { moveToRow(-1) },
-                            onMoveDown = { moveToRow(1) },
-                            rowTransitionInProgress = rowTransitionInProgress
-                        )
-                    }
-                }
-            }
 
-            if (shouldRenderPreviewRow) {
-                val previewRow = nextRow
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                        .height(previewVisibleHeight)
-                        .clipToBounds()
-                ) {
-                    LazyRow(
-                        userScrollEnabled = false,
-                        contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
-                        horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
-                    ) {
-                        itemsIndexed(previewRow.items.take(12), key = { index, item -> "${previewRow.key}_${item.key}_$index" }) { _, item ->
-                            PreviewCarouselCard(
-                                imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop,
-                                cardWidth = previewCardWidth,
-                                cardHeight = previewCardHeight
-                            )
+                        if (showNextRowPreview) {
+                            val rowIndex = carouselRows.indexOfFirst { it.key == resolvedRow.key }
+                            val previewRow = carouselRows.getOrNull(rowIndex + 1)
+                            if (previewRow != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 16.dp)
+                                        .height(previewVisibleHeight)
+                                        .clipToBounds()
+                                ) {
+                                    LazyRow(
+                                        userScrollEnabled = false,
+                                        contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
+                                        horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
+                                    ) {
+                                        itemsIndexed(
+                                            previewRow.items.take(12),
+                                            key = { index, item -> "${previewRow.key}_${item.key}_$index" }
+                                        ) { _, item ->
+                                            PreviewCarouselCard(
+                                                imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop,
+                                                cardWidth = previewCardWidth,
+                                                cardHeight = previewCardHeight
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .size(1.dp)
-                .focusRequester(transitionFocusRequester)
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (!rowTransitionInProgress || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.DirectionUp,
-                        Key.DirectionDown,
-                        Key.DirectionLeft,
-                        Key.DirectionRight,
-                        Key.DirectionCenter,
-                        Key.Enter -> true
-                        else -> false
-                    }
-                }
-        )
     }
 }
 
@@ -662,8 +669,7 @@ private fun ModernCarouselCard(
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onMoveUp: () -> Boolean,
-    onMoveDown: () -> Boolean,
-    rowTransitionInProgress: Boolean
+    onMoveDown: () -> Boolean
 ) {
     val cardShape = RoundedCornerShape(if (useLandscapePosters) 12.dp else 14.dp)
     val titleStyle = if (useLandscapePosters) {
@@ -698,16 +704,9 @@ private fun ModernCarouselCard(
                 }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    if (rowTransitionInProgress) return@onPreviewKeyEvent true
                     when (event.key) {
-                        Key.DirectionUp -> {
-                            onMoveUp()
-                            true
-                        }
-                        Key.DirectionDown -> {
-                            onMoveDown()
-                            true
-                        }
+                        Key.DirectionUp -> onMoveUp()
+                        Key.DirectionDown -> onMoveDown()
                         else -> false
                     }
                 },

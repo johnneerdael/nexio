@@ -24,6 +24,7 @@ data class Meta(
     val videos: List<Video>,
     val productionCompanies: List<MetaCompany> = emptyList(),
     val networks: List<MetaCompany> = emptyList(),
+    val ageRating: String? = null,
     val country: String?,
     val awards: String?,
     val language: String?,

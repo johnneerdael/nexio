@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.domain.model.WatchProgress
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -39,29 +41,6 @@ class WatchProgressPreferences @Inject constructor(
    
     private val maxStoredEntries = 300
 
-    private data class StoredWatchProgress(
-        val contentId: String? = null,
-        val contentType: String? = null,
-        val name: String? = null,
-        val poster: String? = null,
-        val backdrop: String? = null,
-        val logo: String? = null,
-        val videoId: String? = null,
-        val season: Int? = null,
-        val episode: Int? = null,
-        val episodeTitle: String? = null,
-        val position: Long? = null,
-        val duration: Long? = null,
-        val lastWatched: Long? = null,
-        val addonBaseUrl: String? = null,
-        val progressPercent: Float? = null,
-        val source: String? = null,
-        val traktPlaybackId: Long? = null,
-        val traktMovieId: Int? = null,
-        val traktShowId: Int? = null,
-        val traktEpisodeId: Int? = null
-    )
-
     /**
      * Get all watch progress items, sorted by last watched (most recent first)
      * For series, only returns the series-level entry (not individual episode entries)
@@ -88,6 +67,15 @@ class WatchProgressPreferences @Inject constructor(
             }
 
             contentLevelEntries.values
+                .sortedByDescending { it.lastWatched }
+        }
+
+    
+    val allRawProgress: Flow<List<WatchProgress>> = context.watchProgressDataStore.data
+        .map { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            parseProgressMap(json)
+                .values
                 .sortedByDescending { it.lastWatched }
         }
 
@@ -242,6 +230,15 @@ class WatchProgressPreferences @Inject constructor(
         }
     }
 
+    suspend fun replaceWithRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
+        Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${remoteEntries.size} remote entries")
+        context.watchProgressDataStore.edit { preferences ->
+            val pruned = pruneOldItems(remoteEntries.toMutableMap())
+            Log.d("WatchProgressPrefs", "replaceWithRemoteEntries: ${pruned.size} entries after prune, writing to DataStore")
+            preferences[watchProgressKey] = gson.toJson(pruned)
+        }
+    }
+
     /**
      * Clear all watch progress
      */
@@ -261,62 +258,137 @@ class WatchProgressPreferences @Inject constructor(
 
     private fun parseProgressMap(json: String): Map<String, WatchProgress> {
         return try {
-            val type = object : TypeToken<Map<String, StoredWatchProgress>>() {}.type
-            val rawMap: Map<String, StoredWatchProgress> = gson.fromJson(json, type) ?: emptyMap()
-            rawMap.mapNotNull { (key, rawEntry) ->
-                rawEntry.toWatchProgressOrNull(key)?.let { key to it }
-            }.toMap()
+            // Parse entry-by-entry so one malformed value doesn't wipe the entire map.
+            val root = gson.fromJson(json, JsonObject::class.java) ?: return emptyMap()
+            val parsed = mutableMapOf<String, WatchProgress>()
+            root.entrySet().forEach { (key, value) ->
+                runCatching {
+                    parseWatchProgressFromJson(value)
+                }.onSuccess { watchProgress ->
+                    if (watchProgress != null) parsed[key] = watchProgress
+                }.onFailure {
+                    Log.w(TAG, "Skipping malformed watch progress entry for key=$key")
+                }
+            }
+            parsed
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse progress data", e)
-            emptyMap()
+            // Backward compatibility with previously stored direct WatchProgress payloads.
+            runCatching {
+                val fallbackType = object : TypeToken<Map<String, WatchProgress>>() {}.type
+                gson.fromJson<Map<String, WatchProgress>>(json, fallbackType) ?: emptyMap()
+            }.getOrElse { emptyMap() }
         }
     }
 
-    private fun StoredWatchProgress.toWatchProgressOrNull(key: String): WatchProgress? {
-        val resolvedContentId = contentId?.takeIf { it.isNotBlank() }
-        val resolvedContentType = contentType?.takeIf { it.isNotBlank() }
-        val resolvedVideoId = videoId?.takeIf { it.isNotBlank() } ?: resolvedContentId
-        val resolvedLastWatched = lastWatched
-
-        if (resolvedContentId == null || resolvedContentType == null || resolvedVideoId == null || resolvedLastWatched == null) {
-            Log.w(TAG, "Dropping invalid watch progress entry for key=$key")
-            return null
-        }
+    private fun parseWatchProgressFromJson(value: JsonElement): WatchProgress? {
+        val obj = when {
+            value.isJsonObject -> value.asJsonObject
+            value.isJsonPrimitive && value.asJsonPrimitive.isString -> {
+                runCatching { gson.fromJson(value.asString, JsonObject::class.java) }.getOrNull()
+            }
+            else -> null
+        } ?: return null
+        val contentId = obj.getString("contentId", "content_id")?.takeIf { it.isNotBlank() } ?: return null
+        val contentType = obj.getString("contentType", "content_type")?.takeIf { it.isNotBlank() } ?: return null
+        val videoId = obj.getString("videoId", "video_id")?.takeIf { it.isNotBlank() } ?: contentId
+        val lastWatched = obj.getLong("lastWatched", "last_watched") ?: return null
 
         return WatchProgress(
-            contentId = resolvedContentId,
-            contentType = resolvedContentType,
-            name = name.orEmpty(),
-            poster = poster,
-            backdrop = backdrop,
-            logo = logo,
-            videoId = resolvedVideoId,
-            season = season,
-            episode = episode,
-            episodeTitle = episodeTitle,
-            position = position ?: 0L,
-            duration = duration ?: 0L,
-            lastWatched = resolvedLastWatched,
-            addonBaseUrl = addonBaseUrl,
-            progressPercent = progressPercent,
-            source = source?.takeIf { it.isNotBlank() } ?: WatchProgress.SOURCE_LOCAL,
-            traktPlaybackId = traktPlaybackId,
-            traktMovieId = traktMovieId,
-            traktShowId = traktShowId,
-            traktEpisodeId = traktEpisodeId
+            contentId = contentId,
+            contentType = contentType,
+            name = obj.getString("name").orEmpty(),
+            poster = obj.getString("poster"),
+            backdrop = obj.getString("backdrop"),
+            logo = obj.getString("logo"),
+            videoId = videoId,
+            season = obj.getInt("season"),
+            episode = obj.getInt("episode"),
+            episodeTitle = obj.getString("episodeTitle", "episode_title"),
+            position = obj.getLong("position") ?: 0L,
+            duration = obj.getLong("duration") ?: 0L,
+            lastWatched = lastWatched,
+            addonBaseUrl = obj.getString("addonBaseUrl", "addon_base_url"),
+            progressPercent = obj.getFloat("progressPercent", "progress_percent"),
+            source = obj.getString("source")?.takeIf { it.isNotBlank() } ?: WatchProgress.SOURCE_LOCAL,
+            traktPlaybackId = obj.getLong("traktPlaybackId", "trakt_playback_id"),
+            traktMovieId = obj.getInt("traktMovieId", "trakt_movie_id"),
+            traktShowId = obj.getInt("traktShowId", "trakt_show_id"),
+            traktEpisodeId = obj.getInt("traktEpisodeId", "trakt_episode_id")
         )
+    }
+
+    private fun JsonObject.getString(vararg keys: String): String? {
+        keys.forEach { key ->
+            val value = this.get(key) ?: return@forEach
+            if (value.isJsonNull) return@forEach
+            return runCatching { value.asString }.getOrNull()
+        }
+        return null
+    }
+
+    private fun JsonObject.getLong(vararg keys: String): Long? {
+        keys.forEach { key ->
+            val value = this.get(key) ?: return@forEach
+            if (value.isJsonNull) return@forEach
+            runCatching { value.asLong }.getOrNull()?.let { return it }
+            runCatching { value.asDouble.toLong() }.getOrNull()?.let { return it }
+            runCatching { value.asString.toLong() }.getOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    private fun JsonObject.getInt(vararg keys: String): Int? {
+        keys.forEach { key ->
+            val value = this.get(key) ?: return@forEach
+            if (value.isJsonNull) return@forEach
+            runCatching { value.asInt }.getOrNull()?.let { return it }
+            runCatching { value.asDouble.toInt() }.getOrNull()?.let { return it }
+            runCatching { value.asString.toInt() }.getOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    private fun JsonObject.getFloat(vararg keys: String): Float? {
+        keys.forEach { key ->
+            val value = this.get(key) ?: return@forEach
+            if (value.isJsonNull) return@forEach
+            runCatching { value.asFloat }.getOrNull()?.let { return it }
+            runCatching { value.asDouble.toFloat() }.getOrNull()?.let { return it }
+            runCatching { value.asString.toFloat() }.getOrNull()?.let { return it }
+        }
+        return null
     }
 
     private fun pruneOldItems(map: MutableMap<String, WatchProgress>): Map<String, WatchProgress> {
         if (map.isEmpty()) return map
 
-        val keepContentIds = map.values
+        val latestByContent = map.values
             .groupBy { it.contentId }
             .mapValues { (_, items) -> items.maxOf { it.lastWatched } }
+
+        val inProgressContentIds = map.values
+            .asSequence()
+            .filter { it.isInProgress() }
+            .map { it.contentId }
+            .toSet()
+
+        val sortedContentIds = latestByContent
             .entries
             .sortedByDescending { it.value }
-            .take(maxItems)
             .map { it.key }
+
+        val keepContentIds = buildList {
+            sortedContentIds
+                .filter { it in inProgressContentIds }
+                .forEach { add(it) }
+            sortedContentIds
+                .filter { it !in inProgressContentIds }
+                .forEach { add(it) }
+        }
+            .distinct()
+            .take(maxItems)
+
         val keepContentIdSet = keepContentIds.toSet()
 
         val filteredByContent = map.filterValues { it.contentId in keepContentIdSet }

@@ -42,6 +42,7 @@ fun ClassicHomeContent(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onRequestTrailerPreview: (MetaPreview) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit = {},
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
@@ -67,7 +68,6 @@ fun ClassicHomeContent(
     val rowStates = remember { mutableMapOf<String, LazyListState>() }
     val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
 
-    val catalogRowScrollStates = remember { mutableMapOf<String, Int>() }
     var restoringFocus by remember { mutableStateOf(focusState.hasSavedFocus) }
     val heroFocusRequester = remember { FocusRequester() }
     val shouldRequestInitialFocus = remember(focusState) {
@@ -77,6 +77,13 @@ fun ClassicHomeContent(
     }
     val visibleCatalogRows = remember(uiState.catalogRows) {
         uiState.catalogRows.filter { it.items.isNotEmpty() }
+    }
+    val visibleCatalogKeys = remember(visibleCatalogRows) {
+        visibleCatalogRows.mapTo(mutableSetOf()) { "${it.addonId}_${it.apiType}_${it.catalogId}" }
+    }
+
+    LaunchedEffect(visibleCatalogKeys) {
+        rowStates.keys.retainAll(visibleCatalogKeys)
     }
 
     DisposableEffect(Unit) {
@@ -209,12 +216,14 @@ fun ClassicHomeContent(
                 posterCardStyle = posterCardStyle,
                 showPosterLabels = uiState.posterLabelsEnabled,
                 showAddonName = uiState.catalogAddonNameEnabled,
+                showCatalogTypeSuffix = uiState.catalogTypeSuffixEnabled,
                 focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
                 focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
                 focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
                 focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
                 trailerPreviewUrls = trailerPreviewUrls,
                 onRequestTrailerPreview = onRequestTrailerPreview,
+                onItemFocus = onItemFocus,
                 onItemClick = { id, type, addonBaseUrl ->
                     onNavigateToDetail(id, type, addonBaseUrl)
                 },
@@ -234,7 +243,6 @@ fun ClassicHomeContent(
                     restoringFocus = false
                     currentFocusSnapshot.rowIndex = index
                     currentFocusSnapshot.itemIndex = itemIndex
-                    catalogRowScrollStates[catalogKey] = itemIndex
                     // Update the state as well, though getOrPut handles creation
                     // rowStates[catalogKey] already holds the live state object
                 }

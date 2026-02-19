@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
@@ -36,6 +37,9 @@ class SearchViewModel @Inject constructor(
 
     private var activeSearchJobs: List<Job> = emptyList()
     private var discoverJob: Job? = null
+    private var catalogRowsUpdateJob: Job? = null
+    private var hasRenderedFirstCatalog = false
+    private var pendingCatalogResponses = 0
 
     private companion object {
         const val DISCOVER_INITIAL_LIMIT = 100
@@ -61,32 +65,42 @@ class SearchViewModel @Inject constructor(
                 }
             }
         }
+        // Combine all layout preference flows into a single collector to reduce coroutine overhead
         viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardWidthDp.collectLatest { widthDp ->
-                _uiState.update { it.copy(posterCardWidthDp = widthDp) }
+            combine(
+                layoutPreferenceDataStore.posterCardWidthDp,
+                layoutPreferenceDataStore.posterLabelsEnabled,
+                layoutPreferenceDataStore.catalogAddonNameEnabled,
+                layoutPreferenceDataStore.posterCardHeightDp,
+                layoutPreferenceDataStore.posterCardCornerRadiusDp
+            ) { widthDp, labelsEnabled, addonNameEnabled, heightDp, cornerRadiusDp ->
+                LayoutPrefs(widthDp, labelsEnabled, addonNameEnabled, heightDp, cornerRadiusDp)
+            }.collectLatest { prefs ->
+                _uiState.update {
+                    it.copy(
+                        posterCardWidthDp = prefs.widthDp,
+                        posterLabelsEnabled = prefs.labelsEnabled,
+                        catalogAddonNameEnabled = prefs.addonNameEnabled,
+                        posterCardHeightDp = prefs.heightDp,
+                        posterCardCornerRadiusDp = prefs.cornerRadiusDp
+                    )
+                }
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.posterLabelsEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(posterLabelsEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.catalogAddonNameEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(catalogAddonNameEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardHeightDp.collectLatest { heightDp ->
-                _uiState.update { it.copy(posterCardHeightDp = heightDp) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.posterCardCornerRadiusDp.collectLatest { cornerRadiusDp ->
-                _uiState.update { it.copy(posterCardCornerRadiusDp = cornerRadiusDp) }
+            layoutPreferenceDataStore.catalogTypeSuffixEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(catalogTypeSuffixEnabled = enabled) }
             }
         }
     }
+
+    private data class LayoutPrefs(
+        val widthDp: Int,
+        val labelsEnabled: Boolean,
+        val addonNameEnabled: Boolean,
+        val heightDp: Int,
+        val cornerRadiusDp: Int
+    )
 
     fun onEvent(event: SearchEvent) {
         when (event) {
@@ -140,9 +154,12 @@ class SearchViewModel @Inject constructor(
         // Cancel any in-flight work from the previous query.
         activeSearchJobs.forEach { it.cancel() }
         activeSearchJobs = emptyList()
+        catalogRowsUpdateJob?.cancel()
 
         catalogsMap.clear()
         catalogOrder.clear()
+        hasRenderedFirstCatalog = false
+        pendingCatalogResponses = 0
 
         if (query.length < 2) {
             _uiState.update {
@@ -198,6 +215,7 @@ class SearchViewModel @Inject constructor(
                     loadCatalog(addon, catalog, query)
                 }
             }
+            pendingCatalogResponses = jobs.size
             activeSearchJobs = jobs
 
             // Wait for all jobs to complete so we can stop showing the global loading state.
@@ -230,19 +248,24 @@ class SearchViewModel @Inject constructor(
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
+                    if (uiState.value.submittedQuery.trim() != query) return@collect
                     val key = catalogKey(
                         addonId = addon.id,
                         type = catalog.apiType,
                         catalogId = catalog.id
                     )
                     catalogsMap[key] = result.data
-                    updateCatalogRows()
+                    pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
+                    scheduleCatalogRowsUpdate()
                 }
                 is NetworkResult.Error -> {
+                    if (uiState.value.submittedQuery.trim() != query) return@collect
+                    pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     // Ignore per-catalog errors unless we have nothing to show.
                     if (catalogsMap.isEmpty()) {
                         _uiState.update { it.copy(error = result.message ?: "Search failed") }
                     }
+                    scheduleCatalogRowsUpdate()
                 }
                 NetworkResult.Loading -> {
                     // No-op; screen shows global loading when empty.
@@ -258,7 +281,7 @@ class SearchViewModel @Inject constructor(
         if (currentRow.isLoading || !currentRow.hasMore) return
 
         catalogsMap[key] = currentRow.copy(isLoading = true)
-        updateCatalogRows()
+        scheduleCatalogRowsUpdate()
 
         val query = uiState.value.query.trim()
         if (query.isBlank()) return
@@ -266,7 +289,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             val addon = uiState.value.installedAddons.find { it.id == addonId } ?: run {
                 catalogsMap[key] = currentRow.copy(isLoading = false)
-                updateCatalogRows()
+                scheduleCatalogRowsUpdate()
                 return@launch
             }
 
@@ -287,11 +310,11 @@ class SearchViewModel @Inject constructor(
                     is NetworkResult.Success -> {
                         val mergedItems = currentRow.items + result.data.items
                         catalogsMap[key] = result.data.copy(items = mergedItems)
-                        updateCatalogRows()
+                        scheduleCatalogRowsUpdate()
                     }
                     is NetworkResult.Error -> {
                         catalogsMap[key] = currentRow.copy(isLoading = false)
-                        updateCatalogRows()
+                        scheduleCatalogRowsUpdate()
                     }
                     NetworkResult.Loading -> Unit
                 }
@@ -299,7 +322,25 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateCatalogRows() {
+    private fun scheduleCatalogRowsUpdate() {
+        catalogRowsUpdateJob?.cancel()
+        catalogRowsUpdateJob = viewModelScope.launch {
+            if (!hasRenderedFirstCatalog && catalogsMap.isNotEmpty()) {
+                hasRenderedFirstCatalog = true
+                updateCatalogRowsNow()
+                return@launch
+            }
+            val debounceMs = when {
+                pendingCatalogResponses > 5 -> 220L
+                pendingCatalogResponses > 0 -> 140L
+                else -> 90L
+            }
+            kotlinx.coroutines.delay(debounceMs)
+            updateCatalogRowsNow()
+        }
+    }
+
+    private fun updateCatalogRowsNow() {
         _uiState.update { state ->
             val orderedRows = catalogOrder.mapNotNull { key -> catalogsMap[key] }
             state.copy(

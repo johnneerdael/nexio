@@ -9,7 +9,6 @@ import com.nuvio.tv.domain.model.WatchProgress
 @Immutable
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
-    val fullCatalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -19,10 +18,11 @@ data class HomeUiState(
     val modernLandscapePostersEnabled: Boolean = true,
     val modernNextRowPreviewEnabled: Boolean = false,
     val heroItems: List<MetaPreview> = emptyList(),
-    val heroCatalogKey: String? = null,
+    val heroCatalogKeys: List<String> = emptyList(),
     val heroSectionEnabled: Boolean = true,
     val posterLabelsEnabled: Boolean = true,
     val catalogAddonNameEnabled: Boolean = true,
+    val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
     val focusedPosterBackdropTrailerEnabled: Boolean = false,

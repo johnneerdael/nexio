@@ -21,10 +21,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +52,6 @@ import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
-import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -92,16 +88,10 @@ fun GridHomeContent(
         buildSectionMapping(uiState.gridItems, continueWatchingOffset)
     }
 
-    // Track current section for sticky header
-    var currentSectionName by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(gridState, sectionMapping) {
-        snapshotFlow { gridState.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .collect { firstVisibleIndex ->
-                val section = sectionMapping.findSectionForIndex(firstVisibleIndex)
-                currentSectionName = section?.catalogName
-            }
+    val currentSectionName by remember(gridState, sectionMapping) {
+        derivedStateOf {
+            sectionMapping.findSectionForIndex(gridState.firstVisibleItemIndex)?.catalogName
+        }
     }
 
     // Pre-compute whether hero exists to avoid repeated list scan in derivedStateOf

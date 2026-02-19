@@ -14,20 +14,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
@@ -48,28 +50,48 @@ fun CastSection(
     modifier: Modifier = Modifier,
     title: String = "Cast",
     leadingCast: List<MetaCastMember> = emptyList(),
-    preferredFocusedCastTmdbId: Int? = null,
+    upFocusRequester: FocusRequester? = null,
+    restorePersonId: Int? = null,
+    restoreFocusToken: Int = 0,
+    onRestoreFocusHandled: () -> Unit = {},
+    onCastMemberFocused: (MetaCastMember) -> Unit = {},
     onCastMemberClick: (MetaCastMember) -> Unit = {}
 ) {
     if (cast.isEmpty() && leadingCast.isEmpty()) return
 
+    val restoreFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(restoreFocusToken, restorePersonId, leadingCast, cast) {
+        if (restoreFocusToken <= 0 || restorePersonId == null) return@LaunchedEffect
+        val existsInLeading = leadingCast.any { it.tmdbId == restorePersonId }
+        val existsInCast = cast.any { it.tmdbId == restorePersonId }
+        if (!existsInLeading && !existsInCast) return@LaunchedEffect
+        restoreFocusRequester.requestFocusAfterFrames()
+    }
+
     val itemWidth = 150.dp
     val cardSize = 100.dp
-    val dividerOffset = itemWidth - cardSize
+    val hasTitle = title.isNotBlank()
+    val upFocusModifier = if (upFocusRequester != null) {
+        Modifier.focusProperties { up = upFocusRequester }
+    } else {
+        Modifier
+    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 8.dp)
+            .padding(top = if (hasTitle) 20.dp else 8.dp, bottom = 8.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = NuvioColors.TextPrimary,
-            modifier = Modifier.padding(horizontal = 48.dp)
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        if (hasTitle) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = NuvioColors.TextPrimary,
+                modifier = Modifier.padding(horizontal = 48.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
@@ -80,29 +102,35 @@ fun CastSection(
             val deadSpace = itemWidth - cardSize
 
             if (leadingCast.isNotEmpty()) {
-                items(
+                itemsIndexed(
                     items = leadingCast,
-                    key = { member ->
-                        "leading|" + (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
+                    key = { index, member ->
+                        "leading|" + index + "|" + (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
                     }
-                ) { member ->
+                ) { index, member ->
                     val isLastLeading = member == leadingCast.last()
                     val endPadding = if (isLastLeading && cast.isNotEmpty()) 0.dp else standardGap
-                    val focusRequester = remember(member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
-                    val shouldRestoreFocus = preferredFocusedCastTmdbId != null && member.tmdbId == preferredFocusedCastTmdbId
-
-                    LaunchedEffect(shouldRestoreFocus) {
-                        if (shouldRestoreFocus) {
-                            focusRequester.requestFocus()
-                        }
+                    val isRestoreTarget = member.tmdbId == restorePersonId
+                    val focusRequester = if (isRestoreTarget) {
+                        restoreFocusRequester
+                    } else {
+                        remember(index, member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
                     }
 
                     Box(modifier = Modifier.padding(end = endPadding)) {
                         CastMemberItem(
                             member = member,
-                            modifier = Modifier.focusRequester(focusRequester),
+                            modifier = Modifier
+                                .focusRequester(focusRequester)
+                                .then(upFocusModifier),
                             itemWidth = itemWidth,
                             cardSize = cardSize,
+                            onFocused = {
+                                onCastMemberFocused(member)
+                                if (isRestoreTarget && restoreFocusToken > 0) {
+                                    onRestoreFocusHandled()
+                                }
+                            },
                             onClick = { onCastMemberClick(member) }
                         )
                     }
@@ -126,27 +154,33 @@ fun CastSection(
                 }
             }
 
-            items(
+            itemsIndexed(
                 items = cast,
-                key = { member ->
-                    (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
+                key = { index, member ->
+                    index.toString() + "|" + (member.tmdbId?.toString() ?: member.name) + "|" + (member.character ?: "") + "|" + (member.photo ?: "")
                 }
-            ) { member ->
-                val focusRequester = remember(member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
-                val shouldRestoreFocus = preferredFocusedCastTmdbId != null && member.tmdbId == preferredFocusedCastTmdbId
-
-                LaunchedEffect(shouldRestoreFocus) {
-                    if (shouldRestoreFocus) {
-                        focusRequester.requestFocus()
-                    }
+            ) { index, member ->
+                val isRestoreTarget = member.tmdbId == restorePersonId
+                val focusRequester = if (isRestoreTarget) {
+                    restoreFocusRequester
+                } else {
+                    remember(index, member.tmdbId, member.name, member.photo, member.character) { FocusRequester() }
                 }
 
                 Box(modifier = Modifier.padding(end = standardGap)) {
                     CastMemberItem(
                         member = member,
-                        modifier = Modifier.focusRequester(focusRequester),
+                        modifier = Modifier
+                            .focusRequester(focusRequester)
+                            .then(upFocusModifier),
                         itemWidth = itemWidth,
                         cardSize = cardSize,
+                        onFocused = {
+                            onCastMemberFocused(member)
+                            if (isRestoreTarget && restoreFocusToken > 0) {
+                                onRestoreFocusHandled()
+                            }
+                        },
                         onClick = { onCastMemberClick(member) }
                     )
                 }
@@ -162,6 +196,7 @@ private fun CastMemberItem(
     modifier: Modifier = Modifier,
     itemWidth: Dp = 150.dp,
     cardSize: Dp = 100.dp,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit = {}
 ) {
     Column(
@@ -172,7 +207,10 @@ private fun CastMemberItem(
             onClick = onClick,
             modifier = modifier
                 .size(cardSize)
-                .align(Alignment.Start),
+                .align(Alignment.Start)
+                .onFocusChanged { state ->
+                    if (state.isFocused) onFocused()
+                },
             shape = CardDefaults.shape(
                 shape = CircleShape
             ),

@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +49,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.TrailerSettings
@@ -62,6 +62,14 @@ private enum class PlaybackSection {
     SUBTITLES
 }
 
+private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode): String {
+    return when (mode) {
+        FrameRateMatchingMode.OFF -> "Off"
+        FrameRateMatchingMode.START -> "On start"
+        FrameRateMatchingMode.START_STOP -> "On start/stop"
+    }
+}
+
 @Composable
 internal fun PlaybackSettingsSections(
     initialFocusRequester: FocusRequester? = null,
@@ -72,6 +80,7 @@ internal fun PlaybackSettingsSections(
     onShowDecoderPriorityDialog: () -> Unit,
     onShowLanguageDialog: () -> Unit,
     onShowSecondaryLanguageDialog: () -> Unit,
+    onShowSubtitleOrganizationDialog: () -> Unit,
     onShowTextColorDialog: () -> Unit,
     onShowBackgroundColorDialog: () -> Unit,
     onShowOutlineColorDialog: () -> Unit,
@@ -83,13 +92,13 @@ internal fun PlaybackSettingsSections(
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
-    onSetNextEpisodeThresholdPercent: (Int) -> Unit,
-    onSetNextEpisodeThresholdMinutesBeforeEnd: (Int) -> Unit,
+    onSetNextEpisodeThresholdPercent: (Float) -> Unit,
+    onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
-    onSetFrameRateMatching: (Boolean) -> Unit,
+    onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetTrailerEnabled: (Boolean) -> Unit,
     onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
@@ -103,11 +112,13 @@ internal fun PlaybackSettingsSections(
     onSetLibassRenderType: (com.nuvio.tv.data.local.LibassRenderType) -> Unit
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
+    var afrExpanded by rememberSaveable { mutableStateOf(false) }
     var streamExpanded by rememberSaveable { mutableStateOf(false) }
     var audioTrailerExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
 
     val defaultGeneralHeaderFocus = remember { FocusRequester() }
+    val afrHeaderFocus = remember { FocusRequester() }
     val streamHeaderFocus = remember { FocusRequester() }
     val audioTrailerHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
@@ -189,15 +200,26 @@ internal fun PlaybackSettingsSections(
             }
 
             item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.Speed,
+                PlaybackSectionHeader(
                     title = "Auto Frame Rate",
-                    subtitle = "Match display refresh rate to video frame rate.",
-                    isChecked = playerSettings.frameRateMatching,
-                    onCheckedChange = onSetFrameRateMatching,
+                    description = frameRateMatchingModeLabel(playerSettings.frameRateMatchingMode),
+                    expanded = afrExpanded,
+                    onToggle = { afrExpanded = !afrExpanded },
+                    focusRequester = afrHeaderFocus,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
                     enabled = !isExternalPlayer
                 )
+            }
+
+            if (afrExpanded) {
+                item {
+                    FrameRateMatchingModeOptions(
+                        selectedMode = playerSettings.frameRateMatchingMode,
+                        onSelect = onSetFrameRateMatchingMode,
+                        onFocused = { focusedSection = PlaybackSection.GENERAL },
+                        enabled = !isExternalPlayer
+                    )
+                }
             }
         }
 
@@ -278,6 +300,7 @@ internal fun PlaybackSettingsSections(
                 playerSettings = playerSettings,
                 onShowLanguageDialog = onShowLanguageDialog,
                 onShowSecondaryLanguageDialog = onShowSecondaryLanguageDialog,
+                onShowSubtitleOrganizationDialog = onShowSubtitleOrganizationDialog,
                 onShowTextColorDialog = onShowTextColorDialog,
                 onShowBackgroundColorDialog = onShowBackgroundColorDialog,
                 onShowOutlineColorDialog = onShowOutlineColorDialog,
@@ -336,7 +359,8 @@ private fun PlaybackSectionHeader(
     expanded: Boolean,
     onToggle: () -> Unit,
     focusRequester: FocusRequester,
-    onFocused: () -> Unit
+    onFocused: () -> Unit,
+    enabled: Boolean = true
 ) {
     SettingsActionRow(
         title = title,
@@ -347,8 +371,50 @@ private fun PlaybackSectionHeader(
             .fillMaxWidth()
             .focusRequester(focusRequester),
         onFocused = onFocused,
+        enabled = enabled,
         trailingIcon = if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight
     )
+}
+
+@Composable
+private fun FrameRateMatchingModeOptions(
+    selectedMode: FrameRateMatchingMode,
+    onSelect: (FrameRateMatchingMode) -> Unit,
+    onFocused: () -> Unit,
+    enabled: Boolean
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        RenderTypeSettingsItem(
+            title = "Off",
+            subtitle = "Don't change display refresh rate.",
+            isSelected = selectedMode == FrameRateMatchingMode.OFF,
+            onClick = { onSelect(FrameRateMatchingMode.OFF) },
+            onFocused = onFocused,
+            enabled = enabled
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        RenderTypeSettingsItem(
+            title = "On start",
+            subtitle = "Switch when playback starts.",
+            isSelected = selectedMode == FrameRateMatchingMode.START,
+            onClick = { onSelect(FrameRateMatchingMode.START) },
+            onFocused = onFocused,
+            enabled = enabled
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        RenderTypeSettingsItem(
+            title = "On start/stop",
+            subtitle = "Switch on start and restore on stop.",
+            isSelected = selectedMode == FrameRateMatchingMode.START_STOP,
+            onClick = { onSelect(FrameRateMatchingMode.START_STOP) },
+            onFocused = onFocused,
+            enabled = enabled
+        )
+    }
 }
 
 @Composable
@@ -359,6 +425,7 @@ internal fun PlaybackSettingsDialogsHost(
     showPlayerPreferenceDialog: Boolean,
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
+    showSubtitleOrganizationDialog: Boolean,
     showTextColorDialog: Boolean,
     showBackgroundColorDialog: Boolean,
     showOutlineColorDialog: Boolean,
@@ -375,6 +442,7 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissPlayerPreferenceDialog: () -> Unit,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
+    onSetSubtitleOrganizationMode: (com.nuvio.tv.data.local.SubtitleOrganizationMode) -> Unit,
     onSetSubtitleTextColor: (Color) -> Unit,
     onSetSubtitleBackgroundColor: (Color) -> Unit,
     onSetSubtitleOutlineColor: (Color) -> Unit,
@@ -389,6 +457,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetReuseLastLinkCacheHours: (Int) -> Unit,
     onDismissLanguageDialog: () -> Unit,
     onDismissSecondaryLanguageDialog: () -> Unit,
+    onDismissSubtitleOrganizationDialog: () -> Unit,
     onDismissTextColorDialog: () -> Unit,
     onDismissBackgroundColorDialog: () -> Unit,
     onDismissOutlineColorDialog: () -> Unit,
@@ -416,17 +485,20 @@ internal fun PlaybackSettingsDialogsHost(
     SubtitleSettingsDialogs(
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
+        showSubtitleOrganizationDialog = showSubtitleOrganizationDialog,
         showTextColorDialog = showTextColorDialog,
         showBackgroundColorDialog = showBackgroundColorDialog,
         showOutlineColorDialog = showOutlineColorDialog,
         playerSettings = playerSettings,
         onSetPreferredLanguage = onSetSubtitlePreferredLanguage,
         onSetSecondaryLanguage = onSetSubtitleSecondaryLanguage,
+        onSetSubtitleOrganizationMode = onSetSubtitleOrganizationMode,
         onSetTextColor = onSetSubtitleTextColor,
         onSetBackgroundColor = onSetSubtitleBackgroundColor,
         onSetOutlineColor = onSetSubtitleOutlineColor,
         onDismissLanguageDialog = onDismissLanguageDialog,
         onDismissSecondaryLanguageDialog = onDismissSecondaryLanguageDialog,
+        onDismissSubtitleOrganizationDialog = onDismissSubtitleOrganizationDialog,
         onDismissTextColorDialog = onDismissTextColorDialog,
         onDismissBackgroundColorDialog = onDismissBackgroundColorDialog,
         onDismissOutlineColorDialog = onDismissOutlineColorDialog

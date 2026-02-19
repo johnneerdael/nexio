@@ -3,7 +3,6 @@ package com.nuvio.tv.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -14,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
@@ -40,7 +40,9 @@ fun GridContentCard(
     modifier: Modifier = Modifier,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     showLabel: Boolean = true,
+    imageCrossfade: Boolean = false,
     focusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {}
 ) {
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
@@ -59,6 +61,13 @@ fun GridContentCard(
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
                     else Modifier
+                )
+                .then(
+                    if (upFocusRequester != null) {
+                        Modifier.focusProperties { up = upFocusRequester }
+                    } else {
+                        Modifier
+                    }
                 )
                 .onFocusChanged { state ->
                     if (state.isFocused) onFocused()
@@ -81,12 +90,17 @@ fun GridContentCard(
                     .fillMaxSize()
                     .clip(cardShape)
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                val context = LocalContext.current
+                val imageModel = remember(context, item.poster, requestWidthPx, requestHeightPx) {
+                    ImageRequest.Builder(context)
                         .data(item.poster)
-                        .crossfade(false)
+                        .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
-                        .build(),
+                        .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}")
+                        .build()
+                }
+                AsyncImage(
+                    model = imageModel,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -139,7 +141,7 @@ internal fun ModernSidebarBlurPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(headerLogoHeight)
-                .padding(top = 2.dp),
+                .offset(y = 12.dp),
             contentScale = ContentScale.Fit
         )
 
@@ -149,27 +151,33 @@ internal fun ModernSidebarBlurPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            drawerItems.forEachIndexed { index, item ->
-                SidebarNavigationItem(
-                    label = item.label,
-                    iconRes = item.iconRes,
-                    icon = item.icon,
-                    selected = selectedDrawerRoute == item.route,
-                    focusEnabled = keepSidebarFocusDuringCollapse,
-                    labelAlpha = sidebarLabelAlpha,
-                    iconScale = sidebarIconScale,
-                    onFocusChanged = {
-                        if (it) {
-                            onDrawerItemFocused(index)
-                        }
-                    },
-                    onClick = { onDrawerItemClick(item.route) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(drawerItemFocusRequesters.getValue(item.route))
-                )
+            Column(
+                modifier = Modifier.offset(y = (-12).dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                drawerItems.forEachIndexed { index, item ->
+                    SidebarNavigationItem(
+                        label = item.label,
+                        iconRes = item.iconRes,
+                        icon = item.icon,
+                        selected = selectedDrawerRoute == item.route,
+                        focusEnabled = keepSidebarFocusDuringCollapse,
+                        labelAlpha = sidebarLabelAlpha,
+                        iconScale = sidebarIconScale,
+                        onFocusChanged = {
+                            if (it) {
+                                onDrawerItemFocused(index)
+                            }
+                        },
+                        onClick = { onDrawerItemClick(item.route) },
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .focusRequester(drawerItemFocusRequesters.getValue(item.route))
+                    )
+                }
             }
         }
     }
@@ -207,6 +215,8 @@ private fun SidebarNavigationItem(
 
     val contentColor = if (selected) Color(0xFF10151F) else Color.White
     val iconCircleColor = if (selected) Color(0xFFE7E2EF) else Color(0xFF6A6A74)
+    val iconContainerSize = 34.dp
+    val contentGap = 14.dp
 
     Row(
         modifier = modifier
@@ -220,12 +230,11 @@ private fun SidebarNavigationItem(
             .focusable(enabled = focusEnabled)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(iconContainerSize)
                 .clip(CircleShape)
                 .background(iconCircleColor)
                 .padding(6.dp)
@@ -251,15 +260,19 @@ private fun SidebarNavigationItem(
                 )
             }
         }
+        Spacer(modifier = Modifier.width(contentGap))
 
         Text(
             text = label,
             color = contentColor,
-            modifier = Modifier.graphicsLayer(alpha = labelAlpha),
+            modifier = Modifier
+                .weight(1f)
+                .graphicsLayer(alpha = labelAlpha),
             style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+        Spacer(modifier = Modifier.width(iconContainerSize + contentGap))
     }
 }
 

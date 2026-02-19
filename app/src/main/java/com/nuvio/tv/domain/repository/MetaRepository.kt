@@ -15,4 +15,6 @@ interface MetaRepository {
         type: String,
         id: String
     ): Flow<NetworkResult<Meta>>
+    
+    fun clearCache()
 }

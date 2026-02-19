@@ -162,6 +162,20 @@ fun TmdbSettingsContent(
                     )
                 }
 
+                item {
+                    SettingsToggleRow(
+                        title = "More Like This",
+                        subtitle = "TMDB recommendation backdrops on detail page",
+                        checked = uiState.useMoreLikeThis,
+                        enabled = uiState.enabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                TmdbSettingsEvent.ToggleMoreLikeThis(!uiState.useMoreLikeThis)
+                            )
+                        }
+                    )
+                }
+
             }
         }
     }

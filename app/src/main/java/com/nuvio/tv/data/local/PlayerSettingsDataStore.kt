@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -134,7 +135,7 @@ data class PlayerSettings(
     // Dolby Vision Profile 7 → HEVC fallback (requires forked ExoPlayer)
     val mapDV7ToHevc: Boolean = false,
     // Display settings
-    val frameRateMatching: Boolean = false,
+    val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
     // Stream selection settings
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
@@ -143,10 +144,11 @@ data class PlayerSettings(
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
-    val nextEpisodeThresholdPercent: Int = 95,
-    val nextEpisodeThresholdMinutesBeforeEnd: Int = 3,
+    val nextEpisodeThresholdPercent: Float = 98f,
+    val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
     val streamReuseLastLinkEnabled: Boolean = false,
-    val streamReuseLastLinkCacheHours: Int = 24
+    val streamReuseLastLinkCacheHours: Int = 24,
+    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE
 )
 
 enum class StreamAutoPlayMode {
@@ -161,9 +163,21 @@ enum class StreamAutoPlaySource {
     ENABLED_PLUGINS_ONLY
 }
 
+enum class FrameRateMatchingMode {
+    OFF,
+    START,
+    START_STOP
+}
+
 enum class NextEpisodeThresholdMode {
     PERCENTAGE,
     MINUTES_BEFORE_END
+}
+
+enum class SubtitleOrganizationMode {
+    NONE,
+    BY_LANGUAGE,
+    BY_ADDON
 }
 
 enum class PlayerPreference {
@@ -208,6 +222,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
+    private val frameRateMatchingModeKey = stringPreferencesKey("frame_rate_matching_mode")
     private val streamAutoPlayModeKey = stringPreferencesKey("stream_auto_play_mode")
     private val streamAutoPlaySourceKey = stringPreferencesKey("stream_auto_play_source")
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
@@ -215,10 +230,13 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
-    private val nextEpisodeThresholdPercentKey = intPreferencesKey("next_episode_threshold_percent")
-    private val nextEpisodeThresholdMinutesBeforeEndKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
+    private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
+    private val nextEpisodeThresholdMinutesBeforeEndLegacyKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
+    private val nextEpisodeThresholdPercentKey = floatPreferencesKey("next_episode_threshold_percent_v2")
+    private val nextEpisodeThresholdMinutesBeforeEndKey = floatPreferencesKey("next_episode_threshold_minutes_before_end_v2")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
+    private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -291,7 +309,13 @@ class PlayerSettingsDataStore @Inject constructor(
             pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
             skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
             mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
-            frameRateMatching = prefs[frameRateMatchingKey] ?: false,
+            frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
+                runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
+            } ?: if (prefs[frameRateMatchingKey] == true) {
+                FrameRateMatchingMode.START_STOP
+            } else {
+                FrameRateMatchingMode.OFF
+            },
             streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
                 runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
             } ?: StreamAutoPlayMode.MANUAL,
@@ -305,10 +329,23 @@ class PlayerSettingsDataStore @Inject constructor(
             nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                 runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
             } ?: NextEpisodeThresholdMode.PERCENTAGE,
-            nextEpisodeThresholdPercent = (prefs[nextEpisodeThresholdPercentKey] ?: 95).coerceIn(50, 99),
-            nextEpisodeThresholdMinutesBeforeEnd = (prefs[nextEpisodeThresholdMinutesBeforeEndKey] ?: 3).coerceIn(1, 30),
+            nextEpisodeThresholdPercent = normalizeHalfStep(
+                value = prefs[nextEpisodeThresholdPercentKey]
+                    ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
+                    ?: 98f,
+                min = 97f,
+                max = 99.5f
+            ),
+            nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStep(
+                value = prefs[nextEpisodeThresholdMinutesBeforeEndKey]
+                    ?: prefs[nextEpisodeThresholdMinutesBeforeEndLegacyKey]?.toFloat()
+                    ?: 2f,
+                min = 1f,
+                max = 3.5f
+            ),
             streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
             streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
+            subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
             subtitleStyle = SubtitleStyleSettings(
                 preferredLanguage = prefs[subtitlePreferredLanguageKey] ?: "en",
                 secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey],
@@ -401,10 +438,17 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun setFrameRateMatching(enabled: Boolean) {
+    suspend fun setFrameRateMatchingMode(mode: FrameRateMatchingMode) {
         dataStore.edit { prefs ->
-            prefs[frameRateMatchingKey] = enabled
+            prefs[frameRateMatchingModeKey] = mode.name
+            prefs[frameRateMatchingKey] = mode != FrameRateMatchingMode.OFF
         }
+    }
+
+    suspend fun setFrameRateMatching(enabled: Boolean) {
+        setFrameRateMatchingMode(
+            if (enabled) FrameRateMatchingMode.START_STOP else FrameRateMatchingMode.OFF
+        )
     }
 
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
@@ -449,16 +493,29 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun setNextEpisodeThresholdPercent(percent: Int) {
+    suspend fun setNextEpisodeThresholdPercent(percent: Float) {
         dataStore.edit { prefs ->
-            prefs[nextEpisodeThresholdPercentKey] = percent.coerceIn(50, 99)
+            prefs[nextEpisodeThresholdPercentKey] = normalizeHalfStep(
+                value = percent,
+                min = 97f,
+                max = 99.5f
+            )
         }
     }
 
-    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Int) {
+    suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
         dataStore.edit { prefs ->
-            prefs[nextEpisodeThresholdMinutesBeforeEndKey] = minutes.coerceIn(1, 30)
+            prefs[nextEpisodeThresholdMinutesBeforeEndKey] = normalizeHalfStep(
+                value = minutes,
+                min = 1f,
+                max = 3.5f
+            )
         }
+    }
+
+    private fun normalizeHalfStep(value: Float, min: Float, max: Float): Float {
+        val clamped = value.coerceIn(min, max)
+        return (clamped * 2f).roundToInt() / 2f
     }
 
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
@@ -470,6 +527,21 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamReuseLastLinkCacheHours(hours: Int) {
         dataStore.edit { prefs ->
             prefs[streamReuseLastLinkCacheHoursKey] = hours.coerceIn(1, 168)
+        }
+    }
+
+    suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
+        dataStore.edit { prefs ->
+            prefs[subtitleOrganizationModeKey] = mode.name
+        }
+    }
+
+    private fun parseSubtitleOrganizationMode(value: String?): SubtitleOrganizationMode {
+        return when (value) {
+            null, "NONE" -> SubtitleOrganizationMode.NONE
+            "BY_LANGUAGE" -> SubtitleOrganizationMode.BY_LANGUAGE
+            "BY_ADDON" -> SubtitleOrganizationMode.BY_ADDON
+            else -> SubtitleOrganizationMode.NONE
         }
     }
 

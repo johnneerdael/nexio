@@ -127,6 +127,10 @@ fun TrailerPlayer(
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
+                        if (player.currentMediaItem == null) {
+                            player.setMediaItem(MediaItem.fromUri(currentTrailerUrl!!))
+                            player.prepare()
+                        }
                         player.playWhenReady = true
                     }
                 }
@@ -134,6 +138,15 @@ fun TrailerPlayer(
                 Lifecycle.Event.ON_STOP -> {
                     player.playWhenReady = false
                     player.pause()
+                    player.stop()
+                    player.clearMediaItems()
+                }
+                Lifecycle.Event.ON_DESTROY -> {
+                    if (releaseCalled.compareAndSet(false, true)) {
+                        runCatching { player.stop() }
+                        runCatching { player.clearMediaItems() }
+                        runCatching { player.release() }
+                    }
                 }
                 else -> Unit
             }

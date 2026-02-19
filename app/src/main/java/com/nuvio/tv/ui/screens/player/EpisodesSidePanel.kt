@@ -84,9 +84,7 @@ internal fun EpisodesSidePanel(
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(
-        uiState.showEpisodeStreams,
-        uiState.episodes.size,
-        uiState.episodeFilteredStreams.size
+        uiState.showEpisodeStreams
     ) {
         try {
             if (uiState.showEpisodeStreams) {
@@ -97,6 +95,18 @@ internal fun EpisodesSidePanel(
         } catch (_: Exception) {
             // Focus requester may not be ready yet
         }
+    }
+
+   
+    LaunchedEffect(
+        uiState.showEpisodeStreams,
+        uiState.isLoadingEpisodeStreams,
+        uiState.episodeFilteredStreams.isNotEmpty()
+    ) {
+        if (!uiState.showEpisodeStreams) return@LaunchedEffect
+        if (uiState.isLoadingEpisodeStreams) return@LaunchedEffect
+        if (uiState.episodeFilteredStreams.isEmpty()) return@LaunchedEffect
+        runCatching { streamsFocusRequester.requestFocus() }
     }
 
     // Right panel only (scrim is handled in PlayerScreen)
@@ -391,7 +401,7 @@ private fun EpisodesSeasonTabs(
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .focusRestorer { selectedTabFocusRequester },
+            .focusRestorer(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
     ) {

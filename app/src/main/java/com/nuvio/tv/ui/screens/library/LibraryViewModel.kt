@@ -3,7 +3,6 @@ package com.nuvio.tv.ui.screens.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.repository.TraktLibraryService
-import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntry
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -19,11 +18,17 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
-enum class LibraryTypeTab(val label: String, val type: ContentType) {
-    Movies("Movies", ContentType.MOVIE),
-    Series("Series", ContentType.SERIES)
+data class LibraryTypeTab(
+    val key: String,
+    val label: String
+) {
+    companion object {
+        const val ALL_KEY = "__all__"
+        val All = LibraryTypeTab(key = ALL_KEY, label = "All")
+    }
 }
 
 data class LibraryListEditorState(
@@ -44,8 +49,9 @@ data class LibraryUiState(
     val allItems: List<LibraryEntry> = emptyList(),
     val visibleItems: List<LibraryEntry> = emptyList(),
     val listTabs: List<LibraryListTab> = emptyList(),
+    val availableTypeTabs: List<LibraryTypeTab> = emptyList(),
     val selectedListKey: String? = null,
-    val selectedTypeTab: LibraryTypeTab = LibraryTypeTab.Movies,
+    val selectedTypeTab: LibraryTypeTab? = null,
     val isLoading: Boolean = true,
     val isSyncing: Boolean = false,
     val errorMessage: String? = null,
@@ -275,10 +281,23 @@ class LibraryViewModel @Inject constructor(
                         }
                         ?: listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
 
+                    val itemsForTypeTabs = if (sourceMode == LibrarySourceMode.TRAKT) {
+                        val listKey = nextSelectedList
+                        if (listKey.isNullOrBlank()) items else items.filter { it.listKeys.contains(listKey) }
+                    } else {
+                        items
+                    }
+                    val typeTabs = buildTypeTabs(itemsForTypeTabs)
+                    val nextSelectedType = current.selectedTypeTab
+                        ?.takeIf { selected -> typeTabs.any { it.key == selected.key } }
+                        ?: LibraryTypeTab.All
+
                     val updated = current.copy(
                         sourceMode = sourceMode,
                         allItems = items,
                         listTabs = listTabs,
+                        availableTypeTabs = typeTabs,
+                        selectedTypeTab = nextSelectedType,
                         selectedListKey = nextSelectedList,
                         manageSelectedListKey = nextManageSelected,
                         isSyncing = sourceMode == LibrarySourceMode.TRAKT && isSyncing,
@@ -357,9 +376,39 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    private fun buildTypeTabs(items: List<LibraryEntry>): List<LibraryTypeTab> {
+        val byKey = linkedMapOf<String, LibraryTypeTab>()
+        items.forEach { entry ->
+            val key = entry.type.trim().ifBlank { "unknown" }.lowercase(Locale.ROOT)
+            if (byKey.containsKey(key)) return@forEach
+            byKey[key] = LibraryTypeTab(
+                key = key,
+                label = prettifyTypeLabel(key)
+            )
+        }
+        return listOf(LibraryTypeTab.All) + byKey.values
+    }
+
+    private fun prettifyTypeLabel(key: String): String {
+        return key
+            .replace('_', ' ')
+            .replace('-', ' ')
+            .split(' ')
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { token ->
+                token.replaceFirstChar { ch ->
+                    if (ch.isLowerCase()) ch.titlecase(Locale.ROOT) else ch.toString()
+                }
+            }
+            .ifBlank { "Unknown" }
+    }
+
     private fun LibraryUiState.withVisibleItems(): LibraryUiState {
+        val selectedTypeKey = selectedTypeTab?.key
         val typeFiltered = allItems.filter { entry ->
-            ContentType.fromString(entry.type) == selectedTypeTab.type
+            selectedTypeKey == null ||
+                selectedTypeKey == LibraryTypeTab.ALL_KEY ||
+                entry.type.trim().lowercase(Locale.ROOT) == selectedTypeKey
         }
 
         val listFiltered = if (sourceMode == LibrarySourceMode.TRAKT) {

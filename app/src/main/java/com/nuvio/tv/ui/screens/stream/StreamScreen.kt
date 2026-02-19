@@ -595,11 +595,11 @@ private fun AddonChip(
         colors = FilterChipDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
-            selectedContainerColor = NuvioColors.Secondary.copy(alpha = 0.3f),
+            selectedContainerColor = NuvioColors.Secondary,
             focusedSelectedContainerColor = NuvioColors.Secondary,
             contentColor = NuvioColors.TextSecondary,
             focusedContentColor = NuvioColors.OnPrimary,
-            selectedContentColor = NuvioColors.Secondary,
+            selectedContentColor = NuvioColors.OnPrimary,
             focusedSelectedContentColor = NuvioColors.OnPrimary
         ),
         border = FilterChipDefaults.border(
@@ -762,7 +762,7 @@ private fun StreamsList(
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 8.dp)
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
     ) {
         itemsIndexed(streams, key = { index, stream ->
             "${stream.addonName}_${stream.url ?: stream.infoHash ?: stream.ytId ?: "unknown"}_$index"
@@ -799,16 +799,10 @@ private fun StreamCard(
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.BackgroundElevated,
-            focusedContainerColor = NuvioColors.FocusBackground
-        ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(12.dp)
-            )
+            focusedContainerColor = NuvioColors.BackgroundElevated
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.05f)
+        scale = CardDefaults.scale(focusedScale = 1.08f)
     ) {
         Row(
             modifier = Modifier

@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.detail
 
 import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
@@ -36,6 +37,10 @@ data class MetaDetailsUiState(
     val watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
     val blurUnwatchedEpisodes: Boolean = false,
+    val moreLikeThis: List<MetaPreview> = emptyList(),
+    val episodeImdbRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
+    val isEpisodeRatingsLoading: Boolean = false,
+    val episodeRatingsError: String? = null,
     val mdbListRatings: MDBListRatings? = null,
     val showMdbListImdb: Boolean = false,
     val userMessage: String? = null,
