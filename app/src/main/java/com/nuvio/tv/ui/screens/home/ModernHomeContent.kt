@@ -71,6 +71,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
@@ -1086,8 +1087,7 @@ private fun HeroTitleBlock(
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
     val metaScale = if (portraitMode && shouldRenderPreviewRow) 0.90f else 1f
-    val imdbBadgeHorizontalPadding = if (portraitMode) 7.dp else 9.dp
-    val imdbBadgeVerticalPadding = if (portraitMode) 2.dp else 3.dp
+    val context = LocalContext.current
 
     Column(
         modifier = modifier,
@@ -1149,7 +1149,7 @@ private fun HeroTitleBlock(
             }
 
             val yearText = preview.yearText
-            val imdbText = preview.imdbText?.let { "IMDb $it" }
+            val imdbText = preview.imdbText
             val hasYearOrImdb = !yearText.isNullOrBlank() || !imdbText.isNullOrBlank()
             if (hasYearOrImdb) {
                 if (hasLeadingMeta) {
@@ -1168,19 +1168,26 @@ private fun HeroTitleBlock(
                         )
                     }
                     if (!imdbText.isNullOrBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(Color(0xFFDBA506))
-                                .padding(
-                                    horizontal = imdbBadgeHorizontalPadding,
-                                    vertical = imdbBadgeVerticalPadding
-                                )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp * metaScale)
                         ) {
+                            val imdbModel = remember {
+                                ImageRequest.Builder(context)
+                                    .data(com.nuvio.tv.R.raw.imdb_logo_2016)
+                                    .decoderFactory(SvgDecoder.Factory())
+                                    .build()
+                            }
+                            AsyncImage(
+                                model = imdbModel,
+                                contentDescription = "IMDb",
+                                modifier = Modifier.size(30.dp * metaScale),
+                                contentScale = ContentScale.Fit
+                            )
                             Text(
                                 text = imdbText,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.Black,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = NuvioColors.TextSecondary,
                                 maxLines = 1
                             )
                         }
