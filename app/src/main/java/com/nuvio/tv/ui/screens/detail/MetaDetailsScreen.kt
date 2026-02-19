@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -717,10 +718,11 @@ private fun MetaDetailsContent(
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0.0f to Color.Transparent,
-                0.5f to Color.Transparent,
-                0.7f to backgroundColor.copy(alpha = 0.5f),
-                0.85f to backgroundColor.copy(alpha = 0.8f),
-                1.0f to backgroundColor
+                0.38f to Color.Transparent,
+                0.56f to backgroundColor.copy(alpha = 0.38f),
+                0.72f to backgroundColor.copy(alpha = 0.74f),
+                0.86f to backgroundColor.copy(alpha = 0.94f),
+                1.0f to backgroundColor.copy(alpha = 1.0f)
             )
         )
     }
@@ -918,6 +920,7 @@ private fun MetaDetailsContent(
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
                             tabs = peopleTabItems,
+                            ratingsDownFocusRequester = ratingsContentFocusRequester,
                             onTabFocused = { tab ->
                                 activePeopleTab = tab
                             }
@@ -1023,6 +1026,7 @@ private fun MetaDetailsContent(
 private fun PeopleSectionTabs(
     activeTab: PeopleSectionTab,
     tabs: List<PeopleTabItem>,
+    ratingsDownFocusRequester: FocusRequester? = null,
     onTabFocused: (PeopleSectionTab) -> Unit
 ) {
     if (tabs.isEmpty()) return
@@ -1053,6 +1057,7 @@ private fun PeopleSectionTabs(
                 label = item.label,
                 selected = activeTab == item.tab,
                 focusRequester = item.focusRequester,
+                downFocusRequester = if (item.tab == PeopleSectionTab.RATINGS) ratingsDownFocusRequester else null,
                 onFocused = { onTabFocused(item.tab) }
             )
         }
@@ -1065,6 +1070,7 @@ private fun PeopleSectionTabButton(
     label: String,
     selected: Boolean,
     focusRequester: FocusRequester,
+    downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -1073,6 +1079,11 @@ private fun PeopleSectionTabButton(
         onClick = onFocused,
         modifier = Modifier
             .focusRequester(focusRequester)
+            .focusProperties {
+                if (downFocusRequester != null) {
+                    down = downFocusRequester
+                }
+            }
             .onFocusChanged { state ->
                 val focusedNow = state.isFocused
                 isFocused = focusedNow
@@ -1088,7 +1099,7 @@ private fun PeopleSectionTabButton(
                 shape = RoundedCornerShape(16.dp)
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1f)
+        scale = CardDefaults.scale(focusedScale = 1.03f)
     ) {
         Text(
             text = label,

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -128,7 +129,7 @@ fun EpisodeRatingsSection(
                 ) {
                     items(seasonNumbers, key = { it }) { season ->
                         val isSelected = season == selectedSeason
-                        val modifierWithRequester = if (firstItemFocusRequester != null && season == defaultSeason) {
+                        val modifierWithRequester = if (firstItemFocusRequester != null && season == selectedSeason) {
                             Modifier.focusRequester(firstItemFocusRequester)
                         } else {
                             Modifier.focusRequester(seasonFocusRequesters.getValue(season))
@@ -136,7 +137,14 @@ fun EpisodeRatingsSection(
 
                         Card(
                             onClick = { selectedSeason = season },
-                            modifier = modifierWithRequester.then(upFocusModifier),
+                            modifier = modifierWithRequester
+                                .then(upFocusModifier)
+                                .onFocusChanged { state ->
+                                    if (state.isFocused && selectedSeason != season) {
+                                        selectedSeason = season
+                                    }
+                                },
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
                             colors = CardDefaults.colors(
                                 containerColor = if (isSelected) {
                                     NuvioColors.FocusBackground
@@ -182,11 +190,7 @@ fun EpisodeRatingsSection(
                         val ratingText = rating?.let { String.format("%.1f", it) } ?: "—"
                         val chipColor = rating?.let(::ratingColor) ?: NuvioColors.BackgroundCard
                         val chipTextColor = rating?.let(::ratingTextColor) ?: NuvioColors.TextSecondary
-                        val selectedSeasonUpRequester = if (selectedSeason == defaultSeason) {
-                            firstItemFocusRequester ?: seasonFocusRequesters[selectedSeason]
-                        } else {
-                            seasonFocusRequesters[selectedSeason]
-                        }
+                        val selectedSeasonUpRequester = firstItemFocusRequester ?: seasonFocusRequesters[selectedSeason]
 
                         Card(
                             onClick = { },
@@ -195,6 +199,7 @@ fun EpisodeRatingsSection(
                             } else {
                                 Modifier
                             },
+                            shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
                             colors = CardDefaults.colors(
                                 containerColor = chipColor,
                                 focusedContainerColor = chipColor

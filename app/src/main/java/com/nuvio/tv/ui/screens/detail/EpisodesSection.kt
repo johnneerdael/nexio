@@ -287,11 +287,11 @@ private fun EpisodeCard(
     val edgeFadeBrush = remember(backgroundCard) {
         Brush.horizontalGradient(
             0.0f to androidx.compose.ui.graphics.Color.Transparent,
-            0.15f to backgroundCard.copy(alpha = 0.08f),
-            0.35f to backgroundCard.copy(alpha = 0.25f),
-            0.55f to backgroundCard.copy(alpha = 0.50f),
-            0.72f to backgroundCard.copy(alpha = 0.72f),
-            0.85f to backgroundCard.copy(alpha = 0.88f),
+            0.12f to backgroundCard.copy(alpha = 0.08f),
+            0.30f to backgroundCard.copy(alpha = 0.25f),
+            0.50f to backgroundCard.copy(alpha = 0.50f),
+            0.68f to backgroundCard.copy(alpha = 0.72f),
+            0.82f to backgroundCard.copy(alpha = 0.88f),
             1.0f to backgroundCard
         )
     }
@@ -473,7 +473,7 @@ private fun EpisodeCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .width(64.dp)
+                        .width(92.dp)
                         .fillMaxSize()
                         .alpha(edgeFadeAlpha)
                         .background(edgeFadeBrush)
