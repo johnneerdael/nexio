@@ -477,9 +477,9 @@ class HomeViewModel @Inject constructor(
             .mapNotNull { (_, items) ->
                 items.maxWithOrNull(
                     compareBy<WatchProgress>(
+                        { it.lastWatched },
                         { it.season ?: -1 },
-                        { it.episode ?: -1 },
-                        { it.lastWatched }
+                        { it.episode ?: -1 }
                     )
                 )
             }
