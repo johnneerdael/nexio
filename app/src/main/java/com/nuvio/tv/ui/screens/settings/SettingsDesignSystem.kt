@@ -380,7 +380,7 @@ internal fun SettingsToggleRow(
         },
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 62.dp)
+            .height(62.dp)
             .onFocusChanged {
                 if (it.isFocused) onFocused()
             },
@@ -399,8 +399,8 @@ internal fun SettingsToggleRow(
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp),
+                .fillMaxSize()
+                .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

@@ -220,7 +220,7 @@ private fun AddProfileButton(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp),
+            .height(56.dp),
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
             focusedContainerColor = NuvioColors.Background
@@ -238,26 +238,30 @@ private fun AddProfileButton(
         shape = CardDefaults.shape(RoundedCornerShape(SettingsPillRadius)),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+                .fillMaxSize()
+                .padding(horizontal = 18.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "+",
-                color = NuvioColors.TextSecondary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Light
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Add Profile",
-                color = NuvioColors.TextSecondary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "+",
+                    color = NuvioColors.TextSecondary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Light
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Add Profile",
+                    color = NuvioColors.TextSecondary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
     }
 }
