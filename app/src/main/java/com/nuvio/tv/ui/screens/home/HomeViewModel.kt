@@ -1362,7 +1362,7 @@ class HomeViewModel @Inject constructor(
         focusedItemIndex: Int,
         catalogRowScrollStates: Map<String, Int>
     ) {
-        _focusState.value = HomeScreenFocusState(
+        val nextState = HomeScreenFocusState(
             verticalScrollIndex = verticalScrollIndex,
             verticalScrollOffset = verticalScrollOffset,
             focusedRowIndex = focusedRowIndex,
@@ -1370,6 +1370,8 @@ class HomeViewModel @Inject constructor(
             catalogRowScrollStates = catalogRowScrollStates,
             hasSavedFocus = true
         )
+        if (_focusState.value == nextState) return
+        _focusState.value = nextState
     }
 
     /**
