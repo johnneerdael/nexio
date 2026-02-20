@@ -71,7 +71,6 @@ fun CatalogRowSection(
     onItemFocused: (itemIndex: Int) -> Unit = {},
     rowFocusRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
-    downFocusRequester: FocusRequester? = null,
     listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
 ) {
     val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
@@ -94,11 +93,8 @@ fun CatalogRowSection(
         }
     }
 
-    val directionalFocusModifier = if (upFocusRequester != null || downFocusRequester != null) {
-        Modifier.focusProperties {
-            if (upFocusRequester != null) up = upFocusRequester
-            if (downFocusRequester != null) down = downFocusRequester
-        }
+    val directionalFocusModifier = if (upFocusRequester != null) {
+        Modifier.focusProperties { up = upFocusRequester }
     } else {
         Modifier
     }
