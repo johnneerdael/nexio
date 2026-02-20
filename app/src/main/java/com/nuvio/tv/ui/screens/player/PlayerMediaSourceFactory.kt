@@ -71,8 +71,9 @@ internal class PlayerMediaSourceFactory {
 
     private fun getOrCreateOkHttpClient(): OkHttpClient {
         return okHttpClient ?: OkHttpClient.Builder()
-            .connectTimeout(8000, TimeUnit.MILLISECONDS)
-            .readTimeout(8000, TimeUnit.MILLISECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .retryOnConnectionFailure(true)
             .followRedirects(true)
