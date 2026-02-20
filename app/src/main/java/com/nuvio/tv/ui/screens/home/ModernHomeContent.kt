@@ -136,6 +136,7 @@ fun ModernHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit = {},
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
@@ -668,6 +669,9 @@ fun ModernHomeContent(
                                         )
                                     }
                                     is ModernPayload.Catalog -> {
+                                        val catalogItem = visibleCatalogRows
+                                            .getOrNull(resolvedRow.globalRowIndex)
+                                            ?.items?.getOrNull(index)
                                         ModernCarouselCard(
                                             item = item,
                                             useLandscapePosters = useLandscapePosters,
@@ -676,7 +680,10 @@ fun ModernHomeContent(
                                             cardWidth = activeCardWidth,
                                             cardHeight = activeCardHeight,
                                             focusRequester = requester,
-                                            onFocused = onFocused,
+                                            onFocused = {
+                                                onFocused()
+                                                catalogItem?.let { onItemFocus(it) }
+                                            },
                                             onClick = {
                                                 onNavigateToDetail(
                                                     payload.itemId,

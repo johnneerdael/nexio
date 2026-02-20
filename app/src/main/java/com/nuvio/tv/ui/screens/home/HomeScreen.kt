@@ -232,6 +232,7 @@ private fun ModernHomeRoute(
         focusState = focusState,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
+        onItemFocus = { item -> viewModel.onItemFocus(item) },
         onLoadMoreCatalog = { catalogId, addonId, type ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
         },
