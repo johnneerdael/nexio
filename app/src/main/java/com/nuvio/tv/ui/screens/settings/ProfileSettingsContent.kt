@@ -281,7 +281,7 @@ private fun ProfileCreateForm(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             text = "Create Profile",
@@ -290,14 +290,12 @@ private fun ProfileCreateForm(
             fontWeight = FontWeight.SemiBold
         )
 
-        // Name
         InputField(
             value = name,
             onValueChange = { if (it.length <= 20) name = it },
             placeholder = "Profile name"
         )
 
-        // Color picker
         Text(
             text = "Avatar Color",
             color = NuvioColors.TextSecondary,
@@ -313,7 +311,6 @@ private fun ProfileCreateForm(
             }
         }
 
-        // Sharing toggles
         SettingsToggleRow(
             title = "Use primary profile's addons",
             subtitle = null,
@@ -327,11 +324,8 @@ private fun ProfileCreateForm(
             onToggle = { usesPrimaryPlugins = !usesPrimaryPlugins }
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Actions
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             ProfileFormButton(text = "Cancel", onClick = onCancel, modifier = Modifier.weight(1f))
@@ -361,7 +355,7 @@ private fun ProfileEditForm(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             text = "Edit Profile ${profile.id}",
@@ -370,14 +364,12 @@ private fun ProfileEditForm(
             fontWeight = FontWeight.SemiBold
         )
 
-        // Name
         InputField(
             value = name,
             onValueChange = { if (it.length <= 20) name = it },
             placeholder = "Profile name"
         )
 
-        // Color picker
         Text(
             text = "Avatar Color",
             color = NuvioColors.TextSecondary,
@@ -393,7 +385,6 @@ private fun ProfileEditForm(
             }
         }
 
-        // Sharing toggles (not for primary profile)
         if (!profile.isPrimary) {
             SettingsToggleRow(
                 title = "Use primary profile's addons",
@@ -409,11 +400,8 @@ private fun ProfileEditForm(
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Actions
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             ProfileFormButton(text = "Cancel", onClick = onCancel, modifier = Modifier.weight(1f))
@@ -431,18 +419,17 @@ private fun ProfileEditForm(
                 },
                 modifier = Modifier.weight(1f)
             )
-        }
-
-        if (onDelete != null) {
-            var confirmDelete by remember { mutableStateOf(false) }
-            ProfileFormButton(
-                text = if (confirmDelete) "Confirm Delete" else "Delete Profile",
-                onClick = {
-                    if (confirmDelete) onDelete() else confirmDelete = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-                isDestructive = true
-            )
+            if (onDelete != null) {
+                var confirmDelete by remember { mutableStateOf(false) }
+                ProfileFormButton(
+                    text = if (confirmDelete) "Confirm" else "Delete",
+                    onClick = {
+                        if (confirmDelete) onDelete() else confirmDelete = true
+                    },
+                    modifier = Modifier.weight(1f),
+                    isDestructive = true
+                )
+            }
         }
     }
 }
