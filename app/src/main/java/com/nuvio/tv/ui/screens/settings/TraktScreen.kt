@@ -66,6 +66,7 @@ fun TraktScreen(
     val primaryFocusRequester = remember { FocusRequester() }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     var showDaysCapDialog by remember { mutableStateOf(false) }
+    var showUnairedNextUpDialog by remember { mutableStateOf(false) }
     val continueWatchingDayOptions = remember { listOf(14, 30, 60, 90, 180, 365) }
 
     BackHandler { onBackPress() }
@@ -247,6 +248,12 @@ fun TraktScreen(
                     value = "${uiState.continueWatchingDaysCap} days",
                     onClick = { showDaysCapDialog = true }
                 )
+                SettingsActionRow(
+                    title = "Unaired Next Up Episodes",
+                    subtitle = "Show upcoming episodes before they air",
+                    value = if (uiState.showUnairedNextUp) "Shown" else "Hidden",
+                    onClick = { showUnairedNextUpDialog = true }
+                )
             }
 
             if (uiState.mode != TraktConnectionMode.CONNECTED) {
@@ -346,6 +353,70 @@ fun TraktScreen(
                 ) {
                     Button(
                         onClick = { showDaysCapDialog = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextPrimary
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+
+    if (showUnairedNextUpDialog) {
+        Dialog(onDismissRequest = { showUnairedNextUpDialog = false }) {
+            Column(
+                modifier = Modifier
+                    .width(620.dp)
+                    .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                    .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Unaired Next Up Episodes",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = NuvioColors.TextPrimary
+                )
+                Text(
+                    text = "Choose whether Continue Watching should include upcoming episodes before release.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextSecondary
+                )
+                Button(
+                    onClick = {
+                        viewModel.onShowUnairedNextUpChanged(true)
+                        showUnairedNextUpDialog = false
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (uiState.showUnairedNextUp) NuvioColors.Primary else NuvioColors.BackgroundCard,
+                        contentColor = if (uiState.showUnairedNextUp) Color.Black else NuvioColors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Show unaired episodes")
+                }
+                Button(
+                    onClick = {
+                        viewModel.onShowUnairedNextUpChanged(false)
+                        showUnairedNextUpDialog = false
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (!uiState.showUnairedNextUp) NuvioColors.Primary else NuvioColors.BackgroundCard,
+                        contentColor = if (!uiState.showUnairedNextUp) Color.Black else NuvioColors.TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Hide unaired episodes")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { showUnairedNextUpDialog = false },
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioColors.BackgroundCard,
                             contentColor = NuvioColors.TextPrimary
