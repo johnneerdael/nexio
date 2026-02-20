@@ -52,6 +52,7 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.R
 import com.nuvio.tv.core.qr.QrCodeGenerator
+import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
@@ -67,7 +68,17 @@ fun TraktScreen(
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     var showDaysCapDialog by remember { mutableStateOf(false) }
     var showUnairedNextUpDialog by remember { mutableStateOf(false) }
-    val continueWatchingDayOptions = remember { listOf(14, 30, 60, 90, 180, 365) }
+    val continueWatchingDayOptions = remember {
+        listOf(
+            14,
+            30,
+            60,
+            90,
+            180,
+            365,
+            TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL
+        )
+    }
 
     BackHandler { onBackPress() }
 
@@ -244,8 +255,8 @@ fun TraktScreen(
             if (uiState.mode == TraktConnectionMode.CONNECTED) {
                 SettingsActionRow(
                     title = "Continue Watching Window",
-                    subtitle = "Days of Trakt progress considered for continue watching",
-                    value = "${uiState.continueWatchingDaysCap} days",
+                    subtitle = "Trakt history considered for continue watching",
+                    value = formatContinueWatchingWindow(uiState.continueWatchingDaysCap),
                     onClick = { showDaysCapDialog = true }
                 )
                 SettingsActionRow(
@@ -315,7 +326,7 @@ fun TraktScreen(
                     color = NuvioColors.TextPrimary
                 )
                 Text(
-                    text = "Choose how many days of Trakt activity should appear in continue watching.",
+                    text = "Choose how much Trakt activity should appear in continue watching.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioColors.TextSecondary
                 )
@@ -338,7 +349,7 @@ fun TraktScreen(
                                     contentColor = if (selected) Color.Black else NuvioColors.TextPrimary
                                 )
                             ) {
-                                Text("$days days")
+                                Text(formatContinueWatchingWindow(days))
                             }
                         }
                         if (rowOptions.size == 1) {
@@ -585,5 +596,13 @@ private fun formatDuration(valueMs: Long): String {
         hours > 0 -> "${hours}h ${minutes}m"
         minutes > 0 -> "${minutes}m ${seconds}s"
         else -> "${seconds}s"
+    }
+}
+
+private fun formatContinueWatchingWindow(days: Int): String {
+    return if (days == TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL) {
+        "All history"
+    } else {
+        "$days days"
     }
 }

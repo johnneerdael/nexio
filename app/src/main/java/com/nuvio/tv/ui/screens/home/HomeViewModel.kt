@@ -14,6 +14,7 @@ import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
@@ -460,11 +461,15 @@ class HomeViewModel @Inject constructor(
                 val daysCap = snapshot.daysCap
                 val dismissedNextUp = snapshot.dismissedNextUp
                 val showUnairedNextUp = snapshot.showUnairedNextUp
-                val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
-                val cutoffMs = System.currentTimeMillis() - windowMs
+                val cutoffMs = if (daysCap == TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL) {
+                    null
+                } else {
+                    val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
+                    System.currentTimeMillis() - windowMs
+                }
                 val recentItems = items
                     .asSequence()
-                    .filter { it.lastWatched >= cutoffMs }
+                    .filter { progress -> cutoffMs == null || progress.lastWatched >= cutoffMs }
                     .sortedByDescending { it.lastWatched }
                     .take(MAX_RECENT_PROGRESS_ITEMS)
                     .toList()
@@ -507,6 +512,13 @@ class HomeViewModel @Inject constructor(
         val daysCap: Int,
         val dismissedNextUp: Set<String>,
         val showUnairedNextUp: Boolean
+    )
+
+    private data class NextUpArtworkFallback(
+        val thumbnail: String?,
+        val backdrop: String?,
+        val poster: String?,
+        val airDate: String?
     )
 
     private fun deduplicateInProgress(items: List<WatchProgress>): List<WatchProgress> {
@@ -680,23 +692,43 @@ class HomeViewModel @Inject constructor(
         ) ?: return null
         val meta = nextEpisode.first
         val video = nextEpisode.second
-        val releaseDate = parseEpisodeReleaseDate(video.released)
+        val existingPoster = meta.poster.normalizeImageUrl()
+        val existingBackdrop = meta.background.normalizeImageUrl()
+        val existingLogo = meta.logo.normalizeImageUrl()
+        val existingThumbnail = video.thumbnail.normalizeImageUrl()
+        val artworkFallback = if (
+            existingThumbnail == null ||
+            existingBackdrop == null ||
+            existingPoster == null
+        ) {
+            resolveNextUpArtworkFallback(
+                progress = progress,
+                meta = meta,
+                season = video.season ?: return null,
+                episode = video.episode ?: return null
+            )
+        } else {
+            null
+        }
+        val released = video.released?.trim()?.takeIf { it.isNotEmpty() }
+            ?: artworkFallback?.airDate
+        val releaseDate = parseEpisodeReleaseDate(released)
         val todayUtc = LocalDate.now(ZoneOffset.UTC)
         val hasAired = releaseDate?.let { !it.isAfter(todayUtc) } ?: true
         val info = NextUpInfo(
             contentId = progress.contentId,
             contentType = progress.contentType,
             name = meta.name,
-            poster = meta.poster.normalizeImageUrl(),
-            backdrop = meta.background.normalizeImageUrl(),
-            logo = meta.logo.normalizeImageUrl(),
+            poster = existingPoster ?: artworkFallback?.poster,
+            backdrop = existingBackdrop ?: artworkFallback?.backdrop,
+            logo = existingLogo,
             videoId = video.id,
             season = video.season ?: return null,
             episode = video.episode ?: return null,
             episodeTitle = video.title,
             episodeDescription = video.overview?.takeIf { it.isNotBlank() },
-            thumbnail = video.thumbnail.normalizeImageUrl(),
-            released = video.released?.trim()?.takeIf { it.isNotEmpty() },
+            thumbnail = existingThumbnail ?: artworkFallback?.thumbnail,
+            released = released,
             hasAired = hasAired,
             airDateLabel = if (hasAired) {
                 null
@@ -815,6 +847,72 @@ class HomeViewModel @Inject constructor(
                 ?: return@runCatching null
             LocalDate.parse(datePortion)
         }.getOrNull()
+    }
+
+    private suspend fun resolveNextUpArtworkFallback(
+        progress: WatchProgress,
+        meta: Meta,
+        season: Int,
+        episode: Int
+    ): NextUpArtworkFallback? {
+        val tmdbId = resolveTmdbIdForNextUp(progress, meta) ?: return null
+        val language = currentTmdbSettings.language
+
+        val episodeMeta = runCatching {
+            tmdbMetadataService
+                .fetchEpisodeEnrichment(
+                    tmdbId = tmdbId,
+                    seasonNumbers = listOf(season),
+                    language = language
+                )[season to episode]
+        }.getOrNull()
+
+        val showMeta = runCatching {
+            tmdbMetadataService.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = ContentType.SERIES,
+                language = language
+            )
+        }.getOrNull()
+
+        val fallback = NextUpArtworkFallback(
+            thumbnail = episodeMeta?.thumbnail.normalizeImageUrl(),
+            backdrop = showMeta?.backdrop.normalizeImageUrl(),
+            poster = showMeta?.poster.normalizeImageUrl(),
+            airDate = episodeMeta?.airDate?.trim()?.takeIf { it.isNotEmpty() }
+        )
+
+        return if (
+            fallback.thumbnail == null &&
+            fallback.backdrop == null &&
+            fallback.poster == null &&
+            fallback.airDate == null
+        ) {
+            null
+        } else {
+            fallback
+        }
+    }
+
+    private suspend fun resolveTmdbIdForNextUp(
+        progress: WatchProgress,
+        meta: Meta
+    ): String? {
+        val candidates = buildList {
+            add(progress.contentId)
+            add(meta.id)
+            add(progress.videoId)
+            if (progress.contentId.startsWith("trakt:")) add(progress.contentId.substringAfter(':'))
+            if (meta.id.startsWith("trakt:")) add(meta.id.substringAfter(':'))
+        }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        for (candidate in candidates) {
+            tmdbService.ensureTmdbId(candidate, progress.contentType)?.let { return it }
+        }
+        return null
     }
 
     private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {

@@ -27,6 +27,7 @@ class TraktSettingsDataStore @Inject constructor(
     private val showUnairedNextUpKey = booleanPreferencesKey("show_unaired_next_up")
 
     companion object {
+        const val CONTINUE_WATCHING_DAYS_CAP_ALL = 0
         const val DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
         const val DEFAULT_SHOW_UNAIRED_NEXT_UP = true
         const val MIN_CONTINUE_WATCHING_DAYS_CAP = 7
@@ -34,8 +35,9 @@ class TraktSettingsDataStore @Inject constructor(
     }
 
     val continueWatchingDaysCap: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[continueWatchingDaysCapKey] ?: DEFAULT_CONTINUE_WATCHING_DAYS_CAP)
-            .coerceIn(MIN_CONTINUE_WATCHING_DAYS_CAP, MAX_CONTINUE_WATCHING_DAYS_CAP)
+        normalizeContinueWatchingDaysCap(
+            prefs[continueWatchingDaysCapKey] ?: DEFAULT_CONTINUE_WATCHING_DAYS_CAP
+        )
     }
 
     val dismissedNextUpKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
@@ -48,8 +50,15 @@ class TraktSettingsDataStore @Inject constructor(
 
     suspend fun setContinueWatchingDaysCap(days: Int) {
         dataStore.edit { prefs ->
-            prefs[continueWatchingDaysCapKey] =
-                days.coerceIn(MIN_CONTINUE_WATCHING_DAYS_CAP, MAX_CONTINUE_WATCHING_DAYS_CAP)
+            prefs[continueWatchingDaysCapKey] = normalizeContinueWatchingDaysCap(days)
+        }
+    }
+
+    private fun normalizeContinueWatchingDaysCap(days: Int): Int {
+        return if (days == CONTINUE_WATCHING_DAYS_CAP_ALL) {
+            CONTINUE_WATCHING_DAYS_CAP_ALL
+        } else {
+            days.coerceIn(MIN_CONTINUE_WATCHING_DAYS_CAP, MAX_CONTINUE_WATCHING_DAYS_CAP)
         }
     }
 
