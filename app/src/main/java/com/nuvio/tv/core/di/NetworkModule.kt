@@ -239,8 +239,11 @@ object NetworkModule {
     @Named("seriesGraph")
     fun provideSeriesGraphRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
         val rawBaseUrl = BuildConfig.IMDB_RATINGS_API_BASE_URL
-        require(rawBaseUrl.isNotBlank()) { "IMDB_RATINGS_API_BASE_URL must be set in local properties." }
-        val normalizedBaseUrl = if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        val normalizedBaseUrl = if (rawBaseUrl.isNotBlank()) {
+            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        } else {
+            "http://localhost/"
+        }
         return Retrofit.Builder()
             .baseUrl(normalizedBaseUrl)
             .client(okHttpClient)
@@ -258,8 +261,11 @@ object NetworkModule {
     @Named("imdbTapframe")
     fun provideImdbTapframeRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
         val rawBaseUrl = BuildConfig.IMDB_TAPFRAME_API_BASE_URL
-        require(rawBaseUrl.isNotBlank()) { "IMDB_TAPFRAME_API_BASE_URL must be set in local properties." }
-        val normalizedBaseUrl = if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        val normalizedBaseUrl = if (rawBaseUrl.isNotBlank()) {
+            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
+        } else {
+            "http://localhost/"
+        }
         return Retrofit.Builder()
             .baseUrl(normalizedBaseUrl)
             .client(okHttpClient)
