@@ -878,7 +878,7 @@ private fun RepositoryCard(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!isReadOnly) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onRefresh,
                     enabled = !isLoading,
@@ -896,23 +896,21 @@ private fun RepositoryCard(
                     )
                 }
 
-                if (!isReadOnly) {
-                    Button(
-                        onClick = onRemove,
-                        enabled = !isLoading,
-                        colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.Surface,
-                            contentColor = NuvioColors.TextSecondary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Error
-                        ),
-                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Remove"
-                        )
-                    }
+                Button(
+                    onClick = onRemove,
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NuvioColors.Surface,
+                        contentColor = NuvioColors.TextSecondary,
+                        focusedContainerColor = NuvioColors.FocusBackground,
+                        focusedContentColor = NuvioColors.Error
+                    ),
+                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Remove"
+                    )
                 }
             }
         }
