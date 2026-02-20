@@ -9,6 +9,7 @@ import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonArray
@@ -24,6 +25,35 @@ class WatchProgressSyncService @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
     private val traktAuthDataStore: TraktAuthDataStore
 ) {
+    suspend fun deleteFromRemote(keys: Collection<String>): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (traktAuthDataStore.isAuthenticated.first()) {
+                Log.d(TAG, "Trakt connected, skipping watch progress delete")
+                return@withContext Result.success(Unit)
+            }
+
+            val distinctKeys = keys
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+            if (distinctKeys.isEmpty()) {
+                return@withContext Result.success(Unit)
+            }
+
+            val params = buildJsonObject {
+                put("p_keys", buildJsonArray {
+                    distinctKeys.forEach { add(it) }
+                })
+            }
+            postgrest.rpc("sync_delete_watch_progress", params)
+            Log.d(TAG, "Deleted ${distinctKeys.size} watch progress entries from remote")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to delete watch progress from remote", e)
+            Result.failure(e)
+        }
+    }
+
     /**
      * Push all local watch progress to Supabase via RPC.
      * Skips if Trakt is connected (Trakt handles progress when active).

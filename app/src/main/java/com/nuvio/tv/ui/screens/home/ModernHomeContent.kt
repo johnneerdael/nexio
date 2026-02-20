@@ -423,7 +423,8 @@ fun ModernHomeContent(
     ) {
         val previewRowEnabled = showNextRowPreview
         val posterScale = when {
-            previewRowEnabled -> 1f
+            previewRowEnabled && useLandscapePosters -> 1.08f
+            previewRowEnabled -> 1.14f
             useLandscapePosters -> 1.34f
             else -> 1.08f
         }
@@ -443,14 +444,14 @@ fun ModernHomeContent(
         }
         val previewCardWidth = activeCardWidth
         val previewCardHeight = activeCardHeight
-        val continueWatchingScale = if (previewRowEnabled) 1f else 1.34f
+        val continueWatchingScale = 1.34f
         val continueWatchingCardWidth = portraitBaseWidth * 1.24f * continueWatchingScale
         val continueWatchingCardHeight = continueWatchingCardWidth / 1.77f
         val cardCornerRadius = uiState.posterCardCornerRadiusDp.dp
         val previewVisibleHeight = if (useLandscapePosters) {
-            previewCardHeight * 0.30f
+            previewCardHeight * 0.24f
         } else {
-            previewCardHeight * 0.22f
+            previewCardHeight * 0.18f
         }
 
         val resolvedHero = heroItem ?: activeRow?.items?.firstOrNull()?.heroPreview
@@ -481,8 +482,9 @@ fun ModernHomeContent(
         val heroBackdropAlpha = 1f - heroTransitionProgress
         val heroTrailerAlpha = heroTransitionProgress
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
-        val catalogBottomPadding = if (shouldRenderPreviewRow) 12.dp else 18.dp
-        val heroToCatalogGap = if (shouldRenderPreviewRow) 14.dp else 18.dp
+        val catalogBottomPadding = if (shouldRenderPreviewRow) 8.dp else 18.dp
+        val heroToCatalogGap = if (shouldRenderPreviewRow) 8.dp else 18.dp
+        val activeRowTitleBottom = if (shouldRenderPreviewRow) 2.dp else 6.dp
         val localContext = LocalContext.current
         val bgColor = NuvioColors.Background
 
@@ -658,7 +660,7 @@ fun ModernHomeContent(
                         text = row?.title.orEmpty(),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         color = NuvioColors.TextPrimary,
-                        modifier = Modifier.padding(start = rowHorizontalPadding, bottom = 6.dp)
+                        modifier = Modifier.padding(start = rowHorizontalPadding, bottom = activeRowTitleBottom)
                     )
 
                     row?.let { resolvedRow ->

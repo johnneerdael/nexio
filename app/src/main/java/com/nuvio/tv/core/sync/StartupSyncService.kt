@@ -153,8 +153,8 @@ class StartupSyncService @Inject constructor(
                     return Result.success(Unit)
                 }
                 Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
-                watchProgressPreferences.replaceWithRemoteEntries(remoteEntries.toMap())
-                Log.d(TAG, "Reconciled local watch progress with ${remoteEntries.size} remote entries")
+                watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
+                Log.d(TAG, "Merged local watch progress with ${remoteEntries.size} remote entries")
                 watchProgressRepository.isSyncingFromRemote = false
 
                 if (traktAuthDataStore.isAuthenticated.first()) {
