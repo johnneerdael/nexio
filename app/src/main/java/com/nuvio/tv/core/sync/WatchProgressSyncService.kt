@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.sync
 
 import android.util.Log
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.remote.supabase.SupabaseWatchProgress
@@ -23,7 +24,8 @@ private const val TAG = "WatchProgressSyncService"
 class WatchProgressSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val watchProgressPreferences: WatchProgressPreferences,
-    private val traktAuthDataStore: TraktAuthDataStore
+    private val traktAuthDataStore: TraktAuthDataStore,
+    private val profileManager: ProfileManager
 ) {
     suspend fun deleteFromRemote(keys: Collection<String>): Result<Unit> = withContext(Dispatchers.IO) {
         try {
@@ -40,13 +42,15 @@ class WatchProgressSyncService @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
+            val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_keys", buildJsonArray {
                     distinctKeys.forEach { add(it) }
                 })
+                put("p_profile_id", profileId)
             }
             postgrest.rpc("sync_delete_watch_progress", params)
-            Log.d(TAG, "Deleted ${distinctKeys.size} watch progress entries from remote")
+            Log.d(TAG, "Deleted ${distinctKeys.size} watch progress entries from remote for profile $profileId")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete watch progress from remote", e)
@@ -72,6 +76,7 @@ class WatchProgressSyncService @Inject constructor(
                 Log.d(TAG, "  push entry: key=$key contentId=${progress.contentId} type=${progress.contentType} pos=${progress.position} dur=${progress.duration} lastWatched=${progress.lastWatched}")
             }
 
+            val profileId = profileManager.activeProfileId.value
             val params = buildJsonObject {
                 put("p_entries", buildJsonArray {
                     entries.forEach { (key, progress) ->
@@ -88,10 +93,11 @@ class WatchProgressSyncService @Inject constructor(
                         }
                     }
                 })
+                put("p_profile_id", profileId)
             }
             postgrest.rpc("sync_push_watch_progress", params)
 
-            Log.d(TAG, "Pushed ${entries.size} watch progress entries to remote")
+            Log.d(TAG, "Pushed ${entries.size} watch progress entries to remote for profile $profileId")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push watch progress to remote", e)
@@ -112,10 +118,14 @@ class WatchProgressSyncService @Inject constructor(
                 return@withContext Result.success(emptyList())
             }
 
-            val response = postgrest.rpc("sync_pull_watch_progress")
+            val profileId = profileManager.activeProfileId.value
+            val params = buildJsonObject {
+                put("p_profile_id", profileId)
+            }
+            val response = postgrest.rpc("sync_pull_watch_progress", params)
             val remote = response.decodeList<SupabaseWatchProgress>()
 
-            Log.d(TAG, "pullFromRemote: fetched ${remote.size} entries from Supabase via RPC")
+            Log.d(TAG, "pullFromRemote: fetched ${remote.size} entries from Supabase via RPC for profile $profileId")
             remote.forEach { entry ->
                 Log.d(TAG, "  pull entry: key=${entry.progressKey} contentId=${entry.contentId} type=${entry.contentType} pos=${entry.position} dur=${entry.duration} lastWatched=${entry.lastWatched}")
             }

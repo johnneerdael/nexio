@@ -1,29 +1,24 @@
 package com.nuvio.tv.data.local
 
-import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.nuvio.tv.core.profile.ProfileManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.playerSettingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "player_settings")
 
 /**
  * Available subtitle languages
@@ -201,9 +196,16 @@ enum class LibassRenderType {
 
 @Singleton
 class PlayerSettingsDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val factory: ProfileDataStoreFactory,
+    private val profileManager: ProfileManager
 ) {
-    private val dataStore = context.playerSettingsDataStore
+    companion object {
+        private const val FEATURE = "player_settings"
+    }
+
+    private fun store(profileId: Int = profileManager.activeProfileId.value) =
+        factory.get(profileId, FEATURE)
+
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Player preference key
@@ -212,7 +214,7 @@ class PlayerSettingsDataStore @Inject constructor(
     // Libass settings keys
     private val useLibassKey = booleanPreferencesKey("use_libass")
     private val libassRenderTypeKey = stringPreferencesKey("libass_render_type")
-    
+
     // Audio settings keys
     private val decoderPriorityKey = intPreferencesKey("decoder_priority")
     private val tunnelingEnabledKey = booleanPreferencesKey("tunneling_enabled")
@@ -264,7 +266,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     init {
         ioScope.launch {
-            dataStore.edit { prefs ->
+            store().edit { prefs ->
                 val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false
                 if (!loadControlMigrated) {
                     val currentMin = prefs[minBufferMsKey]
@@ -320,109 +322,115 @@ class PlayerSettingsDataStore @Inject constructor(
     /**
      * Flow of current player settings
      */
-    val playerSettings: Flow<PlayerSettings> = dataStore.data.map { prefs ->
-        PlayerSettings(
-            playerPreference = prefs[playerPreferenceKey]?.let {
-                runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
-            } ?: PlayerPreference.INTERNAL,
-            useLibass = prefs[useLibassKey] ?: false,
-            libassRenderType = prefs[libassRenderTypeKey]?.let { 
-                try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
-            } ?: LibassRenderType.OVERLAY_OPEN_GL,
-            decoderPriority = prefs[decoderPriorityKey] ?: 1,
-            tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
-            skipSilence = prefs[skipSilenceKey] ?: false,
-            preferredAudioLanguage = normalizeSelectableLanguageCode(
-                prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE
-            ),
-            loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
-            pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
-            skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
-            mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
-            frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
-                runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
-            } ?: if (prefs[frameRateMatchingKey] == true) {
-                FrameRateMatchingMode.START_STOP
-            } else {
-                FrameRateMatchingMode.OFF
-            },
-            streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
-                runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
-            } ?: StreamAutoPlayMode.MANUAL,
-            streamAutoPlaySource = prefs[streamAutoPlaySourceKey]?.let {
-                runCatching { StreamAutoPlaySource.valueOf(it) }.getOrDefault(StreamAutoPlaySource.ALL_SOURCES)
-            } ?: StreamAutoPlaySource.ALL_SOURCES,
-            streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
-            streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
-            streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
-            streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
-            nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
-                runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
-            } ?: NextEpisodeThresholdMode.PERCENTAGE,
-            nextEpisodeThresholdPercent = normalizeHalfStep(
-                value = prefs[nextEpisodeThresholdPercentKey]
-                    ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
-                    ?: 98f,
-                min = 97f,
-                max = 99.5f
-            ),
-            nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStep(
-                value = prefs[nextEpisodeThresholdMinutesBeforeEndKey]
-                    ?: prefs[nextEpisodeThresholdMinutesBeforeEndLegacyKey]?.toFloat()
-                    ?: 2f,
-                min = 1f,
-                max = 3.5f
-            ),
-            streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
-            streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
-            subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
-            subtitleStyle = SubtitleStyleSettings(
-                preferredLanguage = normalizeSelectableLanguageCode(
-                    prefs[subtitlePreferredLanguageKey] ?: "en"
+    val playerSettings: Flow<PlayerSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            PlayerSettings(
+                playerPreference = prefs[playerPreferenceKey]?.let {
+                    runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
+                } ?: PlayerPreference.INTERNAL,
+                useLibass = prefs[useLibassKey] ?: false,
+                libassRenderType = prefs[libassRenderTypeKey]?.let {
+                    try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
+                } ?: LibassRenderType.OVERLAY_OPEN_GL,
+                decoderPriority = prefs[decoderPriorityKey] ?: 1,
+                tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
+                skipSilence = prefs[skipSilenceKey] ?: false,
+                preferredAudioLanguage = normalizeSelectableLanguageCode(
+                    prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE
                 ),
-                secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey]
-                    ?.let(::normalizeSelectableLanguageCode),
-                size = prefs[subtitleSizeKey] ?: 100,
-                verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
-                bold = prefs[subtitleBoldKey] ?: false,
-                textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
-                backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
-                outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
-                outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
-                outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
-            ),
-            bufferSettings = BufferSettings(
-                minBufferMs = prefs[minBufferMsKey] ?: 50_000,
-                maxBufferMs = prefs[maxBufferMsKey] ?: 50_000,
-                bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: 2_500,
-                bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 5_000,
-                targetBufferSizeMb = prefs[targetBufferSizeMbKey] ?: 0,
-                backBufferDurationMs = prefs[backBufferDurationMsKey] ?: 0,
-                retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
+                loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
+                pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
+                skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
+                mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
+                frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
+                    runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
+                } ?: if (prefs[frameRateMatchingKey] == true) {
+                    FrameRateMatchingMode.START_STOP
+                } else {
+                    FrameRateMatchingMode.OFF
+                },
+                streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
+                    runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
+                } ?: StreamAutoPlayMode.MANUAL,
+                streamAutoPlaySource = prefs[streamAutoPlaySourceKey]?.let {
+                    runCatching { StreamAutoPlaySource.valueOf(it) }.getOrDefault(StreamAutoPlaySource.ALL_SOURCES)
+                } ?: StreamAutoPlaySource.ALL_SOURCES,
+                streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
+                streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
+                streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
+                streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
+                nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
+                    runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
+                } ?: NextEpisodeThresholdMode.PERCENTAGE,
+                nextEpisodeThresholdPercent = normalizeHalfStep(
+                    value = prefs[nextEpisodeThresholdPercentKey]
+                        ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
+                        ?: 98f,
+                    min = 97f,
+                    max = 99.5f
+                ),
+                nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStep(
+                    value = prefs[nextEpisodeThresholdMinutesBeforeEndKey]
+                        ?: prefs[nextEpisodeThresholdMinutesBeforeEndLegacyKey]?.toFloat()
+                        ?: 2f,
+                    min = 1f,
+                    max = 3.5f
+                ),
+                streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
+                streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
+                subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
+                subtitleStyle = SubtitleStyleSettings(
+                    preferredLanguage = normalizeSelectableLanguageCode(
+                        prefs[subtitlePreferredLanguageKey] ?: "en"
+                    ),
+                    secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey]
+                        ?.let(::normalizeSelectableLanguageCode),
+                    size = prefs[subtitleSizeKey] ?: 100,
+                    verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
+                    bold = prefs[subtitleBoldKey] ?: false,
+                    textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
+                    backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
+                    outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
+                    outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
+                    outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
+                ),
+                bufferSettings = BufferSettings(
+                    minBufferMs = prefs[minBufferMsKey] ?: 50_000,
+                    maxBufferMs = prefs[maxBufferMsKey] ?: 50_000,
+                    bufferForPlaybackMs = prefs[bufferForPlaybackMsKey] ?: 2_500,
+                    bufferForPlaybackAfterRebufferMs = prefs[bufferForPlaybackAfterRebufferMsKey] ?: 5_000,
+                    targetBufferSizeMb = prefs[targetBufferSizeMbKey] ?: 0,
+                    backBufferDurationMs = prefs[backBufferDurationMsKey] ?: 0,
+                    retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
+                )
             )
-        )
+        }
     }
 
     /**
      * Flow for just the libass toggle
      */
-    val useLibass: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[useLibassKey] ?: false
+    val useLibass: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            prefs[useLibassKey] ?: false
+        }
     }
 
     /**
      * Flow for the libass render type
      */
-    val libassRenderType: Flow<LibassRenderType> = dataStore.data.map { prefs ->
-        prefs[libassRenderTypeKey]?.let { 
-            try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
-        } ?: LibassRenderType.OVERLAY_OPEN_GL
+    val libassRenderType: Flow<LibassRenderType> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            prefs[libassRenderTypeKey]?.let {
+                try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
+            } ?: LibassRenderType.OVERLAY_OPEN_GL
+        }
     }
 
     // Player preference setter
 
     suspend fun setPlayerPreference(preference: PlayerPreference) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[playerPreferenceKey] = preference.name
         }
     }
@@ -430,25 +438,25 @@ class PlayerSettingsDataStore @Inject constructor(
     // Audio settings setters
 
     suspend fun setDecoderPriority(priority: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[decoderPriorityKey] = priority.coerceIn(0, 2)
         }
     }
 
     suspend fun setTunnelingEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[tunnelingEnabledKey] = enabled
         }
     }
 
     suspend fun setSkipSilence(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[skipSilenceKey] = enabled
         }
     }
 
     suspend fun setPreferredAudioLanguage(language: String) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[preferredAudioLanguageKey] = normalizeSelectableLanguageCode(
                 language.ifBlank { AudioLanguageOption.DEVICE }
             )
@@ -456,25 +464,25 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     suspend fun setPauseOverlayEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[pauseOverlayEnabledKey] = enabled
         }
     }
 
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[skipIntroEnabledKey] = enabled
         }
     }
 
     suspend fun setLoadingOverlayEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[loadingOverlayEnabledKey] = enabled
         }
     }
 
     suspend fun setFrameRateMatchingMode(mode: FrameRateMatchingMode) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[frameRateMatchingModeKey] = mode.name
             prefs[frameRateMatchingKey] = mode != FrameRateMatchingMode.OFF
         }
@@ -487,49 +495,49 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamAutoPlayModeKey] = mode.name
         }
     }
 
     suspend fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamAutoPlaySourceKey] = source.name
         }
     }
 
     suspend fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamAutoPlaySelectedAddonsKey] = addons
         }
     }
 
     suspend fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamAutoPlaySelectedPluginsKey] = plugins
         }
     }
 
     suspend fun setStreamAutoPlayRegex(regex: String) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamAutoPlayRegexKey] = regex.trim()
         }
     }
 
     suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamAutoPlayNextEpisodeEnabledKey] = enabled
         }
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[nextEpisodeThresholdModeKey] = mode.name
         }
     }
 
     suspend fun setNextEpisodeThresholdPercent(percent: Float) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[nextEpisodeThresholdPercentKey] = normalizeHalfStep(
                 value = percent,
                 min = 97f,
@@ -539,7 +547,7 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     suspend fun setNextEpisodeThresholdMinutesBeforeEnd(minutes: Float) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[nextEpisodeThresholdMinutesBeforeEndKey] = normalizeHalfStep(
                 value = minutes,
                 min = 1f,
@@ -554,19 +562,19 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamReuseLastLinkEnabledKey] = enabled
         }
     }
 
     suspend fun setStreamReuseLastLinkCacheHours(hours: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[streamReuseLastLinkCacheHoursKey] = hours.coerceIn(1, 168)
         }
     }
 
     suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleOrganizationModeKey] = mode.name
         }
     }
@@ -590,7 +598,7 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     suspend fun setMapDV7ToHevc(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[mapDV7ToHevcKey] = enabled
         }
     }
@@ -599,7 +607,7 @@ class PlayerSettingsDataStore @Inject constructor(
      * Set whether to use libass for ASS/SSA subtitle rendering
      */
     suspend fun setUseLibass(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[useLibassKey] = enabled
         }
     }
@@ -608,23 +616,23 @@ class PlayerSettingsDataStore @Inject constructor(
      * Set the libass render type
      */
     suspend fun setLibassRenderType(renderType: LibassRenderType) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[libassRenderTypeKey] = renderType.name
         }
     }
-    
+
     // Subtitle style settings functions
-    
+
     suspend fun setSubtitlePreferredLanguage(language: String) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitlePreferredLanguageKey] = normalizeSelectableLanguageCode(
                 language.ifBlank { "en" }
             )
         }
     }
-    
+
     suspend fun setSubtitleSecondaryLanguage(language: String?) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             val normalizedLanguage = language
                 ?.takeIf { it.isNotBlank() }
                 ?.let(::normalizeSelectableLanguageCode)
@@ -635,51 +643,51 @@ class PlayerSettingsDataStore @Inject constructor(
             }
         }
     }
-    
+
     suspend fun setSubtitleSize(size: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleSizeKey] = size.coerceIn(50, 200)
         }
     }
-    
+
     suspend fun setSubtitleVerticalOffset(offset: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleVerticalOffsetKey] = offset.coerceIn(-20, 50)
         }
     }
-    
+
     suspend fun setSubtitleBold(bold: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleBoldKey] = bold
         }
     }
-    
+
     suspend fun setSubtitleTextColor(color: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleTextColorKey] = color
         }
     }
-    
+
     suspend fun setSubtitleBackgroundColor(color: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleBackgroundColorKey] = color
         }
     }
-    
+
     suspend fun setSubtitleOutlineEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleOutlineEnabledKey] = enabled
         }
     }
-    
+
     suspend fun setSubtitleOutlineColor(color: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleOutlineColorKey] = color
         }
     }
-    
+
     suspend fun setSubtitleOutlineWidth(width: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[subtitleOutlineWidthKey] = width.coerceIn(1, 5)
         }
     }
@@ -687,7 +695,7 @@ class PlayerSettingsDataStore @Inject constructor(
     // Buffer settings functions
 
     suspend fun setBufferMinBufferMs(ms: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             val newMin = ms.coerceIn(5_000, 120_000)
             prefs[minBufferMsKey] = newMin
             val currentMax = prefs[maxBufferMsKey] ?: 50_000
@@ -698,38 +706,38 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     suspend fun setBufferMaxBufferMs(ms: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             val currentMin = prefs[minBufferMsKey] ?: 50_000
             prefs[maxBufferMsKey] = ms.coerceIn(currentMin, 120_000)
         }
     }
 
     suspend fun setBufferForPlaybackMs(ms: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[bufferForPlaybackMsKey] = ms.coerceIn(1_000, 30_000)
         }
     }
 
     suspend fun setBufferForPlaybackAfterRebufferMs(ms: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[bufferForPlaybackAfterRebufferMsKey] = ms.coerceIn(1_000, 60_000)
         }
     }
 
     suspend fun setBufferTargetSizeMb(mb: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[targetBufferSizeMbKey] = mb.coerceAtLeast(0)
         }
     }
 
     suspend fun setBufferBackBufferDurationMs(ms: Int) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[backBufferDurationMsKey] = ms.coerceIn(0, 120_000)
         }
     }
 
     suspend fun setBufferRetainBackBufferFromKeyframe(retain: Boolean) {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[retainBackBufferFromKeyframeKey] = retain
         }
     }

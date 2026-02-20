@@ -8,6 +8,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.server.AddonConfigServer
 import com.nuvio.tv.core.server.DeviceIpAddress
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
@@ -30,11 +31,18 @@ import javax.inject.Inject
 class AddonManagerViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddonManagerUiState())
     val uiState: StateFlow<AddonManagerUiState> = _uiState.asStateFlow()
+
+    val isReadOnly: Boolean
+        get() {
+            val profile = profileManager.activeProfile ?: return false
+            return !profile.isPrimary && profile.usesPrimaryAddons
+        }
 
     private var server: AddonConfigServer? = null
     private var logoBytes: ByteArray? = null
