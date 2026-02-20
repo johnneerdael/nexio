@@ -6,11 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -38,7 +40,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -261,16 +267,64 @@ private fun EpisodeCard(
             "Episode"
         }
     }
+    val textMeasurer = rememberTextMeasurer()
     val titleMedium = MaterialTheme.typography.titleMedium
-    val backgroundCard = NuvioColors.BackgroundCard
+    val titleSmall = MaterialTheme.typography.titleSmall
+    val labelSmall = MaterialTheme.typography.labelSmall
+    val bodySmall = MaterialTheme.typography.bodySmall
     val episodeCodeTextStyle = remember(titleMedium) {
         titleMedium.copy(
             shadow = Shadow(
                 color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.95f),
-                offset = androidx.compose.ui.geometry.Offset(0f, 0f),
+                offset = Offset(0f, 0f),
                 blurRadius = 5f
             )
         )
+    }
+    val thumbnailWidthContentPx = remember(density) {
+        with(density) { (280.dp - 20.dp).roundToPx() } // card width minus horizontal padding
+    }
+    val overlayLayouts = remember(episode.title, episode.overview, formattedDate, episode.runtime, titleSmall, labelSmall, bodySmall, thumbnailWidthContentPx) {
+        val metaStyle = labelSmall.copy(color = Color.White.copy(alpha = 0.75f))
+        val dateLayout = if (formattedDate.isNotBlank()) textMeasurer.measure(
+            text = formattedDate,
+            style = metaStyle,
+            constraints = Constraints(maxWidth = thumbnailWidthContentPx),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        ) else null
+        val runtimeLayout = episode.runtime?.let { textMeasurer.measure(
+            text = "${it}m",
+            style = metaStyle,
+            maxLines = 1
+        ) }
+        val titleLayout = textMeasurer.measure(
+            text = episode.title,
+            style = titleSmall.copy(color = Color.White),
+            constraints = Constraints(maxWidth = thumbnailWidthContentPx),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        val overviewLayout = episode.overview?.let { textMeasurer.measure(
+            text = it,
+            style = bodySmall.copy(color = Color.White.copy(alpha = 0.85f)),
+            constraints = Constraints(maxWidth = thumbnailWidthContentPx),
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        ) }
+        OverlayLayouts(dateLayout, runtimeLayout, titleLayout, overviewLayout)
+    }
+    val overlayHeightDp = remember(overlayLayouts, density) {
+        with(density) {
+            val lineSpacingPx = 3.dp.roundToPx()
+            var h = 0
+            if (overlayLayouts.date != null || overlayLayouts.runtime != null) {
+                h += maxOf(overlayLayouts.date?.size?.height ?: 0, overlayLayouts.runtime?.size?.height ?: 0) + lineSpacingPx
+            }
+            h += overlayLayouts.title.size.height
+            overlayLayouts.overview?.let { h += lineSpacingPx + it.size.height }
+            h.toDp() + 14.dp // top + bottom padding
+        }
     }
     val overlayBrush = remember {
         Brush.verticalGradient(
@@ -376,19 +430,29 @@ private fun EpisodeCard(
                     contentScale = ContentScale.Crop
                 )
 
-                Box(
+                val episodeCodeLayout = remember(episodeCode, episodeCodeTextStyle) {
+                    textMeasurer.measure(
+                        text = episodeCode,
+                        style = episodeCodeTextStyle,
+                        maxLines = 1
+                    )
+                }
+                Canvas(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(horizontal = 10.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.62f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .width(with(density) { (episodeCodeLayout.size.width + 16.dp.roundToPx()).toDp() })
+                        .height(with(density) { (episodeCodeLayout.size.height + 6.dp.roundToPx()).toDp() })
                 ) {
-                    Text(
-                        text = episodeCode,
-                        style = episodeCodeTextStyle,
-                        color = NuvioColors.TextPrimary,
-                        maxLines = 1
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = 0.62f),
+                        size = size,
+                        cornerRadius = CornerRadius(6.dp.toPx())
+                    )
+                    drawText(
+                        textLayoutResult = episodeCodeLayout,
+                        topLeft = Offset(8.dp.toPx(), 3.dp.toPx()),
+                        color = NuvioColors.TextPrimary
                     )
                 }
 
@@ -447,57 +511,36 @@ private fun EpisodeCard(
                         .alpha(overlayAlpha)
                         .background(overlayBrush)
                 )
-                Column(
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
+                        .height(overlayHeightDp)
                         .alpha(overlayAlpha)
-                        .padding(start = 10.dp, end = 10.dp, bottom = 10.dp, top = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (formattedDate.isNotBlank()) {
-                            Text(
-                                text = formattedDate,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.75f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
+                        .padding(start = 10.dp, end = 10.dp, bottom = 10.dp, top = 4.dp)
+                        .drawWithCache {
+                            val lineSpacing = 3.dp.toPx()
+                            onDrawBehind {
+                                var y = 0f
+                                if (overlayLayouts.date != null || overlayLayouts.runtime != null) {
+                                    overlayLayouts.date?.let { drawText(it, topLeft = Offset(0f, y)) }
+                                    overlayLayouts.runtime?.let {
+                                        drawText(it, topLeft = Offset(size.width - it.size.width, y))
+                                    }
+                                    val metaHeight = maxOf(
+                                        overlayLayouts.date?.size?.height ?: 0,
+                                        overlayLayouts.runtime?.size?.height ?: 0
+                                    ).toFloat()
+                                    y += metaHeight + lineSpacing
+                                }
+                                drawText(overlayLayouts.title, topLeft = Offset(0f, y))
+                                overlayLayouts.overview?.let {
+                                    y += overlayLayouts.title.size.height + lineSpacing
+                                    drawText(it, topLeft = Offset(0f, y))
+                                }
+                            }
                         }
-                        episode.runtime?.let { runtime ->
-                            Text(
-                                text = "${runtime}m",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.75f),
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    Text(
-                        text = episode.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    episode.overview?.let { overview ->
-                        Text(
-                            text = overview,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.85f),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                )
         }
     }
 }
@@ -549,6 +592,13 @@ private fun EpisodeOptionsDialog(
         }
     }
 }
+
+private data class OverlayLayouts(
+    val date: TextLayoutResult?,
+    val runtime: TextLayoutResult?,
+    val title: TextLayoutResult,
+    val overview: TextLayoutResult?
+)
 
 private fun isSelectKey(keyCode: Int): Boolean {
     return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
