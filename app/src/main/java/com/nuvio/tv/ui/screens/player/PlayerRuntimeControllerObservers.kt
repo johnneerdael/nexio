@@ -272,3 +272,36 @@ internal fun PlayerRuntimeController.retryCurrentStreamFromStartAfter416() {
         }
     }
 }
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@OptIn(UnstableApi::class)
+internal fun PlayerRuntimeController.retryCurrentStreamAfterTimeout(fromPositionMs: Long) {
+    if (hasRetriedCurrentStreamAfterTimeout) return
+    hasRetriedCurrentStreamAfterTimeout = true
+    _uiState.update {
+        it.copy(
+            error = null,
+            showLoadingOverlay = it.loadingOverlayEnabled
+        )
+    }
+    _exoPlayer?.let { player ->
+        runCatching {
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaSource(mediaSourceFactory.createMediaSource(currentStreamUrl, currentHeaders))
+            if (fromPositionMs > 0L) {
+                player.seekTo(fromPositionMs)
+            }
+            player.prepare()
+            player.playWhenReady = true
+        }.onFailure { e ->
+            _uiState.update {
+                it.copy(
+                    error = e.message ?: "Playback error",
+                    showLoadingOverlay = false,
+                    showPauseOverlay = false
+                )
+            }
+        }
+    }
+}

@@ -29,6 +29,8 @@ import io.github.peerless2012.ass.media.kt.buildWithAssSupport
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.SocketTimeoutException
+import kotlin.math.min
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(UnstableApi::class)
@@ -46,7 +48,29 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val useLibass = false // Temporarily disabled for maintenance
             val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
-            val loadControl = DefaultLoadControl.Builder().build()
+            val bufferSettings = playerSettings.bufferSettings
+            val targetBufferBytes = if (bufferSettings.targetBufferSizeMb <= 0) {
+                C.LENGTH_UNSET
+            } else {
+                min(
+                    Int.MAX_VALUE.toLong(),
+                    bufferSettings.targetBufferSizeMb.toLong() * 1024L * 1024L
+                ).toInt()
+            }
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    bufferSettings.minBufferMs,
+                    bufferSettings.maxBufferMs,
+                    bufferSettings.bufferForPlaybackMs,
+                    bufferSettings.bufferForPlaybackAfterRebufferMs
+                )
+                .setTargetBufferBytes(targetBufferBytes)
+                .setBackBuffer(
+                    bufferSettings.backBufferDurationMs,
+                    bufferSettings.retainBackBufferFromKeyframe
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
 
             
             trackSelector = DefaultTrackSelector(context).apply {
@@ -276,6 +300,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        val timeoutError = error.findCause<SocketTimeoutException>()
+                        if (timeoutError != null && !hasRetriedCurrentStreamAfterTimeout) {
+                            retryCurrentStreamAfterTimeout(currentPosition)
+                            return
+                        }
+
                         val detailedError = buildString {
                             append(error.message ?: "Playback error")
                             val cause = error.cause
@@ -317,6 +347,7 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRenderedFirstFrame = false
     shouldEnforceAutoplayOnFirstReady = true
     userPausedManually = false
+    hasRetriedCurrentStreamAfterTimeout = false
     lastKnownDuration = 0L
     _uiState.update { state ->
         state.copy(
@@ -355,4 +386,13 @@ private class SubtitleOffsetRenderer(
         val adjustedPositionUs = (positionUs - subtitleDelayUsProvider()).coerceAtLeast(0L)
         super.render(adjustedPositionUs, elapsedRealtimeUs)
     }
+}
+
+private inline fun <reified T : Throwable> Throwable.findCause(): T? {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current is T) return current
+        current = current.cause
+    }
+    return null
 }
