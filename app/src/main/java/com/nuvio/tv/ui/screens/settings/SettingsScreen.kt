@@ -112,8 +112,8 @@ fun SettingsScreen(
                 category = SettingsCategory.ACCOUNT,
                 title = "Account",
                 icon = Icons.Default.Person,
-                subtitle = "Open QR sign-in screen.",
-                destination = SettingsSectionDestination.External
+                subtitle = "Account and sync status.",
+                destination = SettingsSectionDestination.Inline
             ),
             SettingsSectionSpec(
                 category = SettingsCategory.PROFILES,
@@ -361,7 +361,9 @@ fun SettingsScreen(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.ABOUT]
                             )
                             SettingsCategory.PLUGINS -> PluginsSettingsContent()
-                            SettingsCategory.ACCOUNT -> Unit
+                            SettingsCategory.ACCOUNT -> AccountSettingsInline(
+                                onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
+                            )
                             SettingsCategory.DEBUG -> DebugSettingsContent()
                             SettingsCategory.TRAKT -> Unit
                         }
@@ -398,6 +400,31 @@ private fun PluginsSettingsContent() {
                     showHeader = false
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AccountSettingsInline(
+    onNavigateToAuthQrSignIn: () -> Unit
+) {
+    val accountViewModel: com.nuvio.tv.ui.screens.account.AccountViewModel = hiltViewModel()
+    val accountUiState by accountViewModel.uiState.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SettingsDetailHeader(
+            title = "Account",
+            subtitle = "Account and sync status."
+        )
+        SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
+            com.nuvio.tv.ui.screens.account.AccountSettingsContent(
+                uiState = accountUiState,
+                viewModel = accountViewModel,
+                onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
+            )
         }
     }
 }
