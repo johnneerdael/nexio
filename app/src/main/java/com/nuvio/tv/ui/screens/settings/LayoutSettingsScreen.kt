@@ -54,6 +54,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.ui.components.ClassicLayoutPreview
 import com.nuvio.tv.ui.components.GridLayoutPreview
@@ -412,16 +413,20 @@ fun LayoutSettingsContent(
                 }
             }
 
-            if (uiState.selectedLayout != HomeLayout.MODERN) {
-                item {
-                    CollapsibleSectionCard(
-                        title = "Focused Poster",
-                        description = "Advanced behavior for focused poster cards.",
-                        expanded = focusedPosterExpanded,
-                        onToggle = { focusedPosterExpanded = !focusedPosterExpanded },
-                        focusRequester = focusedPosterHeaderFocus,
-                        onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                    ) {
+            item {
+                CollapsibleSectionCard(
+                    title = "Focused Poster",
+                    description = "Advanced behavior for focused poster cards.",
+                    expanded = focusedPosterExpanded,
+                    onToggle = { focusedPosterExpanded = !focusedPosterExpanded },
+                    focusRequester = focusedPosterHeaderFocus,
+                    onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                ) {
+                    val isModern = uiState.selectedLayout == HomeLayout.MODERN
+                    val isModernLandscape = isModern && uiState.modernLandscapePostersEnabled
+                    val showAutoplayRow = uiState.focusedPosterBackdropExpandEnabled || isModernLandscape
+
+                    if (!isModernLandscape) {
                         CompactToggleRow(
                             title = "Expand Focused Poster to Backdrop",
                             subtitle = "Expand focused poster after idle delay.",
@@ -435,55 +440,85 @@ fun LayoutSettingsContent(
                             },
                             onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
                         )
+                    }
 
-                        if (uiState.focusedPosterBackdropExpandEnabled) {
-                            SliderSettingsItem(
-                                icon = Icons.Default.Timer,
-                                title = "Backdrop Expand Delay",
-                                subtitle = "How long to wait before expanding focused cards.",
-                                value = uiState.focusedPosterBackdropExpandDelaySeconds,
-                                valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
-                                minValue = 1,
-                                maxValue = 10,
-                                step = 1,
-                                onValueChange = { seconds ->
-                                    viewModel.onEvent(
-                                        LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds(seconds)
-                                    )
-                                },
-                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                            )
+                    if (!isModernLandscape && uiState.focusedPosterBackdropExpandEnabled) {
+                        SliderSettingsItem(
+                            icon = Icons.Default.Timer,
+                            title = "Backdrop Expand Delay",
+                            subtitle = "How long to wait before expanding focused cards.",
+                            value = uiState.focusedPosterBackdropExpandDelaySeconds,
+                            valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
+                            minValue = 1,
+                            maxValue = 10,
+                            step = 1,
+                            onValueChange = { seconds ->
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds(seconds)
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                        )
+                    }
 
-                            CompactToggleRow(
-                                title = "Autoplay Trailer in Expanded Card",
-                                subtitle = "Play trailer inside expanded backdrop when available.",
-                                checked = uiState.focusedPosterBackdropTrailerEnabled,
-                                onToggle = {
-                                    viewModel.onEvent(
-                                        LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled(
-                                            !uiState.focusedPosterBackdropTrailerEnabled
-                                        )
+                    if (showAutoplayRow) {
+                        CompactToggleRow(
+                            title = if (isModern) {
+                                "Autoplay Trailer"
+                            } else {
+                                "Autoplay Trailer in Expanded Card"
+                            },
+                            subtitle = if (isModern) {
+                                "Play trailer preview for focused content when available."
+                            } else {
+                                "Play trailer inside expanded backdrop when available."
+                            },
+                            checked = uiState.focusedPosterBackdropTrailerEnabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled(
+                                        !uiState.focusedPosterBackdropTrailerEnabled
                                     )
-                                },
-                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                            )
-                        }
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                        )
+                    }
 
-                        if (uiState.focusedPosterBackdropExpandEnabled && uiState.focusedPosterBackdropTrailerEnabled) {
-                            CompactToggleRow(
-                                title = "Play Trailer Muted",
-                                subtitle = "Mute trailer audio in expanded cards.",
-                                checked = uiState.focusedPosterBackdropTrailerMuted,
-                                onToggle = {
-                                    viewModel.onEvent(
-                                        LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted(
-                                            !uiState.focusedPosterBackdropTrailerMuted
-                                        )
+                    if (showAutoplayRow && uiState.focusedPosterBackdropTrailerEnabled) {
+                        CompactToggleRow(
+                            title = "Play Trailer Muted",
+                            subtitle = if (isModern) {
+                                "Mute trailer audio during autoplay preview."
+                            } else {
+                                "Mute trailer audio in expanded cards."
+                            },
+                            checked = uiState.focusedPosterBackdropTrailerMuted,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted(
+                                        !uiState.focusedPosterBackdropTrailerMuted
                                     )
-                                },
-                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                            )
-                        }
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                        )
+                    }
+
+                    if (
+                        isModern &&
+                        showAutoplayRow &&
+                        uiState.focusedPosterBackdropTrailerEnabled
+                    ) {
+                        ModernTrailerPlaybackTargetRow(
+                            selectedTarget = uiState.focusedPosterBackdropTrailerPlaybackTarget,
+                            onTargetSelected = { target ->
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget(target)
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                        )
                     }
                 }
             }
@@ -569,6 +604,49 @@ private fun CompactToggleRow(
         onToggle = onToggle,
         onFocused = onFocused
     )
+}
+
+@Composable
+private fun ModernTrailerPlaybackTargetRow(
+    selectedTarget: FocusedPosterTrailerPlaybackTarget,
+    onTargetSelected: (FocusedPosterTrailerPlaybackTarget) -> Unit,
+    onFocused: () -> Unit
+) {
+    Text(
+        text = "Modern Trailer Playback Location",
+        style = MaterialTheme.typography.labelLarge,
+        color = NuvioColors.TextSecondary
+    )
+    Text(
+        text = "Choose where trailer preview plays in Modern Home.",
+        style = MaterialTheme.typography.bodySmall,
+        color = NuvioColors.TextTertiary
+    )
+    LazyRow(
+        contentPadding = PaddingValues(end = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            SettingsChoiceChip(
+                label = "Expanded Card",
+                selected = selectedTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
+                onClick = {
+                    onTargetSelected(FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD)
+                },
+                onFocused = onFocused
+            )
+        }
+        item {
+            SettingsChoiceChip(
+                label = "Hero Media",
+                selected = selectedTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
+                onClick = {
+                    onTargetSelected(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
+                },
+                onFocused = onFocused
+            )
+        }
+    }
 }
 
 @Composable

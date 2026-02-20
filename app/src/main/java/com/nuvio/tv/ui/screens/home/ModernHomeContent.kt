@@ -2,6 +2,8 @@ package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +56,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -74,15 +78,19 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.ContinueWatchingCard
 import com.nuvio.tv.ui.components.ContinueWatchingOptionsDialog
+import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
 private const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.72f
+private const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
 
 private data class HeroPreview(
     val title: String,
@@ -102,9 +110,17 @@ private sealed class ModernPayload {
     data class Catalog(
         val itemId: String,
         val itemType: String,
-        val addonBaseUrl: String
+        val addonBaseUrl: String,
+        val trailerTitle: String,
+        val trailerReleaseInfo: String?,
+        val trailerApiType: String
     ) : ModernPayload()
 }
+
+private data class FocusedCatalogSelection(
+    val focusKey: String,
+    val payload: ModernPayload.Catalog
+)
 
 private data class ModernCarouselItem(
     val key: String,
@@ -133,8 +149,10 @@ private data class HeroCarouselRow(
 fun ModernHomeContent(
     uiState: HomeUiState,
     focusState: HomeScreenFocusState,
+    trailerPreviewUrls: Map<String, String>,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
+    onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
@@ -142,6 +160,23 @@ fun ModernHomeContent(
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
     val showNextRowPreview = uiState.modernNextRowPreviewEnabled
     val showCatalogTypeSuffixInModern = uiState.catalogTypeSuffixEnabled
+    val isLandscapeModern = useLandscapePosters
+    val expandControlAvailable = !isLandscapeModern
+    val trailerPlaybackTarget = uiState.focusedPosterBackdropTrailerPlaybackTarget
+    val effectiveAutoplayEnabled =
+        uiState.focusedPosterBackdropTrailerEnabled &&
+            (isLandscapeModern || uiState.focusedPosterBackdropExpandEnabled)
+    val landscapeExpandedCardMode =
+        isLandscapeModern &&
+            effectiveAutoplayEnabled &&
+            trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
+    val effectiveExpandEnabled =
+        (uiState.focusedPosterBackdropExpandEnabled && expandControlAvailable) ||
+            landscapeExpandedCardMode
+    val shouldActivateFocusedPosterFlow =
+        effectiveExpandEnabled ||
+            (effectiveAutoplayEnabled &&
+                trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
     val visibleCatalogRows = remember(uiState.catalogRows) {
         uiState.catalogRows.filter { it.items.isNotEmpty() }
     }
@@ -217,6 +252,9 @@ fun ModernHomeContent(
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastFocusedContinueWatchingIndex by remember { mutableStateOf(-1) }
+    var focusedCatalogSelection by remember { mutableStateOf<FocusedCatalogSelection?>(null) }
+    var expandedCatalogFocusKey by remember { mutableStateOf<String?>(null) }
+    var expansionInteractionNonce by remember { mutableIntStateOf(0) }
 
     fun requesterFor(rowKey: String, index: Int): FocusRequester {
         val byIndex = itemFocusRequesters.getOrPut(rowKey) { mutableMapOf() }
@@ -242,7 +280,43 @@ fun ModernHomeContent(
             ?: targetRow.items.firstOrNull()?.heroPreview
         pendingRowFocusKey = targetRow.key
         pendingRowFocusIndex = targetItemIndex
+        focusedCatalogSelection = null
+        expandedCatalogFocusKey = null
         return true
+    }
+
+    LaunchedEffect(
+        focusedCatalogSelection?.focusKey,
+        expansionInteractionNonce,
+        shouldActivateFocusedPosterFlow,
+        trailerPlaybackTarget,
+        uiState.focusedPosterBackdropExpandDelaySeconds
+    ) {
+        expandedCatalogFocusKey = null
+        if (!shouldActivateFocusedPosterFlow) return@LaunchedEffect
+        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        delay(uiState.focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(1) * 1000L)
+        if (shouldActivateFocusedPosterFlow &&
+            focusedCatalogSelection?.focusKey == selection.focusKey
+        ) {
+            expandedCatalogFocusKey = selection.focusKey
+        }
+    }
+
+    LaunchedEffect(
+        focusedCatalogSelection?.focusKey,
+        effectiveAutoplayEnabled
+    ) {
+        if (!effectiveAutoplayEnabled) {
+            return@LaunchedEffect
+        }
+        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        onRequestTrailerPreview(
+            selection.payload.itemId,
+            selection.payload.trailerTitle,
+            selection.payload.trailerReleaseInfo,
+            selection.payload.trailerApiType
+        )
     }
 
     LaunchedEffect(carouselRows, focusState.hasSavedFocus, focusState.focusedRowIndex, focusState.focusedItemIndex) {
@@ -250,6 +324,17 @@ fun ModernHomeContent(
         focusedItemByRow.keys.retainAll(activeKeys)
         itemFocusRequesters.keys.retainAll(activeKeys)
         rowListStates.keys.retainAll(activeKeys)
+        val activeCatalogItemIds = carouselRows
+            .flatMap { row ->
+                row.items.mapNotNull { item ->
+                    (item.payload as? ModernPayload.Catalog)?.itemId
+                }
+            }
+            .toSet()
+        if (focusedCatalogSelection?.payload?.itemId !in activeCatalogItemIds) {
+            focusedCatalogSelection = null
+            expandedCatalogFocusKey = null
+        }
 
         carouselRows.forEach { row ->
             if (row.items.isNotEmpty() && row.key !in focusedItemByRow) {
@@ -375,22 +460,46 @@ fun ModernHomeContent(
             }
         }
         val heroBackdrop = resolvedHero?.backdrop?.takeIf { it.isNotBlank() } ?: fallbackBackdrop
+        val expandedFocusedSelection = focusedCatalogSelection?.takeIf {
+            it.focusKey == expandedCatalogFocusKey
+        }
+        val heroTrailerUrl = expandedFocusedSelection?.payload?.itemId?.let { trailerPreviewUrls[it] }
+        val shouldPlayHeroTrailer = effectiveAutoplayEnabled &&
+            trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            !heroTrailerUrl.isNullOrBlank()
+        var heroTrailerFirstFrameRendered by remember(heroTrailerUrl) { mutableStateOf(false) }
+        LaunchedEffect(shouldPlayHeroTrailer) {
+            if (!shouldPlayHeroTrailer) {
+                heroTrailerFirstFrameRendered = false
+            }
+        }
+        val heroTransitionProgress by animateFloatAsState(
+            targetValue = if (shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 1f else 0f,
+            animationSpec = tween(durationMillis = 480),
+            label = "heroBackdropTrailerCrossfadeProgress"
+        )
+        val heroBackdropAlpha = 1f - heroTransitionProgress
+        val heroTrailerAlpha = heroTransitionProgress
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
         val catalogBottomPadding = if (shouldRenderPreviewRow) 12.dp else 18.dp
         val heroToCatalogGap = if (shouldRenderPreviewRow) 14.dp else 18.dp
         val localContext = LocalContext.current
         val bgColor = NuvioColors.Background
 
-        Crossfade(
-            targetState = heroBackdrop,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .fillMaxWidth(0.75f)
-                .fillMaxHeight(MODERN_HERO_BACKDROP_HEIGHT_FRACTION),
-            animationSpec = tween(durationMillis = 350),
-            label = "modernHeroBackground"
-        ) { imageUrl ->
-            Box(modifier = Modifier.fillMaxSize()) {
+        val heroMediaModifier = Modifier
+            .align(Alignment.TopEnd)
+            .fillMaxWidth(0.75f)
+            .fillMaxHeight(MODERN_HERO_BACKDROP_HEIGHT_FRACTION)
+
+        Box(modifier = heroMediaModifier) {
+            Crossfade(
+                targetState = heroBackdrop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = heroBackdropAlpha },
+                animationSpec = tween(durationMillis = 350),
+                label = "modernHeroBackground"
+            ) { imageUrl ->
                 AsyncImage(
                     model = ImageRequest.Builder(localContext)
                         .data(imageUrl)
@@ -401,49 +510,63 @@ fun ModernHomeContent(
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.TopEnd
                 )
-                // Left edge fade - rounded arc inward
-                Box(
+            }
+
+            if (shouldPlayHeroTrailer) {
+                TrailerPlayer(
+                    trailerUrl = heroTrailerUrl,
+                    isPlaying = true,
+                    onEnded = { expandedCatalogFocusKey = null },
+                    onFirstFrameRendered = { heroTrailerFirstFrameRendered = true },
+                    muted = uiState.focusedPosterBackdropTrailerMuted,
+                    cropToFill = true,
+                    overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
                     modifier = Modifier
                         .fillMaxSize()
-                        .drawBehind {
-                            // Strong solid cover at the left edge, then arc inward
-                            drawRect(
-                                brush = Brush.horizontalGradient(
-                                    0.0f to bgColor.copy(alpha = 0.96f),
-                                    0.10f to bgColor.copy(alpha = 0.72f),
-                                    0.30f to Color.Transparent
-                                ),
-                                size = size
-                            )
-                            drawRect(
-                                brush = Brush.radialGradient(
-                                    colorStops = arrayOf(
-                                        0.0f to bgColor.copy(alpha = 0.78f),
-                                        0.55f to bgColor.copy(alpha = 0.52f),
-                                        0.80f to bgColor.copy(alpha = 0.16f),
-                                        1.0f to Color.Transparent
-                                    ),
-                                    center = Offset(0f, size.height / 2f),
-                                    radius = size.height * 1.0f
-                                ),
-                                size = size
-                            )
-                        }
-                )
-                // Bottom edge fade
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                0.78f to Color.Transparent,
-                                0.90f to bgColor.copy(alpha = 0.72f),
-                                0.96f to bgColor.copy(alpha = 0.98f),
-                                1.0f to bgColor
-                            )
-                        )
+                        .graphicsLayer { alpha = heroTrailerAlpha }
                 )
             }
+
+            // Keep the same hero gradients for both backdrop and trailer.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawBehind {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0.0f to bgColor.copy(alpha = 0.96f),
+                                0.10f to bgColor.copy(alpha = 0.72f),
+                                0.30f to Color.Transparent
+                            ),
+                            size = size
+                        )
+                        drawRect(
+                            brush = Brush.radialGradient(
+                                colorStops = arrayOf(
+                                    0.0f to bgColor.copy(alpha = 0.78f),
+                                    0.55f to bgColor.copy(alpha = 0.52f),
+                                    0.80f to bgColor.copy(alpha = 0.16f),
+                                    1.0f to Color.Transparent
+                                ),
+                                center = Offset(0f, size.height / 2f),
+                                radius = size.height * 1.0f
+                            ),
+                            size = size
+                        )
+                    }
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.78f to Color.Transparent,
+                            0.90f to bgColor.copy(alpha = 0.72f),
+                            0.96f to bgColor.copy(alpha = 0.98f),
+                            1.0f to bgColor
+                        )
+                    )
+            )
         }
         val leftGradient = remember(bgColor) {
             Brush.horizontalGradient(
@@ -640,6 +763,7 @@ fun ModernHomeContent(
                                     heroItem = item.heroPreview
                                     if (resolvedRow.key == "continue_watching") {
                                         lastFocusedContinueWatchingIndex = index
+                                        focusedCatalogSelection = null
                                     }
                                 }
                                 when (val payload = item.payload) {
@@ -668,6 +792,21 @@ fun ModernHomeContent(
                                         )
                                     }
                                     is ModernPayload.Catalog -> {
+                                        val focusKey = "${resolvedRow.key}::${payload.itemId}"
+                                        val suppressCardExpansionForHeroTrailer =
+                                            effectiveAutoplayEnabled &&
+                                                trailerPlaybackTarget ==
+                                                    FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+                                        val isBackdropExpanded =
+                                            effectiveExpandEnabled &&
+                                                expandedCatalogFocusKey == focusKey &&
+                                                !suppressCardExpansionForHeroTrailer
+                                        val trailerPreviewUrl = trailerPreviewUrls[payload.itemId]
+                                        val playTrailerInExpandedCard =
+                                            effectiveAutoplayEnabled &&
+                                                trailerPlaybackTarget ==
+                                                    FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
+                                                isBackdropExpanded
                                         ModernCarouselCard(
                                             item = item,
                                             useLandscapePosters = useLandscapePosters,
@@ -675,8 +814,19 @@ fun ModernHomeContent(
                                             cardCornerRadius = cardCornerRadius,
                                             cardWidth = activeCardWidth,
                                             cardHeight = activeCardHeight,
+                                            focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
+                                            isBackdropExpanded = isBackdropExpanded,
+                                            playTrailerInExpandedCard = playTrailerInExpandedCard,
+                                            focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
+                                            trailerPreviewUrl = trailerPreviewUrl,
                                             focusRequester = requester,
-                                            onFocused = onFocused,
+                                            onFocused = {
+                                                onFocused()
+                                                focusedCatalogSelection = FocusedCatalogSelection(
+                                                    focusKey = focusKey,
+                                                    payload = payload
+                                                )
+                                            },
                                             onClick = {
                                                 onNavigateToDetail(
                                                     payload.itemId,
@@ -685,7 +835,13 @@ fun ModernHomeContent(
                                                 )
                                             },
                                             onMoveUp = { moveToRow(-1) },
-                                            onMoveDown = { moveToRow(1) }
+                                            onMoveDown = { moveToRow(1) },
+                                            onBackdropInteraction = {
+                                                expansionInteractionNonce++
+                                            },
+                                            onTrailerEnded = {
+                                                expandedCatalogFocusKey = null
+                                            }
                                         )
                                     }
                                 }
@@ -875,7 +1031,10 @@ private fun buildCatalogItem(
         payload = ModernPayload.Catalog(
             itemId = item.id,
             itemType = item.type.toApiString(),
-            addonBaseUrl = row.addonBaseUrl
+            addonBaseUrl = row.addonBaseUrl,
+            trailerTitle = item.name,
+            trailerReleaseInfo = item.releaseInfo,
+            trailerApiType = item.apiType
         )
     )
 }
@@ -946,11 +1105,18 @@ private fun ModernCarouselCard(
     cardCornerRadius: Dp,
     cardWidth: Dp,
     cardHeight: Dp,
+    focusedPosterBackdropExpandEnabled: Boolean,
+    isBackdropExpanded: Boolean,
+    playTrailerInExpandedCard: Boolean,
+    focusedPosterBackdropTrailerMuted: Boolean,
+    trailerPreviewUrl: String?,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onMoveUp: () -> Boolean,
-    onMoveDown: () -> Boolean
+    onMoveDown: () -> Boolean,
+    onBackdropInteraction: () -> Unit,
+    onTrailerEnded: () -> Unit
 ) {
     val cardShape = RoundedCornerShape(cardCornerRadius)
     val landscapeLogoGradient = remember {
@@ -962,9 +1128,24 @@ private fun ModernCarouselCard(
             )
         )
     }
+    val expandedCardWidth = cardHeight * (16f / 9f)
+    val targetCardWidth = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+        expandedCardWidth
+    } else {
+        cardWidth
+    }
+    val animatedCardWidth by animateDpAsState(
+        targetValue = targetCardWidth,
+        label = "modernCardWidth"
+    )
+    val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
+        item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
+    } else {
+        item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+    }
 
     Column(
-        modifier = Modifier.width(cardWidth),
+        modifier = Modifier.width(animatedCardWidth),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Card(
@@ -980,6 +1161,9 @@ private fun ModernCarouselCard(
                 }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (focusedPosterBackdropExpandEnabled && shouldResetBackdropTimer(event.key)) {
+                        onBackdropInteraction()
+                    }
                     when (event.key) {
                         Key.DirectionUp -> onMoveUp()
                         Key.DirectionDown -> onMoveDown()
@@ -1001,11 +1185,23 @@ private fun ModernCarouselCard(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
-                    model = item.imageUrl,
+                    model = imageUrl,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+
+                if (playTrailerInExpandedCard) {
+                    TrailerPlayer(
+                        trailerUrl = trailerPreviewUrl,
+                        isPlaying = true,
+                        onEnded = onTrailerEnded,
+                        muted = focusedPosterBackdropTrailerMuted,
+                        cropToFill = true,
+                        overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
                 if (useLandscapePosters && !item.heroPreview.logo.isNullOrBlank()) {
                     Box(
@@ -1028,7 +1224,7 @@ private fun ModernCarouselCard(
             }
         }
 
-        if (showLabels) {
+        if (showLabels && !isBackdropExpanded) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1079,6 +1275,20 @@ private fun PreviewCarouselCard(
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.36f))
         )
+    }
+}
+
+private fun shouldResetBackdropTimer(key: Key): Boolean {
+    return when (key) {
+        Key.DirectionUp,
+        Key.DirectionDown,
+        Key.DirectionLeft,
+        Key.DirectionRight,
+        Key.DirectionCenter,
+        Key.Enter,
+        Key.NumPadEnter,
+        Key.Back -> true
+        else -> false
     }
 }
 
