@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nuvio.tv.domain.model.HomeLayout
@@ -47,6 +48,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val focusedPosterBackdropExpandDelaySecondsKey = intPreferencesKey("focused_poster_backdrop_expand_delay_seconds")
     private val focusedPosterBackdropTrailerEnabledKey = booleanPreferencesKey("focused_poster_backdrop_trailer_enabled")
     private val focusedPosterBackdropTrailerMutedKey = booleanPreferencesKey("focused_poster_backdrop_trailer_muted")
+    private val focusedPosterBackdropTrailerPlaybackTargetKey =
+        stringPreferencesKey("focused_poster_backdrop_trailer_playback_target")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
@@ -164,6 +167,14 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[focusedPosterBackdropTrailerMutedKey] ?: true
     }
 
+    val focusedPosterBackdropTrailerPlaybackTarget: Flow<FocusedPosterTrailerPlaybackTarget> =
+        dataStore.data.map { prefs ->
+            val stored = prefs[focusedPosterBackdropTrailerPlaybackTargetKey]
+                ?: FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD.name
+            runCatching { FocusedPosterTrailerPlaybackTarget.valueOf(stored) }
+                .getOrDefault(FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD)
+        }
+
     val posterCardWidthDp: Flow<Int> = dataStore.data.map { prefs ->
         prefs[posterCardWidthDpKey] ?: DEFAULT_POSTER_CARD_WIDTH_DP
     }
@@ -190,7 +201,16 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     suspend fun setLayout(layout: HomeLayout) {
         dataStore.edit { prefs ->
+            val hadChosenLayout = prefs[hasChosenKey] ?: false
             prefs[layoutKey] = layout.name
+            if (
+                layout == HomeLayout.MODERN &&
+                !hadChosenLayout &&
+                prefs[focusedPosterBackdropTrailerPlaybackTargetKey] == null
+            ) {
+                prefs[focusedPosterBackdropTrailerPlaybackTargetKey] =
+                    FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
+            }
             prefs[hasChosenKey] = true
         }
     }
@@ -329,6 +349,14 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setFocusedPosterBackdropTrailerMuted(muted: Boolean) {
         dataStore.edit { prefs ->
             prefs[focusedPosterBackdropTrailerMutedKey] = muted
+        }
+    }
+
+    suspend fun setFocusedPosterBackdropTrailerPlaybackTarget(
+        target: FocusedPosterTrailerPlaybackTarget
+    ) {
+        dataStore.edit { prefs ->
+            prefs[focusedPosterBackdropTrailerPlaybackTargetKey] = target.name
         }
     }
 
