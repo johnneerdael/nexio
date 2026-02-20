@@ -357,6 +357,29 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun updateCatalogItemWithMeta(itemId: String, meta: Meta) {
+        fun mergeItem(currentItem: MetaPreview): MetaPreview = currentItem.copy(
+            background = meta.background ?: currentItem.background,
+            logo = meta.logo ?: currentItem.logo,
+            description = meta.description ?: currentItem.description,
+            releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
+            imdbRating = meta.imdbRating ?: currentItem.imdbRating,
+            genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
+        )
+
+        // Update the source-of-truth catalogsMap so re-renders don't revert the enrichment
+        catalogsMap.forEach { (key, row) ->
+            val itemIndex = row.items.indexOfFirst { it.id == itemId }
+            if (itemIndex >= 0) {
+                val merged = mergeItem(row.items[itemIndex])
+                if (merged != row.items[itemIndex]) {
+                    val mutableItems = row.items.toMutableList()
+                    mutableItems[itemIndex] = merged
+                    catalogsMap[key] = row.copy(items = mutableItems)
+                    truncatedRowCache.remove(key)
+                }
+            }
+        }
+
         _uiState.update { state ->
             var changed = false
             val updatedRows = state.catalogRows.map { row ->
@@ -364,16 +387,8 @@ class HomeViewModel @Inject constructor(
                 if (itemIndex < 0) {
                     row
                 } else {
-                    val currentItem = row.items[itemIndex]
-                    val mergedItem = currentItem.copy(
-                        background = meta.background ?: currentItem.background,
-                        logo = meta.logo ?: currentItem.logo,
-                        description = meta.description ?: currentItem.description,
-                        releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
-                        imdbRating = meta.imdbRating ?: currentItem.imdbRating,
-                        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
-                    )
-                    if (mergedItem == currentItem) {
+                    val mergedItem = mergeItem(row.items[itemIndex])
+                    if (mergedItem == row.items[itemIndex]) {
                         row
                     } else {
                         changed = true
@@ -383,11 +398,7 @@ class HomeViewModel @Inject constructor(
                     }
                 }
             }
-            if (changed) {
-                state.copy(catalogRows = updatedRows)
-            } else {
-                state
-            }
+            if (changed) state.copy(catalogRows = updatedRows) else state
         }
     }
 
