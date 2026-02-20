@@ -33,3 +33,4 @@ scripts/live_app_logs.sh
 docs/tv_qr_login.sql
 docss
 benchmark
+.mcp.json
