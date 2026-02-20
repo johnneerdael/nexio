@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,10 +34,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.grid.TvGridCells
-import androidx.tv.foundation.lazy.grid.TvGridItemSpan
-import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -65,7 +65,7 @@ fun GridHomeContent(
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
-    val gridState = rememberTvLazyGridState(
+    val gridState = rememberLazyGridState(
         initialFirstVisibleItemIndex = gridFocusState.verticalScrollIndex,
         initialFirstVisibleItemScrollOffset = gridFocusState.verticalScrollOffset
     )
@@ -143,9 +143,9 @@ fun GridHomeContent(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        TvLazyVerticalGrid(
+        LazyVerticalGrid(
             state = gridState,
-            columns = TvGridCells.Adaptive(minSize = posterCardStyle.width),
+            columns = GridCells.Adaptive(minSize = posterCardStyle.width),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 24.dp,
@@ -164,7 +164,7 @@ fun GridHomeContent(
                     is GridItem.Hero -> {
                         item(
                             key = "hero",
-                            span = { TvGridItemSpan(maxLineSpan) },
+                            span = { GridItemSpan(maxLineSpan) },
                             contentType = "hero"
                         ) {
                             HeroCarousel(
@@ -187,7 +187,7 @@ fun GridHomeContent(
                             continueWatchingInserted = true
                             item(
                                 key = "continue_watching",
-                                span = { TvGridItemSpan(maxLineSpan) },
+                                span = { GridItemSpan(maxLineSpan) },
                                 contentType = "continue_watching"
                             ) {
                                 GridContinueWatchingSection(
@@ -231,7 +231,7 @@ fun GridHomeContent(
 
                         item(
                             key = "divider_${index}_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
-                            span = { TvGridItemSpan(maxLineSpan) },
+                            span = { GridItemSpan(maxLineSpan) },
                             contentType = "divider"
                         ) {
                             SectionDivider(
@@ -254,7 +254,7 @@ fun GridHomeContent(
                         }
                         item(
                             key = "content_${index}_${gridItem.catalogId}_${gridItem.item.id}",
-                            span = { TvGridItemSpan(1) },
+                            span = { GridItemSpan(1) },
                             contentType = "content"
                         ) {
                             GridContentCard(
@@ -287,7 +287,7 @@ fun GridHomeContent(
                         }
                         item(
                             key = "see_all_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
-                            span = { TvGridItemSpan(1) },
+                            span = { GridItemSpan(1) },
                             contentType = "see_all"
                         ) {
                             SeeAllGridCard(
@@ -309,7 +309,7 @@ fun GridHomeContent(
             if (!continueWatchingInserted && uiState.continueWatchingItems.isNotEmpty()) {
                 item(
                     key = "continue_watching_fallback",
-                    span = { TvGridItemSpan(maxLineSpan) },
+                    span = { GridItemSpan(maxLineSpan) },
                     contentType = "continue_watching"
                 ) {
                     GridContinueWatchingSection(
