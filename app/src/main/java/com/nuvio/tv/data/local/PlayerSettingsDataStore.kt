@@ -132,6 +132,7 @@ data class PlayerSettings(
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
     val loadingOverlayEnabled: Boolean = true,
     val pauseOverlayEnabled: Boolean = true,
+    val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
     // Dolby Vision Profile 7 → HEVC fallback (requires forked ExoPlayer)
     val mapDV7ToHevc: Boolean = false,
@@ -220,6 +221,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val loadingOverlayEnabledKey = booleanPreferencesKey("loading_overlay_enabled")
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
+    private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
@@ -337,6 +339,7 @@ class PlayerSettingsDataStore @Inject constructor(
             ),
             loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
             pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
+            osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
             skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
             mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
             frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
@@ -458,6 +461,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPauseOverlayEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[pauseOverlayEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setOsdClockEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[osdClockEnabledKey] = enabled
         }
     }
 

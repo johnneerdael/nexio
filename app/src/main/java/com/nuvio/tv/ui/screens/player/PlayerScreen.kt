@@ -97,7 +97,11 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.player.ExternalPlayerLauncher
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.theme.NuvioColors
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -607,6 +611,35 @@ fun PlayerScreen(
                 .align(Alignment.TopEnd)
                 .zIndex(2.2f)
         )
+
+        val showClockOverlay = uiState.showControls &&
+            uiState.osdClockEnabled &&
+            uiState.error == null &&
+            !uiState.showLoadingOverlay &&
+            !uiState.showPauseOverlay &&
+            !uiState.showEpisodesPanel &&
+            !uiState.showSourcesPanel &&
+            !uiState.showAudioDialog &&
+            !uiState.showSubtitleDialog &&
+            !uiState.showSubtitleStylePanel &&
+            !uiState.showSpeedDialog &&
+            !uiState.showMoreDialog &&
+            !uiState.showDisplayModeInfo
+
+        AnimatedVisibility(
+            visible = showClockOverlay,
+            enter = fadeIn(animationSpec = tween(150)),
+            exit = fadeOut(animationSpec = tween(150)),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 28.dp, top = 24.dp)
+                .zIndex(2.15f)
+        ) {
+            PlayerClockOverlay(
+                currentPosition = uiState.currentPosition,
+                duration = uiState.duration
+            )
+        }
 
         // Controls overlay
         AnimatedVisibility(
@@ -1207,6 +1240,51 @@ private fun SeekOverlay(uiState: PlayerUiState) {
                 color = Color.White.copy(alpha = 0.9f)
             )
         }
+    }
+}
+
+@Composable
+private fun PlayerClockOverlay(
+    currentPosition: Long,
+    duration: Long
+) {
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val current = System.currentTimeMillis()
+            nowMs = current
+            val delayMs = (1_000L - (current % 1_000L)).coerceAtLeast(250L)
+            delay(delayMs)
+        }
+    }
+
+    val remainingMs = (duration - currentPosition).coerceAtLeast(0L)
+    val endTimeText = if (duration > 0L) {
+        timeFormatter.format(Date(nowMs + remainingMs))
+    } else {
+        "--:--"
+    }
+
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        Text(
+            text = timeFormatter.format(Date(nowMs)),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = Color.White.copy(alpha = 0.96f)
+        )
+        Text(
+            text = "Ends at: $endTimeText",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 10.sp),
+            color = Color.White.copy(alpha = 0.78f)
+        )
     }
 }
 
