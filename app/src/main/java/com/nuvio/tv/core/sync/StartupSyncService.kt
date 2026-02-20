@@ -3,6 +3,7 @@ package com.nuvio.tv.core.sync
 import android.util.Log
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.WatchProgressPreferences
@@ -31,6 +32,7 @@ class StartupSyncService @Inject constructor(
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
     private val watchedItemsSyncService: WatchedItemsSyncService,
+    private val profileSyncService: ProfileSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
@@ -38,11 +40,12 @@ class StartupSyncService @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val watchProgressPreferences: WatchProgressPreferences,
     private val libraryPreferences: LibraryPreferences,
-    private val watchedItemsPreferences: WatchedItemsPreferences
+    private val watchedItemsPreferences: WatchedItemsPreferences,
+    private val profileManager: ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
-    private var lastPulledUserId: String? = null
+    private var lastPulledKey: String? = null
     @Volatile
     private var forceSyncRequested: Boolean = false
 
@@ -63,7 +66,7 @@ class StartupSyncService @Inject constructor(
                     is AuthState.SignedOut -> {
                         startupPullJob?.cancel()
                         startupPullJob = null
-                        lastPulledUserId = null
+                        lastPulledKey = null
                         forceSyncRequested = false
                     }
                     is AuthState.Loading -> Unit
@@ -87,8 +90,14 @@ class StartupSyncService @Inject constructor(
         }
     }
 
+    private fun pullKey(userId: String): String {
+        val profileId = profileManager.activeProfileId.value
+        return "${userId}_p${profileId}"
+    }
+
     private fun scheduleStartupPull(userId: String, force: Boolean = false): Boolean {
-        if (!force && lastPulledUserId == userId) return false
+        val key = pullKey(userId)
+        if (!force && lastPulledKey == key) return false
         if (force && startupPullJob?.isActive == true) {
             startupPullJob?.cancel()
         } else if (startupPullJob?.isActive == true) {
@@ -99,15 +108,15 @@ class StartupSyncService @Inject constructor(
             val maxAttempts = 3
             repeat(maxAttempts) { index ->
                 val attempt = index + 1
-                Log.d(TAG, "Startup sync attempt $attempt/$maxAttempts for user=$userId")
+                Log.d(TAG, "Startup sync attempt $attempt/$maxAttempts for key=$key")
                 val result = pullRemoteData()
                 if (result.isSuccess) {
-                    lastPulledUserId = userId
-                    Log.d(TAG, "Startup sync completed for user=$userId")
+                    lastPulledKey = key
+                    Log.d(TAG, "Startup sync completed for key=$key")
                     return@launch
                 }
 
-                Log.w(TAG, "Startup sync attempt $attempt failed for user=$userId", result.exceptionOrNull())
+                Log.w(TAG, "Startup sync attempt $attempt failed for key=$key", result.exceptionOrNull())
                 if (attempt < maxAttempts) {
                     delay(3000)
                 }
@@ -118,6 +127,13 @@ class StartupSyncService @Inject constructor(
 
     private suspend fun pullRemoteData(): Result<Unit> {
         try {
+            val profileId = profileManager.activeProfileId.value
+            Log.d(TAG, "Pulling remote data for profile $profileId")
+
+            // Pull profiles list first so profile selection stays up-to-date
+            profileSyncService.pullFromRemote().getOrElse { throw it }
+            Log.d(TAG, "Pulled profiles from remote")
+
             pluginManager.isSyncingFromRemote = true
             val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
             pluginManager.reconcileWithRemoteRepoUrls(
@@ -125,7 +141,7 @@ class StartupSyncService @Inject constructor(
                 removeMissingLocal = false
             )
             pluginManager.isSyncingFromRemote = false
-            Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote")
+            Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote for profile $profileId")
 
             addonRepository.isSyncingFromRemote = true
             val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
@@ -134,7 +150,7 @@ class StartupSyncService @Inject constructor(
                 removeMissingLocal = false
             )
             addonRepository.isSyncingFromRemote = false
-            Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote")
+            Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote for profile $profileId")
 
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
             Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")

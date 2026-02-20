@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -58,6 +59,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
@@ -65,6 +67,7 @@ import kotlinx.coroutines.launch
 
 internal enum class SettingsCategory {
     ACCOUNT,
+    PROFILES,
     APPEARANCE,
     LAYOUT,
     PLUGINS,
@@ -99,8 +102,10 @@ internal data class SettingsSectionSpec(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTrakt: () -> Unit = {},
-    onNavigateToAuthQrSignIn: () -> Unit = {}
+    onNavigateToAuthQrSignIn: () -> Unit = {},
+    profileViewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
+    val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsState()
     val sectionSpecs = remember {
         listOf(
             SettingsSectionSpec(
@@ -109,6 +114,13 @@ fun SettingsScreen(
                 icon = Icons.Default.Person,
                 subtitle = "Open QR sign-in screen.",
                 destination = SettingsSectionDestination.External
+            ),
+            SettingsSectionSpec(
+                category = SettingsCategory.PROFILES,
+                title = "Profiles",
+                icon = Icons.Default.People,
+                subtitle = "Manage user profiles.",
+                destination = SettingsSectionDestination.Inline
             ),
             SettingsSectionSpec(
                 category = SettingsCategory.APPEARANCE,
@@ -169,11 +181,13 @@ fun SettingsScreen(
         )
     }
 
-    val visibleSections = remember(sectionSpecs) {
+    val visibleSections = remember(sectionSpecs, isPrimaryProfileActive) {
         sectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
-                SettingsCategory.ACCOUNT -> true
+                SettingsCategory.PROFILES -> isPrimaryProfileActive
+                SettingsCategory.ACCOUNT -> isPrimaryProfileActive
+                SettingsCategory.TRAKT -> isPrimaryProfileActive
                 else -> true
             }
         }
@@ -325,6 +339,7 @@ fun SettingsScreen(
                         label = "settings_split_detail"
                     ) { category ->
                         when (category) {
+                            SettingsCategory.PROFILES -> ProfileSettingsContent()
                             SettingsCategory.APPEARANCE -> ThemeSettingsContent(
                                 initialFocusRequester = contentFocusRequesters[SettingsCategory.APPEARANCE]
                             )

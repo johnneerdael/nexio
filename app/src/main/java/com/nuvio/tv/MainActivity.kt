@@ -84,6 +84,7 @@ import androidx.tv.material3.ModalNavigationDrawer
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
@@ -91,6 +92,7 @@ import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
+import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.updater.UpdateViewModel
@@ -137,10 +139,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var startupSyncService: StartupSyncService
 
+    @Inject
+    lateinit var profileManager: ProfileManager
+
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
+
             val mainUiPrefsFlow = remember(themeDataStore, layoutPreferenceDataStore) {
                 combine(
                     themeDataStore.selectedTheme,
@@ -165,6 +172,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
+                    if (!hasSelectedProfileThisSession) {
+                        ProfileSelectionScreen(
+                            onProfileSelected = {
+                                hasSelectedProfileThisSession = true
+                                startupSyncService.requestSyncNow()
+                            }
+                        )
+                        return@Surface
+                    }
+
                     val layoutChosen = mainUiPrefs.hasChosenLayout
                     if (layoutChosen == null) {
                         Box(

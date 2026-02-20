@@ -2,6 +2,7 @@ package com.nuvio.tv.core.sync
 
 import android.util.Log
 import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.data.local.AddonPreferences
 import com.nuvio.tv.data.remote.supabase.SupabaseAddon
 import io.github.jan.supabase.postgrest.Postgrest
@@ -21,7 +22,8 @@ private const val TAG = "AddonSyncService"
 class AddonSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val authManager: AuthManager,
-    private val addonPreferences: AddonPreferences
+    private val addonPreferences: AddonPreferences,
+    private val profileManager: ProfileManager
 ) {
     /**
      * Push local addon URLs to Supabase via RPC.
@@ -29,7 +31,14 @@ class AddonSyncService @Inject constructor(
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            val activeProfile = profileManager.activeProfile
+            if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryAddons) {
+                Log.d(TAG, "Profile ${activeProfile.id} uses primary addons, skipping push")
+                return@withContext Result.success(Unit)
+            }
+
             val localUrls = addonPreferences.installedAddonUrls.first()
+            val profileId = profileManager.activeProfileId.value
 
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
@@ -40,10 +49,11 @@ class AddonSyncService @Inject constructor(
                         }
                     }
                 })
+                put("p_profile_id", profileId)
             }
             postgrest.rpc("sync_push_addons", params)
 
-            Log.d(TAG, "Pushed ${localUrls.size} addons to remote")
+            Log.d(TAG, "Pushed ${localUrls.size} addons to remote for profile $profileId")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push addons to remote", e)
@@ -56,8 +66,15 @@ class AddonSyncService @Inject constructor(
             val effectiveUserId = authManager.getEffectiveUserId()
                 ?: return@withContext Result.success(emptyList())
 
+            val activeProfile = profileManager.activeProfile
+            val profileId = if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryAddons) 1
+                            else profileManager.activeProfileId.value
+
             val remoteAddons = postgrest.from("addons")
-                .select { filter { eq("user_id", effectiveUserId) } }
+                .select { filter {
+                    eq("user_id", effectiveUserId)
+                    eq("profile_id", profileId)
+                } }
                 .decodeList<SupabaseAddon>()
 
             Result.success(
