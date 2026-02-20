@@ -120,6 +120,7 @@ fun ClassicHomeContent(
                 HeroCarousel(
                     items = uiState.heroItems,
                     focusRequester = if (shouldRequestInitialFocus) heroFocusRequester else null,
+                    onItemFocus = onItemFocus,
                     onItemClick = { item ->
                         onNavigateToDetail(
                             item.id,
