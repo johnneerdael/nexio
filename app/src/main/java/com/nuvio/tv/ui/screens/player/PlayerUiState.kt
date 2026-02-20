@@ -201,7 +201,8 @@ data class ParentalWarning(
 data class DisplayModeInfo(
     val width: Int,
     val height: Int,
-    val refreshRate: Float
+    val refreshRate: Float,
+    val statusMessage: String? = null
 )
 
 enum class FrameRateSource {

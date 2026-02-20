@@ -209,11 +209,11 @@ fun PlayerScreen(
                 prefer23976Near24 = prefer23976ProbeBias
             )
             val wasPlaying = uiState.isPlaying
-            val switched = com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(
+            com.nuvio.tv.core.player.FrameRateUtils.matchFrameRate(
                 activity,
                 targetFrameRate,
                 onBeforeSwitch = { if (wasPlaying) viewModel.exoPlayer?.pause() },
-                onAfterSwitch = { mode ->
+                onAfterSwitch = { result ->
                     if (wasPlaying) {
                         coroutineScope.launch {
                             kotlinx.coroutines.delay(2000)
@@ -223,28 +223,15 @@ fun PlayerScreen(
                     viewModel.onEvent(
                         PlayerEvent.OnShowDisplayModeInfo(
                             DisplayModeInfo(
-                                width = mode.physicalWidth,
-                                height = mode.physicalHeight,
-                                refreshRate = mode.refreshRate
+                                width = result.appliedMode.physicalWidth,
+                                height = result.appliedMode.physicalHeight,
+                                refreshRate = result.appliedMode.refreshRate,
+                                statusMessage = if (result.isFallback) "Fallback applied" else null
                             )
                         )
                     )
                 }
             )
-            if (!switched) {
-                val mode = activity.window?.decorView?.display?.mode
-                if (mode != null) {
-                    viewModel.onEvent(
-                        PlayerEvent.OnShowDisplayModeInfo(
-                            DisplayModeInfo(
-                                width = mode.physicalWidth,
-                                height = mode.physicalHeight,
-                                refreshRate = mode.refreshRate
-                            )
-                        )
-                    )
-                }
-            }
             if (allowSourceCorrection) {
                 afrCorrectionUsed = true
             }
