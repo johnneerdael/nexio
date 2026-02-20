@@ -41,6 +41,8 @@ data class PlayerUiState(
     val showAudioDialog: Boolean = false,
     val showSubtitleDialog: Boolean = false,
     val showSubtitleStylePanel: Boolean = false,
+    val showSubtitleDelayOverlay: Boolean = false,
+    val subtitleDelayMs: Int = 0,
     val showSpeedDialog: Boolean = false,
     val showMoreDialog: Boolean = false,
     // Subtitle style settings
@@ -156,6 +158,9 @@ sealed class PlayerEvent {
     data object OnShowSubtitleDialog : PlayerEvent()
     data object OnOpenSubtitleStylePanel : PlayerEvent()
     data object OnDismissSubtitleStylePanel : PlayerEvent()
+    data object OnShowSubtitleDelayOverlay : PlayerEvent()
+    data object OnHideSubtitleDelayOverlay : PlayerEvent()
+    data class OnAdjustSubtitleDelay(val deltaMs: Int) : PlayerEvent()
     data object OnShowSpeedDialog : PlayerEvent()
     data object OnShowMoreDialog : PlayerEvent()
     data object OnDismissMoreDialog : PlayerEvent()
