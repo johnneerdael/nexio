@@ -138,7 +138,7 @@ configurations.all {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.01.01")
+    val composeBom = platform("androidx.compose:compose-bom:2025.02.00")
 
     baselineProfile(project(":benchmark"))
     implementation(libs.androidx.core.ktx)
@@ -152,7 +152,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation(libs.androidx.tv.foundation)
     implementation("androidx.tv:tv-material:1.0.1")
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.activity:activity-compose:1.11.0")
