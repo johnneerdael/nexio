@@ -61,11 +61,16 @@ class PluginViewModel @Inject constructor(
             ) { enabled, repos, scrapers ->
                 Triple(enabled, repos, scrapers)
             }.collect { (enabled, repos, scrapers) ->
+                val visibleScrapers = if (isReadOnly) {
+                    scrapers.filter { it.enabled }
+                } else {
+                    scrapers
+                }
                 _uiState.update {
                     it.copy(
                         pluginsEnabled = enabled,
                         repositories = repos,
-                        scrapers = scrapers
+                        scrapers = visibleScrapers
                     )
                 }
             }

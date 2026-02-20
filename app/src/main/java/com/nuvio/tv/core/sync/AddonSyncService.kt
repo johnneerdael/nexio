@@ -32,13 +32,16 @@ class AddonSyncService @Inject constructor(
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val activeProfile = profileManager.activeProfile
+            val profileId = profileManager.activeProfileId.value
+            Log.d(TAG, "pushToRemote: activeProfile=${activeProfile?.id} isPrimary=${activeProfile?.isPrimary} usesPrimaryAddons=${activeProfile?.usesPrimaryAddons} profileId=$profileId")
+
             if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryAddons) {
                 Log.d(TAG, "Profile ${activeProfile.id} uses primary addons, skipping push")
                 return@withContext Result.success(Unit)
             }
 
             val localUrls = addonPreferences.installedAddonUrls.first()
-            val profileId = profileManager.activeProfileId.value
+            Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size} for profile $profileId")
 
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
@@ -51,6 +54,7 @@ class AddonSyncService @Inject constructor(
                 })
                 put("p_profile_id", profileId)
             }
+            Log.d(TAG, "pushToRemote: calling RPC sync_push_addons with profile_id=$profileId")
             postgrest.rpc("sync_push_addons", params)
 
             Log.d(TAG, "Pushed ${localUrls.size} addons to remote for profile $profileId")

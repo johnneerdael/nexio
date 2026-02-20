@@ -32,13 +32,16 @@ class PluginSyncService @Inject constructor(
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val activeProfile = profileManager.activeProfile
+            val profileId = profileManager.activeProfileId.value
+            Log.d(TAG, "pushToRemote: activeProfile=${activeProfile?.id} isPrimary=${activeProfile?.isPrimary} usesPrimaryPlugins=${activeProfile?.usesPrimaryPlugins} profileId=$profileId")
+
             if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryPlugins) {
                 Log.d(TAG, "Profile ${activeProfile.id} uses primary plugins, skipping push")
                 return@withContext Result.success(Unit)
             }
 
             val localRepos = pluginDataStore.repositories.first()
-            val profileId = profileManager.activeProfileId.value
+            Log.d(TAG, "pushToRemote: localRepos count=${localRepos.size} for profile $profileId")
 
             val params = buildJsonObject {
                 put("p_plugins", buildJsonArray {
@@ -53,6 +56,7 @@ class PluginSyncService @Inject constructor(
                 })
                 put("p_profile_id", profileId)
             }
+            Log.d(TAG, "pushToRemote: calling RPC sync_push_plugins with profile_id=$profileId")
             postgrest.rpc("sync_push_plugins", params)
 
             Log.d(TAG, "Pushed ${localRepos.size} plugin repos to remote for profile $profileId")
