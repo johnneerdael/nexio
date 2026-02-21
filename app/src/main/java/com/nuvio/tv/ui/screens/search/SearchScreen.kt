@@ -2,7 +2,6 @@ package com.nuvio.tv.ui.screens.search
 
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.view.KeyEvent
 import android.speech.RecognizerIntent
 import android.widget.Toast
@@ -46,9 +45,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -82,11 +83,13 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var isSearchFieldAttached by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
+    var pendingAutoMoveToResults by remember { mutableStateOf(false) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
@@ -112,25 +115,33 @@ fun SearchScreen(
             .trim()
         onVoiceQueryResultState.value(recognized)
     }
-    val isVoiceSearchAvailable = remember(context) {
-        val voiceIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        val hasMic = context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
-        val hasRecognizer = voiceIntent.resolveActivity(context.packageManager) != null
-        hasMic && hasRecognizer
-    }
-    val launchVoiceSearch: () -> Unit = {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+    val voiceIntentAction = remember(context) {
+        listOf(
+            RecognizerIntent.ACTION_RECOGNIZE_SPEECH,
+            RecognizerIntent.ACTION_VOICE_SEARCH_HANDS_FREE
+        ).firstOrNull { action ->
+            Intent(action).resolveActivity(context.packageManager) != null
         }
-        runCatching { voiceLauncher.launch(intent) }.onFailure {
+    }
+    val isVoiceSearchAvailable = voiceIntentAction != null
+    val launchVoiceSearch: () -> Unit = {
+        val action = voiceIntentAction
+        if (action == null) {
             Toast.makeText(context, "Voice search is unavailable on this device.", Toast.LENGTH_SHORT).show()
+        } else {
+            val intent = Intent(action).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+            }
+            runCatching { voiceLauncher.launch(intent) }.onFailure {
+                Toast.makeText(context, "Voice search is unavailable on this device.", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -175,6 +186,17 @@ fun SearchScreen(
             delay(100)
             runCatching { discoverFirstItemFocusRequester.requestFocus() }
             focusResults = false
+        }
+    }
+
+    LaunchedEffect(pendingAutoMoveToResults, canMoveToResults, uiState.isSearching, isDiscoverMode) {
+        if (pendingAutoMoveToResults && !isDiscoverMode && canMoveToResults && !uiState.isSearching) {
+            delay(100)
+            val moved = focusManager.moveFocus(FocusDirection.Down)
+            if (moved) {
+                focusResults = false
+                pendingAutoMoveToResults = false
+            }
         }
     }
 
@@ -225,6 +247,7 @@ fun SearchScreen(
                     onSubmit = {
                         viewModel.onEvent(SearchEvent.SubmitSearch)
                         focusResults = true
+                        pendingAutoMoveToResults = true
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
                     onVoiceSearch = launchVoiceSearch,
@@ -272,6 +295,7 @@ fun SearchScreen(
                         onSubmit = {
                             viewModel.onEvent(SearchEvent.SubmitSearch)
                             focusResults = true
+                            pendingAutoMoveToResults = true
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
                         onVoiceSearch = launchVoiceSearch,
