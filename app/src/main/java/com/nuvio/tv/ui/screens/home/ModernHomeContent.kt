@@ -156,7 +156,6 @@ fun ModernHomeContent(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
-    onItemFocus: (MetaPreview) -> Unit = {},
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
@@ -406,7 +405,9 @@ fun ModernHomeContent(
 
     LaunchedEffect(activeRow, activeItemIndex) {
         val updated = activeRow?.items?.getOrNull(activeItemIndex)?.heroPreview
-        if (updated != null) heroItem = updated
+        if (updated != null && heroItem != updated) {
+            heroItem = updated
+        }
     }
     val nextRow = remember(carouselRows, activeRow?.key, rowIndexByKey) {
         val index = activeRow?.key?.let { key -> rowIndexByKey[key] ?: -1 } ?: -1
@@ -568,12 +569,22 @@ fun ModernHomeContent(
                     ) { index, item ->
                         val requester = requesterFor(resolvedRow.key, item.key)
                         val onFocused = {
-                            focusedItemByRow[resolvedRow.key] = index
-                            activeRowKey = resolvedRow.key
-                            heroItem = item.heroPreview
+                            if (focusedItemByRow[resolvedRow.key] != index) {
+                                focusedItemByRow[resolvedRow.key] = index
+                            }
+                            if (activeRowKey != resolvedRow.key) {
+                                activeRowKey = resolvedRow.key
+                            }
+                            if (heroItem != item.heroPreview) {
+                                heroItem = item.heroPreview
+                            }
                             if (resolvedRow.key == "continue_watching") {
-                                lastFocusedContinueWatchingIndex = index
-                                focusedCatalogSelection = null
+                                if (lastFocusedContinueWatchingIndex != index) {
+                                    lastFocusedContinueWatchingIndex = index
+                                }
+                                if (focusedCatalogSelection != null) {
+                                    focusedCatalogSelection = null
+                                }
                             }
                         }
                         when (val payload = item.payload) {
@@ -656,10 +667,13 @@ fun ModernHomeContent(
                                     focusRequester = requester,
                                     onFocused = {
                                         onFocused()
-                                        focusedCatalogSelection = FocusedCatalogSelection(
+                                        val nextSelection = FocusedCatalogSelection(
                                             focusKey = focusKey,
                                             payload = payload
                                         )
+                                        if (focusedCatalogSelection != nextSelection) {
+                                            focusedCatalogSelection = nextSelection
+                                        }
                                     },
                                     onClick = {
                                         onNavigateToDetail(

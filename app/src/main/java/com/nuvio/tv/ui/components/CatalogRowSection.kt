@@ -23,8 +23,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -79,17 +82,28 @@ fun CatalogRowSection(
     val internalRowFocusRequester = remember { FocusRequester() }
     val resolvedRowFocusRequester = rowFocusRequester ?: internalRowFocusRequester
     val itemFocusRequestersById = remember { mutableMapOf<String, FocusRequester>() }
+    var lastRequestedFocusItemId by remember { mutableStateOf<String?>(null) }
+    var lastFocusedItemIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(catalogRow.items) {
         val validIds = catalogRow.items.mapTo(mutableSetOf()) { it.id }
         itemFocusRequestersById.keys.retainAll(validIds)
+        if (lastRequestedFocusItemId !in validIds) {
+            lastRequestedFocusItemId = null
+        }
     }
 
     LaunchedEffect(focusedItemIndex, catalogRow.items) {
         if (focusedItemIndex >= 0 && focusedItemIndex < catalogRow.items.size) {
             val targetItemId = catalogRow.items[focusedItemIndex].id
+            if (lastRequestedFocusItemId == targetItemId) return@LaunchedEffect
             val requester = itemFocusRequestersById.getOrPut(targetItemId) { FocusRequester() }
             repeat(2) { withFrameNanos { } }
-            runCatching { requester.requestFocus() }
+            val focused = runCatching { requester.requestFocus() }.isSuccess
+            if (focused) {
+                lastRequestedFocusItemId = targetItemId
+            }
+        } else {
+            lastRequestedFocusItemId = null
         }
     }
 
@@ -161,7 +175,7 @@ fun CatalogRowSection(
             itemsIndexed(
                 items = catalogRow.items,
                 key = { _, item ->
-                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}"
+                    "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}_${item.id}"
                 },
                 contentType = { _, _ -> "content_card" }
             ) { index, item ->
@@ -180,7 +194,10 @@ fun CatalogRowSection(
                     modifier = Modifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) {
-                                currentOnItemFocused(index)
+                                if (lastFocusedItemIndex != index) {
+                                    lastFocusedItemIndex = index
+                                    currentOnItemFocused(index)
+                                }
                             }
                         }
                         .then(directionalFocusModifier),

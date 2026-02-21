@@ -77,6 +77,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
+        private const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -118,6 +119,8 @@ class HomeViewModel @Inject constructor(
     private var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     private val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     private val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
+    private var externalMetaPrefetchJob: Job? = null
+    private var pendingExternalMetaPrefetchItemId: String? = null
     @Volatile
     private var externalMetaPrefetchEnabled: Boolean = false
     val trailerPreviewUrls: Map<String, String>
@@ -215,7 +218,9 @@ class HomeViewModel @Inject constructor(
                     modernLandscapePostersEnabled = modernPrefs.first,
                     modernNextRowPreviewEnabled = modernPrefs.second
                 )
-            }.collectLatest { prefs ->
+            }
+                .distinctUntilChanged()
+                .collectLatest { prefs ->
                 val effectivePosterLabelsEnabled = if (prefs.layout == HomeLayout.MODERN) {
                     false
                 } else {
@@ -261,6 +266,8 @@ class HomeViewModel @Inject constructor(
                 .collectLatest { enabled ->
                     externalMetaPrefetchEnabled = enabled
                     if (!enabled) {
+                        externalMetaPrefetchJob?.cancel()
+                        pendingExternalMetaPrefetchItemId = null
                         externalMetaPrefetchInFlightIds.clear()
                     }
                 }
@@ -359,9 +366,16 @@ class HomeViewModel @Inject constructor(
     fun onItemFocus(item: MetaPreview) {
         if (!externalMetaPrefetchEnabled) return
         if (item.id in prefetchedExternalMetaIds) return
-        if (!externalMetaPrefetchInFlightIds.add(item.id)) return
+        if (pendingExternalMetaPrefetchItemId == item.id) return
 
-        viewModelScope.launch(Dispatchers.IO) {
+        pendingExternalMetaPrefetchItemId = item.id
+        externalMetaPrefetchJob?.cancel()
+        externalMetaPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
+            if (pendingExternalMetaPrefetchItemId != item.id) return@launch
+            if (!externalMetaPrefetchEnabled) return@launch
+            if (item.id in prefetchedExternalMetaIds) return@launch
+            if (!externalMetaPrefetchInFlightIds.add(item.id)) return@launch
             try {
                 val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
                     .first { it is NetworkResult.Success || it is NetworkResult.Error }
@@ -372,6 +386,9 @@ class HomeViewModel @Inject constructor(
                 }
             } finally {
                 externalMetaPrefetchInFlightIds.remove(item.id)
+                if (pendingExternalMetaPrefetchItemId == item.id) {
+                    pendingExternalMetaPrefetchItemId = null
+                }
             }
         }
     }
@@ -509,7 +526,13 @@ class HomeViewModel @Inject constructor(
                 Log.d("HomeViewModel", "inProgressOnly: ${inProgressOnly.size} items after filter+dedup")
 
                 // Optimistic immediate render: show in-progress entries instantly.
-                _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
+                _uiState.update { state ->
+                    if (state.continueWatchingItems == inProgressOnly) {
+                        state
+                    } else {
+                        state.copy(continueWatchingItems = inProgressOnly)
+                    }
+                }
 
                 // Then enrich Next Up in background with bounded concurrency.
                 enrichContinueWatchingProgressively(
@@ -620,12 +643,15 @@ class HomeViewModel @Inject constructor(
                         if (nextUpByContent.size - lastEmittedNextUpCount >= 2) {
                             val nextUpItems = nextUpByContent.values.toList()
                             _uiState.update {
-                                it.copy(
-                                    continueWatchingItems = mergeContinueWatchingItems(
-                                        inProgressItems = inProgressItems,
-                                        nextUpItems = nextUpItems
-                                    )
+                                val mergedItems = mergeContinueWatchingItems(
+                                    inProgressItems = inProgressItems,
+                                    nextUpItems = nextUpItems
                                 )
+                                if (it.continueWatchingItems == mergedItems) {
+                                    it
+                                } else {
+                                    it.copy(continueWatchingItems = mergedItems)
+                                }
                             }
                             lastEmittedNextUpCount = nextUpByContent.size
                         }
@@ -639,12 +665,15 @@ class HomeViewModel @Inject constructor(
             if (nextUpByContent.size != lastEmittedNextUpCount) {
                 val nextUpItems = nextUpByContent.values.toList()
                 _uiState.update {
-                    it.copy(
-                        continueWatchingItems = mergeContinueWatchingItems(
-                            inProgressItems = inProgressItems,
-                            nextUpItems = nextUpItems
-                        )
+                    val mergedItems = mergeContinueWatchingItems(
+                        inProgressItems = inProgressItems,
+                        nextUpItems = nextUpItems
                     )
+                    if (it.continueWatchingItems == mergedItems) {
+                        it
+                    } else {
+                        it.copy(continueWatchingItems = mergedItems)
+                    }
                 }
             }
         }
@@ -883,6 +912,8 @@ class HomeViewModel @Inject constructor(
         trailerPreviewRequestVersion = 0L
         prefetchedExternalMetaIds.clear()
         externalMetaPrefetchInFlightIds.clear()
+        externalMetaPrefetchJob?.cancel()
+        pendingExternalMetaPrefetchItemId = null
         lastHeroEnrichmentSignature = null
         lastHeroEnrichedItems = emptyList()
 
@@ -1001,12 +1032,12 @@ class HomeViewModel @Inject constructor(
                         val mergedItems = currentRow.items + result.data.items
                         catalogsMap[key] = result.data.copy(items = mergedItems)
                         _loadingCatalogs.update { it - key }
-                        updateCatalogRows()
+                        scheduleUpdateCatalogRows()
                     }
                     is NetworkResult.Error -> {
                         catalogsMap[key] = currentRow.copy(isLoading = false)
                         _loadingCatalogs.update { it - key }
-                        updateCatalogRows()
+                        scheduleUpdateCatalogRows()
                     }
                     NetworkResult.Loading -> { }
                 }

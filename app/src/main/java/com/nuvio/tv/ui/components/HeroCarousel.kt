@@ -69,7 +69,8 @@ fun HeroCarousel(
     var activeIndex by remember { mutableIntStateOf(0) }
     var isFocused by remember { mutableStateOf(false) }
 
-    LaunchedEffect(activeIndex) {
+    LaunchedEffect(activeIndex, isFocused) {
+        if (!isFocused) return@LaunchedEffect
         items.getOrNull(activeIndex)?.let { onItemFocus(it) }
     }
 
