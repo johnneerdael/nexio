@@ -166,8 +166,9 @@ class StartupSyncService @Inject constructor(
             addonRepository.isSyncingFromRemote = false
             Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote for profile $profileId")
 
-            val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
-            Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")
+            val isPrimaryProfile = profileManager.activeProfileId.value == 1
+            val isTraktConnected = isPrimaryProfile && traktAuthDataStore.isAuthenticated.first()
+            Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected isPrimaryProfile=$isPrimaryProfile")
             if (!isTraktConnected) {
                 // Pull library and watched items first — these are lightweight and critical.
                 // Watch progress is pulled last because the table is large and may time out;

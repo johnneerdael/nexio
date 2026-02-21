@@ -590,8 +590,9 @@ class AccountViewModel @Inject constructor(
             )
             addonRepository.isSyncingFromRemote = false
 
-            val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
-            Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected")
+            val isPrimaryProfile = profileManager.activeProfileId.value == 1
+            val isTraktConnected = isPrimaryProfile && traktAuthDataStore.isAuthenticated.first()
+            Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected isPrimaryProfile=$isPrimaryProfile")
             if (!isTraktConnected) {
                 watchProgressRepository.isSyncingFromRemote = true
                 val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
