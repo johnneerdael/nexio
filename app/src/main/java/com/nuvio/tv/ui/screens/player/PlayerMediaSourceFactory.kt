@@ -64,9 +64,15 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         val mediaItem = mediaItemBuilder.build()
         val useVodCache = !isHls && !isDash && shouldUseVodCache(url)
-        val progressiveFactory = if (useVodCache) {
-            Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
-            buildVodCacheDataSourceFactory(okHttpFactory)
+        val progressiveFactory = if (useVodCache && !isVodCacheDisabled) {
+            runCatching {
+                Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
+                buildVodCacheDataSourceFactory(okHttpFactory)
+            }.getOrElse { error ->
+                isVodCacheDisabled = true
+                Log.e(TAG, "Disabling VOD cache after initialization failure", error)
+                okHttpFactory
+            }
         } else {
             okHttpFactory
         }
@@ -135,6 +141,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val VOD_CACHE_DIR = "player_vod_cache"
         private const val VOD_CACHE_MAX_BYTES = 2L * 1024L * 1024L * 1024L
         @Volatile private var sharedSimpleCache: SimpleCache? = null
+        @Volatile private var isVodCacheDisabled: Boolean = false
 
         fun parseHeaders(headers: String?): Map<String, String> {
             if (headers.isNullOrEmpty()) return emptyMap()
