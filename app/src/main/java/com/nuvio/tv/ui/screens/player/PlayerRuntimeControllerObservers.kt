@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.net.Uri
+import android.util.Log
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.nuvio.tv.data.local.FrameRateMatchingMode
@@ -278,6 +280,13 @@ internal fun PlayerRuntimeController.retryCurrentStreamFromStartAfter416() {
 internal fun PlayerRuntimeController.retryCurrentStreamAfterTimeout(fromPositionMs: Long) {
     if (timeoutRecoveryAttempts >= PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS) return
     timeoutRecoveryAttempts += 1
+    Log.w(
+        PlayerRuntimeController.TAG,
+        "Retrying stream after timeout attempt=$timeoutRecoveryAttempts/" +
+            "${PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS} " +
+            "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} " +
+            "fromPositionMs=$fromPositionMs"
+    )
     _uiState.update {
         it.copy(
             error = null,

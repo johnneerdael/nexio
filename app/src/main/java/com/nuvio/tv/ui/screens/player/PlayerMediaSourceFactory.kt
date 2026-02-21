@@ -1,8 +1,16 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.C
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.cache.CacheDataSink
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -11,12 +19,14 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import java.io.File
 import java.net.SocketTimeoutException
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
-internal class PlayerMediaSourceFactory {
+internal class PlayerMediaSourceFactory(private val context: Context) {
     private var okHttpClient: OkHttpClient? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
 
@@ -53,6 +63,13 @@ internal class PlayerMediaSourceFactory {
         }
 
         val mediaItem = mediaItemBuilder.build()
+        val useVodCache = !isHls && !isDash && shouldUseVodCache(url)
+        val progressiveFactory = if (useVodCache) {
+            Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
+            buildVodCacheDataSourceFactory(okHttpFactory)
+        } else {
+            okHttpFactory
+        }
         return when {
             isHls -> HlsMediaSource.Factory(okHttpFactory)
                 .setAllowChunklessPreparation(true)
@@ -61,7 +78,7 @@ internal class PlayerMediaSourceFactory {
             isDash -> DashMediaSource.Factory(okHttpFactory)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
-            else -> DefaultMediaSourceFactory(okHttpFactory)
+            else -> DefaultMediaSourceFactory(progressiveFactory)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
         }
@@ -78,10 +95,16 @@ internal class PlayerMediaSourceFactory {
     }
 
     private fun getOrCreateOkHttpClient(): OkHttpClient {
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 12
+        }
         return okHttpClient ?: OkHttpClient.Builder()
+            .dispatcher(dispatcher)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .retryOnConnectionFailure(true)
             .followRedirects(true)
@@ -90,7 +113,29 @@ internal class PlayerMediaSourceFactory {
             .also { okHttpClient = it }
     }
 
+    private fun buildVodCacheDataSourceFactory(upstreamFactory: DataSource.Factory): DataSource.Factory {
+        val cache = getOrCreateSimpleCache(context)
+        val dataSinkFactory = CacheDataSink.Factory()
+            .setCache(cache)
+            .setFragmentSize(2L * 1024L * 1024L)
+        return CacheDataSource.Factory()
+            .setCache(cache)
+            .setCacheWriteDataSinkFactory(dataSinkFactory)
+            .setUpstreamDataSourceFactory(upstreamFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
+    private fun shouldUseVodCache(url: String): Boolean {
+        val scheme = Uri.parse(url).scheme?.lowercase()
+        return scheme == "https" || scheme == "http"
+    }
+
     companion object {
+        private const val TAG = "PlayerMediaSource"
+        private const val VOD_CACHE_DIR = "player_vod_cache"
+        private const val VOD_CACHE_MAX_BYTES = 2L * 1024L * 1024L * 1024L
+        @Volatile private var sharedSimpleCache: SimpleCache? = null
+
         fun parseHeaders(headers: String?): Map<String, String> {
             if (headers.isNullOrEmpty()) return emptyMap()
 
@@ -105,6 +150,18 @@ internal class PlayerMediaSourceFactory {
                 }.filterKeys { it.isNotEmpty() }
             } catch (_: Exception) {
                 emptyMap()
+            }
+        }
+
+        private fun getOrCreateSimpleCache(context: Context): SimpleCache {
+            sharedSimpleCache?.let { return it }
+            synchronized(this) {
+                sharedSimpleCache?.let { return it }
+                val cacheDir = File(context.cacheDir, VOD_CACHE_DIR).apply { mkdirs() }
+                return SimpleCache(
+                    cacheDir,
+                    LeastRecentlyUsedCacheEvictor(VOD_CACHE_MAX_BYTES)
+                ).also { sharedSimpleCache = it }
             }
         }
     }
@@ -123,7 +180,7 @@ private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) 
         val timeout = loadErrorInfo.exception.findCause<SocketTimeoutException>() != null
         if (!timeout) return super.getRetryDelayMsFor(loadErrorInfo)
 
-        return when (loadErrorInfo.errorCount) {
+        val retryDelayMs = when (loadErrorInfo.errorCount) {
             1 -> 750L
             2 -> 1_500L
             3 -> 3_000L
@@ -131,6 +188,14 @@ private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) 
             5 -> 8_000L
             else -> C.TIME_UNSET
         }
+        Log.w(
+            "PlayerMediaSource",
+            "Timeout load error dataType=${dataTypeName(loadErrorInfo.mediaLoadData.dataType)} " +
+                "host=${loadErrorInfo.loadEventInfo.uri.host ?: "unknown"} " +
+                "attempt=${loadErrorInfo.errorCount} retryDelayMs=$retryDelayMs " +
+                "error=${loadErrorInfo.exception.javaClass.simpleName}:${loadErrorInfo.exception.message}"
+        )
+        return retryDelayMs
     }
 }
 
@@ -141,4 +206,10 @@ private inline fun <reified T : Throwable> Throwable.findCause(): T? {
         current = current.cause
     }
     return null
+}
+
+private fun dataTypeName(dataType: Int): String = when (dataType) {
+    C.DATA_TYPE_MEDIA -> "media"
+    C.DATA_TYPE_MANIFEST -> "manifest"
+    else -> "other($dataType)"
 }
