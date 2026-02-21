@@ -753,7 +753,7 @@ fun ModernHomeContent(
         val heroBackdropAlpha = 1f - heroTransitionProgress
         val heroTrailerAlpha = heroTransitionProgress
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
-        val catalogBottomPadding = if (shouldRenderPreviewRow) 8.dp else 18.dp
+        val catalogBottomPadding = if (shouldRenderPreviewRow) 20.dp else 30.dp
         val heroToCatalogGap = if (shouldRenderPreviewRow) 8.dp else 18.dp
         val activeRowTitleBottom = if (shouldRenderPreviewRow) 2.dp else 6.dp
         val localDensity = LocalDensity.current
