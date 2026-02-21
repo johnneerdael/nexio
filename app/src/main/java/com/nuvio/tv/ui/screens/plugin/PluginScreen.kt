@@ -166,7 +166,7 @@ fun PluginScreenContent(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         androidx.tv.material3.Text(
-                            text = "Using primary profile's plugins (read-only)",
+                            text = "Using primary profile's plugins and can't be changed",
                             style = androidx.tv.material3.MaterialTheme.typography.bodyMedium,
                             color = com.nuvio.tv.ui.theme.NuvioColors.TextSecondary,
                             modifier = Modifier.padding(16.dp)

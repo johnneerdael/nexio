@@ -177,7 +177,7 @@ fun AddonManagerScreen(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "Using primary profile's addons (read-only)",
+                            text = "Using primary profile's addons and can't be changed",
                             style = MaterialTheme.typography.bodyMedium,
                             color = NuvioColors.TextSecondary,
                             modifier = androidx.compose.ui.Modifier.padding(16.dp)
