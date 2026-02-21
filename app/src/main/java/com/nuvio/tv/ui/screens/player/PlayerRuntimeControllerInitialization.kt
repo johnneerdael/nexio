@@ -301,7 +301,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
                     override fun onPlayerError(error: PlaybackException) {
                         val timeoutError = error.findCause<SocketTimeoutException>()
-                        if (timeoutError != null && !hasRetriedCurrentStreamAfterTimeout) {
+                        if (timeoutError != null &&
+                            timeoutRecoveryAttempts < PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS
+                        ) {
                             retryCurrentStreamAfterTimeout(currentPosition)
                             return
                         }
@@ -347,7 +349,7 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRenderedFirstFrame = false
     shouldEnforceAutoplayOnFirstReady = true
     userPausedManually = false
-    hasRetriedCurrentStreamAfterTimeout = false
+    timeoutRecoveryAttempts = 0
     lastKnownDuration = 0L
     _uiState.update { state ->
         state.copy(

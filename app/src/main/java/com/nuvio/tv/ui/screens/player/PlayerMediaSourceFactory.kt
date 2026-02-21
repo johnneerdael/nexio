@@ -2,18 +2,23 @@ package com.nuvio.tv.ui.screens.player
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.C
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
+import java.net.SocketTimeoutException
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 internal class PlayerMediaSourceFactory {
     private var okHttpClient: OkHttpClient? = null
+    private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
 
     fun createMediaSource(
         url: String,
@@ -51,10 +56,13 @@ internal class PlayerMediaSourceFactory {
         return when {
             isHls -> HlsMediaSource.Factory(okHttpFactory)
                 .setAllowChunklessPreparation(true)
+                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
             isDash -> DashMediaSource.Factory(okHttpFactory)
+                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
             else -> DefaultMediaSourceFactory(okHttpFactory)
+                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
         }
     }
@@ -72,8 +80,8 @@ internal class PlayerMediaSourceFactory {
     private fun getOrCreateOkHttpClient(): OkHttpClient {
         return okHttpClient ?: OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(45, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
             .retryOnConnectionFailure(true)
             .followRedirects(true)
@@ -100,4 +108,37 @@ internal class PlayerMediaSourceFactory {
             }
         }
     }
+}
+
+private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) {
+    override fun getMinimumLoadableRetryCount(dataType: Int): Int {
+        return when (dataType) {
+            C.DATA_TYPE_MEDIA,
+            C.DATA_TYPE_MANIFEST -> 6
+            else -> 3
+        }
+    }
+
+    override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+        val timeout = loadErrorInfo.exception.findCause<SocketTimeoutException>() != null
+        if (!timeout) return super.getRetryDelayMsFor(loadErrorInfo)
+
+        return when (loadErrorInfo.errorCount) {
+            1 -> 750L
+            2 -> 1_500L
+            3 -> 3_000L
+            4 -> 5_000L
+            5 -> 8_000L
+            else -> C.TIME_UNSET
+        }
+    }
+}
+
+private inline fun <reified T : Throwable> Throwable.findCause(): T? {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current is T) return current
+        current = current.cause
+    }
+    return null
 }
