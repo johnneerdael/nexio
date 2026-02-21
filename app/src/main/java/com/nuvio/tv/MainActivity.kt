@@ -85,6 +85,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.data.local.AppOnboardingDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
@@ -93,6 +94,7 @@ import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
+import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -143,11 +145,18 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var profileManager: ProfileManager
 
+    @Inject
+    lateinit var appOnboardingDataStore: AppOnboardingDataStore
+
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
+            var onboardingCompletedThisSession by remember { mutableStateOf(false) }
+            val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
+                .hasSeenAuthQrOnFirstLaunch
+                .collectAsState(initial = false)
 
             val activeProfileId by profileManager.activeProfileId.collectAsState()
             val profiles by profileManager.profiles.collectAsState()
@@ -179,6 +188,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
+                    if (!hasSeenAuthQrOnFirstLaunch && !onboardingCompletedThisSession) {
+                        AuthQrSignInScreen(
+                            onBackPress = {},
+                            onContinue = {
+                                onboardingCompletedThisSession = true
+                                lifecycleScope.launch {
+                                    appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
+                                }
+                                startupSyncService.requestSyncNow()
+                            }
+                        )
+                        return@Surface
+                    }
+
                     if (!hasSelectedProfileThisSession) {
                         ProfileSelectionScreen(
                             onProfileSelected = {
