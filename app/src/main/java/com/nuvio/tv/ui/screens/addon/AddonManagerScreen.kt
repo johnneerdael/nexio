@@ -882,101 +882,146 @@ private fun AddonCard(
     onRemove: () -> Unit,
     isReadOnly: Boolean = false
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = addon.displayName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioColors.TextPrimary
-                    )
-                    Text(
-                        text = "v${addon.version}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
-                    )
-                }
-                if (!isReadOnly) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = onMoveUp,
-                            enabled = canMoveUp,
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextSecondary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                        ) {
-                            Icon(imageVector = Icons.Default.ArrowUpward, contentDescription = "Move up")
-                        }
-                        Button(
-                            onClick = onMoveDown,
-                            enabled = canMoveDown,
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextSecondary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                        ) {
-                            Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = "Move down")
-                        }
-                        Button(
-                            onClick = onRemove,
-                            colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextSecondary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Error
-                            ),
-                            shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                        ) {
-                            Text(text = "Remove")
-                        }
-                    }
-                }
-            }
+    if (isReadOnly) {
+        Surface(
+            onClick = { },
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                focusedContainerColor = NuvioColors.BackgroundCard
+            ),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            ),
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+        ) {
+            AddonCardContent(addon = addon, isReadOnly = true)
+        }
+    } else {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(),
+            colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            AddonCardContent(
+                addon = addon,
+                isReadOnly = false,
+                canMoveUp = canMoveUp,
+                canMoveDown = canMoveDown,
+                onMoveUp = onMoveUp,
+                onMoveDown = onMoveDown,
+                onRemove = onRemove
+            )
+        }
+    }
+}
 
-            if (!addon.description.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AddonCardContent(
+    addon: Addon,
+    isReadOnly: Boolean,
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
+    onRemove: () -> Unit = {}
+) {
+    Column(modifier = Modifier.padding(20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = addon.description ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = addon.displayName,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = NuvioColors.TextPrimary
+                )
+                Text(
+                    text = "v${addon.version}",
+                    style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
                 )
             }
+            if (!isReadOnly) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = onMoveUp,
+                        enabled = canMoveUp,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextSecondary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(imageVector = Icons.Default.ArrowUpward, contentDescription = "Move up")
+                    }
+                    Button(
+                        onClick = onMoveDown,
+                        enabled = canMoveDown,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextSecondary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = "Move down")
+                    }
+                    Button(
+                        onClick = onRemove,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NuvioColors.BackgroundCard,
+                            contentColor = NuvioColors.TextSecondary,
+                            focusedContainerColor = NuvioColors.FocusBackground,
+                            focusedContentColor = NuvioColors.Error
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Text(text = "Remove")
+                    }
+                }
+            }
+        }
 
+        if (!addon.description.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = addon.baseUrl,
-                style = MaterialTheme.typography.bodySmall,
-                color = NuvioColors.TextTertiary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Catalogs: ${addon.catalogs.size} • Types: ${addon.rawTypes.joinToString()}",
-                style = MaterialTheme.typography.bodySmall,
-                color = NuvioColors.TextTertiary
+                text = addon.description ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioColors.TextSecondary
             )
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = addon.baseUrl,
+            style = MaterialTheme.typography.bodySmall,
+            color = NuvioColors.TextTertiary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Catalogs: ${addon.catalogs.size} • Types: ${addon.rawTypes.joinToString()}",
+            style = MaterialTheme.typography.bodySmall,
+            color = NuvioColors.TextTertiary
+        )
     }
 }
 
