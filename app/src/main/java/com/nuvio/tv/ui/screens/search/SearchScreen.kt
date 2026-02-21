@@ -45,13 +45,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -85,7 +83,6 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val voiceFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
@@ -94,6 +91,7 @@ fun SearchScreen(
     var focusResults by remember { mutableStateOf(false) }
     var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
     var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
+    var pendingFocusMoveHadExistingSearchRows by remember { mutableStateOf(false) }
     var pendingVoiceSearchResume by remember { mutableStateOf(false) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
@@ -104,9 +102,11 @@ fun SearchScreen(
         if (recognized.isNotBlank()) {
             viewModel.onEvent(SearchEvent.QueryChanged(recognized))
             viewModel.onEvent(SearchEvent.SubmitSearch)
-            focusResults = true
+            focusResults = false
             pendingFocusMoveToResultsQuery = recognized
             pendingFocusMoveSawSearching = false
+            pendingFocusMoveHadExistingSearchRows =
+                uiState.submittedQuery.trim().length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
         } else {
             Toast.makeText(context, "No speech detected. Try again.", Toast.LENGTH_SHORT).show()
         }
@@ -183,11 +183,7 @@ fun SearchScreen(
         trimmedSubmittedQuery,
         uiState.catalogRows
     ) {
-        if (isDiscoverMode) {
-            uiState.discoverResults.isNotEmpty()
-        } else {
-            trimmedSubmittedQuery.length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
-        }
+        if (isDiscoverMode) false else trimmedSubmittedQuery.length >= 2 && uiState.catalogRows.any { it.items.isNotEmpty() }
     }
 
     LaunchedEffect(focusResults, isDiscoverMode, uiState.discoverResults.size) {
@@ -197,12 +193,14 @@ fun SearchScreen(
             focusResults = false
             pendingFocusMoveToResultsQuery = null
             pendingFocusMoveSawSearching = false
+            pendingFocusMoveHadExistingSearchRows = false
         }
     }
 
     LaunchedEffect(
         pendingFocusMoveToResultsQuery,
         pendingFocusMoveSawSearching,
+        pendingFocusMoveHadExistingSearchRows,
         uiState.isSearching,
         uiState.submittedQuery,
         canMoveToResults,
@@ -217,19 +215,21 @@ fun SearchScreen(
             return@LaunchedEffect
         }
 
-        if (!pendingFocusMoveSawSearching || !canMoveToResults) return@LaunchedEffect
+        val shouldRequireSeenSearching = pendingFocusMoveHadExistingSearchRows
+        if ((shouldRequireSeenSearching && !pendingFocusMoveSawSearching) || !canMoveToResults) {
+            return@LaunchedEffect
+        }
 
         if (isDiscoverMode) {
             focusResults = true
         } else {
+            // Use explicit first-item focus for deterministic landing on row 1 / column 1.
             delay(80)
-            val moved = focusManager.moveFocus(FocusDirection.Down)
-            if (moved) {
-                focusResults = false
-            }
+            focusResults = true
         }
         pendingFocusMoveToResultsQuery = null
         pendingFocusMoveSawSearching = false
+        pendingFocusMoveHadExistingSearchRows = false
     }
 
     LaunchedEffect(Unit) {
@@ -290,18 +290,22 @@ fun SearchScreen(
                         focusResults = false
                         pendingFocusMoveToResultsQuery = null
                         pendingFocusMoveSawSearching = false
+                        pendingFocusMoveHadExistingSearchRows = false
                         viewModel.onEvent(SearchEvent.QueryChanged(it))
                     },
                     onSubmit = {
                         val submittedQuery = uiState.query.trim()
                         viewModel.onEvent(SearchEvent.SubmitSearch)
-                        focusResults = true
+                        focusResults = false
                         if (submittedQuery.length >= 2) {
                             pendingFocusMoveToResultsQuery = submittedQuery
                             pendingFocusMoveSawSearching = false
+                            pendingFocusMoveHadExistingSearchRows =
+                                trimmedSubmittedQuery.length >= 2 && uiState.catalogRows.any { row -> row.items.isNotEmpty() }
                         } else {
                             pendingFocusMoveToResultsQuery = null
                             pendingFocusMoveSawSearching = false
+                            pendingFocusMoveHadExistingSearchRows = false
                         }
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
@@ -312,27 +316,18 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                DiscoverSection(
-                    uiState = uiState,
-                    posterCardStyle = posterCardStyle,
-                    focusResults = focusResults,
-                    firstItemFocusRequester = discoverFirstItemFocusRequester,
-                    focusedItemIndex = discoverFocusedItemIndex,
-                    shouldRestoreFocusedItem = restoreDiscoverFocus,
-                    onRestoreFocusedItemHandled = { restoreDiscoverFocus = false },
-                    onNavigateToDetail = { id, type, addonBaseUrl ->
-                        pendingDiscoverRestoreOnResume = true
-                        onNavigateToDetail(id, type, addonBaseUrl)
-                    },
-                    onDiscoverItemFocused = { index ->
-                        discoverFocusedItemIndex = index
-                    },
-                    onSelectType = { viewModel.onEvent(SearchEvent.SelectDiscoverType(it)) },
-                    onSelectCatalog = { viewModel.onEvent(SearchEvent.SelectDiscoverCatalog(it)) },
-                    onSelectGenre = { viewModel.onEvent(SearchEvent.SelectDiscoverGenre(it)) },
-                    onLoadMore = { viewModel.onEvent(SearchEvent.LoadNextDiscoverResults) },
-                    modifier = Modifier.weight(1f)
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EmptyScreenState(
+                        title = "Start Searching",
+                        subtitle = "Enter at least 2 characters",
+                        icon = Icons.Default.Search
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -351,32 +346,28 @@ fun SearchScreen(
                             focusResults = false
                             pendingFocusMoveToResultsQuery = null
                             pendingFocusMoveSawSearching = false
+                            pendingFocusMoveHadExistingSearchRows = false
                             viewModel.onEvent(SearchEvent.QueryChanged(it))
                         },
                         onSubmit = {
                             val submittedQuery = uiState.query.trim()
                             viewModel.onEvent(SearchEvent.SubmitSearch)
-                            focusResults = true
+                            focusResults = false
                             if (submittedQuery.length >= 2) {
                                 pendingFocusMoveToResultsQuery = submittedQuery
                                 pendingFocusMoveSawSearching = false
+                                pendingFocusMoveHadExistingSearchRows =
+                                    trimmedSubmittedQuery.length >= 2 && uiState.catalogRows.any { row -> row.items.isNotEmpty() }
                             } else {
                                 pendingFocusMoveToResultsQuery = null
                                 pendingFocusMoveSawSearching = false
+                                pendingFocusMoveHadExistingSearchRows = false
                             }
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
                         onVoiceSearch = launchVoiceSearch,
                         onMoveToResults = {
                             focusResults = true
-                            val submittedQuery = uiState.query.trim()
-                            if (submittedQuery.length >= 2) {
-                                pendingFocusMoveToResultsQuery = submittedQuery
-                                pendingFocusMoveSawSearching = false
-                            } else {
-                                pendingFocusMoveToResultsQuery = null
-                                pendingFocusMoveSawSearching = false
-                            }
                         },
                         keyboardController = keyboardController
                     )
