@@ -42,9 +42,11 @@ class LibraryRepositoryImpl @Inject constructor(
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
     var isSyncingFromRemote = false
+    var hasCompletedInitialPull = false
 
     private fun triggerRemoteSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialPull) return
         if (!authManager.isAuthenticated) return
         syncJob?.cancel()
         syncJob = syncScope.launch {

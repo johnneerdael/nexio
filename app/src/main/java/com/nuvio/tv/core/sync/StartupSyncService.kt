@@ -48,6 +48,8 @@ class StartupSyncService @Inject constructor(
     private var lastPulledKey: String? = null
     @Volatile
     private var forceSyncRequested: Boolean = false
+    @Volatile
+    private var pendingResyncKey: String? = null
 
     init {
         scope.launch {
@@ -68,6 +70,7 @@ class StartupSyncService @Inject constructor(
                         startupPullJob = null
                         lastPulledKey = null
                         forceSyncRequested = false
+                        pendingResyncKey = null
                     }
                     is AuthState.Loading -> Unit
                 }
@@ -98,9 +101,10 @@ class StartupSyncService @Inject constructor(
     private fun scheduleStartupPull(userId: String, force: Boolean = false): Boolean {
         val key = pullKey(userId)
         if (!force && lastPulledKey == key) return false
-        if (force && startupPullJob?.isActive == true) {
-            startupPullJob?.cancel()
-        } else if (startupPullJob?.isActive == true) {
+        // Never cancel an active sync — it may be mid-write to DataStore.
+        // Instead, schedule a follow-up sync after the current one finishes.
+        if (startupPullJob?.isActive == true) {
+            if (force) pendingResyncKey = key
             return false
         }
 
@@ -113,12 +117,22 @@ class StartupSyncService @Inject constructor(
                 if (result.isSuccess) {
                     lastPulledKey = key
                     Log.d(TAG, "Startup sync completed for key=$key")
-                    return@launch
+                    return@repeat
                 }
 
                 Log.w(TAG, "Startup sync attempt $attempt failed for key=$key", result.exceptionOrNull())
                 if (attempt < maxAttempts) {
                     delay(3000)
+                }
+            }
+
+            // After completing, check if a re-sync was requested while we were running
+            val resyncKey = pendingResyncKey
+            if (resyncKey != null) {
+                pendingResyncKey = null
+                if (resyncKey != lastPulledKey) {
+                    Log.d(TAG, "Running pending re-sync for key=$resyncKey")
+                    scheduleStartupPull(userId, force = true)
                 }
             }
         }
@@ -155,40 +169,45 @@ class StartupSyncService @Inject constructor(
             val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
             Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")
             if (!isTraktConnected) {
-                // Re-check before each pull to avoid stale decisions when Trakt auth flips mid-sync.
-                if (traktAuthDataStore.isAuthenticated.first()) {
-                    Log.d(TAG, "Skipping watch progress & library sync (Trakt connected during startup sync)")
-                    return Result.success(Unit)
+                // Pull library and watched items first — these are lightweight and critical.
+                // Watch progress is pulled last because the table is large and may time out;
+                // a failure there must not block the other syncs.
+
+                libraryRepository.isSyncingFromRemote = true
+                try {
+                    val remoteLibraryItems = librarySyncService.pullFromRemote().getOrElse { throw it }
+                    Log.d(TAG, "Pulled ${remoteLibraryItems.size} library items from remote")
+                    libraryPreferences.mergeRemoteItems(remoteLibraryItems)
+                    libraryRepository.hasCompletedInitialPull = true
+                    Log.d(TAG, "Reconciled local library with ${remoteLibraryItems.size} remote items")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to pull library, continuing with other syncs", e)
+                } finally {
+                    libraryRepository.isSyncingFromRemote = false
+                }
+
+                try {
+                    val remoteWatchedItems = watchedItemsSyncService.pullFromRemote().getOrElse { throw it }
+                    Log.d(TAG, "Pulled ${remoteWatchedItems.size} watched items from remote")
+                    watchedItemsPreferences.replaceWithRemoteItems(remoteWatchedItems)
+                    watchProgressRepository.hasCompletedInitialWatchedItemsPull = true
+                    Log.d(TAG, "Reconciled local watched items with ${remoteWatchedItems.size} remote items")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to pull watched items, continuing with other syncs", e)
                 }
 
                 watchProgressRepository.isSyncingFromRemote = true
-                val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
-                if (traktAuthDataStore.isAuthenticated.first()) {
-                    Log.d(TAG, "Discarding account watch progress pull (Trakt connected during pull)")
+                try {
+                    val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
+                    Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
+                    watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
+                    watchProgressRepository.hasCompletedInitialPull = true
+                    Log.d(TAG, "Merged local watch progress with ${remoteEntries.size} remote entries")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to pull watch progress, continuing", e)
+                } finally {
                     watchProgressRepository.isSyncingFromRemote = false
-                    return Result.success(Unit)
                 }
-                Log.d(TAG, "Pulled ${remoteEntries.size} watch progress entries from remote")
-                watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
-                Log.d(TAG, "Merged local watch progress with ${remoteEntries.size} remote entries")
-                watchProgressRepository.isSyncingFromRemote = false
-
-                if (traktAuthDataStore.isAuthenticated.first()) {
-                    Log.d(TAG, "Skipping library/watch history sync (Trakt connected during startup sync)")
-                    return Result.success(Unit)
-                }
-
-                libraryRepository.isSyncingFromRemote = true
-                val remoteLibraryItems = librarySyncService.pullFromRemote().getOrElse { throw it }
-                Log.d(TAG, "Pulled ${remoteLibraryItems.size} library items from remote")
-                libraryPreferences.mergeRemoteItems(remoteLibraryItems)
-                Log.d(TAG, "Reconciled local library with ${remoteLibraryItems.size} remote items")
-                libraryRepository.isSyncingFromRemote = false
-
-                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote().getOrElse { throw it }
-                Log.d(TAG, "Pulled ${remoteWatchedItems.size} watched items from remote")
-                watchedItemsPreferences.replaceWithRemoteItems(remoteWatchedItems)
-                Log.d(TAG, "Reconciled local watched items with ${remoteWatchedItems.size} remote items")
             } else {
                 Log.d(TAG, "Skipping watch progress & library sync (Trakt connected)")
             }

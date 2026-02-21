@@ -66,6 +66,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private var syncJob: Job? = null
     private var watchedItemsSyncJob: Job? = null
     var isSyncingFromRemote = false
+    var hasCompletedInitialPull = false
+    var hasCompletedInitialWatchedItemsPull = false
 
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
     private val metadataMutex = Mutex()
@@ -74,6 +76,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun triggerRemoteSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialPull) return
         if (!authManager.isAuthenticated) return
         syncJob?.cancel()
         syncJob = syncScope.launch {
@@ -84,6 +87,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun triggerWatchedItemsSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialWatchedItemsPull) return
         if (!authManager.isAuthenticated) return
         watchedItemsSyncJob?.cancel()
         watchedItemsSyncJob = syncScope.launch {

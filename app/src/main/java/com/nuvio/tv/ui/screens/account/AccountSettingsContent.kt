@@ -162,6 +162,7 @@ private fun SyncOverviewCard(overview: SyncOverview) {
                     ProfileStatValue(overview.totalPlugins, "plug")
                     ProfileStatValue(overview.totalLibrary, "lib")
                     ProfileStatValue(overview.totalWatchProgress, "prog")
+                    ProfileStatValue(overview.totalWatchedItems, "wtch")
                 }
             }
 
@@ -240,6 +241,7 @@ private fun ProfileSyncRow(profile: ProfileSyncStats) {
             ProfileStatValue(profile.plugins, "plug")
             ProfileStatValue(profile.library, "lib")
             ProfileStatValue(profile.watchProgress, "prog")
+            ProfileStatValue(profile.watchedItems, "wtch")
         }
     }
 }
