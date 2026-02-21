@@ -6,6 +6,7 @@ import android.view.KeyEvent
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,9 +45,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
@@ -85,11 +87,13 @@ fun SearchScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val voiceFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var isSearchFieldAttached by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
-    var pendingAutoMoveToResults by remember { mutableStateOf(false) }
+    var pendingFocusMoveToResults by remember { mutableStateOf(false) }
+    var pendingVoiceSearchResume by remember { mutableStateOf(false) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
@@ -100,6 +104,7 @@ fun SearchScreen(
             viewModel.onEvent(SearchEvent.QueryChanged(recognized))
             viewModel.onEvent(SearchEvent.SubmitSearch)
             focusResults = true
+            pendingFocusMoveToResults = true
         } else {
             Toast.makeText(context, "No speech detected. Try again.", Toast.LENGTH_SHORT).show()
         }
@@ -107,6 +112,7 @@ fun SearchScreen(
     val voiceLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        pendingVoiceSearchResume = false
         if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
         val recognized = result.data
             ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
@@ -124,6 +130,9 @@ fun SearchScreen(
         }
     }
     val isVoiceSearchAvailable = voiceIntentAction != null
+    val topInputFocusRequester = remember(isVoiceSearchAvailable) {
+        if (isVoiceSearchAvailable) voiceFocusRequester else searchFocusRequester
+    }
     val launchVoiceSearch: () -> Unit = {
         val action = voiceIntentAction
         if (action == null) {
@@ -139,7 +148,9 @@ fun SearchScreen(
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
                 putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
             }
+            pendingVoiceSearchResume = true
             runCatching { voiceLauncher.launch(intent) }.onFailure {
+                pendingVoiceSearchResume = false
                 Toast.makeText(context, "Voice search is unavailable on this device.", Toast.LENGTH_SHORT).show()
             }
         }
@@ -177,45 +188,56 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(trimmedQuery) {
-        focusResults = false
-    }
-
     LaunchedEffect(focusResults, isDiscoverMode, uiState.discoverResults.size) {
         if (focusResults && isDiscoverMode && uiState.discoverResults.isNotEmpty()) {
             delay(100)
             runCatching { discoverFirstItemFocusRequester.requestFocus() }
             focusResults = false
+            pendingFocusMoveToResults = false
         }
     }
 
-    LaunchedEffect(pendingAutoMoveToResults, canMoveToResults, uiState.isSearching, isDiscoverMode) {
-        if (pendingAutoMoveToResults && !isDiscoverMode && canMoveToResults && !uiState.isSearching) {
-            delay(100)
-            val moved = focusManager.moveFocus(FocusDirection.Down)
-            if (moved) {
-                focusResults = false
-                pendingAutoMoveToResults = false
+    LaunchedEffect(pendingFocusMoveToResults, canMoveToResults, uiState.isSearching, isDiscoverMode) {
+        if (pendingFocusMoveToResults && !uiState.isSearching && canMoveToResults) {
+            if (isDiscoverMode) {
+                focusResults = true
+            } else {
+                delay(80)
+                val moved = focusManager.moveFocus(FocusDirection.Down)
+                if (moved) {
+                    focusResults = false
+                }
             }
+            pendingFocusMoveToResults = false
         }
     }
 
     LaunchedEffect(Unit) {
         repeat(2) { withFrameNanos { } }
-        runCatching { searchFocusRequester.requestFocus() }
+        runCatching { topInputFocusRequester.requestFocus() }
     }
 
     val latestPendingDiscoverRestore by rememberUpdatedState(pendingDiscoverRestoreOnResume)
+    val latestShouldKeepSearchFocus by rememberUpdatedState(
+        focusResults || uiState.isSearching || pendingVoiceSearchResume
+    )
+    val latestVoiceSearchAvailable by rememberUpdatedState(isVoiceSearchAvailable)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 if (latestPendingDiscoverRestore) {
                     restoreDiscoverFocus = true
                     pendingDiscoverRestoreOnResume = false
-                } else {
+                } else if (!latestShouldKeepSearchFocus) {
                     coroutineScope.launch {
                         repeat(2) { withFrameNanos { } }
-                        runCatching { searchFocusRequester.requestFocus() }
+                        runCatching {
+                            if (latestVoiceSearchAvailable) {
+                                voiceFocusRequester.requestFocus()
+                            } else {
+                                searchFocusRequester.requestFocus()
+                            }
+                        }
                     }
                 }
             }
@@ -241,13 +263,18 @@ fun SearchScreen(
                 SearchInputField(
                     query = uiState.query,
                     canMoveToResults = canMoveToResults,
+                    voiceFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else null,
                     searchFocusRequester = searchFocusRequester,
                     onAttached = { isSearchFieldAttached = true },
-                    onQueryChanged = { viewModel.onEvent(SearchEvent.QueryChanged(it)) },
+                    onQueryChanged = {
+                        focusResults = false
+                        pendingFocusMoveToResults = false
+                        viewModel.onEvent(SearchEvent.QueryChanged(it))
+                    },
                     onSubmit = {
                         viewModel.onEvent(SearchEvent.SubmitSearch)
                         focusResults = true
-                        pendingAutoMoveToResults = true
+                        pendingFocusMoveToResults = true
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
                     onVoiceSearch = launchVoiceSearch,
@@ -289,17 +316,25 @@ fun SearchScreen(
                     SearchInputField(
                         query = uiState.query,
                         canMoveToResults = canMoveToResults,
+                        voiceFocusRequester = if (isVoiceSearchAvailable) voiceFocusRequester else null,
                         searchFocusRequester = searchFocusRequester,
                         onAttached = { isSearchFieldAttached = true },
-                        onQueryChanged = { viewModel.onEvent(SearchEvent.QueryChanged(it)) },
+                        onQueryChanged = {
+                            focusResults = false
+                            pendingFocusMoveToResults = false
+                            viewModel.onEvent(SearchEvent.QueryChanged(it))
+                        },
                         onSubmit = {
                             viewModel.onEvent(SearchEvent.SubmitSearch)
                             focusResults = true
-                            pendingAutoMoveToResults = true
+                            pendingFocusMoveToResults = true
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
                         onVoiceSearch = launchVoiceSearch,
-                        onMoveToResults = { focusResults = true },
+                        onMoveToResults = {
+                            focusResults = true
+                            pendingFocusMoveToResults = true
+                        },
                         keyboardController = keyboardController
                     )
                 }
@@ -385,7 +420,7 @@ fun SearchScreen(
                                         focusResults = false
                                     }
                                 },
-                                upFocusRequester = if (index == 0 && isSearchFieldAttached) searchFocusRequester else null,
+                                upFocusRequester = if (index == 0 && isSearchFieldAttached) topInputFocusRequester else null,
                                 onItemClick = { id, type, addonBaseUrl ->
                                     onNavigateToDetail(id, type, addonBaseUrl)
                                 },
@@ -409,6 +444,7 @@ fun SearchScreen(
 private fun SearchInputField(
     query: String,
     canMoveToResults: Boolean,
+    voiceFocusRequester: FocusRequester?,
     searchFocusRequester: FocusRequester,
     onAttached: () -> Unit,
     onQueryChanged: (String) -> Unit,
@@ -418,6 +454,8 @@ private fun SearchInputField(
     onMoveToResults: () -> Unit,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?
 ) {
+    var isVoiceButtonFocused by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -429,7 +467,20 @@ private fun SearchInputField(
             IconButton(
                 onClick = onVoiceSearch,
                 modifier = Modifier
+                    .then(
+                        if (voiceFocusRequester != null) {
+                            Modifier.focusRequester(voiceFocusRequester)
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .onFocusChanged { isVoiceButtonFocused = it.isFocused }
                     .size(56.dp)
+                    .border(
+                        width = if (isVoiceButtonFocused) 2.dp else 1.dp,
+                        color = if (isVoiceButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
+                        shape = RoundedCornerShape(12.dp)
+                    )
                     .background(
                         color = NuvioColors.BackgroundCard,
                         shape = RoundedCornerShape(12.dp)
@@ -452,20 +503,22 @@ private fun SearchInputField(
                 .weight(1f)
                 .focusRequester(searchFocusRequester)
                 .onPreviewKeyEvent { keyEvent ->
-                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                        when (keyEvent.nativeKeyEvent.keyCode) {
-                            KeyEvent.KEYCODE_ENTER,
-                            KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    when (keyEvent.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_ENTER,
+                        KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                                 onSubmit()
-                                return@onPreviewKeyEvent true
                             }
+                            return@onPreviewKeyEvent true
+                        }
 
-                            KeyEvent.KEYCODE_DPAD_DOWN,
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                if (canMoveToResults) {
+                        KeyEvent.KEYCODE_DPAD_DOWN,
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            if (canMoveToResults) {
+                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                                     onMoveToResults()
-                                    return@onPreviewKeyEvent true
                                 }
+                                return@onPreviewKeyEvent true
                             }
                         }
                     }
