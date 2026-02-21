@@ -158,11 +158,11 @@ private fun SyncOverviewCard(overview: SyncOverview) {
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    ProfileStatValue(overview.totalAddons, "add")
-                    ProfileStatValue(overview.totalPlugins, "plug")
-                    ProfileStatValue(overview.totalLibrary, "lib")
-                    ProfileStatValue(overview.totalWatchProgress, "prog")
-                    ProfileStatValue(overview.totalWatchedItems, "wtch")
+                    ProfileStatValue(overview.totalAddons, "addons")
+                    ProfileStatValue(overview.totalPlugins, "plugins")
+                    ProfileStatValue(overview.totalLibrary, "library")
+                    ProfileStatValue(overview.totalWatchProgress, "progress")
+                    ProfileStatValue(overview.totalWatchedItems, "watched")
                 }
             }
 
@@ -237,11 +237,11 @@ private fun ProfileSyncRow(profile: ProfileSyncStats) {
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            ProfileStatValue(profile.addons, "add")
-            ProfileStatValue(profile.plugins, "plug")
-            ProfileStatValue(profile.library, "lib")
-            ProfileStatValue(profile.watchProgress, "prog")
-            ProfileStatValue(profile.watchedItems, "wtch")
+            ProfileStatValue(profile.addons, "addons")
+            ProfileStatValue(profile.plugins, "plugins")
+            ProfileStatValue(profile.library, "library")
+            ProfileStatValue(profile.watchProgress, "progress")
+            ProfileStatValue(profile.watchedItems, "watched")
         }
     }
 }
