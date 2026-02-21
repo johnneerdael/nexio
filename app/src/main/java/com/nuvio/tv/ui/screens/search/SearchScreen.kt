@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.view.KeyEvent
 import android.speech.RecognizerIntent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,7 +50,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,7 @@ import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -95,6 +97,8 @@ fun SearchScreen(
             viewModel.onEvent(SearchEvent.QueryChanged(recognized))
             viewModel.onEvent(SearchEvent.SubmitSearch)
             focusResults = true
+        } else {
+            Toast.makeText(context, "No speech detected. Try again.", Toast.LENGTH_SHORT).show()
         }
     }
     val voiceLauncher = rememberLauncherForActivityResult(
@@ -113,6 +117,21 @@ fun SearchScreen(
         val hasMic = context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
         val hasRecognizer = voiceIntent.resolveActivity(context.packageManager) != null
         hasMic && hasRecognizer
+    }
+    val launchVoiceSearch: () -> Unit = {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+        }
+        runCatching { voiceLauncher.launch(intent) }.onFailure {
+            Toast.makeText(context, "Voice search is unavailable on this device.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     val posterCardStyle = remember(uiState.posterCardWidthDp, uiState.posterCardCornerRadiusDp) {
@@ -208,17 +227,7 @@ fun SearchScreen(
                         focusResults = true
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
-                    onVoiceSearch = {
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(
-                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                            )
-                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-                        }
-                        runCatching { voiceLauncher.launch(intent) }
-                    },
+                    onVoiceSearch = launchVoiceSearch,
                     onMoveToResults = { focusResults = true },
                     keyboardController = keyboardController
                 )
@@ -265,17 +274,7 @@ fun SearchScreen(
                             focusResults = true
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
-                        onVoiceSearch = {
-                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                putExtra(
-                                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                                )
-                                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-                            }
-                            runCatching { voiceLauncher.launch(intent) }
-                        },
+                        onVoiceSearch = launchVoiceSearch,
                         onMoveToResults = { focusResults = true },
                         keyboardController = keyboardController
                     )
