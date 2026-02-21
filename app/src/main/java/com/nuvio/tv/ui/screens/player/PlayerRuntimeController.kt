@@ -49,6 +49,7 @@ class PlayerRuntimeController(
     companion object {
         internal const val TAG = "PlayerViewModel"
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
+        internal const val MAX_TIMEOUT_RECOVERY_ATTEMPTS = 2
         internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "nuvio-addon-sub:"
         internal val PORTUGUESE_BRAZILIAN_TAGS = listOf(
             "pt-br", "pt_br", "pob", "brazilian", "brazil", "brasil"
@@ -179,7 +180,7 @@ class PlayerRuntimeController(
     internal var pendingPreviewSeekPosition: Long? = null
     internal var pendingResumeProgress: WatchProgress? = null
     internal var hasRetriedCurrentStreamAfter416: Boolean = false
-    internal var hasRetriedCurrentStreamAfterTimeout: Boolean = false
+    internal var timeoutRecoveryAttempts: Int = 0
     internal var currentScrobbleItem: TraktScrobbleItem? = null
     internal var hasSentScrobbleStartForCurrentItem: Boolean = false
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false

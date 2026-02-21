@@ -276,8 +276,8 @@ internal fun PlayerRuntimeController.retryCurrentStreamFromStartAfter416() {
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.retryCurrentStreamAfterTimeout(fromPositionMs: Long) {
-    if (hasRetriedCurrentStreamAfterTimeout) return
-    hasRetriedCurrentStreamAfterTimeout = true
+    if (timeoutRecoveryAttempts >= PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS) return
+    timeoutRecoveryAttempts += 1
     _uiState.update {
         it.copy(
             error = null,
