@@ -243,7 +243,7 @@ fun ContinueWatchingCard(
     val titleText = progress?.name ?: nextUp?.name.orEmpty()
     val episodeTitle = when {
         progress != null -> progress.episodeTitle
-        nextUp != null && !nextUp.hasAired -> nextUp.airDateLabel?.let { "Airs $it" } ?: nextUp.episodeTitle
+        nextUp != null && !nextUp.hasAired -> nextUp.episodeTitle ?: nextUp.airDateLabel?.let { "Airs $it" }
         else -> nextUp?.episodeTitle
     }
     val context = LocalContext.current
