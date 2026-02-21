@@ -74,6 +74,7 @@ fun SeasonTabs(
     seasons: List<Int>,
     selectedSeason: Int,
     onSeasonSelected: (Int) -> Unit,
+    onSeasonLongPress: (Int) -> Unit = {},
     selectedTabFocusRequester: FocusRequester
 ) {
     // Move season 0 (specials) to the end
@@ -91,9 +92,16 @@ fun SeasonTabs(
         items(sortedSeasons, key = { it }) { season ->
             val isSelected = season == selectedSeason
             var isFocused by remember { mutableStateOf(false) }
+            var longPressTriggered by remember { mutableStateOf(false) }
 
             Card(
-                onClick = { onSeasonSelected(season) },
+                onClick = {
+                    if (longPressTriggered) {
+                        longPressTriggered = false
+                    } else {
+                        onSeasonSelected(season)
+                    }
+                },
                 modifier = Modifier
                     .then(if (isSelected) Modifier.focusRequester(selectedTabFocusRequester) else Modifier)
                     .onFocusChanged {
@@ -102,7 +110,30 @@ fun SeasonTabs(
                     if (nowFocused && !isSelected) {
                         onSeasonSelected(season)
                     }
-                },
+                }
+                    .onPreviewKeyEvent { event ->
+                        val native = event.nativeKeyEvent
+                        if (native.action == AndroidKeyEvent.ACTION_DOWN) {
+                            if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                                longPressTriggered = true
+                                onSeasonLongPress(season)
+                                return@onPreviewKeyEvent true
+                            }
+                            val isLongPress = native.isLongPress || native.repeatCount > 0
+                            if (isLongPress && isSelectKey(native.keyCode)) {
+                                longPressTriggered = true
+                                onSeasonLongPress(season)
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                        if (native.action == AndroidKeyEvent.ACTION_UP &&
+                            longPressTriggered &&
+                            isSelectKey(native.keyCode)
+                        ) {
+                            return@onPreviewKeyEvent true
+                        }
+                        false
+                    },
                 shape = CardDefaults.shape(
                     shape = RoundedCornerShape(20.dp)
                 ),
@@ -143,6 +174,11 @@ fun EpisodesRow(
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
+    onMarkSeasonWatched: (Int) -> Unit = {},
+    onMarkSeasonUnwatched: (Int) -> Unit = {},
+    isSeasonFullyWatched: Boolean = false,
+    selectedSeason: Int = 1,
+    onMarkPreviousEpisodesWatched: (Video) -> Unit = {},
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
     restoreEpisodeId: String? = null,
@@ -204,11 +240,17 @@ fun EpisodesRow(
             }
         } ?: false
         val isPending = episodeWatchedPendingKeys.contains(episodePendingKey(selectedEpisode))
+        val firstEpisodeInSeason = episodes.minByOrNull { it.episode ?: Int.MAX_VALUE }
+        val hasPreviousEpisodes = selectedEpisode.episode != null &&
+            firstEpisodeInSeason?.episode != null &&
+            selectedEpisode.episode > firstEpisodeInSeason.episode
 
         EpisodeOptionsDialog(
             episode = selectedEpisode,
             isWatched = selectedWatched,
             isPending = isPending,
+            isSeasonFullyWatched = isSeasonFullyWatched,
+            hasPreviousEpisodes = hasPreviousEpisodes,
             onDismiss = { optionsEpisode = null },
             onPlay = {
                 onEpisodeClick(selectedEpisode)
@@ -216,6 +258,18 @@ fun EpisodesRow(
             },
             onToggleWatched = {
                 onToggleEpisodeWatched(selectedEpisode)
+                optionsEpisode = null
+            },
+            onMarkSeasonWatched = {
+                onMarkSeasonWatched(selectedSeason)
+                optionsEpisode = null
+            },
+            onMarkSeasonUnwatched = {
+                onMarkSeasonUnwatched(selectedSeason)
+                optionsEpisode = null
+            },
+            onMarkPreviousEpisodesWatched = {
+                onMarkPreviousEpisodesWatched(selectedEpisode)
                 optionsEpisode = null
             }
         )
@@ -551,9 +605,14 @@ private fun EpisodeOptionsDialog(
     episode: Video,
     isWatched: Boolean,
     isPending: Boolean,
+    isSeasonFullyWatched: Boolean = false,
+    hasPreviousEpisodes: Boolean = false,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    onMarkSeasonWatched: () -> Unit = {},
+    onMarkSeasonUnwatched: () -> Unit = {},
+    onMarkPreviousEpisodesWatched: () -> Unit = {}
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -581,6 +640,30 @@ private fun EpisodeOptionsDialog(
         }
 
         Button(
+            onClick = if (isSeasonFullyWatched) onMarkSeasonUnwatched else onMarkSeasonWatched,
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (isSeasonFullyWatched) "Mark season as unwatched" else "Mark season as watched")
+        }
+
+        if (hasPreviousEpisodes) {
+            Button(
+                onClick = onMarkPreviousEpisodesWatched,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.BackgroundCard,
+                    contentColor = NuvioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Mark previous in this season as watched")
+            }
+        }
+
+        Button(
             onClick = onPlay,
             colors = ButtonDefaults.colors(
                 containerColor = NuvioColors.BackgroundCard,
@@ -589,6 +672,41 @@ private fun EpisodeOptionsDialog(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Play")
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SeasonOptionsDialog(
+    season: Int,
+    isFullyWatched: Boolean,
+    onDismiss: () -> Unit,
+    onMarkSeasonWatched: () -> Unit,
+    onMarkSeasonUnwatched: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = if (season == 0) "Specials" else "Season $season",
+        subtitle = "Season actions"
+    ) {
+        Button(
+            onClick = if (isFullyWatched) onMarkSeasonUnwatched else onMarkSeasonWatched,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(primaryFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            )
+        ) {
+            Text(if (isFullyWatched) "Mark season as unwatched" else "Mark season as watched")
         }
     }
 }
