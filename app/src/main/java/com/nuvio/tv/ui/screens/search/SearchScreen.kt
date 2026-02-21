@@ -1,6 +1,10 @@
 package com.nuvio.tv.ui.screens.search
 
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.view.KeyEvent
+import android.speech.RecognizerIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,13 +16,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -39,10 +48,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -67,6 +79,7 @@ fun SearchScreen(
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
@@ -77,6 +90,30 @@ fun SearchScreen(
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
+    val onVoiceQueryResultState = rememberUpdatedState<(String) -> Unit> { recognized ->
+        if (recognized.isNotBlank()) {
+            viewModel.onEvent(SearchEvent.QueryChanged(recognized))
+            viewModel.onEvent(SearchEvent.SubmitSearch)
+            focusResults = true
+        }
+    }
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val recognized = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+            .orEmpty()
+            .trim()
+        onVoiceQueryResultState.value(recognized)
+    }
+    val isVoiceSearchAvailable = remember(context) {
+        val voiceIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        val hasMic = context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+        val hasRecognizer = voiceIntent.resolveActivity(context.packageManager) != null
+        hasMic && hasRecognizer
+    }
 
     val posterCardStyle = remember(uiState.posterCardWidthDp, uiState.posterCardCornerRadiusDp) {
         val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
@@ -166,7 +203,22 @@ fun SearchScreen(
                     searchFocusRequester = searchFocusRequester,
                     onAttached = { isSearchFieldAttached = true },
                     onQueryChanged = { viewModel.onEvent(SearchEvent.QueryChanged(it)) },
-                    onSubmit = { viewModel.onEvent(SearchEvent.SubmitSearch) },
+                    onSubmit = {
+                        viewModel.onEvent(SearchEvent.SubmitSearch)
+                        focusResults = true
+                    },
+                    showVoiceSearch = isVoiceSearchAvailable,
+                    onVoiceSearch = {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(
+                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                            )
+                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+                        }
+                        runCatching { voiceLauncher.launch(intent) }
+                    },
                     onMoveToResults = { focusResults = true },
                     keyboardController = keyboardController
                 )
@@ -208,7 +260,22 @@ fun SearchScreen(
                         searchFocusRequester = searchFocusRequester,
                         onAttached = { isSearchFieldAttached = true },
                         onQueryChanged = { viewModel.onEvent(SearchEvent.QueryChanged(it)) },
-                        onSubmit = { viewModel.onEvent(SearchEvent.SubmitSearch) },
+                        onSubmit = {
+                            viewModel.onEvent(SearchEvent.SubmitSearch)
+                            focusResults = true
+                        },
+                        showVoiceSearch = isVoiceSearchAvailable,
+                        onVoiceSearch = {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(
+                                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                                )
+                                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+                            }
+                            runCatching { voiceLauncher.launch(intent) }
+                        },
                         onMoveToResults = { focusResults = true },
                         keyboardController = keyboardController
                     )
@@ -323,60 +390,88 @@ private fun SearchInputField(
     onAttached: () -> Unit,
     onQueryChanged: (String) -> Unit,
     onSubmit: () -> Unit,
+    showVoiceSearch: Boolean,
+    onVoiceSearch: () -> Unit,
     onMoveToResults: () -> Unit,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?
 ) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChanged,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 48.dp)
-            .onGloballyPositioned { onAttached() }
-            .focusRequester(searchFocusRequester)
-            .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_ENTER,
-                        KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                            onSubmit()
-                            return@onPreviewKeyEvent true
-                        }
+            .onGloballyPositioned { onAttached() },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showVoiceSearch) {
+            IconButton(
+                onClick = onVoiceSearch,
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(
+                        color = NuvioColors.BackgroundCard,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Voice search",
+                    tint = NuvioColors.TextPrimary
+                )
+            }
 
-                        KeyEvent.KEYCODE_DPAD_DOWN,
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (canMoveToResults) {
-                                onMoveToResults()
+            Spacer(modifier = Modifier.width(12.dp))
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChanged,
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(searchFocusRequester)
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_ENTER,
+                            KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                                onSubmit()
                                 return@onPreviewKeyEvent true
+                            }
+
+                            KeyEvent.KEYCODE_DPAD_DOWN,
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                if (canMoveToResults) {
+                                    onMoveToResults()
+                                    return@onPreviewKeyEvent true
+                                }
                             }
                         }
                     }
+                    false
+                },
+            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    onSubmit()
+                    keyboardController?.hide()
                 }
-                false
+            ),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            placeholder = {
+                Text(
+                    text = "Search movies & series",
+                    color = NuvioColors.TextTertiary
+                )
             },
-        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(
-            onDone = {
-                onSubmit()
-                keyboardController?.hide()
-            }
-        ),
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        placeholder = {
-            Text(
-                text = "Search movies & series",
-                color = NuvioColors.TextTertiary
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = NuvioColors.BackgroundCard,
+                unfocusedContainerColor = NuvioColors.BackgroundCard,
+                focusedIndicatorColor = NuvioColors.FocusRing,
+                unfocusedIndicatorColor = NuvioColors.Border,
+                focusedTextColor = NuvioColors.TextPrimary,
+                unfocusedTextColor = NuvioColors.TextPrimary,
+                cursorColor = NuvioColors.FocusRing
             )
-        },
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = NuvioColors.BackgroundCard,
-            unfocusedContainerColor = NuvioColors.BackgroundCard,
-            focusedIndicatorColor = NuvioColors.FocusRing,
-            unfocusedIndicatorColor = NuvioColors.Border,
-            focusedTextColor = NuvioColors.TextPrimary,
-            unfocusedTextColor = NuvioColors.TextPrimary,
-            cursorColor = NuvioColors.FocusRing
         )
-    )
+    }
 }
