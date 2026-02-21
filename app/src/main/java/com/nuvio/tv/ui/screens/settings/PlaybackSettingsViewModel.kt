@@ -90,6 +90,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(enabled)
     }
 
+    suspend fun setOsdClockEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setOsdClockEnabled(enabled)
+    }
+
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
         playerSettingsDataStore.setSkipIntroEnabled(enabled)
     }
