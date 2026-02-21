@@ -37,7 +37,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -49,7 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -93,6 +92,7 @@ private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
 private const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.72f
 private const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
+private const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 90L
 
 private data class HeroPreview(
     val title: String,
@@ -246,11 +246,12 @@ fun ModernHomeContent(
         }
     }
 
-    val focusedItemByRow = remember { mutableStateMapOf<String, Int>() }
+    val focusedItemByRow = remember { mutableMapOf<String, Int>() }
     val itemFocusRequesters = remember { mutableMapOf<String, MutableMap<String, FocusRequester>>() }
     val rowListStates = remember { mutableMapOf<String, LazyListState>() }
     val loadMoreRequestedTotals = remember { mutableMapOf<String, Int>() }
     var activeRowKey by remember { mutableStateOf<String?>(null) }
+    var activeItemIndex by remember { mutableIntStateOf(0) }
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
@@ -274,12 +275,17 @@ fun ModernHomeContent(
         if (targetIndex !in carouselRows.indices) return false
         val targetRow = carouselRows[targetIndex]
         if (targetRow.items.isEmpty()) return false
-        val currentItemIndex = focusedItemByRow[currentRowKey] ?: 0
+        val currentItemIndex = if (activeRowKey == currentRowKey) {
+            activeItemIndex
+        } else {
+            focusedItemByRow[currentRowKey] ?: 0
+        }
         val rememberedTargetIndex = focusedItemByRow[targetRow.key]
         val targetItemIndex = (rememberedTargetIndex ?: currentItemIndex)
             .coerceIn(0, (targetRow.items.size - 1).coerceAtLeast(0))
 
         activeRowKey = targetRow.key
+        activeItemIndex = targetItemIndex
         focusedItemByRow[targetRow.key] = targetItemIndex
         heroItem = targetRow.items.getOrNull(targetItemIndex)?.heroPreview
             ?: targetRow.items.firstOrNull()?.heroPreview
@@ -366,6 +372,7 @@ fun ModernHomeContent(
                 .coerceAtMost((resolvedRow.items.size - 1).coerceAtLeast(0))
 
             activeRowKey = resolvedRow.key
+            activeItemIndex = resolvedIndex
             focusedItemByRow[resolvedRow.key] = resolvedIndex
             heroItem = resolvedRow.items.getOrNull(resolvedIndex)?.heroPreview
                 ?: resolvedRow.items.firstOrNull()?.heroPreview
@@ -382,6 +389,7 @@ fun ModernHomeContent(
         val resolvedIndex = focusedItemByRow[resolvedActive.key]
             ?.coerceIn(0, (resolvedActive.items.size - 1).coerceAtLeast(0))
             ?: 0
+        activeItemIndex = resolvedIndex
         focusedItemByRow[resolvedActive.key] = resolvedIndex
         heroItem = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
             ?: resolvedActive.items.firstOrNull()?.heroPreview
@@ -391,22 +399,40 @@ fun ModernHomeContent(
         }
     }
 
-    val activeRow = remember(carouselRows, activeRowKey) {
+    val rowByKey = remember(carouselRows) {
+        carouselRows.associateBy { it.key }
+    }
+    val activeRow = remember(carouselRows, rowByKey, activeRowKey) {
         val activeKey = activeRowKey
         if (activeKey == null) {
             null
         } else {
-            carouselRows.firstOrNull { it.key == activeKey } ?: carouselRows.firstOrNull()
+            rowByKey[activeKey] ?: carouselRows.firstOrNull()
         }
     }
-    val activeItemIndex = activeRow?.let { row ->
-        focusedItemByRow[row.key]?.coerceIn(0, (row.items.size - 1).coerceAtLeast(0)) ?: 0
+    val clampedActiveItemIndex = activeRow?.let { row ->
+        activeItemIndex.coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
     } ?: 0
 
-    LaunchedEffect(activeRow, activeItemIndex) {
-        val updated = activeRow?.items?.getOrNull(activeItemIndex)?.heroPreview
-        if (updated != null && heroItem != updated) {
-            heroItem = updated
+    LaunchedEffect(activeRow?.key, activeRow?.items?.size) {
+        val row = activeRow ?: return@LaunchedEffect
+        val clampedIndex = activeItemIndex.coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
+        if (activeItemIndex != clampedIndex) {
+            activeItemIndex = clampedIndex
+        }
+        focusedItemByRow[row.key] = clampedIndex
+    }
+
+    LaunchedEffect(activeRow?.key, clampedActiveItemIndex) {
+        val row = activeRow ?: return@LaunchedEffect
+        val candidateHero =
+            row.items.getOrNull(clampedActiveItemIndex)?.heroPreview ?: row.items.firstOrNull()?.heroPreview
+        if (candidateHero == null || heroItem == candidateHero) return@LaunchedEffect
+        delay(MODERN_HERO_FOCUS_DEBOUNCE_MS)
+        val latestHero =
+            row.items.getOrNull(clampedActiveItemIndex)?.heroPreview ?: row.items.firstOrNull()?.heroPreview
+        if (latestHero != null && heroItem != latestHero) {
+            heroItem = latestHero
         }
     }
     val nextRow = remember(carouselRows, activeRow?.key, rowIndexByKey) {
@@ -419,16 +445,15 @@ fun ModernHomeContent(
     }
 
     val latestActiveRow by rememberUpdatedState(activeRow)
-    val latestActiveItemIndex by rememberUpdatedState(activeItemIndex)
+    val latestActiveItemIndex by rememberUpdatedState(clampedActiveItemIndex)
     val latestCarouselRows by rememberUpdatedState(carouselRows)
-    val latestFocusedItemByRow by rememberUpdatedState(focusedItemByRow)
     DisposableEffect(Unit) {
         onDispose {
             val row = latestActiveRow
             val focusedRowIndex = row?.globalRowIndex ?: 0
             val catalogRowScrollStates = latestCarouselRows
                 .filter { it.globalRowIndex >= 0 }
-                .associate { rowState -> rowState.key to (latestFocusedItemByRow[rowState.key] ?: 0) }
+                .associate { rowState -> rowState.key to (focusedItemByRow[rowState.key] ?: 0) }
 
             onSaveFocusState(
                 0,
@@ -440,10 +465,28 @@ fun ModernHomeContent(
         }
     }
 
+    val portraitBaseWidth = uiState.posterCardWidthDp.dp
+    val portraitBaseHeight = uiState.posterCardHeightDp.dp
+    val modernPosterScale = if (useLandscapePosters) {
+        if (showNextRowPreview) 1.08f else 1.34f
+    } else {
+        if (showNextRowPreview) 1.14f else 1.08f
+    }
+    val modernCatalogCardWidth = if (useLandscapePosters) {
+        portraitBaseWidth * 1.24f * modernPosterScale
+    } else {
+        portraitBaseWidth * 0.84f * modernPosterScale
+    }
+    val modernCatalogCardHeight = if (useLandscapePosters) {
+        modernCatalogCardWidth / 1.77f
+    } else {
+        portraitBaseHeight * 0.84f * modernPosterScale
+    }
+    val previewVisibleHeightFraction = if (useLandscapePosters) 0.24f else 0.18f
+
     @Composable
     fun ModernActiveRowContent(activeRowStateKey: String?, activeRowTitleBottom: Dp) {
-        val row = carouselRows.firstOrNull { it.key == activeRowStateKey }
-        val portraitBaseWidth = uiState.posterCardWidthDp.dp
+        val row = activeRowStateKey?.let { rowByKey[it] }
         val continueWatchingScale = 1.34f
         val continueWatchingCardWidth = portraitBaseWidth * 1.24f * continueWatchingScale
         val continueWatchingCardHeight = continueWatchingCardWidth / 1.77f
@@ -569,14 +612,15 @@ fun ModernHomeContent(
                     ) { index, item ->
                         val requester = requesterFor(resolvedRow.key, item.key)
                         val onFocused = {
+                            val rowBecameActive = activeRowKey != resolvedRow.key
                             if (focusedItemByRow[resolvedRow.key] != index) {
                                 focusedItemByRow[resolvedRow.key] = index
                             }
-                            if (activeRowKey != resolvedRow.key) {
+                            if (rowBecameActive) {
                                 activeRowKey = resolvedRow.key
                             }
-                            if (heroItem != item.heroPreview) {
-                                heroItem = item.heroPreview
+                            if (rowBecameActive || activeItemIndex != index) {
+                                activeItemIndex = index
                             }
                             if (resolvedRow.key == "continue_watching") {
                                 if (lastFocusedContinueWatchingIndex != index) {
@@ -638,27 +682,8 @@ fun ModernHomeContent(
                                     useLandscapePosters = useLandscapePosters,
                                     showLabels = uiState.posterLabelsEnabled,
                                     cardCornerRadius = uiState.posterCardCornerRadiusDp.dp,
-                                    cardWidth = if (useLandscapePosters) {
-                                        (uiState.posterCardWidthDp.dp * 1.24f) *
-                                            (if (showNextRowPreview) 1.08f else 1.34f)
-                                    } else {
-                                        (uiState.posterCardWidthDp.dp * 0.84f) *
-                                            (if (showNextRowPreview) 1.14f else 1.08f)
-                                    },
-                                    cardHeight = if (useLandscapePosters) {
-                                        (
-                                            if (useLandscapePosters) {
-                                                (uiState.posterCardWidthDp.dp * 1.24f) *
-                                                    (if (showNextRowPreview) 1.08f else 1.34f)
-                                            } else {
-                                                (uiState.posterCardWidthDp.dp * 0.84f) *
-                                                    (if (showNextRowPreview) 1.14f else 1.08f)
-                                            }
-                                            ) / 1.77f
-                                    } else {
-                                        (uiState.posterCardHeightDp.dp * 0.84f) *
-                                            (if (showNextRowPreview) 1.14f else 1.08f)
-                                    },
+                                    cardWidth = modernCatalogCardWidth,
+                                    cardHeight = modernCatalogCardHeight,
                                     focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
                                     isBackdropExpanded = isBackdropExpanded,
                                     playTrailerInExpandedCard = playTrailerInExpandedCard,
@@ -699,33 +724,13 @@ fun ModernHomeContent(
                 if (showNextRowPreview) {
                     val rowIndex = rowIndexByKey[resolvedRow.key] ?: -1
                     val previewRow = carouselRows.getOrNull(rowIndex + 1)
-                    val posterScale = if (showNextRowPreview) {
-                        if (useLandscapePosters) 1.08f else 1.14f
-                    } else {
-                        if (useLandscapePosters) 1.34f else 1.08f
-                    }
-                    val portraitBaseWidth = uiState.posterCardWidthDp.dp
-                    val portraitBaseHeight = uiState.posterCardHeightDp.dp
-                    val previewCardWidth = if (useLandscapePosters) {
-                        portraitBaseWidth * 1.24f * posterScale
-                    } else {
-                        portraitBaseWidth * 0.84f * posterScale
-                    }
-                    val previewCardHeight = if (useLandscapePosters) {
-                        previewCardWidth / 1.77f
-                    } else {
-                        portraitBaseHeight * 0.84f * posterScale
-                    }
-                    val previewVisibleHeight = if (useLandscapePosters) {
-                        previewCardHeight * 0.24f
-                    } else {
-                        previewCardHeight * 0.18f
-                    }
+                    val previewCardWidth = modernCatalogCardWidth
+                    val previewCardHeight = modernCatalogCardHeight
                     ModernNextRowPreviewStrip(
                         previewRow = previewRow,
                         rowHorizontalPadding = 52.dp,
                         rowItemSpacing = 12.dp,
-                        previewVisibleHeight = previewVisibleHeight,
+                        previewVisibleHeight = previewCardHeight * previewVisibleHeightFraction,
                         previewCardWidth = previewCardWidth,
                         previewCardHeight = previewCardHeight
                     )
@@ -739,7 +744,9 @@ fun ModernHomeContent(
     ) {
         val rowHorizontalPadding = 52.dp
 
-        val resolvedHero = heroItem ?: activeRow?.items?.firstOrNull()?.heroPreview
+        val resolvedHero = heroItem
+            ?: activeRow?.items?.getOrNull(clampedActiveItemIndex)?.heroPreview
+            ?: activeRow?.items?.firstOrNull()?.heroPreview
         val fallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
@@ -1149,10 +1156,14 @@ private fun ModernCarouselCard(
     } else {
         cardWidth
     }
-    val animatedCardWidth by animateDpAsState(
-        targetValue = targetCardWidth,
-        label = "modernCardWidth"
-    )
+    val animatedCardWidth by if (focusedPosterBackdropExpandEnabled) {
+        animateDpAsState(
+            targetValue = targetCardWidth,
+            label = "modernCardWidth"
+        )
+    } else {
+        rememberUpdatedState(cardWidth)
+    }
     val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
     } else {
@@ -1226,13 +1237,13 @@ private fun ModernCarouselCard(
             scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                if (item.imageUrl != null) {
-                AsyncImage(
-                    model = imageModel,
-                    contentDescription = item.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (!imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = imageModel,
+                        contentDescription = item.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
                 }
 
                 if (shouldPlayTrailerInCard) {
@@ -1312,6 +1323,14 @@ private fun ModernHeroMediaLayer(
     requestHeightPx: Int
 ) {
     val localContext = LocalContext.current
+    val verticalOverlayGradient = remember(bgColor) {
+        Brush.verticalGradient(
+            0.78f to Color.Transparent,
+            0.90f to bgColor.copy(alpha = 0.72f),
+            0.96f to bgColor.copy(alpha = 0.98f),
+            1.0f to bgColor
+        )
+    }
     Box(modifier = modifier) {
         Crossfade(
             targetState = heroBackdrop,
@@ -1355,41 +1374,32 @@ private fun ModernHeroMediaLayer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.horizontalGradient(
-                            0.0f to bgColor.copy(alpha = 0.96f),
-                            0.10f to bgColor.copy(alpha = 0.72f),
-                            0.30f to Color.Transparent
-                        ),
-                        size = size
+                .drawWithCache {
+                    val horizontalGradient = Brush.horizontalGradient(
+                        0.0f to bgColor.copy(alpha = 0.96f),
+                        0.10f to bgColor.copy(alpha = 0.72f),
+                        0.30f to Color.Transparent
                     )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colorStops = arrayOf(
-                                0.0f to bgColor.copy(alpha = 0.78f),
-                                0.55f to bgColor.copy(alpha = 0.52f),
-                                0.80f to bgColor.copy(alpha = 0.16f),
-                                1.0f to Color.Transparent
-                            ),
-                            center = Offset(0f, size.height / 2f),
-                            radius = size.height * 1.0f
+                    val radialGradient = Brush.radialGradient(
+                        colorStops = arrayOf(
+                            0.0f to bgColor.copy(alpha = 0.78f),
+                            0.55f to bgColor.copy(alpha = 0.52f),
+                            0.80f to bgColor.copy(alpha = 0.16f),
+                            1.0f to Color.Transparent
                         ),
-                        size = size
+                        center = Offset(0f, size.height / 2f),
+                        radius = size.height
                     )
+                    onDrawBehind {
+                        drawRect(brush = horizontalGradient, size = size)
+                        drawRect(brush = radialGradient, size = size)
+                    }
                 }
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.78f to Color.Transparent,
-                        0.90f to bgColor.copy(alpha = 0.72f),
-                        0.96f to bgColor.copy(alpha = 0.98f),
-                        1.0f to bgColor
-                    )
-                )
+                .background(verticalOverlayGradient)
         )
     }
 }
