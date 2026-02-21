@@ -92,7 +92,8 @@ fun SearchScreen(
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var isSearchFieldAttached by remember { mutableStateOf(false) }
     var focusResults by remember { mutableStateOf(false) }
-    var pendingFocusMoveToResults by remember { mutableStateOf(false) }
+    var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
+    var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
     var pendingVoiceSearchResume by remember { mutableStateOf(false) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
@@ -104,7 +105,8 @@ fun SearchScreen(
             viewModel.onEvent(SearchEvent.QueryChanged(recognized))
             viewModel.onEvent(SearchEvent.SubmitSearch)
             focusResults = true
-            pendingFocusMoveToResults = true
+            pendingFocusMoveToResultsQuery = recognized
+            pendingFocusMoveSawSearching = false
         } else {
             Toast.makeText(context, "No speech detected. Try again.", Toast.LENGTH_SHORT).show()
         }
@@ -193,23 +195,41 @@ fun SearchScreen(
             delay(100)
             runCatching { discoverFirstItemFocusRequester.requestFocus() }
             focusResults = false
-            pendingFocusMoveToResults = false
+            pendingFocusMoveToResultsQuery = null
+            pendingFocusMoveSawSearching = false
         }
     }
 
-    LaunchedEffect(pendingFocusMoveToResults, canMoveToResults, uiState.isSearching, isDiscoverMode) {
-        if (pendingFocusMoveToResults && !uiState.isSearching && canMoveToResults) {
-            if (isDiscoverMode) {
-                focusResults = true
-            } else {
-                delay(80)
-                val moved = focusManager.moveFocus(FocusDirection.Down)
-                if (moved) {
-                    focusResults = false
-                }
-            }
-            pendingFocusMoveToResults = false
+    LaunchedEffect(
+        pendingFocusMoveToResultsQuery,
+        pendingFocusMoveSawSearching,
+        uiState.isSearching,
+        uiState.submittedQuery,
+        canMoveToResults,
+        isDiscoverMode
+    ) {
+        val pendingQuery = pendingFocusMoveToResultsQuery ?: return@LaunchedEffect
+        val currentSubmittedQuery = uiState.submittedQuery.trim()
+        if (currentSubmittedQuery != pendingQuery) return@LaunchedEffect
+
+        if (uiState.isSearching) {
+            pendingFocusMoveSawSearching = true
+            return@LaunchedEffect
         }
+
+        if (!pendingFocusMoveSawSearching || !canMoveToResults) return@LaunchedEffect
+
+        if (isDiscoverMode) {
+            focusResults = true
+        } else {
+            delay(80)
+            val moved = focusManager.moveFocus(FocusDirection.Down)
+            if (moved) {
+                focusResults = false
+            }
+        }
+        pendingFocusMoveToResultsQuery = null
+        pendingFocusMoveSawSearching = false
     }
 
     LaunchedEffect(Unit) {
@@ -268,13 +288,21 @@ fun SearchScreen(
                     onAttached = { isSearchFieldAttached = true },
                     onQueryChanged = {
                         focusResults = false
-                        pendingFocusMoveToResults = false
+                        pendingFocusMoveToResultsQuery = null
+                        pendingFocusMoveSawSearching = false
                         viewModel.onEvent(SearchEvent.QueryChanged(it))
                     },
                     onSubmit = {
+                        val submittedQuery = uiState.query.trim()
                         viewModel.onEvent(SearchEvent.SubmitSearch)
                         focusResults = true
-                        pendingFocusMoveToResults = true
+                        if (submittedQuery.length >= 2) {
+                            pendingFocusMoveToResultsQuery = submittedQuery
+                            pendingFocusMoveSawSearching = false
+                        } else {
+                            pendingFocusMoveToResultsQuery = null
+                            pendingFocusMoveSawSearching = false
+                        }
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
                     onVoiceSearch = launchVoiceSearch,
@@ -321,19 +349,34 @@ fun SearchScreen(
                         onAttached = { isSearchFieldAttached = true },
                         onQueryChanged = {
                             focusResults = false
-                            pendingFocusMoveToResults = false
+                            pendingFocusMoveToResultsQuery = null
+                            pendingFocusMoveSawSearching = false
                             viewModel.onEvent(SearchEvent.QueryChanged(it))
                         },
                         onSubmit = {
+                            val submittedQuery = uiState.query.trim()
                             viewModel.onEvent(SearchEvent.SubmitSearch)
                             focusResults = true
-                            pendingFocusMoveToResults = true
+                            if (submittedQuery.length >= 2) {
+                                pendingFocusMoveToResultsQuery = submittedQuery
+                                pendingFocusMoveSawSearching = false
+                            } else {
+                                pendingFocusMoveToResultsQuery = null
+                                pendingFocusMoveSawSearching = false
+                            }
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
                         onVoiceSearch = launchVoiceSearch,
                         onMoveToResults = {
                             focusResults = true
-                            pendingFocusMoveToResults = true
+                            val submittedQuery = uiState.query.trim()
+                            if (submittedQuery.length >= 2) {
+                                pendingFocusMoveToResultsQuery = submittedQuery
+                                pendingFocusMoveSawSearching = false
+                            } else {
+                                pendingFocusMoveToResultsQuery = null
+                                pendingFocusMoveSawSearching = false
+                            }
                         },
                         keyboardController = keyboardController
                     )
