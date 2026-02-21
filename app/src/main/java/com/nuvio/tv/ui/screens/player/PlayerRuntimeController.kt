@@ -194,6 +194,7 @@ class PlayerRuntimeController(
 
     init {
         refreshScrobbleItem()
+        mediaSourceFactory.warmupVodCacheAsync()
         initializePlayer(currentStreamUrl, currentHeaders)
         loadSavedProgressFor(currentSeason, currentEpisode)
         fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
