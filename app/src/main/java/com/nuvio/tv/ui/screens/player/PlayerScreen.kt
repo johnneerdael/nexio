@@ -1074,11 +1074,6 @@ private fun PlayerControlsOverlay(
                     val hasYear = !uiState.releaseYear.isNullOrBlank()
                     val showVia = !uiState.isPlaying && !uiState.currentStreamName.isNullOrBlank()
                     val yearText = uiState.releaseYear.orEmpty()
-                    val viaHeight by animateDpAsState(
-                        targetValue = if (showVia) 24.dp else 0.dp,
-                        animationSpec = tween(durationMillis = 220),
-                        label = "viaHeight"
-                    )
 
                     if (hasYear || showVia) {
                         Column {
@@ -1090,14 +1085,18 @@ private fun PlayerControlsOverlay(
                                 )
                             }
 
-                            Box(modifier = Modifier.height(viaHeight)) {
-                                if (showVia) {
-                                    Text(
-                                        text = "via ${uiState.currentStreamName}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White.copy(alpha = 0.68f)
-                                    )
-                                }
+                            AnimatedVisibility(
+                                visible = showVia,
+                                enter = fadeIn(animationSpec = tween(durationMillis = 220)),
+                                exit = fadeOut(animationSpec = tween(durationMillis = 180))
+                            ) {
+                                Text(
+                                    text = "via ${uiState.currentStreamName}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.68f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }

@@ -38,3 +38,4 @@ db/
 backups/
 .supabase_db.env
 scripts
+supabase
