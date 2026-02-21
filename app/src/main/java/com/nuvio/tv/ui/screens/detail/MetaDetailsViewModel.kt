@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -69,6 +70,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerFetchJob: Job? = null
     private var moreLikeThisJob: Job? = null
     private var episodeRatingsJob: Job? = null
+    private var nextToWatchJob: Job? = null
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -88,8 +90,47 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun observeMetaViewSettings() {
         viewModelScope.launch {
-            layoutPreferenceDataStore.detailPageTrailerButtonEnabled.collectLatest { enabled ->
-                _uiState.update { it.copy(trailerButtonEnabled = enabled) }
+            layoutPreferenceDataStore.detailPageTrailerButtonEnabled
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _uiState.update { state ->
+                        if (state.trailerButtonEnabled == enabled) {
+                            state
+                        } else {
+                            state.copy(trailerButtonEnabled = enabled)
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun setTrailerPlaybackState(
+        isPlaying: Boolean,
+        showControls: Boolean,
+        hideLogo: Boolean
+    ) {
+        _uiState.update { state ->
+            if (state.isTrailerPlaying == isPlaying &&
+                state.showTrailerControls == showControls &&
+                state.hideLogoDuringTrailer == hideLogo
+            ) {
+                state
+            } else {
+                state.copy(
+                    isTrailerPlaying = isPlaying,
+                    showTrailerControls = showControls,
+                    hideLogoDuringTrailer = hideLogo
+                )
+            }
+        }
+    }
+
+    private fun updateNextToWatch(nextToWatch: NextToWatch) {
+        _uiState.update { state ->
+            if (state.nextToWatch == nextToWatch) {
+                state
+            } else {
+                state.copy(nextToWatch = nextToWatch)
             }
         }
     }
@@ -134,13 +175,22 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeLibraryState() {
         viewModelScope.launch {
             libraryRepository.sourceMode
+                .distinctUntilChanged()
                 .collectLatest { sourceMode ->
-                    _uiState.update { it.copy(librarySourceMode = sourceMode) }
+                    _uiState.update { state ->
+                        if (state.librarySourceMode == sourceMode) {
+                            state
+                        } else {
+                            state.copy(librarySourceMode = sourceMode)
+                        }
+                    }
                 }
         }
 
         viewModelScope.launch {
-            libraryRepository.listTabs.collectLatest { tabs ->
+            libraryRepository.listTabs
+                .distinctUntilChanged()
+                .collectLatest { tabs ->
                 _uiState.update { state ->
                     val selectedMembership = state.pickerMembership
                     val filteredMembership = if (selectedMembership.isEmpty()) {
@@ -148,25 +198,37 @@ class MetaDetailsViewModel @Inject constructor(
                     } else {
                         tabs.associate { tab -> tab.key to (selectedMembership[tab.key] == true) }
                     }
-                    state.copy(
-                        libraryListTabs = tabs,
-                        pickerMembership = filteredMembership
-                    )
+                    if (state.libraryListTabs == tabs &&
+                        state.pickerMembership == filteredMembership
+                    ) {
+                        state
+                    } else {
+                        state.copy(
+                            libraryListTabs = tabs,
+                            pickerMembership = filteredMembership
+                        )
+                    }
                 }
             }
         }
 
         viewModelScope.launch {
             libraryRepository.isInLibrary(itemId = itemId, itemType = itemType)
+                .distinctUntilChanged()
                 .collectLatest { inLibrary ->
-                    _uiState.update { it.copy(isInLibrary = inLibrary) }
+                    _uiState.update { state ->
+                        if (state.isInLibrary == inLibrary) state else state.copy(isInLibrary = inLibrary)
+                    }
                 }
         }
 
         viewModelScope.launch {
             libraryRepository.isInWatchlist(itemId = itemId, itemType = itemType)
+                .distinctUntilChanged()
                 .collectLatest { inWatchlist ->
-                    _uiState.update { it.copy(isInWatchlist = inWatchlist) }
+                    _uiState.update { state ->
+                        if (state.isInWatchlist == inWatchlist) state else state.copy(isInWatchlist = inWatchlist)
+                    }
                 }
         }
     }
@@ -174,8 +236,16 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId).collectLatest { progressMap ->
-                _uiState.update { it.copy(episodeProgressMap = progressMap) }
+            watchProgressRepository.getAllEpisodeProgress(itemId)
+                .distinctUntilChanged()
+                .collectLatest { progressMap ->
+                _uiState.update { state ->
+                    if (state.episodeProgressMap == progressMap) {
+                        state
+                    } else {
+                        state.copy(episodeProgressMap = progressMap)
+                    }
+                }
                 // Recalculate next to watch when progress changes
                 calculateNextToWatch()
             }
@@ -185,8 +255,16 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchedItemsPreferences.getWatchedEpisodesForContent(itemId).collectLatest { watchedSet ->
-                _uiState.update { it.copy(watchedEpisodes = watchedSet) }
+            watchedItemsPreferences.getWatchedEpisodesForContent(itemId)
+                .distinctUntilChanged()
+                .collectLatest { watchedSet ->
+                _uiState.update { state ->
+                    if (state.watchedEpisodes == watchedSet) {
+                        state
+                    } else {
+                        state.copy(watchedEpisodes = watchedSet)
+                    }
+                }
                 calculateNextToWatch()
             }
         }
@@ -195,16 +273,24 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
         viewModelScope.launch {
-            watchProgressRepository.isWatched(itemId).collectLatest { watched ->
-                _uiState.update { it.copy(isMovieWatched = watched) }
+            watchProgressRepository.isWatched(itemId)
+                .distinctUntilChanged()
+                .collectLatest { watched ->
+                _uiState.update { state ->
+                    if (state.isMovieWatched == watched) state else state.copy(isMovieWatched = watched)
+                }
             }
         }
     }
 
     private fun observeBlurUnwatchedEpisodes() {
         viewModelScope.launch {
-            layoutPreferenceDataStore.blurUnwatchedEpisodes.collectLatest { enabled ->
-                _uiState.update { it.copy(blurUnwatchedEpisodes = enabled) }
+            layoutPreferenceDataStore.blurUnwatchedEpisodes
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                _uiState.update { state ->
+                    if (state.blurUnwatchedEpisodes == enabled) state else state.copy(blurUnwatchedEpisodes = enabled)
+                }
             }
         }
     }
@@ -644,10 +730,11 @@ class MetaDetailsViewModel @Inject constructor(
         val meta = _uiState.value.meta ?: return
         val progressMap = _uiState.value.episodeProgressMap
         val isSeries = meta.apiType in listOf("series", "tv")
+        nextToWatchJob?.cancel()
 
-        if (!isSeries) {
-            // For movies, check if there's an in-progress watch
-            viewModelScope.launch {
+        nextToWatchJob = viewModelScope.launch {
+            if (!isSeries) {
+                // For movies, check if there's an in-progress watch
                 val progress = watchProgressRepository.getProgress(itemId).first()
                 val nextToWatch = if (progress != null && shouldResumeProgress(progress)) {
                     NextToWatch(
@@ -668,33 +755,31 @@ class MetaDetailsViewModel @Inject constructor(
                         displayText = "Play"
                     )
                 }
-                _uiState.update { it.copy(nextToWatch = nextToWatch) }
+                updateNextToWatch(nextToWatch)
+                return@launch
             }
-            return
-        }
 
-        viewModelScope.launch {
             val allEpisodes = meta.videos
                 .filter { it.season != null && it.episode != null }
                 .sortedWith(compareBy({ it.season }, { it.episode }))
 
             if (allEpisodes.isEmpty()) {
-                _uiState.update {
-                    it.copy(nextToWatch = NextToWatch(
+                updateNextToWatch(
+                    NextToWatch(
                         watchProgress = null,
                         isResume = false,
                         nextVideoId = meta.id,
                         nextSeason = null,
                         nextEpisode = null,
                         displayText = "Play"
-                    ))
-                }
+                    )
+                )
                 return@launch
             }
 
             val nonSpecialEpisodes = allEpisodes.filter { (it.season ?: 0) > 0 }
             val episodePool = if (nonSpecialEpisodes.isNotEmpty()) nonSpecialEpisodes else allEpisodes
-            val latestSeriesProgress = watchProgressRepository.getProgress(itemId).first()
+            val latestSeriesProgress = progressMap.values.maxByOrNull { it.lastWatched }
 
             val nextToWatch = buildNextToWatchFromLatestProgress(
                 latestProgress = latestSeriesProgress,
@@ -703,7 +788,7 @@ class MetaDetailsViewModel @Inject constructor(
                 metaId = meta.id
             )
 
-            _uiState.update { it.copy(nextToWatch = nextToWatch) }
+            updateNextToWatch(nextToWatch)
         }
     }
 
@@ -1174,16 +1259,26 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun showMessage(message: String, isError: Boolean = false) {
-        _uiState.update {
-            it.copy(
-                userMessage = message,
-                userMessageIsError = isError
-            )
+        _uiState.update { state ->
+            if (state.userMessage == message && state.userMessageIsError == isError) {
+                state
+            } else {
+                state.copy(
+                    userMessage = message,
+                    userMessageIsError = isError
+                )
+            }
         }
     }
 
     private fun clearMessage() {
-        _uiState.update { it.copy(userMessage = null, userMessageIsError = false) }
+        _uiState.update { state ->
+            if (state.userMessage == null && !state.userMessageIsError) {
+                state
+            } else {
+                state.copy(userMessage = null, userMessageIsError = false)
+            }
+        }
     }
 
     private fun extractImdbId(rawId: String?): String? {
@@ -1234,7 +1329,9 @@ class MetaDetailsViewModel @Inject constructor(
 
         trailerFetchJob?.cancel()
         trailerFetchJob = viewModelScope.launch {
-            _uiState.update { it.copy(isTrailerLoading = true) }
+            _uiState.update { state ->
+                if (state.isTrailerLoading) state else state.copy(isTrailerLoading = true)
+            }
 
             val year = meta.releaseInfo?.split("-")?.firstOrNull()
 
@@ -1258,7 +1355,13 @@ class MetaDetailsViewModel @Inject constructor(
                 type = type
             )
 
-            _uiState.update { it.copy(trailerUrl = url, isTrailerLoading = false) }
+            _uiState.update { state ->
+                if (state.trailerUrl == url && !state.isTrailerLoading) {
+                    state
+                } else {
+                    state.copy(trailerUrl = url, isTrailerLoading = false)
+                }
+            }
 
             if (url != null && isPlayButtonFocused) {
                 startIdleTimer()
@@ -1276,34 +1379,37 @@ class MetaDetailsViewModel @Inject constructor(
 
         idleTimerJob = viewModelScope.launch {
             delay(trailerDelayMs)
-            _uiState.update {
-                it.copy(
-                    isTrailerPlaying = true,
-                    showTrailerControls = false,
-                    hideLogoDuringTrailer = false
-                )
-            }
+            setTrailerPlaybackState(
+                isPlaying = true,
+                showControls = false,
+                hideLogo = false
+            )
         }
     }
 
     private fun handlePlayButtonFocused() {
+        if (isPlayButtonFocused) return
         isPlayButtonFocused = true
         startIdleTimer()
     }
 
     private fun handleUserInteraction() {
+        val state = _uiState.value
+        val shouldStopAutoTrailer = state.isTrailerPlaying && !state.showTrailerControls
+        val hasActiveIdleTimer = idleTimerJob?.isActive == true
+        if (!isPlayButtonFocused && !hasActiveIdleTimer && !shouldStopAutoTrailer) {
+            return
+        }
+
         idleTimerJob?.cancel()
         isPlayButtonFocused = false
 
-        val state = _uiState.value
-        if (state.isTrailerPlaying && !state.showTrailerControls) {
-            _uiState.update {
-                it.copy(
-                    isTrailerPlaying = false,
-                    showTrailerControls = false,
-                    hideLogoDuringTrailer = false
-                )
-            }
+        if (shouldStopAutoTrailer) {
+            setTrailerPlaybackState(
+                isPlaying = false,
+                showControls = false,
+                hideLogo = false
+            )
         }
     }
 
@@ -1312,29 +1418,26 @@ class MetaDetailsViewModel @Inject constructor(
         if (state.trailerUrl.isNullOrBlank()) return
         idleTimerJob?.cancel()
         isPlayButtonFocused = false
-        _uiState.update {
-            it.copy(
-                isTrailerPlaying = true,
-                showTrailerControls = true,
-                hideLogoDuringTrailer = true
-            )
-        }
+        setTrailerPlaybackState(
+            isPlaying = true,
+            showControls = true,
+            hideLogo = true
+        )
     }
 
     private fun handleTrailerEnded() {
         isPlayButtonFocused = false
-        _uiState.update {
-            it.copy(
-                isTrailerPlaying = false,
-                showTrailerControls = false,
-                hideLogoDuringTrailer = false
-            )
-        }
+        setTrailerPlaybackState(
+            isPlaying = false,
+            showControls = false,
+            hideLogo = false
+        )
     }
 
     override fun onCleared() {
         super.onCleared()
         idleTimerJob?.cancel()
         trailerFetchJob?.cancel()
+        nextToWatchJob?.cancel()
     }
 }
