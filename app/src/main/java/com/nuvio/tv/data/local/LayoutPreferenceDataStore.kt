@@ -174,9 +174,9 @@ class LayoutPreferenceDataStore @Inject constructor(
     val focusedPosterBackdropTrailerPlaybackTarget: Flow<FocusedPosterTrailerPlaybackTarget> =
         profileFlow { prefs ->
             val stored = prefs[focusedPosterBackdropTrailerPlaybackTargetKey]
-                ?: FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD.name
+                ?: FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
             runCatching { FocusedPosterTrailerPlaybackTarget.valueOf(stored) }
-                .getOrDefault(FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD)
+                .getOrDefault(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
         }
 
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->

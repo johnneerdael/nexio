@@ -156,6 +156,7 @@ fun ModernHomeContent(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit = {},
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
@@ -402,6 +403,11 @@ fun ModernHomeContent(
     val activeItemIndex = activeRow?.let { row ->
         focusedItemByRow[row.key]?.coerceIn(0, (row.items.size - 1).coerceAtLeast(0)) ?: 0
     } ?: 0
+
+    LaunchedEffect(activeRow, activeItemIndex) {
+        val updated = activeRow?.items?.getOrNull(activeItemIndex)?.heroPreview
+        if (updated != null) heroItem = updated
+    }
     val nextRow = remember(carouselRows, activeRow?.key, rowIndexByKey) {
         val index = activeRow?.key?.let { key -> rowIndexByKey[key] ?: -1 } ?: -1
         if (index in carouselRows.indices && index + 1 < carouselRows.size) {
@@ -1206,12 +1212,14 @@ private fun ModernCarouselCard(
             scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
+                if (item.imageUrl != null) {
                 AsyncImage(
                     model = imageModel,
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
+                }
 
                 if (shouldPlayTrailerInCard) {
                     TrailerPlayer(
