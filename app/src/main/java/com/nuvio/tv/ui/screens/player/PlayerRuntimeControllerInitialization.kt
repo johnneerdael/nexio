@@ -3,7 +3,9 @@ package com.nuvio.tv.ui.screens.player
 import android.content.Context
 import android.content.res.Resources
 import android.media.audiofx.LoudnessEnhancer
+import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.view.accessibility.CaptioningManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -304,6 +306,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         if (timeoutError != null &&
                             timeoutRecoveryAttempts < PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS
                         ) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "Timeout source error code=${error.errorCode} " +
+                                    "attempt=${timeoutRecoveryAttempts + 1}/" +
+                                    "${PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS} " +
+                                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} " +
+                                    "positionMs=$currentPosition"
+                            )
                             retryCurrentStreamAfterTimeout(currentPosition)
                             return
                         }
