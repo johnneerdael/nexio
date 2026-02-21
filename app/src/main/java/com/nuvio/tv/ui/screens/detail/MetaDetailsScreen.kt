@@ -309,6 +309,18 @@ fun MetaDetailsScreen(
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
                     },
+                    onMarkSeasonWatched = { season ->
+                        viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(season))
+                    },
+                    onMarkSeasonUnwatched = { season ->
+                        viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
+                    },
+                    onMarkPreviousEpisodesWatched = { video ->
+                        viewModel.onEvent(MetaDetailsEvent.OnMarkPreviousEpisodesWatched(video))
+                    },
+                    isSeasonFullyWatched = { season ->
+                        viewModel.isSeasonFullyWatched(season)
+                    },
                     trailerUrl = uiState.trailerUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
                     showTrailerControls = uiState.showTrailerControls,
@@ -466,6 +478,10 @@ private fun MetaDetailsContent(
     onLibraryLongPress: () -> Unit,
     onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
+    onMarkSeasonWatched: (Int) -> Unit,
+    onMarkSeasonUnwatched: (Int) -> Unit,
+    onMarkPreviousEpisodesWatched: (Video) -> Unit,
+    isSeasonFullyWatched: (Int) -> Boolean,
     trailerUrl: String?,
     isTrailerPlaying: Boolean,
     showTrailerControls: Boolean,
@@ -669,6 +685,7 @@ private fun MetaDetailsContent(
         else -> PeopleSectionTab.RATINGS
     }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
+    var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
 
     val activePeopleTabFocusRequester = peopleTabItems
         .firstOrNull { it.tab == activePeopleTab }
@@ -890,6 +907,7 @@ private fun MetaDetailsContent(
                         seasons = seasons,
                         selectedSeason = selectedSeason,
                         onSeasonSelected = onSeasonSelected,
+                        onSeasonLongPress = { seasonOptionsDialogSeason = it },
                         selectedTabFocusRequester = selectedSeasonFocusRequester
                     )
                 }
@@ -902,6 +920,11 @@ private fun MetaDetailsContent(
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                         onEpisodeClick = episodeClick,
                         onToggleEpisodeWatched = onToggleEpisodeWatched,
+                        onMarkSeasonWatched = onMarkSeasonWatched,
+                        onMarkSeasonUnwatched = onMarkSeasonUnwatched,
+                        isSeasonFullyWatched = isSeasonFullyWatched(selectedSeason),
+                        selectedSeason = selectedSeason,
+                        onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
                         upFocusRequester = selectedSeasonFocusRequester,
                         downFocusRequester = episodesDownFocusRequester,
                         restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
@@ -1037,6 +1060,22 @@ private fun MetaDetailsContent(
                     }
                 }
             }
+        }
+
+        seasonOptionsDialogSeason?.let { season ->
+            SeasonOptionsDialog(
+                season = season,
+                isFullyWatched = isSeasonFullyWatched(season),
+                onDismiss = { seasonOptionsDialogSeason = null },
+                onMarkSeasonWatched = {
+                    onMarkSeasonWatched(season)
+                    seasonOptionsDialogSeason = null
+                },
+                onMarkSeasonUnwatched = {
+                    onMarkSeasonUnwatched(season)
+                    seasonOptionsDialogSeason = null
+                }
+            )
         }
     }
 }

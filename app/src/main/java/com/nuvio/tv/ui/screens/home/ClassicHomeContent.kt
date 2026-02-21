@@ -120,6 +120,7 @@ fun ClassicHomeContent(
                 HeroCarousel(
                     items = uiState.heroItems,
                     focusRequester = if (shouldRequestInitialFocus) heroFocusRequester else null,
+                    onItemFocus = onItemFocus,
                     onItemClick = { item ->
                         onNavigateToDetail(
                             item.id,
@@ -186,9 +187,6 @@ fun ClassicHomeContent(
             contentType = { _, _ -> "catalog_row" }
         ) { index, catalogRow ->
             val catalogKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
-            val nextCatalogKey = visibleCatalogRows.getOrNull(index + 1)?.let { nextRow ->
-                "${nextRow.addonId}_${nextRow.apiType}_${nextRow.catalogId}"
-            }
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex
             val shouldInitialFocusFirstCatalogRow =
                 shouldRequestInitialFocus &&
@@ -207,9 +205,6 @@ fun ClassicHomeContent(
                 )
             }
             val rowFocusRequester = rowFocusRequesters.getOrPut(catalogKey) { FocusRequester() }
-            val downFocusRequester = nextCatalogKey?.let { key ->
-                rowFocusRequesters.getOrPut(key) { FocusRequester() }
-            }
 
             CatalogRowSection(
                 catalogRow = catalogRow,
@@ -235,12 +230,11 @@ fun ClassicHomeContent(
                     )
                 },
                 rowFocusRequester = rowFocusRequester,
-                downFocusRequester = downFocusRequester,
                 listState = listState,
                 // We don't need initialScrollIndex anymore as listState handles it
                 focusedItemIndex = focusedItemIndex,
                 onItemFocused = { itemIndex ->
-                    restoringFocus = false
+                    if (restoringFocus) restoringFocus = false
                     currentFocusSnapshot.rowIndex = index
                     currentFocusSnapshot.itemIndex = itemIndex
                     // Update the state as well, though getOrPut handles creation

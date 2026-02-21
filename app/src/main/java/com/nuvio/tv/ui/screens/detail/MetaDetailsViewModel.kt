@@ -120,6 +120,9 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
             MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
             is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
+            is MetaDetailsEvent.OnMarkSeasonWatched -> markSeasonWatched(event.season)
+            is MetaDetailsEvent.OnMarkSeasonUnwatched -> markSeasonUnwatched(event.season)
+            is MetaDetailsEvent.OnMarkPreviousEpisodesWatched -> markPreviousEpisodesWatched(event.video)
             MetaDetailsEvent.OnLibraryLongPress -> openListPicker()
             is MetaDetailsEvent.OnPickerMembershipToggled -> togglePickerMembership(event.listKey)
             MetaDetailsEvent.OnPickerSave -> savePickerMembership()
@@ -434,8 +437,9 @@ class MetaDetailsViewModel @Inject constructor(
                 val tmdbIdString = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
                     ?: tmdbService.ensureTmdbId(itemId, itemType)
                 val tmdbId = tmdbIdString?.toIntOrNull()
+                val imdbId = extractImdbId(meta.id) ?: extractImdbId(itemId)
 
-                if (tmdbId == null) {
+                if (tmdbId == null && imdbId == null) {
                     _uiState.update { state ->
                         if (state.meta == null || state.meta.id != meta.id) {
                             state
@@ -450,7 +454,10 @@ class MetaDetailsViewModel @Inject constructor(
                     return@launch
                 }
 
-                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(tmdbId)
+                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(
+                    imdbId = imdbId,
+                    tmdbId = tmdbId
+                )
 
                 _uiState.update { state ->
                     if (state.meta == null || state.meta.id != meta.id) {
@@ -989,6 +996,140 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    fun isSeasonFullyWatched(season: Int): Boolean {
+        val state = _uiState.value
+        val meta = state.meta ?: return false
+        val episodes = meta.videos.filter { it.season == season && it.episode != null }
+        if (episodes.isEmpty()) return false
+        return episodes.all { video ->
+            val s = video.season ?: return@all false
+            val e = video.episode ?: return@all false
+            state.episodeProgressMap[s to e]?.isCompleted() == true
+                || state.watchedEpisodes.contains(s to e)
+        }
+    }
+
+    private fun markSeasonWatched(season: Int) {
+        val meta = _uiState.value.meta ?: return
+        viewModelScope.launch {
+            val episodes = meta.videos.filter { it.season == season && it.episode != null }
+            val unwatched = episodes.filter { video ->
+                val s = video.season!!
+                val e = video.episode!!
+                val isWatched = _uiState.value.episodeProgressMap[s to e]?.isCompleted() == true
+                    || _uiState.value.watchedEpisodes.contains(s to e)
+                !isWatched
+            }
+            if (unwatched.isEmpty()) {
+                showMessage("All episodes already watched")
+                return@launch
+            }
+
+            val pendingKeys = unwatched.map { episodePendingKey(it) }.toSet()
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
+            }
+
+            var marked = 0
+            for (video in unwatched) {
+                val key = episodePendingKey(video)
+                runCatching {
+                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
+                    marked++
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to mark S${video.season}E${video.episode} as watched: ${error.message}")
+                }
+                _uiState.update {
+                    it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - key)
+                }
+            }
+
+            showMessage("Marked $marked episode${if (marked != 1) "s" else ""} as watched")
+        }
+    }
+
+    private fun markSeasonUnwatched(season: Int) {
+        val meta = _uiState.value.meta ?: return
+        viewModelScope.launch {
+            val episodes = meta.videos.filter { it.season == season && it.episode != null }
+            val watched = episodes.filter { video ->
+                val s = video.season!!
+                val e = video.episode!!
+                _uiState.value.episodeProgressMap[s to e]?.isCompleted() == true
+                    || _uiState.value.watchedEpisodes.contains(s to e)
+            }
+            if (watched.isEmpty()) {
+                showMessage("No watched episodes in this season")
+                return@launch
+            }
+
+            val pendingKeys = watched.map { episodePendingKey(it) }.toSet()
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
+            }
+
+            var unmarked = 0
+            for (video in watched) {
+                val key = episodePendingKey(video)
+                runCatching {
+                    watchProgressRepository.removeFromHistory(itemId, video.season!!, video.episode!!)
+                    unmarked++
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to unmark S${video.season}E${video.episode}: ${error.message}")
+                }
+                _uiState.update {
+                    it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - key)
+                }
+            }
+
+            showMessage("Marked $unmarked episode${if (unmarked != 1) "s" else ""} as unwatched")
+        }
+    }
+
+    private fun markPreviousEpisodesWatched(video: Video) {
+        val meta = _uiState.value.meta ?: return
+        val targetSeason = video.season ?: return
+        val targetEpisode = video.episode ?: return
+
+        viewModelScope.launch {
+            val previous = meta.videos.filter { v ->
+                v.season == targetSeason && v.episode != null && v.episode < targetEpisode
+            }
+            val unwatched = previous.filter { v ->
+                val s = v.season!!
+                val e = v.episode!!
+                val isWatched = _uiState.value.episodeProgressMap[s to e]?.isCompleted() == true
+                    || _uiState.value.watchedEpisodes.contains(s to e)
+                !isWatched
+            }
+            if (unwatched.isEmpty()) {
+                showMessage("All previous episodes already watched")
+                return@launch
+            }
+
+            val pendingKeys = unwatched.map { episodePendingKey(it) }.toSet()
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
+            }
+
+            var marked = 0
+            for (ep in unwatched) {
+                val key = episodePendingKey(ep)
+                runCatching {
+                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, ep))
+                    marked++
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to mark S${ep.season}E${ep.episode} as watched: ${error.message}")
+                }
+                _uiState.update {
+                    it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - key)
+                }
+            }
+
+            showMessage("Marked $marked previous episode${if (marked != 1) "s" else ""} as watched")
+        }
+    }
+
     private fun buildCompletedMovieProgress(meta: Meta): WatchProgress {
         return WatchProgress(
             contentId = itemId,
@@ -1043,6 +1184,16 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun clearMessage() {
         _uiState.update { it.copy(userMessage = null, userMessageIsError = false) }
+    }
+
+    private fun extractImdbId(rawId: String?): String? {
+        if (rawId.isNullOrBlank()) return null
+        val normalized = rawId.trim()
+        return if (normalized.startsWith("tt", ignoreCase = true)) {
+            normalized.substringBefore(':')
+        } else {
+            null
+        }
     }
 
     private fun Meta.toLibraryEntryInput(): LibraryEntryInput {

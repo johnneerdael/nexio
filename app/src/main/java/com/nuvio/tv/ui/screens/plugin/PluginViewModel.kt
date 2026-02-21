@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
 import com.nuvio.tv.core.plugin.PluginManager
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.server.DeviceIpAddress
 import com.nuvio.tv.core.server.RepositoryConfigServer
@@ -23,11 +24,18 @@ import javax.inject.Inject
 @HiltViewModel
 class PluginViewModel @Inject constructor(
     private val pluginManager: PluginManager,
+    private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PluginUiState())
     val uiState: StateFlow<PluginUiState> = _uiState.asStateFlow()
+
+    val isReadOnly: Boolean
+        get() {
+            val profile = profileManager.activeProfile ?: return false
+            return !profile.isPrimary && profile.usesPrimaryPlugins
+        }
 
     private var repoServer: RepositoryConfigServer? = null
     private var logoBytes: ByteArray? = null
@@ -53,11 +61,16 @@ class PluginViewModel @Inject constructor(
             ) { enabled, repos, scrapers ->
                 Triple(enabled, repos, scrapers)
             }.collect { (enabled, repos, scrapers) ->
+                val visibleScrapers = if (isReadOnly) {
+                    scrapers.filter { it.enabled }
+                } else {
+                    scrapers
+                }
                 _uiState.update {
                     it.copy(
                         pluginsEnabled = enabled,
                         repositories = repos,
-                        scrapers = scrapers
+                        scrapers = visibleScrapers
                     )
                 }
             }

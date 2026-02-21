@@ -66,6 +66,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private var syncJob: Job? = null
     private var watchedItemsSyncJob: Job? = null
     var isSyncingFromRemote = false
+    var hasCompletedInitialPull = false
+    var hasCompletedInitialWatchedItemsPull = false
 
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
     private val metadataMutex = Mutex()
@@ -74,6 +76,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun triggerRemoteSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialPull) return
         if (!authManager.isAuthenticated) return
         syncJob?.cancel()
         syncJob = syncScope.launch {
@@ -84,6 +87,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun triggerWatchedItemsSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialWatchedItemsPull) return
         if (!authManager.isAuthenticated) return
         watchedItemsSyncJob?.cancel()
         watchedItemsSyncJob = syncScope.launch {
@@ -358,7 +362,14 @@ class WatchProgressRepositoryImpl @Inject constructor(
             watchProgressPreferences.removeProgress(contentId, season, episode)
             return
         }
+        val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, season, episode)
         watchProgressPreferences.removeProgress(contentId, season, episode)
+        if (authManager.isAuthenticated && remoteDeleteKeys.isNotEmpty()) {
+            watchProgressSyncService.deleteFromRemote(remoteDeleteKeys)
+                .onFailure { error ->
+                    Log.w(TAG, "removeProgress remote delete failed; relying on push sync", error)
+                }
+        }
         triggerRemoteSync()
     }
 
@@ -368,8 +379,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
             watchProgressPreferences.removeProgress(contentId, season, episode)
             return
         }
+        val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, season, episode)
         watchProgressPreferences.removeProgress(contentId, season, episode)
         watchedItemsPreferences.unmarkAsWatched(contentId, season, episode)
+        if (authManager.isAuthenticated && remoteDeleteKeys.isNotEmpty()) {
+            watchProgressSyncService.deleteFromRemote(remoteDeleteKeys)
+                .onFailure { error ->
+                    Log.w(TAG, "removeFromHistory remote delete failed; relying on push sync", error)
+                }
+        }
         triggerRemoteSync()
         triggerWatchedItemsSync()
     }
@@ -431,6 +449,28 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             progress.contentId
         }
+    }
+
+    private suspend fun resolveRemoteDeleteKeys(
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ): List<String> {
+        val keys = if (season != null && episode != null) {
+            listOf("${contentId}_s${season}e${episode}", contentId)
+        } else {
+            val matchingLocalKeys = watchProgressPreferences
+                .getAllRawEntries()
+                .keys
+                .filter { key ->
+                    key == contentId || key.startsWith("${contentId}_")
+                }
+            matchingLocalKeys + contentId
+        }
+        return keys
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
     }
 
     private fun mergeProgressLists(

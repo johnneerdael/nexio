@@ -230,8 +230,13 @@ private fun ModernHomeRoute(
     ModernHomeContent(
         uiState = uiState,
         focusState = focusState,
+        trailerPreviewUrls = viewModel.trailerPreviewUrls,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
+        onRequestTrailerPreview = { itemId, title, releaseInfo, apiType ->
+            viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType)
+        },
+        onItemFocus = { item -> viewModel.onItemFocus(item) },
         onLoadMoreCatalog = { catalogId, addonId, type ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
         },
