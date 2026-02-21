@@ -1453,7 +1453,7 @@ private fun SubtitleDelayOverlay(subtitleDelayMs: Int) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Subtitle offset",
+                text = "Subtitles Delay",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = Color.White
             )

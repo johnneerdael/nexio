@@ -128,7 +128,9 @@ class AccountViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             authManager.signInWithEmail(email, password).fold(
                 onSuccess = {
-                    pullRemoteData()
+                    pullRemoteData().onFailure { e ->
+                        Log.e("AccountViewModel", "signIn: pullRemoteData failed, continuing signed-in flow", e)
+                    }
                     loadConnectedStats()
                     _uiState.update { it.copy(isLoading = false) }
                 },
@@ -187,7 +189,9 @@ class AccountViewModel @Inject constructor(
                 onSuccess = { result ->
                     if (result.success) {
                         authManager.clearEffectiveUserIdCache()
-                        pullRemoteData()
+                        pullRemoteData().onFailure { e ->
+                            Log.e("AccountViewModel", "claimSyncCode: pullRemoteData failed, continuing", e)
+                        }
                         updateEffectiveOwnerId(_uiState.value.authState)
                         _uiState.update { it.copy(isLoading = false, syncClaimSuccess = true) }
                     } else {
@@ -316,7 +320,9 @@ class AccountViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null, qrLoginStatus = "Signing you in...") }
             authManager.exchangeTvLoginSession(code = code, deviceNonce = nonce).fold(
                 onSuccess = {
-                    pullRemoteData()
+                    pullRemoteData().onFailure { e ->
+                        Log.e("AccountViewModel", "exchangeQrLogin: pullRemoteData failed, continuing", e)
+                    }
                     loadConnectedStats()
                     _uiState.update { it.copy(isLoading = false, qrLoginStatus = "Signed in successfully") }
                 },
@@ -572,7 +578,7 @@ class AccountViewModel @Inject constructor(
         watchedItemsSyncService.pushToRemote()
     }
 
-    private suspend fun pullRemoteData() {
+    private suspend fun pullRemoteData(): Result<Unit> {
         try {
             pluginManager.isSyncingFromRemote = true
             val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
@@ -619,12 +625,13 @@ class AccountViewModel @Inject constructor(
                 watchedItemsPreferences.replaceWithRemoteItems(remoteWatchedItems)
                 Log.d("AccountViewModel", "pullRemoteData: reconciled local watched items with ${remoteWatchedItems.size} remote items")
             }
+            return Result.success(Unit)
         } catch (e: Exception) {
             pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
             watchProgressRepository.isSyncingFromRemote = false
             libraryRepository.isSyncingFromRemote = false
-            throw e
+            return Result.failure(e)
         }
     }
 

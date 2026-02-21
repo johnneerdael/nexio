@@ -90,6 +90,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppTheme
+import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
@@ -143,6 +144,9 @@ class MainActivity : ComponentActivity() {
     lateinit var startupSyncService: StartupSyncService
 
     @Inject
+    lateinit var profileSyncService: ProfileSyncService
+
+    @Inject
     lateinit var profileManager: ProfileManager
 
     @Inject
@@ -154,6 +158,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
+            var onboardingProfileSyncInProgress by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
                 .hasSeenAuthQrOnFirstLaunch
                 .collectAsState(initial = false)
@@ -192,9 +197,30 @@ class MainActivity : ComponentActivity() {
                         AuthQrSignInScreen(
                             onBackPress = {},
                             onContinue = {
-                                onboardingCompletedThisSession = true
                                 lifecycleScope.launch {
+                                    if (onboardingProfileSyncInProgress) return@launch
+                                    onboardingProfileSyncInProgress = true
+                                    val maxAttempts = 3
+                                    var synced = false
+                                    for (attempt in 0 until maxAttempts) {
+                                        val result = profileSyncService.pullFromRemote()
+                                        if (result.isSuccess) {
+                                            synced = true
+                                            break
+                                        }
+                                        if (attempt < maxAttempts - 1) {
+                                            delay(1_000)
+                                        }
+                                    }
+                                    if (!synced) {
+                                        android.util.Log.w(
+                                            "MainActivity",
+                                            "Onboarding profile sync failed after retries; continuing"
+                                        )
+                                    }
                                     appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
+                                    onboardingCompletedThisSession = true
+                                    onboardingProfileSyncInProgress = false
                                 }
                                 startupSyncService.requestSyncNow()
                             }
@@ -293,7 +319,11 @@ class MainActivity : ComponentActivity() {
                             hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
                             activeProfileName = activeProfile?.name ?: "",
                             activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                            onSwitchProfile = { hasSelectedProfileThisSession = false }
+                            onSwitchProfile = { hasSelectedProfileThisSession = false },
+                            onExitApp = {
+                                finishAffinity()
+                                finishAndRemoveTask()
+                            }
                         )
                     } else {
                         LegacySidebarScaffold(
@@ -307,7 +337,11 @@ class MainActivity : ComponentActivity() {
                             hideBuiltInHeaders = false,
                             activeProfileName = activeProfile?.name ?: "",
                             activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                            onSwitchProfile = { hasSelectedProfileThisSession = false }
+                            onSwitchProfile = { hasSelectedProfileThisSession = false },
+                            onExitApp = {
+                                finishAffinity()
+                                finishAndRemoveTask()
+                            }
                         )
                     }
 
@@ -346,7 +380,8 @@ private fun LegacySidebarScaffold(
     hideBuiltInHeaders: Boolean,
     activeProfileName: String,
     activeProfileColorHex: String,
-    onSwitchProfile: () -> Unit
+    onSwitchProfile: () -> Unit,
+    onExitApp: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val drawerItemFocusRequesters = remember(drawerItems) {
@@ -368,6 +403,10 @@ private fun LegacySidebarScaffold(
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
         pendingSidebarFocusRequest = true
         drawerState.setValue(DrawerValue.Open)
+    }
+
+    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Open) {
+        onExitApp()
     }
 
     LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
@@ -623,7 +662,8 @@ private fun ModernSidebarScaffold(
     hideBuiltInHeaders: Boolean,
     activeProfileName: String,
     activeProfileColorHex: String,
-    onSwitchProfile: () -> Unit
+    onSwitchProfile: () -> Unit,
+    onExitApp: () -> Unit
 ) {
     val showSidebar = currentRoute in rootRoutes
     val collapsedSidebarWidth = if (sidebarCollapsed) 0.dp else 184.dp
@@ -664,6 +704,10 @@ private fun ModernSidebarScaffold(
         isSidebarExpanded = true
         sidebarCollapsePending = false
         pendingSidebarFocusRequest = true
+    }
+
+    BackHandler(enabled = currentRoute in rootRoutes && isSidebarExpanded && !sidebarCollapsePending) {
+        onExitApp()
     }
 
     LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
