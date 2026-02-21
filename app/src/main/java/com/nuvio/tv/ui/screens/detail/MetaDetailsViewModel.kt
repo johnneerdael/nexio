@@ -434,8 +434,9 @@ class MetaDetailsViewModel @Inject constructor(
                 val tmdbIdString = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
                     ?: tmdbService.ensureTmdbId(itemId, itemType)
                 val tmdbId = tmdbIdString?.toIntOrNull()
+                val imdbId = extractImdbId(meta.id) ?: extractImdbId(itemId)
 
-                if (tmdbId == null) {
+                if (tmdbId == null && imdbId == null) {
                     _uiState.update { state ->
                         if (state.meta == null || state.meta.id != meta.id) {
                             state
@@ -450,7 +451,10 @@ class MetaDetailsViewModel @Inject constructor(
                     return@launch
                 }
 
-                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(tmdbId)
+                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(
+                    imdbId = imdbId,
+                    tmdbId = tmdbId
+                )
 
                 _uiState.update { state ->
                     if (state.meta == null || state.meta.id != meta.id) {
@@ -1043,6 +1047,16 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun clearMessage() {
         _uiState.update { it.copy(userMessage = null, userMessageIsError = false) }
+    }
+
+    private fun extractImdbId(rawId: String?): String? {
+        if (rawId.isNullOrBlank()) return null
+        val normalized = rawId.trim()
+        return if (normalized.startsWith("tt", ignoreCase = true)) {
+            normalized.substringBefore(':')
+        } else {
+            null
+        }
     }
 
     private fun Meta.toLibraryEntryInput(): LibraryEntryInput {

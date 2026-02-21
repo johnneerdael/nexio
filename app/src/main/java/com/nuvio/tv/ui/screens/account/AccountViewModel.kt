@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.plugin.PluginManager
+import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.core.sync.AddonSyncService
 import com.nuvio.tv.core.sync.LibrarySyncService
@@ -22,6 +23,9 @@ import com.nuvio.tv.data.repository.LibraryRepositoryImpl
 import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.domain.repository.SyncRepository
+import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,7 +57,9 @@ class AccountViewModel @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
     private val libraryPreferences: LibraryPreferences,
     private val watchedItemsPreferences: WatchedItemsPreferences,
-    private val traktAuthDataStore: TraktAuthDataStore
+    private val traktAuthDataStore: TraktAuthDataStore,
+    private val postgrest: Postgrest,
+    private val profileManager: ProfileManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
@@ -62,6 +68,7 @@ class AccountViewModel @Inject constructor(
 
     init {
         observeAuthState()
+        observeProfileNames()
     }
 
     private fun observeAuthState() {
@@ -76,9 +83,27 @@ class AccountViewModel @Inject constructor(
                     )
                 }
                 updateEffectiveOwnerId(state)
-                if (state is AuthState.FullAccount) {
+                if (state is AuthState.FullAccount || state is AuthState.Anonymous) {
                     loadConnectedStats()
+                    loadSyncOverview()
                 }
+            }
+        }
+    }
+
+    private fun observeProfileNames() {
+        viewModelScope.launch {
+            profileManager.profiles.collect { profiles ->
+                val current = _uiState.value.syncOverview ?: return@collect
+                val updated = current.copy(
+                    perProfile = current.perProfile.map { stat ->
+                        val local = profiles.firstOrNull { it.id == stat.profileId }
+                        if (local != null) {
+                            stat.copy(profileName = local.name, avatarColorHex = local.avatarColorHex)
+                        } else stat
+                    }
+                )
+                _uiState.update { it.copy(syncOverview = updated) }
             }
         }
     }
@@ -355,6 +380,74 @@ class AccountViewModel @Inject constructor(
                 it.copy(
                     connectedStats = stats ?: it.connectedStats,
                     isStatsLoading = false
+                )
+            }
+        }
+    }
+
+    @Serializable
+    private data class SyncOverviewResponse(
+        val addons: Map<String, Int> = emptyMap(),
+        val plugins: Map<String, Int> = emptyMap(),
+        @SerialName("library_items") val libraryItems: Map<String, Int> = emptyMap(),
+        @SerialName("watch_progress") val watchProgress: Map<String, Int> = emptyMap(),
+        @SerialName("watched_items") val watchedItems: Map<String, Int> = emptyMap(),
+        val profiles: Map<String, ProfileInfo> = emptyMap()
+    ) {
+        @Serializable
+        data class ProfileInfo(
+            val name: String,
+            val color: String
+        )
+    }
+
+    fun loadSyncOverview() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncOverviewLoading = true) }
+
+            val overview = runCatching {
+                val response = postgrest.rpc("get_sync_overview")
+                    .decodeAs<SyncOverviewResponse>()
+
+                val allProfileIds = (response.addons.keys + response.plugins.keys +
+                    response.libraryItems.keys + response.watchProgress.keys +
+                    response.watchedItems.keys + response.profiles.keys)
+                    .mapNotNull { it.toIntOrNull() }
+                    .distinct()
+                    .sorted()
+
+                val localProfiles = profileManager.profiles.value
+                val perProfile = allProfileIds.map { pid ->
+                    val pidStr = pid.toString()
+                    val local = localProfiles.firstOrNull { it.id == pid }
+                    val remote = response.profiles[pidStr]
+                    ProfileSyncStats(
+                        profileId = pid,
+                        profileName = local?.name ?: remote?.name ?: "Profile $pid",
+                        avatarColorHex = local?.avatarColorHex ?: remote?.color ?: "#1E88E5",
+                        addons = response.addons[pidStr] ?: 0,
+                        plugins = response.plugins[pidStr] ?: 0,
+                        library = response.libraryItems[pidStr] ?: 0,
+                        watchProgress = response.watchProgress[pidStr] ?: 0,
+                        watchedItems = response.watchedItems[pidStr] ?: 0
+                    )
+                }
+
+                SyncOverview(
+                    profileCount = response.profiles.size,
+                    totalAddons = response.addons.values.sum(),
+                    totalPlugins = response.plugins.values.sum(),
+                    totalLibrary = response.libraryItems.values.sum(),
+                    totalWatchProgress = response.watchProgress.values.sum(),
+                    totalWatchedItems = response.watchedItems.values.sum(),
+                    perProfile = perProfile
+                )
+            }.getOrNull()
+
+            _uiState.update {
+                it.copy(
+                    syncOverview = overview ?: it.syncOverview,
+                    isSyncOverviewLoading = false
                 )
             }
         }
