@@ -95,22 +95,46 @@ class AuthManager @Inject constructor(
      * For sync-linked devices, this returns the sync owner's user ID.
      * For direct users, returns their own user ID.
      */
-    suspend fun getEffectiveUserId(): String? {
+    suspend fun getEffectiveUserId(fallbackToOwnIdOnFailure: Boolean = true): String? {
         val userId = currentUserId ?: return null
         if (cachedEffectiveUserSourceUserId != userId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
         }
         cachedEffectiveUserId?.let { return it }
-        return try {
+
+        suspend fun resolveAndCache(): String {
             val result = postgrest.rpc("get_sync_owner")
             val effectiveId = result.decodeAs<String>()
             cachedEffectiveUserId = effectiveId
             cachedEffectiveUserSourceUserId = userId
-            effectiveId
+            return effectiveId
+        }
+
+        return try {
+            resolveAndCache()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get effective user ID, falling back to own ID", e)
-            userId
+            if (refreshSessionIfJwtExpired(e)) {
+                return try {
+                    resolveAndCache()
+                } catch (retryError: Exception) {
+                    if (fallbackToOwnIdOnFailure) {
+                        Log.e(TAG, "Failed to get effective user ID after refresh; falling back to own ID", retryError)
+                        userId
+                    } else {
+                        Log.e(TAG, "Failed to get effective user ID after refresh", retryError)
+                        null
+                    }
+                }
+            }
+
+            if (fallbackToOwnIdOnFailure) {
+                Log.e(TAG, "Failed to get effective user ID, falling back to own ID", e)
+                userId
+            } else {
+                Log.e(TAG, "Failed to get effective user ID", e)
+                null
+            }
         }
     }
 
@@ -175,6 +199,23 @@ class AuthManager @Inject constructor(
     fun clearEffectiveUserIdCache() {
         cachedEffectiveUserId = null
         cachedEffectiveUserSourceUserId = null
+    }
+
+    suspend fun refreshSessionIfJwtExpired(error: Throwable): Boolean {
+        if (!error.isJwtExpiredError()) return false
+        val hasRefreshToken = auth.currentSessionOrNull()?.refreshToken?.isNotBlank() == true
+        if (!hasRefreshToken) {
+            Log.w(TAG, "JWT expired but no refresh token available; cannot refresh session")
+            return false
+        }
+        return try {
+            Log.w(TAG, "JWT expired; refreshing Supabase session and retrying request")
+            auth.refreshCurrentSession()
+            true
+        } catch (refreshError: Exception) {
+            Log.e(TAG, "Failed to refresh Supabase session after JWT expiry", refreshError)
+            false
+        }
     }
 
     suspend fun startTvLoginSession(deviceNonce: String, deviceName: String?, redirectBaseUrl: String): Result<TvLoginStartResult> {
@@ -276,4 +317,13 @@ class AuthManager @Inject constructor(
             Result.failure(e)
         }
     }
+}
+
+private fun Throwable.isJwtExpiredError(): Boolean {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current.message?.contains("jwt expired", ignoreCase = true) == true) return true
+        current = current.cause
+    }
+    return false
 }

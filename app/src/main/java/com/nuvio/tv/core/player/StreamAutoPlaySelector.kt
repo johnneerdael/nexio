@@ -60,6 +60,7 @@ object StreamAutoPlaySelector {
                     .flatMap { match -> match.groupValues[1].split("|") }
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
+                    .toList()
 
                 val excludeRegex = if (exclusionWords.isNotEmpty()) {
                     Regex("\\b(${exclusionWords.joinToString("|")})\\b", RegexOption.IGNORE_CASE)
