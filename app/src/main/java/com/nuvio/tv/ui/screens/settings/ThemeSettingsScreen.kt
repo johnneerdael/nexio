@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,8 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.os.LocaleListCompat
+import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
@@ -87,13 +87,14 @@ fun ThemeSettingsContent(
             "pl" to "Polski"
         )
     }
-    val currentTag = remember {
-        AppCompatDelegate.getApplicationLocales().toLanguageTags()
-            .split(",").firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    var selectedTag by remember {
+        mutableStateOf(
+            context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
+                .getString("locale_tag", null)?.takeIf { it.isNotEmpty() }
+        )
     }
-    val currentLocaleName = remember(currentTag) {
-        supportedLocales.firstOrNull { it.first == currentTag }?.second ?: "System default"
-    }
+    val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: "System default"
+    val strRestartHint = stringResource(R.string.appearance_language_restart_hint)
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -144,26 +145,27 @@ fun ThemeSettingsContent(
     }
 
     if (showLanguageDialog) {
+        val firstFocusRequester = remember { FocusRequester() }
+        LaunchedEffect(Unit) { firstFocusRequester.requestFocus() }
         NuvioDialog(
             onDismiss = { showLanguageDialog = false },
             title = stringResource(R.string.appearance_language_dialog_title),
-            width = 400.dp
+            width = 400.dp,
+            suppressFirstKeyUp = false
         ) {
-            supportedLocales.forEach { (tag, name) ->
-                val isSelected = tag == currentTag
+            supportedLocales.forEachIndexed { index, (tag, name) ->
+                val isSelected = tag == selectedTag
                 Button(
                     onClick = {
-                        val locales = if (tag == null) {
-                            LocaleListCompat.getEmptyLocaleList()
-                        } else {
-                            LocaleListCompat.forLanguageTags(tag)
-                        }
-                        AppCompatDelegate.setApplicationLocales(locales)
                         context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
                             .edit().putString("locale_tag", tag ?: "").apply()
+                        selectedTag = tag
                         showLanguageDialog = false
+                        Toast.makeText(context, strRestartHint, Toast.LENGTH_LONG).show()
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(firstFocusRequester) else Modifier),
                     colors = ButtonDefaults.colors(
                         containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
                         contentColor = NuvioColors.TextPrimary

@@ -65,4 +65,5 @@
     <string name="appearance_language_subtitle">Nadpisz język systemowy</string>
     <string name="appearance_language_system">Domyślny systemowy</string>
     <string name="appearance_language_dialog_title">Wybierz język</string>
+    <string name="appearance_language_restart_hint">Uruchom ponownie aplikację, aby zastosować zmianę języka.</string>
 </resources>

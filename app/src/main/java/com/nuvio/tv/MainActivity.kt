@@ -1,10 +1,13 @@
 package com.nuvio.tv
 
 import android.os.Bundle
+import android.content.Context
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
+import java.util.Locale
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDp
@@ -159,6 +162,20 @@ class MainActivity : ComponentActivity() {
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
     @OptIn(ExperimentalTvMaterial3Api::class)
+    override fun attachBaseContext(newBase: Context) {
+        val tag = newBase.getSharedPreferences("app_locale", Context.MODE_PRIVATE)
+            .getString("locale_tag", null)
+        if (!tag.isNullOrEmpty()) {
+            val locale = Locale.forLanguageTag(tag)
+            Locale.setDefault(locale)
+            val config = Configuration(newBase.resources.configuration)
+            config.setLocale(locale)
+            super.attachBaseContext(newBase.createConfigurationContext(config))
+        } else {
+            super.attachBaseContext(newBase)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {

@@ -67,4 +67,5 @@
     <string name="appearance_language_subtitle">Override system language</string>
     <string name="appearance_language_system">System default</string>
     <string name="appearance_language_dialog_title">Choose Language</string>
+    <string name="appearance_language_restart_hint">Restart the app to apply the language change.</string>
 </resources>
