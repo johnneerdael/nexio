@@ -34,17 +34,25 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.AppTheme
+import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.ThemeColors
 
@@ -69,6 +77,23 @@ fun ThemeSettingsContent(
     initialFocusRequester: FocusRequester? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val supportedLocales = remember {
+        listOf(
+            null to "System default",
+            "en" to "English",
+            "pl" to "Polski"
+        )
+    }
+    val currentTag = remember {
+        AppCompatDelegate.getApplicationLocales().toLanguageTags()
+            .split(",").firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+    val currentLocaleName = remember(currentTag) {
+        supportedLocales.firstOrNull { it.first == currentTag }?.second ?: "System default"
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -78,6 +103,17 @@ fun ThemeSettingsContent(
             title = "Appearance",
             subtitle = "Choose your color theme"
         )
+
+        SettingsGroupCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SettingsActionRow(
+                title = stringResource(R.string.appearance_language),
+                subtitle = stringResource(R.string.appearance_language_subtitle),
+                value = currentLocaleName,
+                onClick = { showLanguageDialog = true }
+            )
+        }
 
         SettingsGroupCard(
             modifier = Modifier
@@ -102,6 +138,38 @@ fun ThemeSettingsContent(
                             Modifier
                         }
                     )
+                }
+            }
+        }
+    }
+
+    if (showLanguageDialog) {
+        NuvioDialog(
+            onDismiss = { showLanguageDialog = false },
+            title = stringResource(R.string.appearance_language_dialog_title),
+            width = 400.dp
+        ) {
+            supportedLocales.forEach { (tag, name) ->
+                val isSelected = tag == currentTag
+                Button(
+                    onClick = {
+                        val locales = if (tag == null) {
+                            LocaleListCompat.getEmptyLocaleList()
+                        } else {
+                            LocaleListCompat.forLanguageTags(tag)
+                        }
+                        AppCompatDelegate.setApplicationLocales(locales)
+                        context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
+                            .edit().putString("locale_tag", tag ?: "").apply()
+                        showLanguageDialog = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                ) {
+                    Text(name)
                 }
             }
         }

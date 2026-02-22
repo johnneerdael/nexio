@@ -22,4 +22,49 @@
     <!-- CatalogRowSection -->
     <string name="catalog_from_addon">from %1$s</string>
     <string name="action_see_all">See All</string>
+
+    <!-- HeroSection -->
+    <string name="hero_creator">Creator: %1$s</string>
+    <string name="hero_director">Director: %1$s</string>
+    <string name="hero_writer">Writer: %1$s</string>
+    <string name="hero_play">Play</string>
+    <string name="hero_play_episode">Play S%1$d, E%2$d</string>
+    <string name="hero_add_to_library">Add to library</string>
+    <string name="hero_remove_from_library">Remove from library</string>
+    <string name="hero_mark_watched">Mark as watched</string>
+    <string name="hero_mark_unwatched">Mark as unwatched</string>
+    <string name="hero_play_trailer">Play trailer</string>
+    <string name="hero_press_back_trailer">Press back to exit trailer</string>
+    <string name="cd_rating">Rating</string>
+
+    <!-- EpisodesSection -->
+    <string name="episodes_season">Season %1$d</string>
+    <string name="episodes_specials">Specials</string>
+    <string name="episodes_episode">Episode</string>
+    <string name="episodes_cd_watched">Watched</string>
+    <string name="episodes_dialog_subtitle">Episode actions</string>
+    <string name="episodes_mark_watched">Mark as watched</string>
+    <string name="episodes_mark_unwatched">Mark as unwatched</string>
+    <string name="episodes_mark_season_watched">Mark season as watched</string>
+    <string name="episodes_mark_season_unwatched">Mark season as unwatched</string>
+    <string name="episodes_mark_previous_watched">Mark previous in this season as watched</string>
+    <string name="episodes_play">Play</string>
+    <string name="episodes_season_actions">Season actions</string>
+
+    <!-- MetaDetailsScreen -->
+    <string name="detail_tab_cast">Creator and Cast</string>
+    <string name="detail_tab_ratings">Ratings</string>
+    <string name="detail_tab_more_like_this">More like this</string>
+    <string name="detail_section_network">Network</string>
+    <string name="detail_section_production">Production</string>
+    <string name="detail_lists_fallback">Lists</string>
+    <string name="detail_lists_subtitle">Select which lists should include this title.</string>
+    <string name="action_save">Save</string>
+    <string name="action_saving">Saving…</string>
+
+    <!-- AppLanguage -->
+    <string name="appearance_language">App Language</string>
+    <string name="appearance_language_subtitle">Override system language</string>
+    <string name="appearance_language_system">System default</string>
+    <string name="appearance_language_dialog_title">Choose Language</string>
 </resources>

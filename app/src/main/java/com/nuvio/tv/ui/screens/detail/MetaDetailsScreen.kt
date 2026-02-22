@@ -53,6 +53,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -257,7 +259,7 @@ fun MetaDetailsScreen(
             }
             uiState.error != null -> {
                 ErrorState(
-                    message = uiState.error ?: "An error occurred",
+                    message = uiState.error ?: stringResource(R.string.error_generic),
                     onRetry = { viewModel.onEvent(MetaDetailsEvent.OnRetry) }
                 )
             }
@@ -403,7 +405,7 @@ fun MetaDetailsScreen(
 
         if (uiState.showListPicker) {
             LibraryListPickerDialog(
-                title = uiState.meta?.name ?: "Lists",
+                title = uiState.meta?.name ?: stringResource(R.string.detail_lists_fallback),
                 tabs = uiState.libraryListTabs,
                 membership = uiState.pickerMembership,
                 isPending = uiState.pickerPending,
@@ -652,6 +654,9 @@ private fun MetaDetailsContent(
     val hasCastSection = directorWriterMembers.isNotEmpty() || normalCastMembers.isNotEmpty()
     val hasMoreLikeThisSection = moreLikeThis.isNotEmpty()
     val hasRatingsSection = isTvShow
+    val strTabCast = stringResource(R.string.detail_tab_cast)
+    val strTabRatings = stringResource(R.string.detail_tab_ratings)
+    val strTabMoreLikeThis = stringResource(R.string.detail_tab_more_like_this)
     val peopleTabItems = remember(
         hasCastSection,
         hasMoreLikeThisSection,
@@ -665,7 +670,7 @@ private fun MetaDetailsContent(
                 add(
                     PeopleTabItem(
                         tab = PeopleSectionTab.CAST,
-                        label = "Creator and Cast",
+                        label = strTabCast,
                         focusRequester = castTabFocusRequester
                     )
                 )
@@ -674,7 +679,7 @@ private fun MetaDetailsContent(
                 add(
                     PeopleTabItem(
                         tab = PeopleSectionTab.RATINGS,
-                        label = "Ratings",
+                        label = strTabRatings,
                         focusRequester = ratingsTabFocusRequester
                     )
                 )
@@ -683,7 +688,7 @@ private fun MetaDetailsContent(
                 add(
                     PeopleTabItem(
                         tab = PeopleSectionTab.MORE_LIKE_THIS,
-                        label = "More like this",
+                        label = strTabMoreLikeThis,
                         focusRequester = moreLikeTabFocusRequester
                     )
                 )
@@ -995,7 +1000,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.CAST -> {
                                 CastSection(
                                     cast = normalCastMembers,
-                                    title = if (hasPeopleTabs) "" else "Creator and Cast",
+                                    title = if (hasPeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
                                     upFocusRequester = castTabFocusRequester.takeIf { hasPeopleTabs },
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
@@ -1037,7 +1042,7 @@ private fun MetaDetailsContent(
                                     ratings = episodeImdbRatings,
                                     isLoading = isEpisodeRatingsLoading,
                                     error = episodeRatingsError,
-                                    title = if (hasPeopleTabs) "" else "Ratings",
+                                    title = if (hasPeopleTabs) "" else strTabRatings,
                                     upFocusRequester = if (hasPeopleTabs) {
                                         ratingsTabFocusRequester
                                     } else {
@@ -1055,7 +1060,7 @@ private fun MetaDetailsContent(
                 if (meta.networks.isNotEmpty()) {
                     item(key = "networks", contentType = "horizontal_row") {
                         CompanyLogosSection(
-                            title = "Network",
+                            title = stringResource(R.string.detail_section_network),
                             companies = meta.networks
                         )
                     }
@@ -1064,7 +1069,7 @@ private fun MetaDetailsContent(
                 if (meta.productionCompanies.isNotEmpty()) {
                     item(key = "production", contentType = "horizontal_row") {
                         CompanyLogosSection(
-                            title = "Production",
+                            title = stringResource(R.string.detail_section_production),
                             companies = meta.productionCompanies
                         )
                     }
@@ -1073,7 +1078,7 @@ private fun MetaDetailsContent(
                 if (meta.productionCompanies.isNotEmpty()) {
                     item(key = "production", contentType = "horizontal_row") {
                         CompanyLogosSection(
-                            title = "Production",
+                            title = stringResource(R.string.detail_section_production),
                             companies = meta.productionCompanies
                         )
                     }
@@ -1082,7 +1087,7 @@ private fun MetaDetailsContent(
                 if (meta.networks.isNotEmpty()) {
                     item(key = "networks", contentType = "horizontal_row") {
                         CompanyLogosSection(
-                            title = "Network",
+                            title = stringResource(R.string.detail_section_network),
                             companies = meta.networks
                         )
                     }
@@ -1306,7 +1311,7 @@ private fun LibraryListPickerDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = title,
-        subtitle = "Select which lists should include this title.",
+        subtitle = stringResource(R.string.detail_lists_subtitle),
         width = 500.dp
     ) {
         if (!error.isNullOrBlank()) {
@@ -1361,7 +1366,7 @@ private fun LibraryListPickerDialog(
                     contentColor = NuvioColors.TextPrimary
                 )
             ) {
-                Text(if (isPending) "Saving..." else "Save")
+                Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))
             }
         }
     }

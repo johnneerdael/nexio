@@ -69,8 +69,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.nuvio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -212,6 +214,8 @@ fun ModernHomeContent(
     val visibleCatalogRows = remember(uiState.catalogRows) {
         uiState.catalogRows.filter { it.items.isNotEmpty() }
     }
+    val strContinueWatching = stringResource(R.string.continue_watching)
+    val strAirsDate = stringResource(R.string.cw_airs_date)
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
@@ -223,12 +227,13 @@ fun ModernHomeContent(
                 add(
                     HeroCarouselRow(
                         key = "continue_watching",
-                        title = "Continue Watching",
+                        title = strContinueWatching,
                         globalRowIndex = -1,
                         items = uiState.continueWatchingItems.map { item ->
                             buildContinueWatchingItem(
                                 item = item,
-                                useLandscapePosters = useLandscapePosters
+                                useLandscapePosters = useLandscapePosters,
+                                airsDateTemplate = strAirsDate
                             )
                         }
                     )
@@ -1207,7 +1212,8 @@ private fun ModernAnimatedActiveRowHost(
 
 private fun buildContinueWatchingItem(
     item: ContinueWatchingItem,
-    useLandscapePosters: Boolean
+    useLandscapePosters: Boolean,
+    airsDateTemplate: String = "Airs %s"
 ): ModernCarouselItem {
     val heroPreview = when (item) {
         is ContinueWatchingItem.InProgress -> HeroPreview(
@@ -1231,7 +1237,7 @@ private fun buildContinueWatchingItem(
             logo = item.info.logo,
             description = item.info.episodeDescription
                 ?: item.info.episodeTitle
-                ?: item.info.airDateLabel?.let { "Airs $it" },
+                ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
             contentTypeText = item.info.contentType.replaceFirstChar { ch -> ch.uppercase() },
             yearText = null,
             imdbText = null,

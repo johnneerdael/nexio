@@ -22,6 +22,7 @@
         android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:supportsRtl="true"
+        android:localeConfig="@xml/locale_config"
         android:theme="@style/Theme.MyApplication">
         <meta-data
             android:name="io.sentry.dsn"

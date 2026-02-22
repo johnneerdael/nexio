@@ -1,6 +1,8 @@
 package com.nuvio.tv
 
 import android.app.Application
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -15,6 +17,13 @@ class NuvioApplication : Application(), ImageLoaderFactory {
 
     @Inject lateinit var startupSyncService: StartupSyncService
 
+    override fun onCreate() {
+        super.onCreate()
+        val tag = getSharedPreferences("app_locale", MODE_PRIVATE).getString("locale_tag", null)
+        if (!tag.isNullOrEmpty()) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+        }
+    }
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {

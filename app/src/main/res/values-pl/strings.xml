@@ -20,4 +20,49 @@
     <!-- CatalogRowSection -->
     <string name="catalog_from_addon">z %1$s</string>
     <string name="action_see_all">Zobacz wszystkie</string>
+
+    <!-- HeroSection -->
+    <string name="hero_creator">Twórca: %1$s</string>
+    <string name="hero_director">Reżyser: %1$s</string>
+    <string name="hero_writer">Scenarzysta: %1$s</string>
+    <string name="hero_play">Odtwórz</string>
+    <string name="hero_play_episode">Odtwórz S%1$d, E%2$d</string>
+    <string name="hero_add_to_library">Dodaj do biblioteki</string>
+    <string name="hero_remove_from_library">Usuń z biblioteki</string>
+    <string name="hero_mark_watched">Oznacz jako obejrzane</string>
+    <string name="hero_mark_unwatched">Oznacz jako nieobejrzane</string>
+    <string name="hero_play_trailer">Odtwórz zwiastun</string>
+    <string name="hero_press_back_trailer">Naciśnij wstecz, aby wyjść ze zwiastuna</string>
+    <string name="cd_rating">Ocena</string>
+
+    <!-- EpisodesSection -->
+    <string name="episodes_season">Sezon %1$d</string>
+    <string name="episodes_specials">Specjalne</string>
+    <string name="episodes_episode">Odcinek</string>
+    <string name="episodes_cd_watched">Obejrzane</string>
+    <string name="episodes_dialog_subtitle">Akcje odcinka</string>
+    <string name="episodes_mark_watched">Oznacz jako obejrzane</string>
+    <string name="episodes_mark_unwatched">Oznacz jako nieobejrzane</string>
+    <string name="episodes_mark_season_watched">Oznacz sezon jako obejrzany</string>
+    <string name="episodes_mark_season_unwatched">Oznacz sezon jako nieobejrzany</string>
+    <string name="episodes_mark_previous_watched">Oznacz poprzednie w tym sezonie jako obejrzane</string>
+    <string name="episodes_play">Odtwórz</string>
+    <string name="episodes_season_actions">Akcje sezonu</string>
+
+    <!-- MetaDetailsScreen -->
+    <string name="detail_tab_cast">Twórcy i obsada</string>
+    <string name="detail_tab_ratings">Oceny</string>
+    <string name="detail_tab_more_like_this">Podobne</string>
+    <string name="detail_section_network">Stacja</string>
+    <string name="detail_section_production">Produkcja</string>
+    <string name="detail_lists_fallback">Listy</string>
+    <string name="detail_lists_subtitle">Wybierz listy, do których ma należeć ten tytuł.</string>
+    <string name="action_save">Zapisz</string>
+    <string name="action_saving">Zapisywanie…</string>
+
+    <!-- AppLanguage -->
+    <string name="appearance_language">Język aplikacji</string>
+    <string name="appearance_language_subtitle">Nadpisz język systemowy</string>
+    <string name="appearance_language_system">Domyślny systemowy</string>
+    <string name="appearance_language_dialog_title">Wybierz język</string>
 </resources>
