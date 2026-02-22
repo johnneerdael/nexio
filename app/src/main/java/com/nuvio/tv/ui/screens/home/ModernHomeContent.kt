@@ -482,7 +482,7 @@ fun ModernHomeContent(
     } else {
         portraitBaseHeight * 0.84f * modernPosterScale
     }
-    val previewVisibleHeightFraction = if (useLandscapePosters) 0.24f else 0.18f
+    val previewVisibleHeightFraction = if (useLandscapePosters) 0.24f else 0.20f
 
     @Composable
     fun ModernActiveRowContent(activeRowStateKey: String?, activeRowTitleBottom: Dp) {
@@ -774,8 +774,8 @@ fun ModernHomeContent(
         val heroBackdropAlpha = 1f - heroTransitionProgress
         val heroTrailerAlpha = heroTransitionProgress
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
-        val catalogBottomPadding = if (shouldRenderPreviewRow) 20.dp else 30.dp
-        val heroToCatalogGap = if (shouldRenderPreviewRow) 8.dp else 18.dp
+        val catalogBottomPadding = if (shouldRenderPreviewRow) 0.dp else 30.dp
+        val heroToCatalogGap = if (shouldRenderPreviewRow) 16.dp else 28.dp
         val activeRowTitleBottom = if (shouldRenderPreviewRow) 2.dp else 6.dp
         val localDensity = LocalDensity.current
         val bgColor = NuvioColors.Background
@@ -1472,28 +1472,39 @@ private fun ModernNextRowPreviewStrip(
     previewCardHeight: Dp
 ) {
     if (previewRow == null) return
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 16.dp)
-            .height(previewVisibleHeight)
-            .clipToBounds()
     ) {
-        LazyRow(
-            userScrollEnabled = false,
-            contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
-            horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
+        Text(
+            text = previewRow.title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = NuvioColors.TextPrimary,
+            modifier = Modifier.padding(start = rowHorizontalPadding, bottom = 10.dp)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(previewVisibleHeight)
+                .clipToBounds()
         ) {
-            itemsIndexed(
-                previewRow.items.take(12),
-                key = { _, item -> item.key },
-                contentType = { _, _ -> "modern_preview_card" }
-            ) { _, item ->
-                PreviewCarouselCard(
-                    imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop,
-                    cardWidth = previewCardWidth,
-                    cardHeight = previewCardHeight
-                )
+            LazyRow(
+                userScrollEnabled = false,
+                contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
+                horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
+            ) {
+                itemsIndexed(
+                    previewRow.items.take(12),
+                    key = { _, item -> item.key },
+                    contentType = { _, _ -> "modern_preview_card" }
+                ) { _, item ->
+                    PreviewCarouselCard(
+                        imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop,
+                        cardWidth = previewCardWidth,
+                        cardHeight = previewCardHeight
+                    )
+                }
             }
         }
     }
