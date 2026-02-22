@@ -152,22 +152,32 @@ class StartupSyncService @Inject constructor(
             Log.d(TAG, "Pulled profiles from remote")
 
             pluginManager.isSyncingFromRemote = true
-            val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
-            pluginManager.reconcileWithRemoteRepoUrls(
-                remoteUrls = remotePluginUrls,
-                removeMissingLocal = true
-            )
-            pluginManager.isSyncingFromRemote = false
-            Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote for profile $profileId")
+            try {
+                val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
+                pluginManager.reconcileWithRemoteRepoUrls(
+                    remoteUrls = remotePluginUrls,
+                    removeMissingLocal = true
+                )
+                Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote for profile $profileId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to pull plugins from remote, keeping local cache", e)
+            } finally {
+                pluginManager.isSyncingFromRemote = false
+            }
 
             addonRepository.isSyncingFromRemote = true
-            val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
-            addonRepository.reconcileWithRemoteAddonUrls(
-                remoteUrls = remoteAddonUrls,
-                removeMissingLocal = true
-            )
-            addonRepository.isSyncingFromRemote = false
-            Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote for profile $profileId")
+            try {
+                val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
+                addonRepository.reconcileWithRemoteAddonUrls(
+                    remoteUrls = remoteAddonUrls,
+                    removeMissingLocal = true
+                )
+                Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote for profile $profileId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to pull addons from remote, keeping local cache", e)
+            } finally {
+                addonRepository.isSyncingFromRemote = false
+            }
 
             val isPrimaryProfile = profileManager.activeProfileId.value == 1
             val isTraktConnected = isPrimaryProfile && traktAuthDataStore.isAuthenticated.first()
