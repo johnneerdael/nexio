@@ -90,7 +90,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
-private const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.72f
+private const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.62f
 private const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
 private const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 90L
 
@@ -468,7 +468,7 @@ fun ModernHomeContent(
     val portraitBaseWidth = uiState.posterCardWidthDp.dp
     val portraitBaseHeight = uiState.posterCardHeightDp.dp
     val modernPosterScale = if (useLandscapePosters) {
-        if (showNextRowPreview) 1.08f else 1.34f
+        if (showNextRowPreview) 1.18f else 1.34f
     } else {
         if (showNextRowPreview) 1.14f else 1.08f
     }
@@ -482,7 +482,7 @@ fun ModernHomeContent(
     } else {
         portraitBaseHeight * 0.84f * modernPosterScale
     }
-    val previewVisibleHeightFraction = if (useLandscapePosters) 0.24f else 0.20f
+    val previewVisibleHeightFraction = if (useLandscapePosters) 0.18f else 0.15f
 
     @Composable
     fun ModernActiveRowContent(activeRowStateKey: String?, activeRowTitleBottom: Dp) {
@@ -776,7 +776,7 @@ fun ModernHomeContent(
         val shouldRenderPreviewRow = showNextRowPreview && nextRow != null
         val catalogBottomPadding = if (shouldRenderPreviewRow) 0.dp else 30.dp
         val heroToCatalogGap = if (shouldRenderPreviewRow) 16.dp else 28.dp
-        val activeRowTitleBottom = if (shouldRenderPreviewRow) 2.dp else 6.dp
+        val activeRowTitleBottom = if (shouldRenderPreviewRow) 10.dp else 14.dp
         val localDensity = LocalDensity.current
         val bgColor = NuvioColors.Background
         val heroMediaWidthPx = remember(maxWidth, localDensity) {
@@ -809,12 +809,12 @@ fun ModernHomeContent(
             Brush.horizontalGradient(
                 colorStops = arrayOf(
                     0.0f to bgColor.copy(alpha = 0.96f),
-                    0.20f to bgColor.copy(alpha = 0.86f),
-                    0.35f to bgColor.copy(alpha = 0.70f),
-                    0.45f to bgColor.copy(alpha = 0.55f),
-                    0.55f to bgColor.copy(alpha = 0.38f),
-                    0.65f to bgColor.copy(alpha = 0.22f),
-                    0.75f to Color.Transparent,
+                    0.18f to bgColor.copy(alpha = 0.86f),
+                    0.31f to bgColor.copy(alpha = 0.70f),
+                    0.40f to bgColor.copy(alpha = 0.55f),
+                    0.48f to bgColor.copy(alpha = 0.38f),
+                    0.56f to bgColor.copy(alpha = 0.22f),
+                    0.66f to Color.Transparent,
                     1.0f to Color.Transparent
                 )
             )
@@ -823,10 +823,10 @@ fun ModernHomeContent(
             Brush.verticalGradient(
                 colorStops = arrayOf(
                     0.0f to Color.Transparent,
-                    0.38f to Color.Transparent,
-                    0.56f to bgColor.copy(alpha = 0.38f),
-                    0.72f to bgColor.copy(alpha = 0.74f),
-                    0.86f to bgColor.copy(alpha = 0.94f),
+                    0.44f to Color.Transparent,
+                    0.62f to bgColor.copy(alpha = 0.38f),
+                    0.78f to bgColor.copy(alpha = 0.74f),
+                    0.92f to bgColor.copy(alpha = 0.94f),
                     1.0f to bgColor.copy(alpha = 1.0f)
                 )
             )
@@ -1368,7 +1368,7 @@ private fun ModernHeroMediaLayer(
                 model = imageModel,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 alignment = Alignment.TopEnd
             )
         }
