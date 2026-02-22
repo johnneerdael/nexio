@@ -1,0 +1,23 @@
+<resources>
+    <!-- HomeScreen -->
+    <string name="home_no_addons">Brak zainstalowanych dodatków. Dodaj jeden, aby zacząć.</string>
+    <string name="home_no_catalog_addons">Brak dodatków katalogowych. Zainstaluj dodatek katalogowy, aby zobaczyć treści.</string>
+    <string name="error_generic">Wystąpił błąd</string>
+
+    <!-- ErrorState -->
+    <string name="action_retry">Spróbuj ponownie</string>
+
+    <!-- ContinueWatchingSection -->
+    <string name="continue_watching">Kontynuuj oglądanie</string>
+    <string name="cw_upcoming">Nadchodzące</string>
+    <string name="cw_next_up">Następny odcinek</string>
+    <string name="cw_resume">Wznów</string>
+    <string name="cw_airs_date">Emisja %1$s</string>
+    <string name="cw_action_go_to_details">Przejdź do szczegółów</string>
+    <string name="cw_action_remove">Usuń</string>
+    <string name="cw_dialog_subtitle">Wybierz co chcesz zrobić z tym elementem.</string>
+
+    <!-- CatalogRowSection -->
+    <string name="catalog_from_addon">z %1$s</string>
+    <string name="action_see_all">Zobacz wszystkie</string>
+</resources>

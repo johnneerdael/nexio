@@ -1,3 +1,25 @@
 <resources>
     <string name="app_name">Nuvio</string>
+
+    <!-- HomeScreen -->
+    <string name="home_no_addons">No addons installed. Add one to get started.</string>
+    <string name="home_no_catalog_addons">No catalog addons installed. Install a catalog addon to see content.</string>
+    <string name="error_generic">An error occurred</string>
+
+    <!-- ErrorState -->
+    <string name="action_retry">Retry</string>
+
+    <!-- ContinueWatchingSection -->
+    <string name="continue_watching">Continue Watching</string>
+    <string name="cw_upcoming">Upcoming</string>
+    <string name="cw_next_up">Next Up</string>
+    <string name="cw_resume">Resume</string>
+    <string name="cw_airs_date">Airs %1$s</string>
+    <string name="cw_action_go_to_details">Go to details</string>
+    <string name="cw_action_remove">Remove</string>
+    <string name="cw_dialog_subtitle">Choose what you want to do with this item.</string>
+
+    <!-- CatalogRowSection -->
+    <string name="catalog_from_addon">from %1$s</string>
+    <string name="action_see_all">See All</string>
 </resources>

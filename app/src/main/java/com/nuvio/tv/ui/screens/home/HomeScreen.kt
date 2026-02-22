@@ -23,6 +23,8 @@ import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlin.math.roundToInt
 
@@ -91,7 +93,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No addons installed. Add one to get started.",
+                        text = stringResource(R.string.home_no_addons),
                         style = MaterialTheme.typography.bodyLarge,
                         color = NuvioColors.TextSecondary
                     )
@@ -104,7 +106,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No catalog addons installed. Install a catalog addon to see content.",
+                        text = stringResource(R.string.home_no_catalog_addons),
                         style = MaterialTheme.typography.bodyLarge,
                         color = NuvioColors.TextSecondary
                     )
@@ -113,7 +115,7 @@ fun HomeScreen(
 
             uiState.error != null && uiState.catalogRows.isEmpty() -> {
                 ErrorState(
-                    message = uiState.error ?: "An error occurred",
+                    message = uiState.error ?: stringResource(R.string.error_generic),
                     onRetry = { viewModel.onEvent(HomeEvent.OnRetry) }
                 )
             }
