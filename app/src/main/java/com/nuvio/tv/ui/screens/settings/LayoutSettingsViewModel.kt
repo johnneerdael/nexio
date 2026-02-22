@@ -252,7 +252,7 @@ class LayoutSettingsViewModel @Inject constructor(
     }
 
     private fun selectLayout(layout: HomeLayout) {
-        if (_uiState.value.selectedLayout == layout) return
+        if (_uiState.value.selectedLayout == layout && _uiState.value.hasChosen) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setLayout(layout)
         }

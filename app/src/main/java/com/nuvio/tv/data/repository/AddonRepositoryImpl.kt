@@ -127,7 +127,8 @@ class AddonRepositoryImpl @Inject constructor(
                     }.awaitAll().filterNotNull()
                 }
 
-                if (fresh != cached) {
+               
+                if (fresh != cached || cached.isEmpty()) {
                     emit(applyDisplayNames(fresh))
                 }
             }.flowOn(Dispatchers.IO)
