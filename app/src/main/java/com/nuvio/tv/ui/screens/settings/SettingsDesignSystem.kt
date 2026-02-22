@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -219,9 +220,12 @@ internal fun SettingsRailButton(
         modifier = appliedModifier
             .fillMaxWidth()
             .heightIn(min = SettingsRailItemHeight)
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = if (isSelected) NuvioColors.BackgroundCard else NuvioColors.Background,
@@ -526,9 +530,12 @@ internal fun SettingsChoiceChip(
 
     Card(
         onClick = onClick,
-        modifier = modifier.onFocusChanged {
-            isFocused = it.isFocused
-            if (it.isFocused) onFocused()
+        modifier = modifier.onFocusChanged { state ->
+            val nowFocused = state.isFocused
+            if (isFocused != nowFocused) {
+                isFocused = nowFocused
+                if (nowFocused) onFocused()
+            }
         },
         colors = CardDefaults.colors(
             containerColor = if (selected) NuvioColors.FocusRing.copy(alpha = 0.2f) else NuvioColors.Background,
@@ -581,9 +588,14 @@ private fun SettingsTogglePill(
 }
 
 @Composable
-private fun rememberRawSvgPainter(rawIconRes: Int) = rememberAsyncImagePainter(
-    model = ImageRequest.Builder(LocalContext.current)
-        .data(rawIconRes)
-        .decoderFactory(SvgDecoder.Factory())
-        .build()
-)
+private fun rememberRawSvgPainter(rawIconRes: Int): Painter {
+    val context = LocalContext.current
+    val request = remember(rawIconRes, context) {
+        ImageRequest.Builder(context)
+            .data(rawIconRes)
+            .decoderFactory(SvgDecoder.Factory())
+            .crossfade(false)
+            .build()
+    }
+    return rememberAsyncImagePainter(model = request)
+}

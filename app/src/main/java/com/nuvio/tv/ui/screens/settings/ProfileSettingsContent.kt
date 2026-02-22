@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -56,8 +57,8 @@ private enum class ProfileSettingsMode {
 internal fun ProfileSettingsContent(
     viewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
-    val profiles by viewModel.profiles.collectAsState()
-    val isCreating by viewModel.isCreating.collectAsState()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val isCreating by viewModel.isCreating.collectAsStateWithLifecycle()
     var mode by remember { mutableStateOf(ProfileSettingsMode.List) }
     var editingProfile by remember { mutableStateOf<UserProfile?>(null) }
 
@@ -114,7 +115,10 @@ internal fun ProfileSettingsContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(profiles) { profile ->
+                        items(
+                            items = profiles,
+                            key = { it.id }
+                        ) { profile ->
                             ProfileListItem(
                                 profile = profile,
                                 onClick = {
@@ -274,9 +278,10 @@ private fun ProfileCreateForm(
     onCancel: () -> Unit
 ) {
     var name by remember { mutableStateOf("Profile ${existingProfiles.size + 1}") }
-    val usedColors = existingProfiles.map { it.avatarColorHex }.toSet()
-    val defaultColor = PROFILE_AVATAR_COLORS.firstOrNull { it !in usedColors }
-        ?: PROFILE_AVATAR_COLORS.first()
+    val defaultColor = remember(existingProfiles) {
+        val usedColors = existingProfiles.map { it.avatarColorHex }.toSet()
+        PROFILE_AVATAR_COLORS.firstOrNull { it !in usedColors } ?: PROFILE_AVATAR_COLORS.first()
+    }
     var selectedColor by remember { mutableStateOf(defaultColor) }
     var usesPrimaryAddons by remember { mutableStateOf(false) }
     var usesPrimaryPlugins by remember { mutableStateOf(false) }
@@ -444,8 +449,10 @@ private fun ColorPickerCircle(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val color = runCatching { Color(android.graphics.Color.parseColor(colorHex)) }
-        .getOrDefault(Color(0xFF1E88E5))
+    val color = remember(colorHex) {
+        runCatching { Color(android.graphics.Color.parseColor(colorHex)) }
+            .getOrDefault(Color(0xFF1E88E5))
+    }
 
     Card(
         onClick = onClick,

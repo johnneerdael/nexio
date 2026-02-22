@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +44,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -89,7 +89,7 @@ fun LayoutSettingsContent(
     viewModel: LayoutSettingsViewModel = hiltViewModel(),
     initialFocusRequester: FocusRequester? = null
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     var homeLayoutExpanded by rememberSaveable { mutableStateOf(false) }
     var homeContentExpanded by rememberSaveable { mutableStateOf(false) }
@@ -239,7 +239,10 @@ fun LayoutSettingsContent(
                             contentPadding = PaddingValues(end = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(uiState.availableCatalogs) { catalog ->
+                            items(
+                                items = uiState.availableCatalogs,
+                                key = { it.key }
+                            ) { catalog ->
                                 CatalogChip(
                                     catalogInfo = catalog,
                                     isSelected = catalog.key in uiState.heroCatalogKeys,
@@ -661,9 +664,12 @@ private fun LayoutCard(
 
     Card(
         onClick = onClick,
-        modifier = modifier.onFocusChanged {
-            isFocused = it.isFocused
-            if (it.isFocused) onFocused()
+        modifier = modifier.onFocusChanged { state ->
+            val nowFocused = state.isFocused
+            if (isFocused != nowFocused) {
+                isFocused = nowFocused
+                if (nowFocused) onFocused()
+            }
         },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
@@ -831,7 +837,10 @@ private fun OptionRow(
         contentPadding = PaddingValues(end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(options) { option ->
+        items(
+            items = options,
+            key = { it.value }
+        ) { option ->
             ValueChip(
                 label = option.label,
                 isSelected = option.value == selectedValue,

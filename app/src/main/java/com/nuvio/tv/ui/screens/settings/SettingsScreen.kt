@@ -35,11 +35,10 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,14 +55,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
-import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 internal enum class SettingsCategory {
     ACCOUNT,
@@ -98,6 +96,83 @@ internal data class SettingsSectionSpec(
     val destination: SettingsSectionDestination
 )
 
+private const val SETTINGS_DETAIL_FOCUS_DELAY_MS = 120L
+private const val SETTINGS_DETAIL_ANIM_IN_DURATION_MS = 200
+private const val SETTINGS_DETAIL_ANIM_OUT_DURATION_MS = 180
+
+private val SETTINGS_SECTION_SPECS = listOf(
+    SettingsSectionSpec(
+        category = SettingsCategory.ACCOUNT,
+        title = "Account",
+        icon = Icons.Default.Person,
+        subtitle = "Account and sync status.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.PROFILES,
+        title = "Profiles",
+        icon = Icons.Default.People,
+        subtitle = "Manage user profiles.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.APPEARANCE,
+        title = "Appearance",
+        icon = Icons.Default.Palette,
+        subtitle = "Theme and color tuning.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.LAYOUT,
+        title = "Layout",
+        icon = Icons.Default.GridView,
+        subtitle = "Home structure and poster styles.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.PLUGINS,
+        title = "Plugins",
+        icon = Icons.Default.Build,
+        subtitle = "Repositories and providers.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.INTEGRATION,
+        title = "Integration",
+        icon = Icons.Default.Link,
+        subtitle = "TMDB and MDBList controls.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.PLAYBACK,
+        title = "Playback",
+        icon = Icons.Default.Settings,
+        subtitle = "Player, subtitles, and auto-play.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.TRAKT,
+        title = "Trakt",
+        rawIconRes = R.raw.trakt_tv_glyph,
+        subtitle = "Open Trakt connection screen.",
+        destination = SettingsSectionDestination.External
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.ABOUT,
+        title = "About",
+        icon = Icons.Default.Info,
+        subtitle = "Version and policies.",
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.DEBUG,
+        title = "Debug",
+        icon = Icons.Default.BugReport,
+        subtitle = "Developer tools and feature flags.",
+        destination = SettingsSectionDestination.Inline
+    )
+)
+
 @Composable
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
@@ -105,84 +180,10 @@ fun SettingsScreen(
     onNavigateToAuthQrSignIn: () -> Unit = {},
     profileViewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
-    val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsState()
-    val sectionSpecs = remember {
-        listOf(
-            SettingsSectionSpec(
-                category = SettingsCategory.ACCOUNT,
-                title = "Account",
-                icon = Icons.Default.Person,
-                subtitle = "Account and sync status.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.PROFILES,
-                title = "Profiles",
-                icon = Icons.Default.People,
-                subtitle = "Manage user profiles.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.APPEARANCE,
-                title = "Appearance",
-                icon = Icons.Default.Palette,
-                subtitle = "Theme and color tuning.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.LAYOUT,
-                title = "Layout",
-                icon = Icons.Default.GridView,
-                subtitle = "Home structure and poster styles.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.PLUGINS,
-                title = "Plugins",
-                icon = Icons.Default.Build,
-                subtitle = "Repositories and providers.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.INTEGRATION,
-                title = "Integration",
-                icon = Icons.Default.Link,
-                subtitle = "TMDB and MDBList controls.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.PLAYBACK,
-                title = "Playback",
-                icon = Icons.Default.Settings,
-                subtitle = "Player, subtitles, and auto-play.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.TRAKT,
-                title = "Trakt",
-                rawIconRes = R.raw.trakt_tv_glyph,
-                subtitle = "Open Trakt connection screen.",
-                destination = SettingsSectionDestination.External
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.ABOUT,
-                title = "About",
-                icon = Icons.Default.Info,
-                subtitle = "Version and policies.",
-                destination = SettingsSectionDestination.Inline
-            ),
-            SettingsSectionSpec(
-                category = SettingsCategory.DEBUG,
-                title = "Debug",
-                icon = Icons.Default.BugReport,
-                subtitle = "Developer tools and feature flags.",
-                destination = SettingsSectionDestination.Inline
-            )
-        )
-    }
+    val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
 
-    val visibleSections = remember(sectionSpecs, isPrimaryProfileActive) {
-        sectionSpecs.filter { section ->
+    val visibleSections = remember(isPrimaryProfileActive) {
+        SETTINGS_SECTION_SPECS.filter { section ->
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
                 SettingsCategory.PROFILES -> isPrimaryProfileActive
@@ -210,9 +211,10 @@ fun SettingsScreen(
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
+    var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
+    var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
 
     val focusManager = LocalFocusManager.current
-    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(visibleSections) {
         if (visibleSections.none { it.category == selectedCategory }) {
@@ -224,6 +226,21 @@ fun SettingsScreen(
         railFocusRequesters[selectedCategory]?.let { requester ->
             runCatching { requester.requestFocus() }
         }
+    }
+
+    LaunchedEffect(pendingContentFocusRequestId) {
+        val category = pendingContentFocusCategory ?: return@LaunchedEffect
+        delay(SETTINGS_DETAIL_FOCUS_DELAY_MS)
+        val requester = contentFocusRequesters[category]
+        val requested = if (requester != null) {
+            runCatching { requester.requestFocus() }.isSuccess
+        } else {
+            false
+        }
+        if (!requested) {
+            focusManager.moveFocus(FocusDirection.Right)
+        }
+        pendingContentFocusCategory = null
     }
 
     Box(
@@ -276,7 +293,10 @@ fun SettingsScreen(
                         },
                     verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
                 ) {
-                    items(visibleSections) { section ->
+                    items(
+                        items = visibleSections,
+                        key = { it.category }
+                    ) { section ->
                         SettingsRailButton(
                             title = section.title,
                             icon = section.icon,
@@ -295,21 +315,8 @@ fun SettingsScreen(
                                         integrationSection = IntegrationSettingsSection.Hub
                                     }
                                     selectedCategory = section.category
-                                    coroutineScope.launch {
-                                        // Wait for detail content to settle before requesting first content focus.
-                                        delay(120)
-                                        val requester = contentFocusRequesters[section.category]
-                                        val requested = if (requester != null) {
-                                            runCatching {
-                                                requester.requestFocus()
-                                            }.isSuccess
-                                        } else {
-                                            false
-                                        }
-                                        if (!requested) {
-                                            focusManager.moveFocus(FocusDirection.Right)
-                                        }
-                                    }
+                                    pendingContentFocusCategory = section.category
+                                    pendingContentFocusRequestId += 1L
                                 }
                             }
                         )
@@ -327,13 +334,13 @@ fun SettingsScreen(
                             val direction = if (targetState.ordinal >= initialState.ordinal) 1 else -1
                             (slideInHorizontally(
                                 initialOffsetX = { fullWidth -> direction * (fullWidth / 6) },
-                                animationSpec = tween(200)
-                            ) + fadeIn(animationSpec = tween(200)))
+                                animationSpec = tween(SETTINGS_DETAIL_ANIM_IN_DURATION_MS)
+                            ) + fadeIn(animationSpec = tween(SETTINGS_DETAIL_ANIM_IN_DURATION_MS)))
                                 .togetherWith(
                                     slideOutHorizontally(
                                         targetOffsetX = { fullWidth -> -direction * (fullWidth / 6) },
-                                        animationSpec = tween(180)
-                                    ) + fadeOut(animationSpec = tween(180))
+                                        animationSpec = tween(SETTINGS_DETAIL_ANIM_OUT_DURATION_MS)
+                                    ) + fadeOut(animationSpec = tween(SETTINGS_DETAIL_ANIM_OUT_DURATION_MS))
                                 )
                         },
                         label = "settings_split_detail"
@@ -377,7 +384,7 @@ fun SettingsScreen(
 @Composable
 private fun PluginsSettingsContent() {
     val pluginViewModel: com.nuvio.tv.ui.screens.plugin.PluginViewModel = hiltViewModel()
-    val pluginUiState by pluginViewModel.uiState.collectAsState()
+    val pluginUiState by pluginViewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -409,7 +416,7 @@ private fun AccountSettingsInline(
     onNavigateToAuthQrSignIn: () -> Unit
 ) {
     val accountViewModel: com.nuvio.tv.ui.screens.account.AccountViewModel = hiltViewModel()
-    val accountUiState by accountViewModel.uiState.collectAsState()
+    val accountUiState by accountViewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize(),
