@@ -75,8 +75,13 @@ fun AuthQrSignInScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!isOnboardingMode && !isSignedIn && uiState.qrLoginCode.isNullOrBlank() && !uiState.isLoading) {
+    LaunchedEffect(uiState.authState, isSignedIn, uiState.qrLoginCode, uiState.isLoading) {
+        if (
+            uiState.authState !is AuthState.Loading &&
+            !isSignedIn &&
+            uiState.qrLoginCode.isNullOrBlank() &&
+            !uiState.isLoading
+        ) {
             viewModel.startQrLogin()
         }
     }
