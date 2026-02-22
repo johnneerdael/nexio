@@ -334,7 +334,17 @@ class WatchProgressRepositoryImpl @Inject constructor(
             return
         }
         watchProgressPreferences.saveProgress(progress)
-        triggerRemoteSync()
+        
+        
+        if (authManager.isAuthenticated) {
+            syncScope.launch {
+                watchProgressSyncService.pushSingleToRemote(progressKey(progress), progress)
+                    .onFailure { error ->
+                        Log.w(TAG, "Failed single progress push; falling back to full sync next cycle", error)
+                    }
+            }
+        }
+
         if (progress.isCompleted()) {
             watchedItemsPreferences.markAsWatched(
                 WatchedItem(

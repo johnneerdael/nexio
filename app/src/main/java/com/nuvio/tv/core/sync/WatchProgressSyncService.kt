@@ -105,6 +105,42 @@ class WatchProgressSyncService @Inject constructor(
         }
     }
 
+    
+    suspend fun pushSingleToRemote(key: String, progress: WatchProgress): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (traktAuthDataStore.isAuthenticated.first()) {
+                Log.d(TAG, "Trakt connected, skipping single watch progress push")
+                return@withContext Result.success(Unit)
+            }
+
+           
+            val profileId = profileManager.activeProfileId.value
+            val params = buildJsonObject {
+                put("p_entries", buildJsonArray {
+                    addJsonObject {
+                        put("content_id", progress.contentId)
+                        put("content_type", progress.contentType)
+                        put("video_id", progress.videoId)
+                        progress.season?.let { put("season", it) }
+                        progress.episode?.let { put("episode", it) }
+                        put("position", progress.position)
+                        put("duration", progress.duration)
+                        put("last_watched", progress.lastWatched)
+                        put("progress_key", key)
+                    }
+                })
+                put("p_profile_id", profileId)
+            }
+            postgrest.rpc("sync_push_watch_progress", params)
+
+            Log.d(TAG, "Pushed single watch progress entry to remote for profile $profileId (key=$key)")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to push single watch progress to remote", e)
+            Result.failure(e)
+        }
+    }
+
     /**
      * Pull watch progress from Supabase via SECURITY DEFINER RPC.
      * Uses get_sync_owner() server-side to fetch the correct user's data,
