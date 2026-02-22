@@ -110,6 +110,7 @@ class StartupSyncService @Inject constructor(
 
         startupPullJob = scope.launch {
             val maxAttempts = 3
+            var syncCompleted = false
             repeat(maxAttempts) { index ->
                 val attempt = index + 1
                 Log.d(TAG, "Startup sync attempt $attempt/$maxAttempts for key=$key")
@@ -117,6 +118,7 @@ class StartupSyncService @Inject constructor(
                 if (result.isSuccess) {
                     lastPulledKey = key
                     Log.d(TAG, "Startup sync completed for key=$key")
+                    syncCompleted = true
                     return@repeat
                 }
 
@@ -125,6 +127,7 @@ class StartupSyncService @Inject constructor(
                     delay(3000)
                 }
             }
+            if (syncCompleted) return@launch
 
             // After completing, check if a re-sync was requested while we were running
             val resyncKey = pendingResyncKey
@@ -152,7 +155,7 @@ class StartupSyncService @Inject constructor(
             val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
             pluginManager.reconcileWithRemoteRepoUrls(
                 remoteUrls = remotePluginUrls,
-                removeMissingLocal = false
+                removeMissingLocal = true
             )
             pluginManager.isSyncingFromRemote = false
             Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote for profile $profileId")
@@ -161,7 +164,7 @@ class StartupSyncService @Inject constructor(
             val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
             addonRepository.reconcileWithRemoteAddonUrls(
                 remoteUrls = remoteAddonUrls,
-                removeMissingLocal = false
+                removeMissingLocal = true
             )
             addonRepository.isSyncingFromRemote = false
             Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote for profile $profileId")
