@@ -207,11 +207,19 @@ class WatchProgressPreferences @Inject constructor(
      */
     suspend fun mergeRemoteEntries(remoteEntries: Map<String, WatchProgress>) {
         Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${remoteEntries.size} remote entries")
-        if (remoteEntries.isEmpty()) return
         store().edit { preferences ->
             val json = preferences[watchProgressKey] ?: "{}"
             val local = parseProgressMap(json).toMutableMap()
             Log.d("WatchProgressPrefs", "mergeRemoteEntries: ${local.size} existing local entries")
+
+            // Remove local entries that no longer exist on remote
+            if (remoteEntries.isNotEmpty()) {
+                val removedKeys = local.keys - remoteEntries.keys
+                removedKeys.forEach { key ->
+                    local.remove(key)
+                    Log.d("WatchProgressPrefs", "  removed key=$key (not in remote)")
+                }
+            }
 
             for ((key, remote) in remoteEntries) {
                 val existing = local[key]
