@@ -194,7 +194,11 @@ fun SettingsScreen(
         }
     }
 
-    var selectedCategory by remember { mutableStateOf(SettingsCategory.APPEARANCE) }
+    var selectedCategory by remember(visibleSections) {
+        mutableStateOf(
+            visibleSections.firstOrNull()?.category ?: SettingsCategory.APPEARANCE
+        )
+    }
     val railFocusRequesters = remember(visibleSections) {
         visibleSections.associate { it.category to FocusRequester() }
     }
@@ -213,12 +217,13 @@ fun SettingsScreen(
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var pendingContentFocusRequestId by remember { mutableLongStateOf(0L) }
+    var allowDetailAutofocus by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
 
     LaunchedEffect(visibleSections) {
         if (visibleSections.none { it.category == selectedCategory }) {
-            selectedCategory = SettingsCategory.APPEARANCE
+            selectedCategory = visibleSections.firstOrNull()?.category ?: SettingsCategory.APPEARANCE
         }
     }
 
@@ -285,7 +290,9 @@ fun SettingsScreen(
                         }
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
-                                focusManager.moveFocus(FocusDirection.Right)
+                                allowDetailAutofocus = true
+                                pendingContentFocusCategory = selectedCategory
+                                pendingContentFocusRequestId += 1L
                                 true
                             } else {
                                 false
@@ -314,6 +321,7 @@ fun SettingsScreen(
                                     if (section.category == SettingsCategory.INTEGRATION) {
                                         integrationSection = IntegrationSettingsSection.Hub
                                     }
+                                    allowDetailAutofocus = true
                                     selectedCategory = section.category
                                     pendingContentFocusCategory = section.category
                                     pendingContentFocusRequestId += 1L
@@ -348,24 +356,45 @@ fun SettingsScreen(
                         when (category) {
                             SettingsCategory.PROFILES -> ProfileSettingsContent()
                             SettingsCategory.APPEARANCE -> ThemeSettingsContent(
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.APPEARANCE]
+                                initialFocusRequester = if (allowDetailAutofocus) {
+                                    contentFocusRequesters[SettingsCategory.APPEARANCE]
+                                } else {
+                                    null
+                                }
                             )
                             SettingsCategory.LAYOUT -> LayoutSettingsContent(
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.LAYOUT]
+                                initialFocusRequester = if (allowDetailAutofocus) {
+                                    contentFocusRequesters[SettingsCategory.LAYOUT]
+                                } else {
+                                    null
+                                }
                             )
                             SettingsCategory.PLAYBACK -> PlaybackSettingsContent(
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.PLAYBACK]
+                                initialFocusRequester = if (allowDetailAutofocus) {
+                                    contentFocusRequesters[SettingsCategory.PLAYBACK]
+                                } else {
+                                    null
+                                }
                             )
                             SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
                                 selectedSection = integrationSection,
                                 onSelectSection = { integrationSection = it },
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.INTEGRATION],
+                                initialFocusRequester = if (allowDetailAutofocus) {
+                                    contentFocusRequesters[SettingsCategory.INTEGRATION]
+                                } else {
+                                    null
+                                },
                                 hubFocusRequester = integrationHubFocusRequester,
                                 tmdbFocusRequester = integrationTmdbFocusRequester,
-                                mdbListFocusRequester = integrationMdbListFocusRequester
+                                mdbListFocusRequester = integrationMdbListFocusRequester,
+                                autoFocusEnabled = allowDetailAutofocus
                             )
                             SettingsCategory.ABOUT -> AboutSettingsContent(
-                                initialFocusRequester = contentFocusRequesters[SettingsCategory.ABOUT]
+                                initialFocusRequester = if (allowDetailAutofocus) {
+                                    contentFocusRequesters[SettingsCategory.ABOUT]
+                                } else {
+                                    null
+                                }
                             )
                             SettingsCategory.PLUGINS -> PluginsSettingsContent()
                             SettingsCategory.ACCOUNT -> AccountSettingsInline(
@@ -443,14 +472,16 @@ private fun IntegrationSettingsContent(
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
-    mdbListFocusRequester: FocusRequester
+    mdbListFocusRequester: FocusRequester,
+    autoFocusEnabled: Boolean
 ) {
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
         onSelectSection(IntegrationSettingsSection.Hub)
     }
     val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
 
-    LaunchedEffect(selectedSection) {
+    LaunchedEffect(selectedSection, autoFocusEnabled) {
+        if (!autoFocusEnabled) return@LaunchedEffect
         val requester = when (selectedSection) {
             IntegrationSettingsSection.Hub -> hubEntryFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
