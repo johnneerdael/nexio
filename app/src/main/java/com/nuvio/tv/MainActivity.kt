@@ -110,6 +110,7 @@ import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -166,7 +167,16 @@ class MainActivity : ComponentActivity() {
             var onboardingProfileSyncInProgress by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
                 .hasSeenAuthQrOnFirstLaunch
-                .collectAsState(initial = false)
+                .map<Boolean, Boolean?> { it }
+                .collectAsState(initial = null)
+            val authState by authManager.authState.collectAsState()
+
+            LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
+                if (hasSeenAuthQrOnFirstLaunch == false && authState is AuthState.FullAccount) {
+                    appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
+                    onboardingCompletedThisSession = true
+                }
+            }
 
             val activeProfileId by profileManager.activeProfileId.collectAsState()
             val profiles by profileManager.profiles.collectAsState()
@@ -198,7 +208,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
-                    if (!hasSeenAuthQrOnFirstLaunch && !onboardingCompletedThisSession) {
+                    if (hasSeenAuthQrOnFirstLaunch == null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(NuvioColors.Background)
+                        )
+                        return@Surface
+                    }
+
+                    if (
+                        hasSeenAuthQrOnFirstLaunch == false &&
+                        authState !is AuthState.FullAccount &&
+                        !onboardingCompletedThisSession
+                    ) {
                         AuthQrSignInScreen(
                             onBackPress = {},
                             onContinue = {

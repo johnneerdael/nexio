@@ -211,6 +211,7 @@ fun SettingsScreen(
                 SettingsCategory.ABOUT to FocusRequester()
             )
     }
+    val railContainerFocusRequester = remember { FocusRequester() }
     val integrationHubFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
@@ -228,9 +229,7 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(Unit) {
-        railFocusRequesters[selectedCategory]?.let { requester ->
-            runCatching { requester.requestFocus() }
-        }
+        runCatching { railContainerFocusRequester.requestFocus() }
     }
 
     LaunchedEffect(pendingContentFocusRequestId) {
@@ -271,6 +270,7 @@ fun SettingsScreen(
 
                 LazyColumn(
                     modifier = Modifier
+                        .focusRequester(railContainerFocusRequester)
                         .width(282.dp)
                         .fillMaxHeight()
                         .onFocusChanged { state ->
@@ -335,6 +335,13 @@ fun SettingsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .onFocusChanged { state ->
+                            if (state.hasFocus && !allowDetailAutofocus) {
+                                railFocusRequesters[selectedCategory]?.let { requester ->
+                                    runCatching { requester.requestFocus() }
+                                }
+                            }
+                        }
                 ) {
                     AnimatedContent(
                         targetState = selectedCategory,
