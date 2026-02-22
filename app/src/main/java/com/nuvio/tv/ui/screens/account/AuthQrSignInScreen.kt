@@ -76,7 +76,7 @@ fun AuthQrSignInScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (!isSignedIn && uiState.qrLoginCode.isNullOrBlank() && !uiState.isLoading) {
+        if (!isOnboardingMode && !isSignedIn && uiState.qrLoginCode.isNullOrBlank() && !uiState.isLoading) {
             viewModel.startQrLogin()
         }
     }
@@ -293,6 +293,9 @@ fun AuthQrSignInScreen(
                     }
                     Button(
                         onClick = {
+                            if (onContinue != null && !isSignedIn) {
+                                viewModel.signOut()
+                            }
                             viewModel.clearQrLoginSession()
                             if (onContinue != null) {
                                 onContinue()

@@ -60,11 +60,10 @@ class AuthManager @Inject constructor(
                                 cachedEffectiveUserId = null
                                 cachedEffectiveUserSourceUserId = null
                             }
-                            val isAnonymous = user.email.isNullOrBlank()
-                            _authState.value = if (isAnonymous) {
-                                AuthState.Anonymous(userId = user.id)
+                            if (user.email.isNullOrBlank()) {
+                                _authState.value = AuthState.SignedOut
                             } else {
-                                AuthState.FullAccount(userId = user.id, email = user.email!!)
+                                _authState.value = AuthState.FullAccount(userId = user.id, email = user.email!!)
                             }
                         }
                     }
@@ -83,11 +82,10 @@ class AuthManager @Inject constructor(
     }
 
     val isAuthenticated: Boolean
-        get() = _authState.value is AuthState.Anonymous || _authState.value is AuthState.FullAccount
+        get() = _authState.value is AuthState.FullAccount
 
     val currentUserId: String?
         get() = when (val state = _authState.value) {
-            is AuthState.Anonymous -> state.userId
             is AuthState.FullAccount -> state.userId
             else -> null
         }
@@ -142,12 +140,24 @@ class AuthManager @Inject constructor(
         }
     }
 
-    suspend fun signInAnonymously(): Result<Unit> {
+    /**
+     * QR login RPCs currently require an authenticated Supabase session.
+     * This creates/reuses an anonymous session only for the QR flow while
+     * keeping app-level auth state exposed as SignedOut until a full account exists.
+     */
+    suspend fun ensureQrSessionAuthenticated(): Result<Unit> {
+        val user = auth.currentUserOrNull()
+        val hasToken = auth.currentAccessTokenOrNull() != null
+
+        if (user != null && hasToken) {
+            return Result.success(Unit)
+        }
+
         return try {
             auth.signInAnonymously()
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Anonymous sign in failed", e)
+            Log.e(TAG, "QR anonymous sign in failed", e)
             Result.failure(e)
         }
     }
