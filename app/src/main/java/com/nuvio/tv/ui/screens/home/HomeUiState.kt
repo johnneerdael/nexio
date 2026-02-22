@@ -63,6 +63,9 @@ data class NextUpInfo(
     val episodeTitle: String?,
     val episodeDescription: String? = null,
     val thumbnail: String?,
+    val released: String? = null,
+    val hasAired: Boolean = true,
+    val airDateLabel: String? = null,
     val lastWatched: Long
 )
 

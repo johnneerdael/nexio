@@ -954,7 +954,9 @@ private fun buildContinueWatchingItem(
         is ContinueWatchingItem.NextUp -> HeroPreview(
             title = item.info.name,
             logo = item.info.logo,
-            description = item.info.episodeDescription ?: item.info.episodeTitle,
+            description = item.info.episodeDescription
+                ?: item.info.episodeTitle
+                ?: item.info.airDateLabel?.let { "Airs $it" },
             contentTypeText = item.info.contentType.replaceFirstChar { ch -> ch.uppercase() },
             yearText = null,
             imdbText = null,
@@ -962,9 +964,9 @@ private fun buildContinueWatchingItem(
             poster = item.info.poster,
             backdrop = item.info.backdrop,
             imageUrl = if (useLandscapePosters) {
-                item.info.backdrop ?: item.info.poster
+                firstNonBlank(item.info.backdrop, item.info.poster, item.info.thumbnail)
             } else {
-                item.info.poster ?: item.info.backdrop
+                firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
             }
         )
     }
@@ -972,21 +974,25 @@ private fun buildContinueWatchingItem(
     val imageUrl = when (item) {
         is ContinueWatchingItem.InProgress -> if (useLandscapePosters) {
             if (isSeriesType(item.progress.contentType)) {
-                item.episodeThumbnail ?: item.progress.poster ?: item.progress.backdrop
+                firstNonBlank(item.episodeThumbnail, item.progress.poster, item.progress.backdrop)
             } else {
-                item.progress.backdrop ?: item.progress.poster
+                firstNonBlank(item.progress.backdrop, item.progress.poster)
             }
         } else {
             if (isSeriesType(item.progress.contentType)) {
-                heroPreview.poster ?: item.progress.poster
+                firstNonBlank(heroPreview.poster, item.progress.poster, item.progress.backdrop)
             } else {
-                item.progress.poster ?: item.progress.backdrop
+                firstNonBlank(item.progress.poster, item.progress.backdrop)
             }
         }
         is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
-            item.info.thumbnail ?: item.info.poster ?: item.info.backdrop
+            if (item.info.hasAired) {
+                firstNonBlank(item.info.thumbnail, item.info.poster, item.info.backdrop)
+            } else {
+                firstNonBlank(item.info.backdrop, item.info.poster, item.info.thumbnail)
+            }
         } else {
-            item.info.poster ?: item.info.backdrop
+            firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
         }
     }
 
@@ -998,7 +1004,14 @@ private fun buildContinueWatchingItem(
         },
         subtitle = when (item) {
             is ContinueWatchingItem.InProgress -> item.progress.episodeDisplayString ?: item.progress.episodeTitle
-            is ContinueWatchingItem.NextUp -> "S${item.info.season}E${item.info.episode}"
+            is ContinueWatchingItem.NextUp -> {
+                val code = "S${item.info.season}E${item.info.episode}"
+                if (item.info.hasAired) {
+                    code
+                } else {
+                    item.info.airDateLabel?.let { "$code • Airs $it" } ?: "$code • Upcoming"
+                }
+            }
         },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
@@ -1081,6 +1094,10 @@ private fun CatalogRow.key(): String {
 
 private fun isSeriesType(type: String?): Boolean {
     return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
+}
+
+private fun firstNonBlank(vararg candidates: String?): String? {
+    return candidates.firstOrNull { !it.isNullOrBlank() }?.trim()
 }
 
 private fun extractYear(releaseInfo: String?): String? {
