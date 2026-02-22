@@ -240,7 +240,10 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    if (!hasSelectedProfileThisSession) {
+                    val shouldShowProfileSelection =
+                        !hasSelectedProfileThisSession && profiles.size > 1
+
+                    if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
                             onProfileSelected = {
                                 hasSelectedProfileThisSession = true
