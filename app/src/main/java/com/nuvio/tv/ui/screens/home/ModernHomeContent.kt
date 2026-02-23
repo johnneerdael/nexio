@@ -130,7 +130,8 @@ private data class ModernCarouselItem(
     val subtitle: String?,
     val imageUrl: String?,
     val heroPreview: HeroPreview,
-    val payload: ModernPayload
+    val payload: ModernPayload,
+    val metaPreview: MetaPreview? = null
 )
 
 private data class HeroCarouselRow(
@@ -157,6 +158,7 @@ fun ModernHomeContent(
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit = {},
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
     val useLandscapePosters = uiState.modernLandscapePostersEnabled
@@ -699,6 +701,7 @@ fun ModernHomeContent(
                                         if (focusedCatalogSelection != nextSelection) {
                                             focusedCatalogSelection = nextSelection
                                         }
+                                        item.metaPreview?.let { onItemFocus(it) }
                                     },
                                     onClick = {
                                         onNavigateToDetail(
@@ -1059,7 +1062,8 @@ private fun buildCatalogItem(
             trailerTitle = item.name,
             trailerReleaseInfo = item.releaseInfo,
             trailerApiType = item.apiType
-        )
+        ),
+        metaPreview = item
     )
 }
 
