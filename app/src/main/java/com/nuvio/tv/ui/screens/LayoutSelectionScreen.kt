@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,6 +37,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.HomeLayout
@@ -43,6 +47,8 @@ import com.nuvio.tv.ui.components.ModernLayoutPreview
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsEvent
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsViewModel
 import com.nuvio.tv.ui.theme.NuvioColors
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 @Composable
 fun LayoutSelectionScreen(
@@ -68,7 +74,7 @@ fun LayoutSelectionScreen(
         ) {
             // Header
             Text(
-                text = "Welcome to Nuvio",
+                text = stringResource(R.string.layout_selection_welcome),
                 style = MaterialTheme.typography.headlineLarge,
                 color = NuvioColors.TextPrimary
             )
@@ -76,7 +82,7 @@ fun LayoutSelectionScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Choose your home screen layout",
+                text = stringResource(R.string.layout_selection_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 color = NuvioColors.TextSecondary
             )
@@ -142,7 +148,7 @@ fun LayoutSelectionScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Continue",
+                        text = stringResource(R.string.layout_selection_continue),
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White
                     )
@@ -170,10 +176,7 @@ private fun LayoutOptionCard(
             focusedContainerColor = NuvioColors.BackgroundCard
         ),
         border = CardDefaults.border(
-            border = if (isSelected) Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
-                shape = RoundedCornerShape(16.dp)
-            ) else Border.None,
+            border = Border.None,
             focusedBorder = Border(
                 border = BorderStroke(2.dp, NuvioColors.FocusRing),
                 shape = RoundedCornerShape(16.dp)
@@ -182,50 +185,68 @@ private fun LayoutOptionCard(
         shape = CardDefaults.shape(RoundedCornerShape(16.dp)),
         scale = CardDefaults.scale(focusedScale = 1.03f)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Animated preview
-            Box(
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                when (layout) {
-                    HomeLayout.CLASSIC -> ClassicLayoutPreview(
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    HomeLayout.GRID -> GridLayoutPreview(
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    HomeLayout.MODERN -> ModernLayoutPreview(
-                        modifier = Modifier.fillMaxSize()
-                    )
+                // Animated preview
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                ) {
+                    when (layout) {
+                        HomeLayout.CLASSIC -> ClassicLayoutPreview(
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        HomeLayout.GRID -> GridLayoutPreview(
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        HomeLayout.MODERN -> ModernLayoutPreview(
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = layout.displayName,
-                style = MaterialTheme.typography.titleLarge,
-                color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
-            )
+                Text(
+                    text = when (layout) {
+                        HomeLayout.CLASSIC -> stringResource(R.string.layout_classic)
+                        HomeLayout.GRID -> stringResource(R.string.layout_grid)
+                        HomeLayout.MODERN -> stringResource(R.string.layout_modern)
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                )
 
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = when (layout) {
-                    HomeLayout.CLASSIC -> "Scroll through categories horizontally"
-                    HomeLayout.GRID -> "Browse everything in a vertical grid with a hero section"
-                    HomeLayout.MODERN -> "Fixed hero with a single active row for faster browsing"
+                    HomeLayout.CLASSIC -> stringResource(R.string.layout_classic_desc)
+                    HomeLayout.GRID -> stringResource(R.string.layout_grid_desc)
+                    HomeLayout.MODERN -> stringResource(R.string.layout_modern_desc)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextTertiary
             )
+            }
+
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = NuvioColors.FocusRing,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(24.dp)
+                )
+            }
         }
     }
 }

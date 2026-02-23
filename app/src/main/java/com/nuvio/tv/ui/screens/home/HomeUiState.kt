@@ -16,8 +16,8 @@ data class HomeUiState(
     val selectedItemId: String? = null,
     val installedAddonsCount: Int = 0,
     val homeLayout: HomeLayout = HomeLayout.MODERN,
-    val modernLandscapePostersEnabled: Boolean = true,
-    val modernNextRowPreviewEnabled: Boolean = false,
+    val modernLandscapePostersEnabled: Boolean = false,
+    val modernNextRowPreviewEnabled: Boolean = true,
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),
     val heroSectionEnabled: Boolean = true,
@@ -29,7 +29,7 @@ data class HomeUiState(
     val focusedPosterBackdropTrailerEnabled: Boolean = false,
     val focusedPosterBackdropTrailerMuted: Boolean = true,
     val focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget =
-        FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
+        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
@@ -63,6 +63,9 @@ data class NextUpInfo(
     val episodeTitle: String?,
     val episodeDescription: String? = null,
     val thumbnail: String?,
+    val released: String? = null,
+    val hasAired: Boolean = true,
+    val airDateLabel: String? = null,
     val lastWatched: Long
 )
 

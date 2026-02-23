@@ -39,6 +39,7 @@ class ProfileSettingsViewModel @Inject constructor(
         usesPrimaryAddons: Boolean,
         usesPrimaryPlugins: Boolean
     ) {
+        if (_isCreating.value) return
         viewModelScope.launch {
             _isCreating.value = true
             val success = profileManager.createProfile(name, avatarColorHex)

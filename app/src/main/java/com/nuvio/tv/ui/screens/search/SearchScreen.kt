@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,13 +74,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
     onNavigateToDetail: (String, String, String) -> Unit,
-    onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> }
+    onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> },
+    onOpenDiscover: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -311,6 +315,7 @@ fun SearchScreen(
                     showVoiceSearch = isVoiceSearchAvailable,
                     onVoiceSearch = launchVoiceSearch,
                     onMoveToResults = { focusResults = true },
+                    onOpenDiscover = onOpenDiscover,
                     keyboardController = keyboardController
                 )
 
@@ -369,6 +374,7 @@ fun SearchScreen(
                         onMoveToResults = {
                             focusResults = true
                         },
+                        onOpenDiscover = onOpenDiscover,
                         keyboardController = keyboardController
                     )
                 }
@@ -376,7 +382,7 @@ fun SearchScreen(
                 if (trimmedSubmittedQuery.length < 2 || hasPendingUnsubmittedQuery) {
                     item {
                         Text(
-                            text = "Press Done on the keyboard to search",
+                            text = stringResource(R.string.search_keyboard_hint),
                             style = androidx.tv.material3.MaterialTheme.typography.bodySmall,
                             color = NuvioColors.TextSecondary,
                             modifier = Modifier
@@ -486,8 +492,10 @@ private fun SearchInputField(
     showVoiceSearch: Boolean,
     onVoiceSearch: () -> Unit,
     onMoveToResults: () -> Unit,
+    onOpenDiscover: () -> Unit,
     keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?
 ) {
+    var isDiscoverButtonFocused by remember { mutableStateOf(false) }
     var isVoiceButtonFocused by remember { mutableStateOf(false) }
 
     Row(
@@ -497,6 +505,30 @@ private fun SearchInputField(
             .onGloballyPositioned { onAttached() },
         verticalAlignment = Alignment.CenterVertically
     ) {
+        IconButton(
+            onClick = onOpenDiscover,
+            modifier = Modifier
+                .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
+                .size(56.dp)
+                .border(
+                    width = if (isDiscoverButtonFocused) 2.dp else 1.dp,
+                    color = if (isDiscoverButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .background(
+                    color = NuvioColors.BackgroundCard,
+                    shape = RoundedCornerShape(12.dp)
+                )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Explore,
+                contentDescription = "Open discover",
+                tint = NuvioColors.TextPrimary
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
         if (showVoiceSearch) {
             IconButton(
                 onClick = onVoiceSearch,
@@ -546,8 +578,7 @@ private fun SearchInputField(
                             return@onPreviewKeyEvent true
                         }
 
-                        KeyEvent.KEYCODE_DPAD_DOWN,
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
                             if (canMoveToResults) {
                                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                                     onMoveToResults()
@@ -569,7 +600,7 @@ private fun SearchInputField(
             shape = RoundedCornerShape(12.dp),
             placeholder = {
                 Text(
-                    text = "Search movies & series",
+                    text = stringResource(R.string.search_placeholder),
                     color = NuvioColors.TextTertiary
                 )
             },

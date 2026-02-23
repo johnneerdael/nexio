@@ -14,6 +14,7 @@ import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.Meta
@@ -53,9 +54,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
-import java.time.ZoneOffset
-import java.time.temporal.ChronoUnit
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import java.util.Locale
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -77,6 +79,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
+        private const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -118,6 +121,8 @@ class HomeViewModel @Inject constructor(
     private var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     private val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     private val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
+    private var externalMetaPrefetchJob: Job? = null
+    private var pendingExternalMetaPrefetchItemId: String? = null
     @Volatile
     private var externalMetaPrefetchEnabled: Boolean = false
     val trailerPreviewUrls: Map<String, String>
@@ -193,8 +198,8 @@ class HomeViewModel @Inject constructor(
                 posterLabelsEnabled = corePrefs.posterLabelsEnabled,
                 catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
                 catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
-                modernLandscapePostersEnabled = true,
-                modernNextRowPreviewEnabled = false,
+                modernLandscapePostersEnabled = false,
+                modernNextRowPreviewEnabled = true,
                 focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
                 focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
                 focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
@@ -215,7 +220,9 @@ class HomeViewModel @Inject constructor(
                     modernLandscapePostersEnabled = modernPrefs.first,
                     modernNextRowPreviewEnabled = modernPrefs.second
                 )
-            }.collectLatest { prefs ->
+            }
+                .distinctUntilChanged()
+                .collectLatest { prefs ->
                 val effectivePosterLabelsEnabled = if (prefs.layout == HomeLayout.MODERN) {
                     false
                 } else {
@@ -261,6 +268,8 @@ class HomeViewModel @Inject constructor(
                 .collectLatest { enabled ->
                     externalMetaPrefetchEnabled = enabled
                     if (!enabled) {
+                        externalMetaPrefetchJob?.cancel()
+                        pendingExternalMetaPrefetchItemId = null
                         externalMetaPrefetchInFlightIds.clear()
                     }
                 }
@@ -359,9 +368,16 @@ class HomeViewModel @Inject constructor(
     fun onItemFocus(item: MetaPreview) {
         if (!externalMetaPrefetchEnabled) return
         if (item.id in prefetchedExternalMetaIds) return
-        if (!externalMetaPrefetchInFlightIds.add(item.id)) return
+        if (pendingExternalMetaPrefetchItemId == item.id) return
 
-        viewModelScope.launch(Dispatchers.IO) {
+        pendingExternalMetaPrefetchItemId = item.id
+        externalMetaPrefetchJob?.cancel()
+        externalMetaPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
+            if (pendingExternalMetaPrefetchItemId != item.id) return@launch
+            if (!externalMetaPrefetchEnabled) return@launch
+            if (item.id in prefetchedExternalMetaIds) return@launch
+            if (!externalMetaPrefetchInFlightIds.add(item.id)) return@launch
             try {
                 val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
                     .first { it is NetworkResult.Success || it is NetworkResult.Error }
@@ -372,11 +388,37 @@ class HomeViewModel @Inject constructor(
                 }
             } finally {
                 externalMetaPrefetchInFlightIds.remove(item.id)
+                if (pendingExternalMetaPrefetchItemId == item.id) {
+                    pendingExternalMetaPrefetchItemId = null
+                }
             }
         }
     }
 
     private fun updateCatalogItemWithMeta(itemId: String, meta: Meta) {
+        fun mergeItem(currentItem: MetaPreview): MetaPreview = currentItem.copy(
+            background = meta.background ?: currentItem.background,
+            logo = meta.logo ?: currentItem.logo,
+            description = meta.description ?: currentItem.description,
+            releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
+            imdbRating = meta.imdbRating ?: currentItem.imdbRating,
+            genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
+        )
+
+        // Update the source-of-truth catalogsMap so re-renders don't revert the enrichment
+        catalogsMap.forEach { (key, row) ->
+            val itemIndex = row.items.indexOfFirst { it.id == itemId }
+            if (itemIndex >= 0) {
+                val merged = mergeItem(row.items[itemIndex])
+                if (merged != row.items[itemIndex]) {
+                    val mutableItems = row.items.toMutableList()
+                    mutableItems[itemIndex] = merged
+                    catalogsMap[key] = row.copy(items = mutableItems)
+                    truncatedRowCache.remove(key)
+                }
+            }
+        }
+
         _uiState.update { state ->
             var changed = false
             val updatedRows = state.catalogRows.map { row ->
@@ -384,16 +426,8 @@ class HomeViewModel @Inject constructor(
                 if (itemIndex < 0) {
                     row
                 } else {
-                    val currentItem = row.items[itemIndex]
-                    val mergedItem = currentItem.copy(
-                        background = meta.background ?: currentItem.background,
-                        logo = meta.logo ?: currentItem.logo,
-                        description = meta.description ?: currentItem.description,
-                        releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
-                        imdbRating = meta.imdbRating ?: currentItem.imdbRating,
-                        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
-                    )
-                    if (mergedItem == currentItem) {
+                    val mergedItem = mergeItem(row.items[itemIndex])
+                    if (mergedItem == row.items[itemIndex]) {
                         row
                     } else {
                         changed = true
@@ -403,11 +437,7 @@ class HomeViewModel @Inject constructor(
                     }
                 }
             }
-            if (changed) {
-                state.copy(catalogRows = updatedRows)
-            } else {
-                state
-            }
+            if (changed) state.copy(catalogRows = updatedRows) else state
         }
     }
 
@@ -465,15 +495,29 @@ class HomeViewModel @Inject constructor(
             combine(
                 watchProgressRepository.allProgress,
                 traktSettingsDataStore.continueWatchingDaysCap,
-                traktSettingsDataStore.dismissedNextUpKeys
-            ) { items, daysCap, dismissedNextUp ->
-                Triple(items, daysCap, dismissedNextUp)
-            }.collectLatest { (items, daysCap, dismissedNextUp) ->
-                val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
-                val cutoffMs = System.currentTimeMillis() - windowMs
+                traktSettingsDataStore.dismissedNextUpKeys,
+                traktSettingsDataStore.showUnairedNextUp
+            ) { items, daysCap, dismissedNextUp, showUnairedNextUp ->
+                ContinueWatchingSettingsSnapshot(
+                    items = items,
+                    daysCap = daysCap,
+                    dismissedNextUp = dismissedNextUp,
+                    showUnairedNextUp = showUnairedNextUp
+                )
+            }.collectLatest { snapshot ->
+                val items = snapshot.items
+                val daysCap = snapshot.daysCap
+                val dismissedNextUp = snapshot.dismissedNextUp
+                val showUnairedNextUp = snapshot.showUnairedNextUp
+                val cutoffMs = if (daysCap == TraktSettingsDataStore.CONTINUE_WATCHING_DAYS_CAP_ALL) {
+                    null
+                } else {
+                    val windowMs = daysCap.toLong() * 24L * 60L * 60L * 1000L
+                    System.currentTimeMillis() - windowMs
+                }
                 val recentItems = items
                     .asSequence()
-                    .filter { it.lastWatched >= cutoffMs }
+                    .filter { progress -> cutoffMs == null || progress.lastWatched >= cutoffMs }
                     .sortedByDescending { it.lastWatched }
                     .take(MAX_RECENT_PROGRESS_ITEMS)
                     .toList()
@@ -483,7 +527,7 @@ class HomeViewModel @Inject constructor(
                 val metaCache = mutableMapOf<String, Meta?>()
                 val inProgressOnly = buildList {
                     deduplicateInProgress(
-                        recentItems.filter { it.isInProgress() }
+                        recentItems.filter { shouldTreatAsInProgressForContinueWatching(it) }
                     ).forEach { progress ->
                         add(
                             ContinueWatchingItem.InProgress(
@@ -498,17 +542,38 @@ class HomeViewModel @Inject constructor(
                 Log.d("HomeViewModel", "inProgressOnly: ${inProgressOnly.size} items after filter+dedup")
 
                 // Optimistic immediate render: show in-progress entries instantly.
-                _uiState.update { it.copy(continueWatchingItems = inProgressOnly) }
+                _uiState.update { state ->
+                    if (state.continueWatchingItems == inProgressOnly) {
+                        state
+                    } else {
+                        state.copy(continueWatchingItems = inProgressOnly)
+                    }
+                }
 
                 // Then enrich Next Up in background with bounded concurrency.
                 enrichContinueWatchingProgressively(
                     allProgress = recentItems,
                     inProgressItems = inProgressOnly,
-                    dismissedNextUp = dismissedNextUp
+                    dismissedNextUp = dismissedNextUp,
+                    showUnairedNextUp = showUnairedNextUp
                 )
             }
         }
     }
+
+    private data class ContinueWatchingSettingsSnapshot(
+        val items: List<WatchProgress>,
+        val daysCap: Int,
+        val dismissedNextUp: Set<String>,
+        val showUnairedNextUp: Boolean
+    )
+
+    private data class NextUpArtworkFallback(
+        val thumbnail: String?,
+        val backdrop: String?,
+        val poster: String?,
+        val airDate: String?
+    )
 
     private fun deduplicateInProgress(items: List<WatchProgress>): List<WatchProgress> {
         val (series, nonSeries) = items.partition { isSeriesType(it.contentType) }
@@ -516,6 +581,18 @@ class HomeViewModel @Inject constructor(
             .sortedByDescending { it.lastWatched }
             .distinctBy { it.contentId }
         return (nonSeries + latestPerShow).sortedByDescending { it.lastWatched }
+    }
+
+    private fun shouldTreatAsInProgressForContinueWatching(progress: WatchProgress): Boolean {
+        if (progress.isInProgress()) return true
+        if (progress.isCompleted()) return false
+
+        // Rewatch edge case: a started replay can be below the default 2% "in progress"
+        // threshold, but should still suppress Next Up and appear as resume.
+        val hasStartedPlayback = progress.position > 0L || progress.progressPercent?.let { it > 0f } == true
+        return hasStartedPlayback &&
+            progress.source != WatchProgress.SOURCE_TRAKT_HISTORY &&
+            progress.source != WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS
     }
 
     private suspend fun resolveCurrentEpisodeDescription(
@@ -559,7 +636,8 @@ class HomeViewModel @Inject constructor(
     private suspend fun enrichContinueWatchingProgressively(
         allProgress: List<WatchProgress>,
         inProgressItems: List<ContinueWatchingItem.InProgress>,
-        dismissedNextUp: Set<String>
+        dismissedNextUp: Set<String>,
+        showUnairedNextUp: Boolean
     ) = coroutineScope {
         val inProgressIds = inProgressItems
             .map { it.progress.contentId }
@@ -603,18 +681,25 @@ class HomeViewModel @Inject constructor(
         val jobs = latestCompletedBySeries.map { progress ->
             launch(Dispatchers.IO) {
                 lookupSemaphore.withPermit {
-                    val nextUp = buildNextUpItem(progress, metaCache) ?: return@withPermit
+                    val nextUp = buildNextUpItem(
+                        progress = progress,
+                        metaCache = metaCache,
+                        showUnairedNextUp = showUnairedNextUp
+                    ) ?: return@withPermit
                     mergeMutex.withLock {
                         nextUpByContent[progress.contentId] = nextUp
                         if (nextUpByContent.size - lastEmittedNextUpCount >= 2) {
                             val nextUpItems = nextUpByContent.values.toList()
                             _uiState.update {
-                                it.copy(
-                                    continueWatchingItems = mergeContinueWatchingItems(
-                                        inProgressItems = inProgressItems,
-                                        nextUpItems = nextUpItems
-                                    )
+                                val mergedItems = mergeContinueWatchingItems(
+                                    inProgressItems = inProgressItems,
+                                    nextUpItems = nextUpItems
                                 )
+                                if (it.continueWatchingItems == mergedItems) {
+                                    it
+                                } else {
+                                    it.copy(continueWatchingItems = mergedItems)
+                                }
                             }
                             lastEmittedNextUpCount = nextUpByContent.size
                         }
@@ -628,12 +713,15 @@ class HomeViewModel @Inject constructor(
             if (nextUpByContent.size != lastEmittedNextUpCount) {
                 val nextUpItems = nextUpByContent.values.toList()
                 _uiState.update {
-                    it.copy(
-                        continueWatchingItems = mergeContinueWatchingItems(
-                            inProgressItems = inProgressItems,
-                            nextUpItems = nextUpItems
-                        )
+                    val mergedItems = mergeContinueWatchingItems(
+                        inProgressItems = inProgressItems,
+                        nextUpItems = nextUpItems
                     )
+                    if (it.continueWatchingItems == mergedItems) {
+                        it
+                    } else {
+                        it.copy(continueWatchingItems = mergedItems)
+                    }
                 }
             }
         }
@@ -666,24 +754,71 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun buildNextUpItem(
         progress: WatchProgress,
-        metaCache: MutableMap<String, Meta?>
+        metaCache: MutableMap<String, Meta?>,
+        showUnairedNextUp: Boolean
     ): ContinueWatchingItem.NextUp? {
-        val nextEpisode = findNextEpisode(progress, metaCache) ?: return null
+        val nextEpisode = findNextEpisode(
+            progress = progress,
+            metaCache = metaCache,
+            showUnairedNextUp = showUnairedNextUp
+        ) ?: return null
         val meta = nextEpisode.first
         val video = nextEpisode.second
+        val nextSeason = requireNotNull(video.season)
+        val nextEpisodeNumber = requireNotNull(video.episode)
+
+        val isNextEpisodeAlreadyWatched = runCatching {
+            watchProgressRepository.isWatched(
+                contentId = progress.contentId,
+                season = nextSeason,
+                episode = nextEpisodeNumber
+            ).first()
+        }.getOrDefault(false)
+        if (isNextEpisodeAlreadyWatched) return null
+
+        val existingPoster = meta.poster.normalizeImageUrl()
+        val existingBackdrop = meta.background.normalizeImageUrl()
+        val existingLogo = meta.logo.normalizeImageUrl()
+        val existingThumbnail = video.thumbnail.normalizeImageUrl()
+        val artworkFallback = if (
+            existingThumbnail == null ||
+            existingBackdrop == null ||
+            existingPoster == null
+        ) {
+            resolveNextUpArtworkFallback(
+                progress = progress,
+                meta = meta,
+                season = nextSeason,
+                episode = nextEpisodeNumber
+            )
+        } else {
+            null
+        }
+        val released = video.released?.trim()?.takeIf { it.isNotEmpty() }
+            ?: artworkFallback?.airDate
+        val releaseDate = parseEpisodeReleaseDate(released)
+        val todayLocal = LocalDate.now(ZoneId.systemDefault())
+        val hasAired = releaseDate?.let { !it.isAfter(todayLocal) } ?: true
         val info = NextUpInfo(
             contentId = progress.contentId,
             contentType = progress.contentType,
             name = meta.name,
-            poster = meta.poster,
-            backdrop = meta.background,
-            logo = meta.logo,
+            poster = existingPoster ?: artworkFallback?.poster,
+            backdrop = existingBackdrop ?: artworkFallback?.backdrop,
+            logo = existingLogo,
             videoId = video.id,
-            season = video.season ?: return null,
-            episode = video.episode ?: return null,
+            season = nextSeason,
+            episode = nextEpisodeNumber,
             episodeTitle = video.title,
             episodeDescription = video.overview?.takeIf { it.isNotBlank() },
-            thumbnail = video.thumbnail,
+            thumbnail = existingThumbnail ?: artworkFallback?.thumbnail,
+            released = released,
+            hasAired = hasAired,
+            airDateLabel = if (hasAired) {
+                null
+            } else {
+                formatEpisodeAirDateLabel(releaseDate)
+            },
             lastWatched = progress.lastWatched
         )
         return ContinueWatchingItem.NextUp(info)
@@ -691,7 +826,8 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun findNextEpisode(
         progress: WatchProgress,
-        metaCache: MutableMap<String, Meta?>
+        metaCache: MutableMap<String, Meta?>,
+        showUnairedNextUp: Boolean
     ): Pair<Meta, Video>? {
         if (!isSeriesType(progress.contentType)) return null
 
@@ -703,22 +839,20 @@ class HomeViewModel @Inject constructor(
 
         val currentSeason = progress.season ?: return null
         val currentEpisode = progress.episode ?: return null
-        val maxEpisodeInSeason = episodes
-            .asSequence()
+        val maxEpisodeInSeason = episodes.asSequence()
             .filter { it.season == currentSeason }
             .mapNotNull { it.episode }
             .maxOrNull()
             ?: return null
 
-        val isSeasonJump = currentEpisode >= maxEpisodeInSeason
-        val targetSeason = if (isSeasonJump) currentSeason + 1 else currentSeason
-        val targetEpisode = if (isSeasonJump) 1 else currentEpisode + 1
+        val targetSeason = if (currentEpisode >= maxEpisodeInSeason) currentSeason + 1 else currentSeason
+        val targetEpisode = if (currentEpisode >= maxEpisodeInSeason) 1 else currentEpisode + 1
 
         val nextEpisode = episodes.firstOrNull {
             it.season == targetSeason && it.episode == targetEpisode
         } ?: return null
 
-        if (!shouldIncludeNextUpEpisode(nextEpisode, isSeasonJump)) return null
+        if (!shouldIncludeNextUpEpisode(nextEpisode, showUnairedNextUp)) return null
 
         return meta to nextEpisode
     }
@@ -771,26 +905,24 @@ class HomeViewModel @Inject constructor(
 
     private fun shouldIncludeNextUpEpisode(
         nextEpisode: Video,
-        isSeasonJump: Boolean
+        showUnairedNextUp: Boolean
     ): Boolean {
+        if (showUnairedNextUp) return true
         val releaseDate = parseEpisodeReleaseDate(nextEpisode.released)
-            ?: return !isSeasonJump
-        val todayUtc = LocalDate.now(ZoneOffset.UTC)
-        if (!releaseDate.isAfter(todayUtc)) return true
-        if (!isSeasonJump) return true
-
-        val daysUntilRelease = ChronoUnit.DAYS.between(todayUtc, releaseDate)
-        return daysUntilRelease <= 7
+            ?: return true
+        val todayLocal = LocalDate.now(ZoneId.systemDefault())
+        return !releaseDate.isAfter(todayLocal)
     }
 
     private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
         if (raw.isNullOrBlank()) return null
         val value = raw.trim()
+        val zone = ZoneId.systemDefault()
 
         return runCatching {
-            Instant.parse(value).atOffset(ZoneOffset.UTC).toLocalDate()
+            Instant.parse(value).atZone(zone).toLocalDate()
         }.getOrNull() ?: runCatching {
-            OffsetDateTime.parse(value).toLocalDate()
+            OffsetDateTime.parse(value).toInstant().atZone(zone).toLocalDate()
         }.getOrNull() ?: runCatching {
             LocalDateTime.parse(value).toLocalDate()
         }.getOrNull() ?: runCatching {
@@ -801,6 +933,86 @@ class HomeViewModel @Inject constructor(
             LocalDate.parse(datePortion)
         }.getOrNull()
     }
+
+    private suspend fun resolveNextUpArtworkFallback(
+        progress: WatchProgress,
+        meta: Meta,
+        season: Int,
+        episode: Int
+    ): NextUpArtworkFallback? {
+        val tmdbId = resolveTmdbIdForNextUp(progress, meta) ?: return null
+        val language = currentTmdbSettings.language
+
+        val episodeMeta = runCatching {
+            tmdbMetadataService
+                .fetchEpisodeEnrichment(
+                    tmdbId = tmdbId,
+                    seasonNumbers = listOf(season),
+                    language = language
+                )[season to episode]
+        }.getOrNull()
+
+        val showMeta = runCatching {
+            tmdbMetadataService.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = ContentType.SERIES,
+                language = language
+            )
+        }.getOrNull()
+
+        val fallback = NextUpArtworkFallback(
+            thumbnail = episodeMeta?.thumbnail.normalizeImageUrl(),
+            backdrop = showMeta?.backdrop.normalizeImageUrl(),
+            poster = showMeta?.poster.normalizeImageUrl(),
+            airDate = episodeMeta?.airDate?.trim()?.takeIf { it.isNotEmpty() }
+        )
+
+        return if (
+            fallback.thumbnail == null &&
+            fallback.backdrop == null &&
+            fallback.poster == null &&
+            fallback.airDate == null
+        ) {
+            null
+        } else {
+            fallback
+        }
+    }
+
+    private suspend fun resolveTmdbIdForNextUp(
+        progress: WatchProgress,
+        meta: Meta
+    ): String? {
+        val candidates = buildList {
+            add(progress.contentId)
+            add(meta.id)
+            add(progress.videoId)
+            if (progress.contentId.startsWith("trakt:")) add(progress.contentId.substringAfter(':'))
+            if (meta.id.startsWith("trakt:")) add(meta.id.substringAfter(':'))
+        }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        for (candidate in candidates) {
+            tmdbService.ensureTmdbId(candidate, progress.contentType)?.let { return it }
+        }
+        return null
+    }
+
+    private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {
+        val todayLocal = LocalDate.now(ZoneId.systemDefault())
+        val formatter = if (releaseDate.year == todayLocal.year) {
+            DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
+        } else {
+            DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
+        }
+        return releaseDate.format(formatter)
+    }
+
+    private fun String?.normalizeImageUrl(): String? = this
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 
     private fun nextUpDismissKey(contentId: String): String {
         return contentId.trim()
@@ -872,6 +1084,8 @@ class HomeViewModel @Inject constructor(
         trailerPreviewRequestVersion = 0L
         prefetchedExternalMetaIds.clear()
         externalMetaPrefetchInFlightIds.clear()
+        externalMetaPrefetchJob?.cancel()
+        pendingExternalMetaPrefetchItemId = null
         lastHeroEnrichmentSignature = null
         lastHeroEnrichedItems = emptyList()
 
@@ -990,12 +1204,12 @@ class HomeViewModel @Inject constructor(
                         val mergedItems = currentRow.items + result.data.items
                         catalogsMap[key] = result.data.copy(items = mergedItems)
                         _loadingCatalogs.update { it - key }
-                        updateCatalogRows()
+                        scheduleUpdateCatalogRows()
                     }
                     is NetworkResult.Error -> {
                         catalogsMap[key] = currentRow.copy(isLoading = false)
                         _loadingCatalogs.update { it - key }
-                        updateCatalogRows()
+                        scheduleUpdateCatalogRows()
                     }
                     NetworkResult.Loading -> { }
                 }

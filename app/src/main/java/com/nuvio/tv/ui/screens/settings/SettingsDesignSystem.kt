@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -219,9 +220,12 @@ internal fun SettingsRailButton(
         modifier = appliedModifier
             .fillMaxWidth()
             .heightIn(min = SettingsRailItemHeight)
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = if (isSelected) NuvioColors.BackgroundCard else NuvioColors.Background,
@@ -373,6 +377,7 @@ internal fun SettingsToggleRow(
     enabled: Boolean = true
 ) {
     val contentAlpha = if (enabled) 1f else 0.4f
+    var isFocused by remember { mutableStateOf(false) }
 
     Card(
         onClick = {
@@ -381,8 +386,12 @@ internal fun SettingsToggleRow(
         modifier = modifier
             .fillMaxWidth()
             .height(62.dp)
-            .onFocusChanged {
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
@@ -444,14 +453,19 @@ internal fun SettingsActionRow(
     trailingIcon: ImageVector = Icons.Default.ChevronRight
 ) {
     val contentAlpha = if (enabled) 1f else 0.4f
+    var isFocused by remember { mutableStateOf(false) }
 
     Card(
         onClick = { if (enabled) onClick() },
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 62.dp)
-            .onFocusChanged {
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
@@ -526,9 +540,12 @@ internal fun SettingsChoiceChip(
 
     Card(
         onClick = onClick,
-        modifier = modifier.onFocusChanged {
-            isFocused = it.isFocused
-            if (it.isFocused) onFocused()
+        modifier = modifier.onFocusChanged { state ->
+            val nowFocused = state.isFocused
+            if (isFocused != nowFocused) {
+                isFocused = nowFocused
+                if (nowFocused) onFocused()
+            }
         },
         colors = CardDefaults.colors(
             containerColor = if (selected) NuvioColors.FocusRing.copy(alpha = 0.2f) else NuvioColors.Background,
@@ -567,7 +584,13 @@ private fun SettingsTogglePill(
             .width(46.dp)
             .height(24.dp)
             .clip(RoundedCornerShape(SettingsPillRadius))
-            .background(if (checked) NuvioColors.FocusRing.copy(alpha = alpha) else NuvioColors.Border.copy(alpha = alpha))
+            .background(
+                if (checked) {
+                    NuvioColors.Secondary.copy(alpha = 0.35f * alpha)
+                } else {
+                    NuvioColors.Border.copy(alpha = alpha)
+                }
+            )
             .padding(2.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     ) {
@@ -581,9 +604,14 @@ private fun SettingsTogglePill(
 }
 
 @Composable
-private fun rememberRawSvgPainter(rawIconRes: Int) = rememberAsyncImagePainter(
-    model = ImageRequest.Builder(LocalContext.current)
-        .data(rawIconRes)
-        .decoderFactory(SvgDecoder.Factory())
-        .build()
-)
+private fun rememberRawSvgPainter(rawIconRes: Int): Painter {
+    val context = LocalContext.current
+    val request = remember(rawIconRes, context) {
+        ImageRequest.Builder(context)
+            .data(rawIconRes)
+            .decoderFactory(SvgDecoder.Factory())
+            .crossfade(false)
+            .build()
+    }
+    return rememberAsyncImagePainter(model = request)
+}

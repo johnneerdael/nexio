@@ -90,6 +90,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(enabled)
     }
 
+    suspend fun setOsdClockEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setOsdClockEnabled(enabled)
+    }
+
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
         playerSettingsDataStore.setSkipIntroEnabled(enabled)
     }
@@ -214,6 +218,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
+    }
+
+    suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {

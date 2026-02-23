@@ -23,8 +23,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -33,8 +36,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.nuvio.tv.R
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
@@ -46,6 +50,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.util.formatAddonTypeLabel
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -75,21 +80,33 @@ fun CatalogRowSection(
 ) {
     val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
+    val currentOnItemFocus by rememberUpdatedState(onItemFocus)
 
     val internalRowFocusRequester = remember { FocusRequester() }
     val resolvedRowFocusRequester = rowFocusRequester ?: internalRowFocusRequester
     val itemFocusRequestersById = remember { mutableMapOf<String, FocusRequester>() }
+    var lastRequestedFocusItemId by remember { mutableStateOf<String?>(null) }
+    var lastFocusedItemIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(catalogRow.items) {
         val validIds = catalogRow.items.mapTo(mutableSetOf()) { it.id }
         itemFocusRequestersById.keys.retainAll(validIds)
+        if (lastRequestedFocusItemId !in validIds) {
+            lastRequestedFocusItemId = null
+        }
     }
 
     LaunchedEffect(focusedItemIndex, catalogRow.items) {
         if (focusedItemIndex >= 0 && focusedItemIndex < catalogRow.items.size) {
             val targetItemId = catalogRow.items[focusedItemIndex].id
+            if (lastRequestedFocusItemId == targetItemId) return@LaunchedEffect
             val requester = itemFocusRequestersById.getOrPut(targetItemId) { FocusRequester() }
             repeat(2) { withFrameNanos { } }
-            runCatching { requester.requestFocus() }
+            val focused = runCatching { requester.requestFocus() }.isSuccess
+            if (focused) {
+                lastRequestedFocusItemId = targetItemId
+            }
+        } else {
+            lastRequestedFocusItemId = null
         }
     }
 
@@ -99,13 +116,14 @@ fun CatalogRowSection(
         Modifier
     }
 
-    val catalogTitle = remember(catalogRow.catalogName, catalogRow.apiType, showCatalogTypeSuffix) {
+    val typeLabel = remember(catalogRow.rawType, catalogRow.apiType) {
+        formatAddonTypeLabel(
+            catalogRow.rawType.takeIf { it.isNotBlank() } ?: catalogRow.apiType
+        )
+    }
+    val catalogTitle = remember(catalogRow.catalogName, typeLabel, showCatalogTypeSuffix) {
         val formattedName = catalogRow.catalogName.replaceFirstChar { it.uppercase() }
-        if (showCatalogTypeSuffix) {
-            "$formattedName - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}"
-        } else {
-            formattedName
-        }
+        if (showCatalogTypeSuffix && typeLabel.isNotEmpty()) "$formattedName - $typeLabel" else formattedName
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -126,7 +144,7 @@ fun CatalogRowSection(
                 )
                 if (showAddonName) {
                     Text(
-                        text = "from ${catalogRow.addonName}",
+                        text = stringResource(R.string.catalog_from_addon, catalogRow.addonName),
                         style = MaterialTheme.typography.labelMedium,
                         color = NuvioColors.TextTertiary
                     )
@@ -161,7 +179,7 @@ fun CatalogRowSection(
             itemsIndexed(
                 items = catalogRow.items,
                 key = { _, item ->
-                    "${catalogRow.addonId}_${catalogRow.type}_${catalogRow.catalogId}_${item.id}"
+                    "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}_${item.id}"
                 },
                 contentType = { _, _ -> "content_card" }
             ) { index, item ->
@@ -175,15 +193,15 @@ fun CatalogRowSection(
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrl = trailerPreviewUrls[item.id],
                     onRequestTrailerPreview = onRequestTrailerPreview,
-                    onFocus = onItemFocus,
-                    onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
-                    modifier = Modifier
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
-                                currentOnItemFocused(index)
-                            }
+                    onFocus = { focusedItem ->
+                        currentOnItemFocus(focusedItem)
+                        if (lastFocusedItemIndex != index) {
+                            lastFocusedItemIndex = index
+                            currentOnItemFocused(index)
                         }
-                        .then(directionalFocusModifier),
+                    },
+                    onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
+                    modifier = Modifier.then(directionalFocusModifier),
                     focusRequester = itemFocusRequestersById.getOrPut(item.id) { FocusRequester() }
                 )
             }
@@ -219,13 +237,13 @@ fun CatalogRowSection(
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = "See All",
+                                    contentDescription = stringResource(R.string.action_see_all),
                                     modifier = Modifier.size(32.dp),
                                     tint = NuvioColors.TextSecondary
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "See All",
+                                    text = stringResource(R.string.action_see_all),
                                     style = MaterialTheme.typography.titleSmall,
                                     color = NuvioColors.TextSecondary
                                 )

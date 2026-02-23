@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltViewModel
@@ -222,7 +221,6 @@ class PluginViewModel @Inject constructor(
                 }
             },
             onChangeProposed = { change -> handleRepoChangeProposed(change) },
-            manifestFetcher = { url -> fetchRepoInfo(url) },
             logoProvider = { logoBytes }
         )
 
@@ -254,22 +252,6 @@ class PluginViewModel @Inject constructor(
                 serverUrl = null,
                 pendingRepoChange = null
             )
-        }
-    }
-
-    private fun fetchRepoInfo(url: String): RepositoryConfigServer.RepositoryInfo? {
-        return try {
-            val result = runBlocking { pluginManager.addRepository(url) }
-            result.getOrNull()?.let { repo ->
-                runBlocking { pluginManager.removeRepository(repo.id) }
-                RepositoryConfigServer.RepositoryInfo(
-                    url = url,
-                    name = repo.name.ifBlank { url },
-                    description = repo.description
-                )
-            }
-        } catch (e: Exception) {
-            null
         }
     }
 

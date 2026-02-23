@@ -1,8 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -33,7 +31,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.nuvio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -81,11 +81,13 @@ fun GridHomeContent(
     }
 
     // Offset for section indices when continue watching is present
-    val continueWatchingOffset = if (uiState.continueWatchingItems.isNotEmpty()) 1 else 0
+    val gridItems = uiState.gridItems
+    val continueWatchingItems = uiState.continueWatchingItems
+    val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
 
     // Build index-to-section mapping for sticky header
-    val sectionMapping = remember(uiState.gridItems, continueWatchingOffset) {
-        buildSectionMapping(uiState.gridItems, continueWatchingOffset)
+    val sectionMapping = remember(gridItems, continueWatchingOffset) {
+        buildSectionMapping(gridItems, continueWatchingOffset)
     }
 
     val currentSectionName by remember(gridState, sectionMapping) {
@@ -95,8 +97,8 @@ fun GridHomeContent(
     }
 
     // Pre-compute whether hero exists to avoid repeated list scan in derivedStateOf
-    val hasHero = remember(uiState.gridItems) {
-        uiState.gridItems.firstOrNull() is GridItem.Hero
+    val hasHero = remember(gridItems) {
+        gridItems.firstOrNull() is GridItem.Hero
     }
     val topPadding = if (hasHero) 0.dp else 24.dp
 
@@ -115,9 +117,9 @@ fun GridHomeContent(
     }
     val heroFocusRequester = remember { FocusRequester() }
     val firstGridItemFocusRequester = remember { FocusRequester() }
-    val hasContinueWatching = uiState.continueWatchingItems.isNotEmpty()
-    val hasStandaloneFocusableGridItem = remember(uiState.gridItems) {
-        uiState.gridItems.any { it is GridItem.Content || it is GridItem.SeeAll }
+    val hasContinueWatching = continueWatchingItems.isNotEmpty()
+    val hasStandaloneFocusableGridItem = remember(gridItems) {
+        gridItems.any { it is GridItem.Content || it is GridItem.SeeAll }
     }
 
     LaunchedEffect(
@@ -125,7 +127,7 @@ fun GridHomeContent(
         hasHero,
         hasContinueWatching,
         hasStandaloneFocusableGridItem,
-        uiState.gridItems.size
+            gridItems.size
     ) {
         if (!shouldRequestInitialFocus) return@LaunchedEffect
         if (hasContinueWatching && !hasHero) return@LaunchedEffect
@@ -158,8 +160,9 @@ fun GridHomeContent(
         ) {
             var continueWatchingInserted = false
             var firstGridFocusableAssigned = false
+            val contentOccurrencesByCatalogAndId = mutableMapOf<String, Int>()
 
-            uiState.gridItems.forEachIndexed { index, gridItem ->
+            gridItems.forEach { gridItem ->
                 when (gridItem) {
                     is GridItem.Hero -> {
                         item(
@@ -183,7 +186,7 @@ fun GridHomeContent(
 
                     is GridItem.SectionDivider -> {
                         // Insert continue watching before the first section divider
-                        if (!continueWatchingInserted && uiState.continueWatchingItems.isNotEmpty()) {
+                        if (!continueWatchingInserted && continueWatchingItems.isNotEmpty()) {
                             continueWatchingInserted = true
                             item(
                                 key = "continue_watching",
@@ -191,7 +194,7 @@ fun GridHomeContent(
                                 contentType = "continue_watching"
                             ) {
                                 GridContinueWatchingSection(
-                                    items = uiState.continueWatchingItems,
+                                    items = continueWatchingItems,
                                     focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                                     onItemClick = { item ->
                                         onContinueWatchingClick(item)
@@ -230,7 +233,7 @@ fun GridHomeContent(
                         }
 
                         item(
-                            key = "divider_${index}_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
+                            key = "divider_${gridItem.catalogId}_${gridItem.addonId}_${gridItem.type}",
                             span = { GridItemSpan(maxLineSpan) },
                             contentType = "divider"
                         ) {
@@ -252,8 +255,11 @@ fun GridHomeContent(
                         } else {
                             null
                         }
+                        val occurrenceBaseKey = "${gridItem.catalogId}|${gridItem.item.id}"
+                        val occurrence = contentOccurrencesByCatalogAndId.getOrDefault(occurrenceBaseKey, 0)
+                        contentOccurrencesByCatalogAndId[occurrenceBaseKey] = occurrence + 1
                         item(
-                            key = "content_${index}_${gridItem.catalogId}_${gridItem.item.id}",
+                            key = "content_${gridItem.catalogId}_${gridItem.item.id}_$occurrence",
                             span = { GridItemSpan(1) },
                             contentType = "content"
                         ) {
@@ -306,14 +312,14 @@ fun GridHomeContent(
                 }
             }
 
-            if (!continueWatchingInserted && uiState.continueWatchingItems.isNotEmpty()) {
+            if (!continueWatchingInserted && continueWatchingItems.isNotEmpty()) {
                 item(
                     key = "continue_watching_fallback",
                     span = { GridItemSpan(maxLineSpan) },
                     contentType = "continue_watching"
                 ) {
                     GridContinueWatchingSection(
-                        items = uiState.continueWatchingItems,
+                        items = continueWatchingItems,
                         focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                         onItemClick = { item ->
                             onContinueWatchingClick(item)
@@ -405,17 +411,11 @@ private fun StickyCategoryHeader(
             .background(headerGradient)
             .padding(horizontal = 48.dp, vertical = 12.dp)
     ) {
-        Crossfade(
-            targetState = sectionName,
-            animationSpec = tween(150),
-            label = "sectionNameCrossfade"
-        ) { name ->
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleLarge,
-                color = NuvioColors.TextPrimary
-            )
-        }
+        Text(
+            text = sectionName,
+            style = MaterialTheme.typography.titleLarge,
+            color = NuvioColors.TextPrimary
+        )
     }
 }
 
@@ -461,13 +461,13 @@ private fun SeeAllGridCard(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "See All",
+                    contentDescription = stringResource(R.string.action_see_all),
                     modifier = Modifier.size(32.dp),
                     tint = NuvioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "See All",
+                    text = stringResource(R.string.action_see_all),
                     style = MaterialTheme.typography.titleSmall,
                     color = NuvioColors.TextSecondary
                 )

@@ -110,6 +110,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     loadingOverlayEnabled = settings.loadingOverlayEnabled,
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
+                    osdClockEnabled = settings.osdClockEnabled,
                     frameRateMatchingMode = settings.frameRateMatchingMode
                 )
             }
@@ -142,6 +143,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
             streamAutoPlayModeSetting = settings.streamAutoPlayMode
             streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
+            streamAutoPlayPreferBingeGroupForNextEpisodeSetting =
+                settings.streamAutoPlayPreferBingeGroupForNextEpisode
             nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode
             nextEpisodeThresholdPercentSetting = settings.nextEpisodeThresholdPercent
             nextEpisodeThresholdMinutesBeforeEndSetting = settings.nextEpisodeThresholdMinutesBeforeEnd
