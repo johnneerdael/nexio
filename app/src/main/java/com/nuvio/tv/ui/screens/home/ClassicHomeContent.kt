@@ -46,13 +46,23 @@ fun ClassicHomeContent(
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
-    val columnListState = rememberLazyListState()
+    val columnListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = focusState.verticalScrollIndex,
+        initialFirstVisibleItemScrollOffset = focusState.verticalScrollOffset
+    )
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
-        if (focusState.verticalScrollIndex > 0 || focusState.verticalScrollOffset > 0) {
+        val targetIndex = focusState.verticalScrollIndex
+        val targetOffset = focusState.verticalScrollOffset
+        if (columnListState.firstVisibleItemIndex == targetIndex &&
+            columnListState.firstVisibleItemScrollOffset == targetOffset
+        ) {
+            return@LaunchedEffect
+        }
+        if (targetIndex > 0 || targetOffset > 0) {
             columnListState.scrollToItem(
-                focusState.verticalScrollIndex,
-                focusState.verticalScrollOffset
+                targetIndex,
+                targetOffset
             )
         }
     }

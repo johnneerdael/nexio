@@ -36,7 +36,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import com.nuvio.tv.R
@@ -80,6 +79,7 @@ fun CatalogRowSection(
 ) {
     val seeAllCardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val currentOnItemFocused by rememberUpdatedState(onItemFocused)
+    val currentOnItemFocus by rememberUpdatedState(onItemFocus)
 
     val internalRowFocusRequester = remember { FocusRequester() }
     val resolvedRowFocusRequester = rowFocusRequester ?: internalRowFocusRequester
@@ -197,18 +197,15 @@ fun CatalogRowSection(
                     focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                     trailerPreviewUrl = trailerPreviewUrls[item.id],
                     onRequestTrailerPreview = onRequestTrailerPreview,
-                    onFocus = onItemFocus,
-                    onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
-                    modifier = Modifier
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
-                                if (lastFocusedItemIndex != index) {
-                                    lastFocusedItemIndex = index
-                                    currentOnItemFocused(index)
-                                }
-                            }
+                    onFocus = { focusedItem ->
+                        currentOnItemFocus(focusedItem)
+                        if (lastFocusedItemIndex != index) {
+                            lastFocusedItemIndex = index
+                            currentOnItemFocused(index)
                         }
-                        .then(directionalFocusModifier),
+                    },
+                    onClick = { onItemClick(item.id, item.apiType, catalogRow.addonBaseUrl) },
+                    modifier = Modifier.then(directionalFocusModifier),
                     focusRequester = itemFocusRequestersById.getOrPut(item.id) { FocusRequester() }
                 )
             }

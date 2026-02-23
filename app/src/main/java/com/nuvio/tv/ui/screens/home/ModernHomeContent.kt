@@ -352,8 +352,6 @@ fun ModernHomeContent(
         activeRowKey = targetRow.key
         activeItemIndex = targetItemIndex
         focusedItemByRow[targetRow.key] = targetItemIndex
-        heroItem = targetRow.items.getOrNull(targetItemIndex)?.heroPreview
-            ?: targetRow.items.firstOrNull()?.heroPreview
         pendingRowFocusKey = targetRow.key
         pendingRowFocusIndex = targetItemIndex
         focusedCatalogSelection = null
@@ -641,14 +639,19 @@ fun ModernHomeContent(
                     ?: activeRow?.items?.firstOrNull()?.heroPreview
             }
         }
-        val fallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
+        val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
             }
         }
-        val heroBackdrop by remember(resolvedHero, fallbackBackdrop) {
+        val heroBackdrop by remember(heroItem, resolvedHero, activeRowFallbackBackdrop) {
             derivedStateOf {
-                resolvedHero?.backdrop?.takeIf { it.isNotBlank() } ?: fallbackBackdrop
+                firstNonBlank(
+                    resolvedHero?.backdrop,
+                    resolvedHero?.imageUrl,
+                    resolvedHero?.poster,
+                    if (heroItem == null) activeRowFallbackBackdrop else null
+                )
             }
         }
         val expandedFocusedSelection by remember(focusedCatalogSelection, expandedCatalogFocusKey) {
