@@ -25,10 +25,10 @@ object SupabaseModule {
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY
         ) {
             install(Auth) {
-                alwaysAutoRefresh = false
+                alwaysAutoRefresh = true
                 autoLoadFromStorage = true
                 autoSaveToStorage = true
-                enableLifecycleCallbacks = true
+                enableLifecycleCallbacks = false
             }
             install(Postgrest)
         }
