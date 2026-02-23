@@ -1220,13 +1220,26 @@ class HomeViewModel @Inject constructor(
     private fun scheduleUpdateCatalogRows() {
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
-            // Render immediately for the first catalog arrival, debounce subsequent updates
+            val currentLayout = _uiState.value.homeLayout
+            val preferSmootherBatching = currentLayout == HomeLayout.CLASSIC || currentLayout == HomeLayout.GRID
+            val loadedContentRowCount = catalogsMap.values.count { it.items.isNotEmpty() }
+
+           
             if (!hasRenderedFirstCatalog && catalogsMap.isNotEmpty()) {
-                hasRenderedFirstCatalog = true
-                updateCatalogRows()
-                return@launch
+                val shouldHoldFirstRenderForBatch =
+                    preferSmootherBatching &&
+                        pendingCatalogLoads > 0 &&
+                        loadedContentRowCount in 0..2
+
+                if (!shouldHoldFirstRenderForBatch) {
+                    hasRenderedFirstCatalog = true
+                    updateCatalogRows()
+                    return@launch
+                }
             }
             val debounceMs = when {
+                preferSmootherBatching && pendingCatalogLoads > 5 -> 650L
+                preferSmootherBatching && pendingCatalogLoads > 0 -> 380L
                 pendingCatalogLoads > 5 -> 450L
                 pendingCatalogLoads > 0 -> 250L
                 else -> 100L
