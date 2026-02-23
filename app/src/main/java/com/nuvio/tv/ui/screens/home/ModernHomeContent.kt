@@ -706,6 +706,7 @@ fun ModernHomeContent(
 
         val heroMediaModifier = Modifier
             .align(Alignment.TopEnd)
+            .offset(x = 56.dp)
             .fillMaxWidth(0.75f)
             .fillMaxHeight(MODERN_HERO_BACKDROP_HEIGHT_FRACTION)
 
