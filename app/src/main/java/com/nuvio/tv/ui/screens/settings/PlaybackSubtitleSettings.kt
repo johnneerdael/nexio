@@ -405,6 +405,7 @@ internal fun SubtitleSettingsDialogs(
     }
 }
 
+@Composable
 private fun subtitleOrganizationModeLabel(mode: SubtitleOrganizationMode): String {
     return when (mode) {
         SubtitleOrganizationMode.NONE -> stringResource(R.string.sub_org_none)

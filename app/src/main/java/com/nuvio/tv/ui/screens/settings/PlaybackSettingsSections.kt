@@ -134,6 +134,14 @@ internal fun PlaybackSettingsSections(
     val strAfrOff = stringResource(R.string.playback_afr_off)
     val strAfrOnStart = stringResource(R.string.playback_afr_on_start)
     val strAfrOnStartStop = stringResource(R.string.playback_afr_on_start_stop)
+    val strSectionGeneral = stringResource(R.string.playback_section_general)
+    val strSectionGeneralDesc = stringResource(R.string.playback_section_general_desc)
+    val strSectionPlayer = stringResource(R.string.playback_section_player)
+    val strSectionPlayerDesc = stringResource(R.string.playback_section_player_desc)
+    val strSectionAudio = stringResource(R.string.playback_section_audio)
+    val strSectionAudioDesc = stringResource(R.string.playback_section_audio_desc)
+    val strSectionSubtitles = stringResource(R.string.playback_section_subtitles)
+    val strSectionSubtitlesDesc = stringResource(R.string.playback_section_subtitles_desc)
 
     LaunchedEffect(generalExpanded, focusedSection) {
         if (!generalExpanded && focusedSection == PlaybackSection.GENERAL) {
@@ -163,8 +171,8 @@ internal fun PlaybackSettingsSections(
     ) {
         playbackCollapsibleSection(
             keyPrefix = "general",
-            title = stringResource(R.string.playback_section_general),
-            description = stringResource(R.string.playback_section_general_desc),
+            title = strSectionGeneral,
+            description = strSectionGeneralDesc,
             expanded = generalExpanded,
             onToggle = { generalExpanded = !generalExpanded },
             focusRequester = generalHeaderFocus,
@@ -244,8 +252,8 @@ internal fun PlaybackSettingsSections(
 
         playbackCollapsibleSection(
             keyPrefix = "stream_selection",
-            title = stringResource(R.string.playback_section_player),
-            description = stringResource(R.string.playback_section_player_desc),
+            title = strSectionPlayer,
+            description = strSectionPlayerDesc,
             expanded = streamExpanded,
             onToggle = { streamExpanded = !streamExpanded },
             focusRequester = streamHeaderFocus,
@@ -284,8 +292,8 @@ internal fun PlaybackSettingsSections(
 
         playbackCollapsibleSection(
             keyPrefix = "audio_trailer",
-            title = stringResource(R.string.playback_section_audio),
-            description = stringResource(R.string.playback_section_audio_desc),
+            title = strSectionAudio,
+            description = strSectionAudioDesc,
             expanded = audioTrailerExpanded,
             onToggle = { audioTrailerExpanded = !audioTrailerExpanded },
             focusRequester = audioTrailerHeaderFocus,
@@ -308,8 +316,8 @@ internal fun PlaybackSettingsSections(
 
         playbackCollapsibleSection(
             keyPrefix = "subtitles",
-            title = stringResource(R.string.playback_section_subtitles),
-            description = stringResource(R.string.playback_section_subtitles_desc),
+            title = strSectionSubtitles,
+            description = strSectionSubtitlesDesc,
             expanded = subtitlesExpanded,
             onToggle = { subtitlesExpanded = !subtitlesExpanded },
             focusRequester = subtitlesHeaderFocus,

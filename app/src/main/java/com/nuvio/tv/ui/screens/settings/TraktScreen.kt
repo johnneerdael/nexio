@@ -53,7 +53,6 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.R
-import com.nuvio.tv.R
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.repository.TraktProgressService

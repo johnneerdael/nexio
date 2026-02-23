@@ -928,6 +928,7 @@ private fun StreamRegexDialog(
 ) {
     var regex by remember(initialRegex) { mutableStateOf(initialRegex) }
     var regexError by remember { mutableStateOf<String?>(null) }
+    val strInvalidRegex = stringResource(R.string.autoplay_invalid_regex)
     var isInputFocused by remember { mutableStateOf(false) }
     val inputFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1120,7 +1121,7 @@ private fun StreamRegexDialog(
                             if (value.isNotEmpty()) {
                                 val valid = runCatching { Regex(value, RegexOption.IGNORE_CASE) }.isSuccess
                                 if (!valid) {
-                                    regexError = stringResource(R.string.autoplay_invalid_regex)
+                                    regexError = strInvalidRegex
                                     return@Button
                                 }
                             }

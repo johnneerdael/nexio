@@ -80,9 +80,10 @@ fun ThemeSettingsContent(
     var showLanguageDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val supportedLocales = remember {
+    val strLanguageSystem = stringResource(R.string.appearance_language_system)
+    val supportedLocales = remember(strLanguageSystem) {
         listOf(
-            null to stringResource(R.string.appearance_language_system),
+            null to strLanguageSystem,
             "en" to "English",
             "pl" to "Polski"
         )
