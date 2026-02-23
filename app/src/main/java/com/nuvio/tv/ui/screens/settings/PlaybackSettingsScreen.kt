@@ -340,9 +340,12 @@ internal fun ToggleSettingsItem(
         onClick = { if (enabled) onCheckedChange(!isChecked) },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
@@ -422,9 +425,12 @@ internal fun RenderTypeSettingsItem(
         onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = if (isSelected) {
@@ -504,9 +510,12 @@ internal fun NavigationSettingsItem(
         onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
@@ -585,9 +594,12 @@ internal fun SliderSettingsItem(
         onClick = { },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             }
             .onKeyEvent { event ->
                 if (!enabled) return@onKeyEvent false
@@ -684,9 +696,12 @@ internal fun SliderSettingsItem(
                         }
                     },
                     modifier = Modifier
-                        .onFocusChanged {
-                            decreaseFocused = it.isFocused
-                            if (it.isFocused) onFocused()
+                        .onFocusChanged { state ->
+                            val nowFocused = state.isFocused
+                            if (decreaseFocused != nowFocused) {
+                                decreaseFocused = nowFocused
+                                if (nowFocused) onFocused()
+                            }
                         },
                     colors = CardDefaults.colors(
                         containerColor = NuvioColors.Background,
@@ -742,9 +757,12 @@ internal fun SliderSettingsItem(
                         }
                     },
                     modifier = Modifier
-                        .onFocusChanged {
-                            increaseFocused = it.isFocused
-                            if (it.isFocused) onFocused()
+                        .onFocusChanged { state ->
+                            val nowFocused = state.isFocused
+                            if (increaseFocused != nowFocused) {
+                                increaseFocused = nowFocused
+                                if (nowFocused) onFocused()
+                            }
                         },
                     colors = CardDefaults.colors(
                         containerColor = NuvioColors.Background,
@@ -793,9 +811,12 @@ internal fun ColorSettingsItem(
         onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
+            .onFocusChanged { state ->
+                val nowFocused = state.isFocused
+                if (isFocused != nowFocused) {
+                    isFocused = nowFocused
+                    if (nowFocused) onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = NuvioColors.Background,
@@ -906,7 +927,7 @@ internal fun LanguageSelectionDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (showNoneOption) {
-                        item {
+                        item(key = "language_none_option") {
                             LanguageOptionItem(
                                 name = "None",
                                 code = null,
@@ -917,7 +938,10 @@ internal fun LanguageSelectionDialog(
                         }
                     }
                     
-                    items(AVAILABLE_SUBTITLE_LANGUAGES.size) { index ->
+                    items(
+                        count = AVAILABLE_SUBTITLE_LANGUAGES.size,
+                        key = { index -> AVAILABLE_SUBTITLE_LANGUAGES[index].code }
+                    ) { index ->
                         val language = AVAILABLE_SUBTITLE_LANGUAGES[index]
                         LanguageOptionItem(
                             name = language.name,
@@ -1030,7 +1054,10 @@ internal fun ColorSelectionDialog(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.focusRequester(focusRequester)
             ) {
-                items(colors.size) { index ->
+                items(
+                    count = colors.size,
+                    key = { index -> colors[index].toArgb() }
+                ) { index ->
                     val color = colors[index]
                     ColorOption(
                         color = color,

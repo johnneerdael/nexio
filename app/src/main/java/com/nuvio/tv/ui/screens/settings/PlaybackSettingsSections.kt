@@ -63,6 +63,15 @@ private enum class PlaybackSection {
     SUBTITLES
 }
 
+private data class PlaybackGeneralUi(
+    val isExternalPlayer: Boolean,
+    val frameRateMatchingLabel: String
+)
+
+private data class PlaybackStreamSelectionUi(
+    val playerPreferenceLabel: String
+)
+
 private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode): String {
     return when (mode) {
         FrameRateMatchingMode.OFF -> "Off"
@@ -128,7 +137,17 @@ internal fun PlaybackSettingsSections(
 
     var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
 
-    val isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL
+    val generalUi = PlaybackGeneralUi(
+        isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL,
+        frameRateMatchingLabel = frameRateMatchingModeLabel(playerSettings.frameRateMatchingMode)
+    )
+    val streamSelectionUi = PlaybackStreamSelectionUi(
+        playerPreferenceLabel = when (playerSettings.playerPreference) {
+            PlayerPreference.INTERNAL -> "Internal"
+            PlayerPreference.EXTERNAL -> "External"
+            PlayerPreference.ASK_EVERY_TIME -> "Ask every time"
+        }
+    )
 
     LaunchedEffect(generalExpanded, focusedSection) {
         if (!generalExpanded && focusedSection == PlaybackSection.GENERAL) {
@@ -165,7 +184,7 @@ internal fun PlaybackSettingsSections(
             focusRequester = generalHeaderFocus,
             onHeaderFocused = { focusedSection = PlaybackSection.GENERAL }
         ) {
-            item {
+            item(key = "general_loading_overlay") {
                 ToggleSettingsItem(
                     icon = Icons.Default.Image,
                     title = "Loading Overlay",
@@ -173,11 +192,11 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.loadingOverlayEnabled,
                     onCheckedChange = onSetLoadingOverlayEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !isExternalPlayer
+                    enabled = !generalUi.isExternalPlayer
                 )
             }
 
-            item {
+            item(key = "general_pause_overlay") {
                 ToggleSettingsItem(
                     icon = Icons.Default.PauseCircle,
                     title = "Pause Overlay",
@@ -185,11 +204,11 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.pauseOverlayEnabled,
                     onCheckedChange = onSetPauseOverlayEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !isExternalPlayer
+                    enabled = !generalUi.isExternalPlayer
                 )
             }
 
-            item {
+            item(key = "general_osd_clock") {
                 ToggleSettingsItem(
                     icon = Icons.Default.Timer,
                     title = "OSD Clock",
@@ -197,11 +216,11 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.osdClockEnabled,
                     onCheckedChange = onSetOsdClockEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !isExternalPlayer
+                    enabled = !generalUi.isExternalPlayer
                 )
             }
 
-            item {
+            item(key = "general_skip_intro") {
                 ToggleSettingsItem(
                     icon = Icons.Default.History,
                     title = "Skip Intro",
@@ -209,29 +228,29 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.skipIntroEnabled,
                     onCheckedChange = onSetSkipIntroEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !isExternalPlayer
+                    enabled = !generalUi.isExternalPlayer
                 )
             }
 
-            item {
+            item(key = "general_afr_header") {
                 PlaybackSectionHeader(
                     title = "Auto Frame Rate",
-                    description = frameRateMatchingModeLabel(playerSettings.frameRateMatchingMode),
+                    description = generalUi.frameRateMatchingLabel,
                     expanded = afrExpanded,
                     onToggle = { afrExpanded = !afrExpanded },
                     focusRequester = afrHeaderFocus,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !isExternalPlayer
+                    enabled = !generalUi.isExternalPlayer
                 )
             }
 
             if (afrExpanded) {
-                item {
+                item(key = "general_afr_options") {
                     FrameRateMatchingModeOptions(
                         selectedMode = playerSettings.frameRateMatchingMode,
                         onSelect = onSetFrameRateMatchingMode,
                         onFocused = { focusedSection = PlaybackSection.GENERAL },
-                        enabled = !isExternalPlayer
+                        enabled = !generalUi.isExternalPlayer
                     )
                 }
             }
@@ -246,15 +265,11 @@ internal fun PlaybackSettingsSections(
             focusRequester = streamHeaderFocus,
             onHeaderFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
         ) {
-            item {
+            item(key = "stream_player_preference") {
                 NavigationSettingsItem(
                     icon = Icons.Default.PlayArrow,
                     title = "Player",
-                    subtitle = when (playerSettings.playerPreference) {
-                        PlayerPreference.INTERNAL -> "Internal"
-                        PlayerPreference.EXTERNAL -> "External"
-                        PlayerPreference.ASK_EVERY_TIME -> "Ask every time"
-                    },
+                    subtitle = streamSelectionUi.playerPreferenceLabel,
                     onClick = onShowPlayerPreferenceDialog,
                     onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
                 )
@@ -297,7 +312,7 @@ internal fun PlaybackSettingsSections(
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetMapDV7ToHevc = onSetMapDV7ToHevc,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
-                enabled = !isExternalPlayer
+                enabled = !generalUi.isExternalPlayer
             )
         }
 
@@ -325,7 +340,7 @@ internal fun PlaybackSettingsSections(
                 onSetUseLibass = onSetUseLibass,
                 onSetLibassRenderType = onSetLibassRenderType,
                 onItemFocused = { focusedSection = PlaybackSection.SUBTITLES },
-                enabled = !isExternalPlayer
+                enabled = !generalUi.isExternalPlayer
             )
         }
     }
@@ -596,7 +611,10 @@ private fun PlayerPreferenceDialog(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(options.size) { index ->
+                    items(
+                        count = options.size,
+                        key = { index -> options[index].first.name }
+                    ) { index ->
                         val (preference, title, description) = options[index]
                         val isSelected = preference == currentPreference
 

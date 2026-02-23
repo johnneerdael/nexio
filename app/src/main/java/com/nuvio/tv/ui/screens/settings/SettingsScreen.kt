@@ -4,13 +4,6 @@ package com.nuvio.tv.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RawRes
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,9 +90,6 @@ internal data class SettingsSectionSpec(
 )
 
 private const val SETTINGS_DETAIL_FOCUS_DELAY_MS = 120L
-private const val SETTINGS_DETAIL_ANIM_IN_DURATION_MS = 200
-private const val SETTINGS_DETAIL_ANIM_OUT_DURATION_MS = 180
-
 private val SETTINGS_SECTION_SPECS = listOf(
     SettingsSectionSpec(
         category = SettingsCategory.ACCOUNT,
@@ -343,73 +333,55 @@ fun SettingsScreen(
                             }
                         }
                 ) {
-                    AnimatedContent(
-                        targetState = selectedCategory,
-                        transitionSpec = {
-                            val direction = if (targetState.ordinal >= initialState.ordinal) 1 else -1
-                            (slideInHorizontally(
-                                initialOffsetX = { fullWidth -> direction * (fullWidth / 6) },
-                                animationSpec = tween(SETTINGS_DETAIL_ANIM_IN_DURATION_MS)
-                            ) + fadeIn(animationSpec = tween(SETTINGS_DETAIL_ANIM_IN_DURATION_MS)))
-                                .togetherWith(
-                                    slideOutHorizontally(
-                                        targetOffsetX = { fullWidth -> -direction * (fullWidth / 6) },
-                                        animationSpec = tween(SETTINGS_DETAIL_ANIM_OUT_DURATION_MS)
-                                    ) + fadeOut(animationSpec = tween(SETTINGS_DETAIL_ANIM_OUT_DURATION_MS))
-                                )
-                        },
-                        label = "settings_split_detail"
-                    ) { category ->
-                        when (category) {
-                            SettingsCategory.PROFILES -> ProfileSettingsContent()
-                            SettingsCategory.APPEARANCE -> ThemeSettingsContent(
-                                initialFocusRequester = if (allowDetailAutofocus) {
-                                    contentFocusRequesters[SettingsCategory.APPEARANCE]
-                                } else {
-                                    null
-                                }
-                            )
-                            SettingsCategory.LAYOUT -> LayoutSettingsContent(
-                                initialFocusRequester = if (allowDetailAutofocus) {
-                                    contentFocusRequesters[SettingsCategory.LAYOUT]
-                                } else {
-                                    null
-                                }
-                            )
-                            SettingsCategory.PLAYBACK -> PlaybackSettingsContent(
-                                initialFocusRequester = if (allowDetailAutofocus) {
-                                    contentFocusRequesters[SettingsCategory.PLAYBACK]
-                                } else {
-                                    null
-                                }
-                            )
-                            SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
-                                selectedSection = integrationSection,
-                                onSelectSection = { integrationSection = it },
-                                initialFocusRequester = if (allowDetailAutofocus) {
-                                    contentFocusRequesters[SettingsCategory.INTEGRATION]
-                                } else {
-                                    null
-                                },
-                                hubFocusRequester = integrationHubFocusRequester,
-                                tmdbFocusRequester = integrationTmdbFocusRequester,
-                                mdbListFocusRequester = integrationMdbListFocusRequester,
-                                autoFocusEnabled = allowDetailAutofocus
-                            )
-                            SettingsCategory.ABOUT -> AboutSettingsContent(
-                                initialFocusRequester = if (allowDetailAutofocus) {
-                                    contentFocusRequesters[SettingsCategory.ABOUT]
-                                } else {
-                                    null
-                                }
-                            )
-                            SettingsCategory.PLUGINS -> PluginsSettingsContent()
-                            SettingsCategory.ACCOUNT -> AccountSettingsInline(
-                                onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
-                            )
-                            SettingsCategory.DEBUG -> DebugSettingsContent()
-                            SettingsCategory.TRAKT -> Unit
-                        }
+                    when (selectedCategory) {
+                        SettingsCategory.PROFILES -> ProfileSettingsContent()
+                        SettingsCategory.APPEARANCE -> ThemeSettingsContent(
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.APPEARANCE]
+                            } else {
+                                null
+                            }
+                        )
+                        SettingsCategory.LAYOUT -> LayoutSettingsContent(
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.LAYOUT]
+                            } else {
+                                null
+                            }
+                        )
+                        SettingsCategory.PLAYBACK -> PlaybackSettingsContent(
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.PLAYBACK]
+                            } else {
+                                null
+                            }
+                        )
+                        SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
+                            selectedSection = integrationSection,
+                            onSelectSection = { integrationSection = it },
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.INTEGRATION]
+                            } else {
+                                null
+                            },
+                            hubFocusRequester = integrationHubFocusRequester,
+                            tmdbFocusRequester = integrationTmdbFocusRequester,
+                            mdbListFocusRequester = integrationMdbListFocusRequester,
+                            autoFocusEnabled = allowDetailAutofocus
+                        )
+                        SettingsCategory.ABOUT -> AboutSettingsContent(
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.ABOUT]
+                            } else {
+                                null
+                            }
+                        )
+                        SettingsCategory.PLUGINS -> PluginsSettingsContent()
+                        SettingsCategory.ACCOUNT -> AccountSettingsInline(
+                            onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
+                        )
+                        SettingsCategory.DEBUG -> DebugSettingsContent()
+                        SettingsCategory.TRAKT -> Unit
                     }
                 }
             }
@@ -516,7 +488,7 @@ private fun IntegrationSettingsContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        item {
+                        item(key = "integration_hub_tmdb") {
                             SettingsActionRow(
                                 title = "TMDB",
                                 subtitle = "Metadata enrichment controls",
@@ -524,7 +496,7 @@ private fun IntegrationSettingsContent(
                                 modifier = Modifier.focusRequester(hubEntryFocusRequester)
                             )
                         }
-                        item {
+                        item(key = "integration_hub_mdblist") {
                             SettingsActionRow(
                                 title = "MDBList",
                                 subtitle = "External ratings providers",

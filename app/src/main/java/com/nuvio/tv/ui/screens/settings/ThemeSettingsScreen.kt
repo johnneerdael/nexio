@@ -91,7 +91,10 @@ fun ThemeSettingsContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                itemsIndexed(uiState.availableThemes) { index, theme ->
+                itemsIndexed(
+                    items = uiState.availableThemes,
+                    key = { _, theme -> theme.name }
+                ) { index, theme ->
                     ThemeCard(
                         theme = theme,
                         isSelected = theme == uiState.selectedTheme,

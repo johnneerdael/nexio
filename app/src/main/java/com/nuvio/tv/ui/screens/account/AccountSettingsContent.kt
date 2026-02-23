@@ -60,7 +60,7 @@ fun AccountSettingsContent(
     ) {
         when (val authState = uiState.authState) {
             is AuthState.Loading -> {
-                item {
+                item(key = "account_loading") {
                     Text(
                         text = "Loading...",
                         style = MaterialTheme.typography.bodyMedium,
@@ -70,14 +70,14 @@ fun AccountSettingsContent(
             }
 
             is AuthState.SignedOut -> {
-                item {
+                item(key = "account_signed_out_info") {
                     Text(
                         text = "Sync your library, watch progress, addons, and plugins across devices.",
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioColors.TextSecondary
                     )
                 }
-                item {
+                item(key = "account_sign_in_qr") {
                     SettingsActionButton(
                         icon = Icons.Default.VpnKey,
                         title = "Sign In with QR",
@@ -88,16 +88,16 @@ fun AccountSettingsContent(
             }
 
             is AuthState.FullAccount -> {
-                item { StatusCard(label = "Signed in", value = authState.email) }
+                item(key = "account_status") { StatusCard(label = "Signed in", value = authState.email) }
 
                 val overview = uiState.syncOverview
                 if (overview != null) {
-                    item { SyncOverviewCard(overview) }
+                    item(key = "account_sync_overview") { SyncOverviewCard(overview) }
                 } else if (uiState.isSyncOverviewLoading) {
-                    item { SyncOverviewLoadingCard() }
+                    item(key = "account_sync_overview_loading") { SyncOverviewLoadingCard() }
                 }
 
-                item { SignOutSettingsButton(onClick = { viewModel.signOut() }) }
+                item(key = "account_sign_out") { SignOutSettingsButton(onClick = { viewModel.signOut() }) }
             }
 
         }

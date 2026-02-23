@@ -81,7 +81,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
-    item {
+    item(key = "autoplay_reuse_last_link") {
         ToggleSettingsItem(
             icon = Icons.Default.History,
             title = "Reuse Last Link",
@@ -93,7 +93,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     }
 
     if (playerSettings.streamReuseLastLinkEnabled) {
-        item {
+        item(key = "autoplay_reuse_cache_duration") {
             NavigationSettingsItem(
                 icon = Icons.Default.Tune,
                 title = "Last Link Cache Duration",
@@ -104,7 +104,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         }
     }
 
-    item {
+    item(key = "autoplay_mode") {
         val modeLabel = when (playerSettings.streamAutoPlayMode) {
             StreamAutoPlayMode.MANUAL -> "Manual (choose stream)"
             StreamAutoPlayMode.FIRST_STREAM -> "Auto-play first source"
@@ -120,7 +120,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     }
 
     if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
-        item {
+        item(key = "autoplay_next_episode") {
             ToggleSettingsItem(
                 icon = Icons.Default.SkipNext,
                 title = "Auto-play Next Episode",
@@ -132,7 +132,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         }
     }
 
-    item {
+    item(key = "autoplay_threshold_mode") {
         val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
             NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
             NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
@@ -146,7 +146,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         )
     }
 
-    item {
+    item(key = "autoplay_threshold_value") {
         when (playerSettings.nextEpisodeThresholdMode) {
             NextEpisodeThresholdMode.PERCENTAGE -> {
                 SliderSettingsItem(
@@ -181,7 +181,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
 
     if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
 
-        item {
+        item(key = "autoplay_source_scope") {
             val sourceLabel = when (playerSettings.streamAutoPlaySource) {
                 StreamAutoPlaySource.ALL_SOURCES -> "All sources"
                 StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> "Installed addons only"
@@ -197,7 +197,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         }
 
         if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
-            item {
+            item(key = "autoplay_allowed_addons") {
                 val addonSubtitle = if (playerSettings.streamAutoPlaySelectedAddons.isEmpty()) {
                     "All installed addons"
                 } else {
@@ -214,7 +214,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         }
 
         if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
-            item {
+            item(key = "autoplay_allowed_plugins") {
                 val pluginSubtitle = if (playerSettings.streamAutoPlaySelectedPlugins.isEmpty()) {
                     "All enabled plugins"
                 } else {
@@ -232,7 +232,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     }
 
     if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH) {
-        item {
+        item(key = "autoplay_regex_pattern") {
             val regexSubtitle = playerSettings.streamAutoPlayRegex.ifBlank {
                 "No pattern set. Example: 4K|2160p|Remux"
             }
@@ -403,7 +403,10 @@ private fun NextEpisodeThresholdModeDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(options.size) { index ->
+                    items(
+                        count = options.size,
+                        key = { index -> options[index].first.name }
+                    ) { index ->
                         val (mode, title, description) = options[index]
                         val isSelected = mode == selectedMode
 
@@ -513,7 +516,10 @@ private fun StreamAutoPlayModeDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(options.size) { index ->
+                    items(
+                        count = options.size,
+                        key = { index -> options[index].first.name }
+                    ) { index ->
                         val (mode, title, description) = options[index]
                         val isSelected = mode == selectedMode
                         var isFocused by remember { mutableStateOf(false) }
@@ -613,7 +619,10 @@ private fun StreamReuseLastLinkCacheDurationDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    itemsIndexed(options) { index, hours ->
+                    itemsIndexed(
+                        items = options,
+                        key = { _, hours -> hours }
+                    ) { index, hours ->
                         val isSelected = hours == selectedHours
                         Card(
                             onClick = { onDurationSelected(hours) },
@@ -711,7 +720,10 @@ private fun StreamAutoPlaySourceDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(options.size) { index ->
+                    items(
+                        count = options.size,
+                        key = { index -> options[index].first.name }
+                    ) { index ->
                         val (source, title, description) = options[index]
                         val isSelected = source == selectedSource
 
@@ -863,7 +875,10 @@ private fun StreamAutoPlayProviderSelectionDialog(
                         modifier = Modifier.height(320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(items) { item ->
+                        items(
+                            items = items,
+                            key = { it }
+                        ) { item ->
                             val isSelected = item in selected
                             Card(
                                 onClick = {
@@ -979,7 +994,10 @@ private fun StreamRegexDialog(
                 )
 
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(presets) { (label, pattern) ->
+                    items(
+                        items = presets,
+                        key = { it.first }
+                    ) { (label, pattern) ->
                         var isFocused by remember { mutableStateOf(false) }
                         Card(
                             onClick = {

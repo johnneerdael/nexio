@@ -66,7 +66,7 @@ fun MDBListSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
+                item(key = "mdblist_enabled") {
                     SettingsToggleRow(
                         title = "Enable MDBList Ratings",
                         subtitle = "Fetch ratings from external providers in metadata detail screen",
@@ -80,7 +80,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_api_key") {
                     SettingsActionRow(
                         title = "API Key",
                         subtitle = "Required to fetch ratings from MDBList",
@@ -90,7 +90,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_trakt") {
                     SettingsToggleRow(
                         title = "Trakt",
                         subtitle = "Show Trakt score",
@@ -100,7 +100,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_imdb") {
                     SettingsToggleRow(
                         title = "IMDb",
                         subtitle = "Show IMDb score (and hide default IMDb line when available)",
@@ -110,7 +110,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_tmdb") {
                     SettingsToggleRow(
                         title = "TMDB",
                         subtitle = "Show TMDB score",
@@ -120,7 +120,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_letterboxd") {
                     SettingsToggleRow(
                         title = "Letterboxd",
                         subtitle = "Show Letterboxd score",
@@ -130,7 +130,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_tomatoes") {
                     SettingsToggleRow(
                         title = "Rotten Tomatoes",
                         subtitle = "Show critics score",
@@ -140,7 +140,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_audience") {
                     SettingsToggleRow(
                         title = "Audience Score",
                         subtitle = "Show audience score",
@@ -150,7 +150,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_metacritic") {
                     SettingsToggleRow(
                         title = "Metacritic",
                         subtitle = "Show Metacritic score",

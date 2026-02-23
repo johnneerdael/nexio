@@ -74,7 +74,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
-    item {
+    item(key = "subtitle_header") {
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
         Text(
             text = "Subtitles",
@@ -84,7 +84,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_preferred_language") {
         val languageName = if (playerSettings.subtitleStyle.preferredLanguage == "none") {
             "None"
         } else {
@@ -103,7 +103,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_secondary_language") {
         val secondaryLanguageName = playerSettings.subtitleStyle.secondaryPreferredLanguage?.let { code ->
             AVAILABLE_SUBTITLE_LANGUAGES.find { it.code == code }?.name
         } ?: "Not set"
@@ -118,7 +118,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_organization") {
         NavigationSettingsItem(
             icon = Icons.Default.Subtitles,
             title = "Subtitle Organization",
@@ -129,7 +129,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_size") {
         SliderSettingsItem(
             icon = Icons.Default.FormatSize,
             title = "Size",
@@ -144,7 +144,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_vertical_offset") {
         SliderSettingsItem(
             icon = Icons.Default.VerticalAlignBottom,
             title = "Vertical Offset",
@@ -159,7 +159,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_bold") {
         ToggleSettingsItem(
             icon = Icons.Default.FormatBold,
             title = "Bold",
@@ -171,7 +171,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_text_color") {
         ColorSettingsItem(
             icon = Icons.Default.Palette,
             title = "Text Color",
@@ -182,7 +182,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_background_color") {
         ColorSettingsItem(
             icon = Icons.Default.Palette,
             title = "Background Color",
@@ -194,7 +194,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_outline_toggle") {
         ToggleSettingsItem(
             icon = Icons.Default.ClosedCaption,
             title = "Outline",
@@ -207,7 +207,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     }
 
     if (playerSettings.subtitleStyle.outlineEnabled) {
-        item {
+        item(key = "subtitle_outline_color") {
             ColorSettingsItem(
                 icon = Icons.Default.Palette,
                 title = "Outline Color",
@@ -219,7 +219,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         }
     }
 
-    item {
+    item(key = "subtitle_advanced_header") {
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
         Text(
             text = "Advanced Subtitle Rendering",
@@ -229,7 +229,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_libass_disabled") {
         ToggleSettingsItem(
             icon = Icons.Default.Subtitles,
             title = "Use libass for ASS/SSA subtitles",
@@ -242,7 +242,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     }
 
     if (false) { // Libass temporarily disabled for maintenance
-        item {
+        item(key = "subtitle_libass_render_header") {
             Text(
                 text = "Libass Render Mode",
                 style = MaterialTheme.typography.titleMedium,
@@ -251,7 +251,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_overlay_gl") {
             RenderTypeSettingsItem(
                 title = "Overlay OpenGL (Recommended)",
                 subtitle = "Best quality with HDR support. Renders subtitles on a separate thread.",
@@ -261,7 +261,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_overlay_canvas") {
             RenderTypeSettingsItem(
                 title = "Overlay Canvas",
                 subtitle = "HDR support with canvas rendering. May block UI thread.",
@@ -271,7 +271,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_effects_gl") {
             RenderTypeSettingsItem(
                 title = "Effects OpenGL",
                 subtitle = "Animation support using Media3 effects. Faster than Canvas.",
@@ -281,7 +281,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_effects_canvas") {
             RenderTypeSettingsItem(
                 title = "Effects Canvas",
                 subtitle = "Animation support using Media3 effects with Canvas rendering.",
@@ -291,7 +291,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_cues") {
             RenderTypeSettingsItem(
                 title = "Standard Cues",
                 subtitle = "Basic subtitle rendering without animation support. Most compatible.",
@@ -444,7 +444,10 @@ private fun SubtitleOrganizationModeDialog(
                 androidx.compose.foundation.lazy.LazyColumn(
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
                 ) {
-                    items(options) { (mode, title, description) ->
+                    items(
+                        items = options,
+                        key = { it.first.name }
+                    ) { (mode, title, description) ->
                         val isSelected = mode == selectedMode
 
                         RenderTypeSettingsItem(

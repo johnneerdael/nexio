@@ -129,7 +129,7 @@ internal fun ProfileSettingsContent(
                         }
 
                         if (viewModel.canAddProfile) {
-                            item {
+                            item(key = "add_profile") {
                                 AddProfileButton(
                                     onClick = { mode = ProfileSettingsMode.Create }
                                 )

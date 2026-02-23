@@ -68,7 +68,7 @@ fun DebugSettingsContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ── Popup / Dialog Testing ──
-            item {
+            item(key = "debug_popup_header") {
                 Text(
                     text = "Popup / Dialog Testing",
                     style = MaterialTheme.typography.titleSmall,
@@ -77,7 +77,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_playback_error") {
                 DebugActionCard(
                     title = "Playback Error Screen",
                     subtitle = "Show a simulated playback error popup",
@@ -86,7 +86,7 @@ fun DebugSettingsContent(
             }
 
             // ── Feature Toggles ──
-            item {
+            item(key = "debug_feature_toggles_header") {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Feature Toggles",
@@ -96,7 +96,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_toggle_account_tab") {
                 DebugToggleCard(
                     title = "Account Tab",
                     subtitle = "Show the Account tab in Settings navigation",
@@ -105,7 +105,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_toggle_sync_code") {
                 DebugToggleCard(
                     title = "Sync Code Features",
                     subtitle = "Show Generate/Enter Sync Code buttons in Account settings",
@@ -115,7 +115,7 @@ fun DebugSettingsContent(
             }
 
             // ── Manual Sign In ──
-            item {
+            item(key = "debug_account_header") {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Account",
@@ -125,7 +125,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_sign_in_card") {
                 DebugSignInCard(
                     isLoading = uiState.signInLoading,
                     result = uiState.signInResult,

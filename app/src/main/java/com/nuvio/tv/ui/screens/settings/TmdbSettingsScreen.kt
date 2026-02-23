@@ -64,7 +64,7 @@ fun TmdbSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
+                item(key = "tmdb_enabled") {
                     SettingsToggleRow(
                         title = "Enable TMDB Enrichment",
                         subtitle = "Use TMDB as a metadata source to enhance addon data",
@@ -78,7 +78,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_language") {
                     val languageName = AVAILABLE_SUBTITLE_LANGUAGES
                         .find { it.code == uiState.language }
                         ?.name
@@ -92,7 +92,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_artwork") {
                     SettingsToggleRow(
                         title = "Artwork",
                         subtitle = "Logo and backdrop images from TMDB",
@@ -102,7 +102,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_basic_info") {
                     SettingsToggleRow(
                         title = "Basic Info",
                         subtitle = "Description, genres, and rating from TMDB",
@@ -112,7 +112,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_details") {
                     SettingsToggleRow(
                         title = "Details",
                         subtitle = "Runtime, release date, country, and language from TMDB",
@@ -122,7 +122,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_credits") {
                     SettingsToggleRow(
                         title = "Credits",
                         subtitle = "Cast with photos, director, and writer from TMDB",
@@ -132,7 +132,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_productions") {
                     SettingsToggleRow(
                         title = "Productions",
                         subtitle = "Production companies from TMDB",
@@ -142,7 +142,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_networks") {
                     SettingsToggleRow(
                         title = "Networks",
                         subtitle = "Networks with logos from TMDB",
@@ -152,7 +152,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_episodes") {
                     SettingsToggleRow(
                         title = "Episodes",
                         subtitle = "Episode titles, overviews, thumbnails, and runtime from TMDB",
@@ -162,7 +162,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_more_like_this") {
                     SettingsToggleRow(
                         title = "More Like This",
                         subtitle = "TMDB recommendation backdrops on detail page",
