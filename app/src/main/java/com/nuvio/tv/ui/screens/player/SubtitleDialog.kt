@@ -65,6 +65,7 @@ import com.nuvio.tv.R
 // Subtitle text color options (matching mobile app)
 private val SUBTITLE_TEXT_COLORS = listOf(
     Color.White,
+    Color(0xFFD9D9D9),  // Light gray
     Color(0xFFFFD700),  // Yellow/Gold
     Color(0xFF00E5FF),  // Cyan
     Color(0xFFFF5C5C),  // Red

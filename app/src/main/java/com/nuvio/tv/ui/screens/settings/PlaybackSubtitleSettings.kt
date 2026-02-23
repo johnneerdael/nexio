@@ -35,6 +35,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 
 private val subtitleColors = listOf(
     Color.White,
+    Color(0xFFD9D9D9),
     Color.Yellow,
     Color.Cyan,
     Color.Green,

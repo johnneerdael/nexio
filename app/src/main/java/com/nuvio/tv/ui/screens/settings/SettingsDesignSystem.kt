@@ -584,7 +584,13 @@ private fun SettingsTogglePill(
             .width(46.dp)
             .height(24.dp)
             .clip(RoundedCornerShape(SettingsPillRadius))
-            .background(if (checked) NuvioColors.FocusRing.copy(alpha = alpha) else NuvioColors.Border.copy(alpha = alpha))
+            .background(
+                if (checked) {
+                    NuvioColors.Secondary.copy(alpha = 0.35f * alpha)
+                } else {
+                    NuvioColors.Border.copy(alpha = alpha)
+                }
+            )
             .padding(2.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     ) {

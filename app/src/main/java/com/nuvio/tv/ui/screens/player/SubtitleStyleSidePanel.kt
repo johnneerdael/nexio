@@ -51,6 +51,7 @@ import com.nuvio.tv.R
 
 private val PANEL_TEXT_COLORS = listOf(
     Color.White,
+    Color(0xFFD9D9D9),
     Color(0xFFFFD700),
     Color(0xFF00E5FF),
     Color(0xFFFF5C5C),
