@@ -666,6 +666,44 @@
     <string name="update_title">App Update</string>
     <string name="update_downloading">Downloading update</string>
     <string name="update_unknown_sources">Allow installs from unknown sources to continue.</string>
+    <!-- AccountScreen -->
+    <string name="account_title">Account</string>
+    <string name="account_sign_in_description">Sign in to sync your library, watch progress, addons, and plugins across devices. Library and watch progress sync only when Trakt is not connected.</string>
+    <string name="account_sync_code_title">Sync Code</string>
+    <string name="account_sync_code_description">Sync across devices without creating an account.</string>
+    <string name="account_linked_devices">Linked Devices (%1$d)</string>
+    <string name="account_no_linked_devices">No linked devices</string>
+    <string name="account_unlink">Unlink</string>
+
+    <!-- EpisodeRatingsSection -->
+    <string name="ratings_loading">Loading episode ratings...</string>
+    <string name="ratings_unavailable">Episode ratings are unavailable.</string>
+    <string name="ratings_season_summary">Season %1$d - %2$d episodes</string>
+
+    <!-- SearchDiscoverSection -->
+    <string name="discover_title">Discover</string>
+    <string name="discover_load_more">Load more</string>
+    <string name="discover_loading">Loading...</string>
+
+    <!-- AddonManagerScreen -->
+    <string name="addon_confirm_total_addons">Total addons: %1$d</string>
+    <string name="addon_confirm_total_catalogs">Total catalogs: %1$d</string>
+    <string name="addon_catalogs_types">Catalogs: %1$d - Types: %2$s</string>
+
+    <!-- PluginScreen -->
+    <string name="plugin_and_more">... and %1$d more</string>
+    <string name="plugin_providers_count">%1$d providers</string>
+    <string name="plugin_enabled">Enabled</string>
+    <string name="plugin_disabled">Disabled</string>
+    <string name="plugin_no_repos">No repositories added yet.\nAdd a repository to get started.</string>
+
+    <!-- ProfileSettingsContent -->
+    <string name="profile_edit_title_id">Edit Profile %1$d</string>
+
+    <!-- PlaybackAudioSettings -->
+    <string name="audio_passthrough_info">Audio passthrough (TrueHD, DTS, AC-3, etc.) is automatic. When connected to a compatible AV receiver or soundbar via HDMI, lossless audio is sent as-is without decoding.</string>
+    <string name="audio_dv_title">DV7 - HEVC Fallback</string>
+
     <string name="update_close">Close</string>
     <string name="update_open_settings">Open Settings</string>
     <string name="update_install">Install</string>

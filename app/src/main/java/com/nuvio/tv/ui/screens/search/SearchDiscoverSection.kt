@@ -52,6 +52,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.GridContentCard
@@ -96,7 +98,7 @@ internal fun DiscoverSection(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Discover",
+            text = stringResource(R.string.discover_title),
             style = MaterialTheme.typography.headlineMedium,
             color = NuvioColors.TextPrimary
         )
@@ -505,9 +507,9 @@ private fun DiscoverActionCard(
 ) {
     val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
     val title = when (actionType) {
-        DiscoverGridAction.ShowMore -> "Load more"
-        DiscoverGridAction.LoadMore -> "Load more"
-        DiscoverGridAction.Loading -> "Loading..."
+        DiscoverGridAction.ShowMore -> stringResource(R.string.discover_load_more)
+        DiscoverGridAction.LoadMore -> stringResource(R.string.discover_load_more)
+        DiscoverGridAction.Loading -> stringResource(R.string.discover_loading)
         DiscoverGridAction.None -> ""
     }
 

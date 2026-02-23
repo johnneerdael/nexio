@@ -664,6 +664,44 @@
     <string name="update_title">Aktualizacja aplikacji</string>
     <string name="update_downloading">Pobieranie aktualizacji</string>
     <string name="update_unknown_sources">Zezwól na instalację z nieznanych źródeł, aby kontynuować.</string>
+    <!-- AccountScreen -->
+    <string name="account_title">Konto</string>
+    <string name="account_sign_in_description">Zaloguj sie, aby synchronizowac biblioteke, postep ogladania, dodatki i wtyczki miedzy urzadzeniami. Synchronizacja biblioteki i postepu dziala tylko gdy Trakt nie jest podlaczony.</string>
+    <string name="account_sync_code_title">Kod synchronizacji</string>
+    <string name="account_sync_code_description">Synchronizuj miedzy urzadzeniami bez tworzenia konta.</string>
+    <string name="account_linked_devices">Polaczone urzadzenia (%1$d)</string>
+    <string name="account_no_linked_devices">Brak polaczonych urzadzen</string>
+    <string name="account_unlink">Odlacz</string>
+
+    <!-- EpisodeRatingsSection -->
+    <string name="ratings_loading">Ladowanie ocen odcinkow...</string>
+    <string name="ratings_unavailable">Oceny odcinkow sa niedostepne.</string>
+    <string name="ratings_season_summary">Sezon %1$d - %2$d odcinkow</string>
+
+    <!-- SearchDiscoverSection -->
+    <string name="discover_title">Odkrywaj</string>
+    <string name="discover_load_more">Zaladuj wiecej</string>
+    <string name="discover_loading">Ladowanie...</string>
+
+    <!-- AddonManagerScreen -->
+    <string name="addon_confirm_total_addons">Lacznie dodatkow: %1$d</string>
+    <string name="addon_confirm_total_catalogs">Lacznie katalogow: %1$d</string>
+    <string name="addon_catalogs_types">Katalogi: %1$d - Typy: %2$s</string>
+
+    <!-- PluginScreen -->
+    <string name="plugin_and_more">... i %1$d wiecej</string>
+    <string name="plugin_providers_count">%1$d dostawcow</string>
+    <string name="plugin_enabled">Wlaczone</string>
+    <string name="plugin_disabled">Wylaczone</string>
+    <string name="plugin_no_repos">Nie dodano zadnych repozytoriow.\nDodaj repozytorium, aby zaczac.</string>
+
+    <!-- ProfileSettingsContent -->
+    <string name="profile_edit_title_id">Edytuj profil %1$d</string>
+
+    <!-- PlaybackAudioSettings -->
+    <string name="audio_passthrough_info">Przepuszczanie audio (TrueHD, DTS, AC-3 itp.) jest automatyczne. Po podlaczeniu do kompatybilnego amplitunera lub soundbara przez HDMI, bezstratne audio jest przesylane bez dekodowania.</string>
+    <string name="audio_dv_title">DV7 - Fallback HEVC</string>
+
     <string name="update_close">Zamknij</string>
     <string name="update_open_settings">Otwórz ustawienia</string>
     <string name="update_install">Zainstaluj</string>

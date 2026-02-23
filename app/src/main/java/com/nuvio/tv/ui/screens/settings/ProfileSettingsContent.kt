@@ -369,7 +369,7 @@ private fun ProfileEditForm(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = "Edit Profile ${profile.id}",
+            text = stringResource(R.string.profile_edit_title_id, profile.id),
             color = NuvioColors.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold

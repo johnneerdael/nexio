@@ -116,7 +116,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
     item {
         Text(
-            text = "Audio passthrough (TrueHD, DTS, AC-3, etc.) is automatic. When connected to a compatible AV receiver or soundbar via HDMI, lossless audio is sent as-is without decoding.",
+            text = stringResource(R.string.audio_passthrough_info),
             style = MaterialTheme.typography.bodySmall,
             color = NuvioColors.TextSecondary,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -206,7 +206,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.Tune,
-            title = "DV7 → HEVC Fallback",
+            title = stringResource(R.string.audio_dv_title),
             subtitle = stringResource(R.string.audio_dv_sub),
             isChecked = playerSettings.mapDV7ToHevc,
             onCheckedChange = onSetMapDV7ToHevc,

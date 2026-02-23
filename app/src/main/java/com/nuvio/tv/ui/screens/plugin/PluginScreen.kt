@@ -210,7 +210,7 @@ fun PluginScreenContent(
             if (uiState.repositories.isEmpty()) {
                 item {
                     EmptyState(
-                        message = "No repositories added yet.\nAdd a repository to get started.",
+                        message = stringResource(R.string.plugin_no_repos),
                         modifier = Modifier.padding(vertical = 24.dp)
                     )
                 }
@@ -332,7 +332,7 @@ private fun PluginHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (pluginsEnabled) "Enabled" else "Disabled",
+                    text = if (pluginsEnabled) stringResource(R.string.plugin_enabled) else stringResource(R.string.plugin_disabled),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (pluginsEnabled) NuvioColors.Secondary else NuvioColors.TextSecondary
                 )
@@ -869,7 +869,7 @@ private fun RepositoryCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${repository.scraperCount} providers",
+                    text = stringResource(R.string.plugin_providers_count, repository.scraperCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
                 )
@@ -1043,7 +1043,7 @@ private fun ScraperCard(
 
                     if ((testResults?.size ?: 0) > 3) {
                         Text(
-                            text = "... and ${testResults!!.size - 3} more",
+                            text = stringResource(R.string.plugin_and_more, testResults!!.size - 3),
                             style = MaterialTheme.typography.bodySmall,
                             color = NuvioColors.TextSecondary
                         )

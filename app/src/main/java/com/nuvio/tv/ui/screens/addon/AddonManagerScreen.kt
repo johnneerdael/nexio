@@ -793,13 +793,13 @@ private fun ConfirmAddonChangesDialog(
                 }
 
                 Text(
-                    text = "Total addons: ${pendingChange.proposedUrls.size}",
+                    text = stringResource(R.string.addon_confirm_total_addons, pendingChange.proposedUrls.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextTertiary,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = "Total catalogs: ${pendingChange.proposedCatalogOrderKeys.size}",
+                    text = stringResource(R.string.addon_confirm_total_catalogs, pendingChange.proposedCatalogOrderKeys.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextTertiary,
                     modifier = Modifier.fillMaxWidth()
@@ -1020,7 +1020,7 @@ private fun AddonCardContent(
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Catalogs: ${addon.catalogs.size} • Types: ${addon.rawTypes.joinToString()}",
+            text = stringResource(R.string.addon_catalogs_types, addon.catalogs.size, addon.rawTypes.joinToString()),
             style = MaterialTheme.typography.bodySmall,
             color = NuvioColors.TextTertiary
         )
