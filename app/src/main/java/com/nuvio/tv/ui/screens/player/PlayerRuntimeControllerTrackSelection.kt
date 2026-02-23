@@ -5,6 +5,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import com.nuvio.tv.domain.model.Subtitle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -142,7 +143,27 @@ internal fun PlayerRuntimeController.disableSubtitles() {
     }
 }
 
-internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: com.nuvio.tv.domain.model.Subtitle) {
+internal fun PlayerRuntimeController.buildAddonSubtitleTrackId(subtitle: Subtitle): String {
+    val urlHashSuffix = subtitle.url.hashCode().toUInt().toString(16)
+    return "${PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX}${subtitle.id}:$urlHashSuffix"
+}
+
+internal fun PlayerRuntimeController.toSubtitleConfiguration(subtitle: Subtitle): MediaItem.SubtitleConfiguration {
+    val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+    val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
+    val addonTrackId = buildAddonSubtitleTrackId(subtitle)
+
+    return MediaItem.SubtitleConfiguration.Builder(
+        android.net.Uri.parse(subtitle.url)
+    )
+        .setId(addonTrackId)
+        .setLanguage(normalizedLang)
+        .setMimeType(subtitleMimeType)
+        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+        .build()
+}
+
+internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
     _exoPlayer?.let { player ->
         val currentlySelected = _uiState.value.selectedAddonSubtitle
         if (currentlySelected?.id == subtitle.id && currentlySelected.url == subtitle.url) {
@@ -151,21 +172,37 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: com.nuvio.tv.
         Log.d(PlayerRuntimeController.TAG, "Selecting ADDON subtitle lang=${subtitle.lang} id=${subtitle.id}")
 
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
-        val addonTrackId = "${PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX}${subtitle.id}"
+        val addonTrackId = buildAddonSubtitleTrackId(subtitle)
+        val alreadyAttachedTrackIndex = _uiState.value.subtitleTracks.indexOfFirst {
+            it.trackId == addonTrackId
+        }
+
+        if (alreadyAttachedTrackIndex >= 0) {
+            Log.d(
+                PlayerRuntimeController.TAG,
+                "Switching ADDON subtitle without media reload id=${subtitle.id} index=$alreadyAttachedTrackIndex"
+            )
+            pendingAddonSubtitleLanguage = null
+            pendingAddonSubtitleTrackId = null
+            pendingAudioSelectionAfterSubtitleRefresh = null
+
+            selectSubtitleTrack(alreadyAttachedTrackIndex)
+            _uiState.update {
+                it.copy(
+                    selectedAddonSubtitle = subtitle,
+                    selectedSubtitleTrackIndex = -1
+                )
+            }
+            return@let
+        }
+
         pendingAddonSubtitleLanguage = normalizedLang
         pendingAddonSubtitleTrackId = addonTrackId
         pendingAudioSelectionAfterSubtitleRefresh =
             captureCurrentAudioSelectionForSubtitleRefresh(player)
-        val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
-
-        val subtitleConfigBuilder = MediaItem.SubtitleConfiguration.Builder(
-            android.net.Uri.parse(subtitle.url)
-        )
-            .setId(addonTrackId)
-            .setLanguage(normalizedLang)
-            .setMimeType(subtitleMimeType)
-            .setSelectionFlags(0)
-        val subtitleConfig = subtitleConfigBuilder.build()
+        val subtitleConfigurations = (_uiState.value.addonSubtitles + subtitle)
+            .distinctBy { "${it.id}|${it.url}" }
+            .map(::toSubtitleConfiguration)
 
         val currentPosition = player.currentPosition
         val playWhenReady = player.playWhenReady
@@ -174,7 +211,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: com.nuvio.tv.
             mediaSourceFactory.createMediaSource(
                 url = currentStreamUrl,
                 headers = currentHeaders,
-                subtitleConfigurations = listOf(subtitleConfig)
+                subtitleConfigurations = subtitleConfigurations
             ),
             currentPosition
         )
