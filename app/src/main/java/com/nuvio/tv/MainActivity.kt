@@ -118,6 +118,8 @@ import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 data class DrawerItem(
     val route: String,
@@ -328,31 +330,36 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    val drawerItems = remember {
+                    val strNavHome = stringResource(R.string.nav_home)
+                    val strNavSearch = stringResource(R.string.nav_search)
+                    val strNavLibrary = stringResource(R.string.nav_library)
+                    val strNavAddons = stringResource(R.string.nav_addons)
+                    val strNavSettings = stringResource(R.string.nav_settings)
+                    val drawerItems = remember(strNavHome, strNavSearch, strNavLibrary, strNavAddons, strNavSettings) {
                         listOf(
                             DrawerItem(
                                 route = Screen.Home.route,
-                                label = "Home",
+                                label = strNavHome,
                                 icon = Icons.Default.Home
                             ),
                             DrawerItem(
                                 route = Screen.Search.route,
-                                label = "Search",
+                                label = strNavSearch,
                                 iconRes = R.raw.sidebar_search
                             ),
                             DrawerItem(
                                 route = Screen.Library.route,
-                                label = "Library",
+                                label = strNavLibrary,
                                 iconRes = R.raw.sidebar_library
                             ),
                             DrawerItem(
                                 route = Screen.AddonManager.route,
-                                label = "Addons",
+                                label = strNavAddons,
                                 iconRes = R.raw.sidebar_plugin
                             ),
                             DrawerItem(
                                 route = Screen.Settings.route,
-                                label = "Settings",
+                                label = strNavSettings,
                                 iconRes = R.raw.sidebar_settings
                             )
                         )
@@ -1103,7 +1110,7 @@ private fun CollapsedSidebarPill(
         if (!iconOnly) {
             Image(
                 painter = painterResource(id = R.drawable.ic_chevron_compact_left),
-                contentDescription = "Expand sidebar",
+                contentDescription = stringResource(R.string.cd_expand_sidebar),
                 modifier = Modifier
                     .width(8.5.dp)
                     .height(16.dp)

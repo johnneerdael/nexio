@@ -160,7 +160,7 @@ fun LibraryScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = if (uiState.sourceMode == LibrarySourceMode.TRAKT) "TRAKT" else "LOCAL",
+                    text = if (uiState.sourceMode == LibrarySourceMode.TRAKT) "TRAKT" else stringResource(R.string.library_source_local),
                     style = MaterialTheme.typography.labelLarge,
                     color = if (showBuiltInHeader) NuvioColors.TextTertiary else Color.Transparent,
                     fontWeight = FontWeight.Medium,
@@ -211,14 +211,14 @@ fun LibraryScreen(
 
         item {
             if (uiState.visibleItems.isEmpty()) {
-                val selectedTypeLabel = uiState.selectedTypeTab?.label?.lowercase() ?: "items"
+                val selectedTypeLabel = uiState.selectedTypeTab?.label?.lowercase() ?: stringResource(R.string.library_type_items)
                 val title = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> "No $selectedTypeLabel yet"
-                    LibrarySourceMode.TRAKT -> "No $selectedTypeLabel in this list"
+                    LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_title, selectedTypeLabel)
+                    LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_title, selectedTypeLabel)
                 }
                 val subtitle = when (uiState.sourceMode) {
-                    LibrarySourceMode.LOCAL -> "Start saving your favorites to see them here"
-                    LibrarySourceMode.TRAKT -> "Use + in details to add items to watchlist or lists"
+                    LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_subtitle)
+                    LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_subtitle)
                 }
                 EmptyScreenState(
                     title = title,
@@ -328,7 +328,7 @@ private fun LibrarySelectorsRow(
     onSelectSort: (LibrarySortOption) -> Unit
 ) {
     val selectedListLabel = listTabs.firstOrNull { it.key == selectedListKey }?.title ?: "Select"
-    val selectedTypeLabel = selectedTypeTab?.label ?: "All"
+    val selectedTypeLabel = selectedTypeTab?.label ?: stringResource(R.string.library_type_all)
     val selectedSortLabel = selectedSortOption.label
 
     Row(

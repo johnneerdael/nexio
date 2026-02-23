@@ -572,6 +572,13 @@
     <string name="library_delete_title">Usunąć tę listę?</string>
     <string name="library_delete_subtitle">Spowoduje to usunięcie listy i wszystkich jej elementów z Trakt.</string>
     <string name="library_delete_confirm">Usuń</string>
+    <string name="library_source_local">LOKALNA</string>
+    <string name="library_type_all">Wszystkie</string>
+    <string name="library_type_items">elementy</string>
+    <string name="library_empty_local_title">Brak %1$s</string>
+    <string name="library_empty_trakt_title">Brak %1$s na tej liście</string>
+    <string name="library_empty_local_subtitle">Zacznij zapisywać ulubione, aby je tutaj zobaczyć</string>
+    <string name="library_empty_trakt_subtitle">Użyj + w szczegółach, aby dodać elementy do listy obserwowanych lub list</string>
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Ładowanie\u2026</string>
@@ -701,6 +708,14 @@
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">Przepuszczanie audio (TrueHD, DTS, AC-3 itp.) jest automatyczne. Po podlaczeniu do kompatybilnego amplitunera lub soundbara przez HDMI, bezstratne audio jest przesylane bez dekodowania.</string>
     <string name="audio_dv_title">DV7 - Fallback HEVC</string>
+
+    <!-- SidebarNavigation / MainActivity -->
+    <string name="nav_home">Strona główna</string>
+    <string name="nav_search">Szukaj</string>
+    <string name="nav_library">Biblioteka</string>
+    <string name="nav_addons">Dodatki</string>
+    <string name="nav_settings">Ustawienia</string>
+    <string name="cd_expand_sidebar">Rozwiń pasek boczny</string>
 
     <string name="update_close">Zamknij</string>
     <string name="update_open_settings">Otwórz ustawienia</string>
