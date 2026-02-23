@@ -349,12 +349,16 @@ fun ContinueWatchingCard(
                     .clip(CwClipShape)
             ) {
                 // Background image with size hints for efficient decoding
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = titleText,
-                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (imageModel.isNullOrBlank()) {
+                    MonochromePosterPlaceholder()
+                } else {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = titleText,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
                 // Gradient overlay for text readability
                 Box(

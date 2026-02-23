@@ -258,13 +258,15 @@ fun ContentCard(
                     .height(baseCardHeight)
                     .clip(cardShape)
             ) {
-                if (imageUrl != null) {
+                if (!imageUrl.isNullOrBlank()) {
                     AsyncImage(
                         model = imageModel,
                         contentDescription = item.name,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
+                } else {
+                    MonochromePosterPlaceholder()
                 }
 
                 val shouldPlayTrailerPreview = isBackdropExpanded &&
@@ -307,7 +309,7 @@ fun ContentCard(
                     )
                 }
 
-                if (shouldPlayTrailerPreview && imageUrl != null) {
+                if (shouldPlayTrailerPreview && !imageUrl.isNullOrBlank()) {
                     AsyncImage(
                         model = imageModel,
                         contentDescription = null,

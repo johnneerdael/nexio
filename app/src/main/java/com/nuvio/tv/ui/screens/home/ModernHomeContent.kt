@@ -87,6 +87,7 @@ import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.ContinueWatchingCard
 import com.nuvio.tv.ui.components.ContinueWatchingOptionsDialog
+import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
@@ -1560,6 +1561,8 @@ private fun ModernCarouselCard(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
+                } else {
+                    MonochromePosterPlaceholder()
                 }
 
                 if (shouldPlayTrailerInCard) {
@@ -1747,12 +1750,16 @@ private fun PreviewCarouselCard(
             .height(cardHeight)
             .clip(RoundedCornerShape(10.dp))
     ) {
-        AsyncImage(
-            model = imageModel,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        if (imageUrl.isNullOrBlank()) {
+            MonochromePosterPlaceholder()
+        } else {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
