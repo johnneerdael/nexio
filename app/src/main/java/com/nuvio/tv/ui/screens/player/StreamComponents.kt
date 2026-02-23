@@ -64,7 +64,7 @@ internal fun StreamItem(
             focusedContainerColor = NuvioColors.BackgroundElevated
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = CardDefaults.scale(focusedScale = 1.08f)
+        scale = CardDefaults.scale(focusedScale = 1.04f)
     ) {
         Row(
             modifier = Modifier
@@ -201,7 +201,7 @@ internal fun AddonChip(
         colors = FilterChipDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
-            selectedContainerColor = NuvioColors.Secondary.copy(alpha = 0.3f),
+            selectedContainerColor = NuvioColors.Secondary,
             focusedSelectedContainerColor = NuvioColors.Secondary,
             contentColor = NuvioColors.TextSecondary,
             focusedContentColor = NuvioColors.OnSecondary,
@@ -230,8 +230,7 @@ internal fun AddonChip(
     ) {
         Text(
             text = name,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (isSelected) NuvioColors.OnSecondary else Color.Unspecified
+            style = MaterialTheme.typography.labelLarge
         )
     }
 }
