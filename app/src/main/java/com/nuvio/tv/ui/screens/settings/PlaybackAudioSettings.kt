@@ -66,7 +66,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
-    item(key = "audio_trailer_header") {
+    item(key = "audio_trailer_section_header") {
         Text(
             text = stringResource(R.string.audio_trailer_section),
             style = MaterialTheme.typography.titleMedium,
