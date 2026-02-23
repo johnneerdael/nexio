@@ -131,7 +131,8 @@ fun NuvioNavHost(
                             year = null,
                             contentId = item.progress.contentId,
                             contentName = item.progress.name,
-                            runtime = null
+                            runtime = null,
+                            returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true)
                         )
                         is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
                             videoId = item.info.videoId,
@@ -147,7 +148,8 @@ fun NuvioNavHost(
                             year = null,
                             contentId = item.info.contentId,
                             contentName = item.info.name,
-                            runtime = null
+                            runtime = null,
+                            returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
                         )
                     }
                     navController.navigate(route)
@@ -167,10 +169,23 @@ fun NuvioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
+                },
+                navArgument("returnFocusSeason") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("returnFocusEpisode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) { backStackEntry ->
+            val detailArgs = backStackEntry.arguments
             MetaDetailsScreen(
+                returnFocusSeason = detailArgs?.getString("returnFocusSeason")?.toIntOrNull(),
+                returnFocusEpisode = detailArgs?.getString("returnFocusEpisode")?.toIntOrNull(),
                 onBackPress = { navController.popBackStack() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
@@ -266,11 +281,43 @@ fun NuvioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = "false"
+                },
+                navArgument("returnToDetailOnBack") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
-        ) {
+        ) { backStackEntry ->
+            val streamArgs = backStackEntry.arguments
+            val returnToDetailOnBack = streamArgs
+                ?.getString("returnToDetailOnBack")
+                ?.toBooleanStrictOrNull() == true
             StreamScreen(
-                onBackPress = { navController.popBackStack() },
+                onBackPress = {
+                    val streamContentType = streamArgs?.getString("contentType").orEmpty()
+                    val streamContentId = streamArgs?.getString("contentId").orEmpty()
+                    if (
+                        returnToDetailOnBack &&
+                        streamContentType.equals("series", ignoreCase = true) &&
+                        streamContentId.isNotBlank()
+                    ) {
+                        navController.navigate(
+                            Screen.Detail.createRoute(
+                                itemId = streamContentId,
+                                itemType = streamContentType,
+                                addonBaseUrl = null,
+                                returnFocusSeason = streamArgs?.getString("season")?.toIntOrNull(),
+                                returnFocusEpisode = streamArgs?.getString("episode")?.toIntOrNull()
+                            )
+                        ) {
+                            popUpTo(Screen.Stream.route) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                },
                 onStreamSelected = { playbackInfo ->
                     playbackInfo.url?.let { url ->
                         navController.navigate(
@@ -293,7 +340,8 @@ fun NuvioNavHost(
                                 bingeGroup = playbackInfo.bingeGroup,
                                 rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
                                 rememberedAudioName = playbackInfo.rememberedAudioName,
-                                autoPlayNav = false
+                                autoPlayNav = false,
+                                returnToDetailOnBack = returnToDetailOnBack
                             )
                         )
                     }
@@ -320,7 +368,8 @@ fun NuvioNavHost(
                                 bingeGroup = playbackInfo.bingeGroup,
                                 rememberedAudioLanguage = playbackInfo.rememberedAudioLanguage,
                                 rememberedAudioName = playbackInfo.rememberedAudioName,
-                                autoPlayNav = true
+                                autoPlayNav = true,
+                                returnToDetailOnBack = returnToDetailOnBack
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -419,6 +468,11 @@ fun NuvioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = "false"
+                },
+                navArgument("returnToDetailOnBack") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "false"
                 }
             )
         ) { backStackEntry ->
@@ -426,7 +480,31 @@ fun NuvioNavHost(
                 onBackPress = {
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
                     if (!returnedToStream) {
-                        navController.popBackStack()
+                        val args = backStackEntry.arguments
+                        val returnToDetailOnBack = args?.getString("returnToDetailOnBack")
+                            ?.toBooleanStrictOrNull() == true
+                        val contentType = args?.getString("contentType").orEmpty()
+                        val contentId = args?.getString("contentId").orEmpty()
+                        if (
+                            returnToDetailOnBack &&
+                            contentType.equals("series", ignoreCase = true) &&
+                            contentId.isNotBlank()
+                        ) {
+                            navController.navigate(
+                                Screen.Detail.createRoute(
+                                    itemId = contentId,
+                                    itemType = contentType,
+                                    addonBaseUrl = null,
+                                    returnFocusSeason = args?.getString("season")?.toIntOrNull(),
+                                    returnFocusEpisode = args?.getString("episode")?.toIntOrNull()
+                                )
+                            ) {
+                                popUpTo(Screen.Player.route) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        } else {
+                            navController.popBackStack()
+                        }
                     }
                 },
                 onPlaybackErrorBack = {
@@ -455,7 +533,9 @@ fun NuvioNavHost(
                                 contentId = args?.getString("contentId"),
                                 contentName = args?.getString("contentName"),
                                 runtime = null,
-                                manualSelection = true
+                                manualSelection = true,
+                                returnToDetailOnBack = args?.getString("returnToDetailOnBack")
+                                    ?.toBooleanStrictOrNull() == true
                             )
 
                             navController.navigate(route) {
