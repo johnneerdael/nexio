@@ -304,15 +304,24 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 if (!isAuthenticated) {
                     val progressFlow = if (season != null && episode != null) {
                         watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
-                            .map { it?.isCompleted() == true }
                     } else {
                         watchProgressPreferences.getProgress(contentId)
-                            .map { it?.isCompleted() == true }
                     }
                     return@flatMapLatest combine(
                         progressFlow,
                         watchedItemsPreferences.isWatched(contentId, season, episode)
-                    ) { progressWatched, itemWatched -> progressWatched || itemWatched }
+                    ) { progressEntry, itemWatched ->
+                        val hasStartedReplay = progressEntry?.let { entry ->
+                            !entry.isCompleted() &&
+                                (entry.position > 0L || entry.progressPercent?.let { it > 0f } == true)
+                        } == true
+
+                        if (hasStartedReplay) {
+                            false
+                        } else {
+                            (progressEntry?.isCompleted() == true) || itemWatched
+                        }
+                    }
                 }
 
                 if (season != null && episode != null) {

@@ -527,7 +527,7 @@ class HomeViewModel @Inject constructor(
                 val metaCache = mutableMapOf<String, Meta?>()
                 val inProgressOnly = buildList {
                     deduplicateInProgress(
-                        recentItems.filter { it.isInProgress() }
+                        recentItems.filter { shouldTreatAsInProgressForContinueWatching(it) }
                     ).forEach { progress ->
                         add(
                             ContinueWatchingItem.InProgress(
@@ -581,6 +581,18 @@ class HomeViewModel @Inject constructor(
             .sortedByDescending { it.lastWatched }
             .distinctBy { it.contentId }
         return (nonSeries + latestPerShow).sortedByDescending { it.lastWatched }
+    }
+
+    private fun shouldTreatAsInProgressForContinueWatching(progress: WatchProgress): Boolean {
+        if (progress.isInProgress()) return true
+        if (progress.isCompleted()) return false
+
+        // Rewatch edge case: a started replay can be below the default 2% "in progress"
+        // threshold, but should still suppress Next Up and appear as resume.
+        val hasStartedPlayback = progress.position > 0L || progress.progressPercent?.let { it > 0f } == true
+        return hasStartedPlayback &&
+            progress.source != WatchProgress.SOURCE_TRAKT_HISTORY &&
+            progress.source != WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS
     }
 
     private suspend fun resolveCurrentEpisodeDescription(
@@ -752,6 +764,18 @@ class HomeViewModel @Inject constructor(
         ) ?: return null
         val meta = nextEpisode.first
         val video = nextEpisode.second
+        val nextSeason = requireNotNull(video.season)
+        val nextEpisodeNumber = requireNotNull(video.episode)
+
+        val isNextEpisodeAlreadyWatched = runCatching {
+            watchProgressRepository.isWatched(
+                contentId = progress.contentId,
+                season = nextSeason,
+                episode = nextEpisodeNumber
+            ).first()
+        }.getOrDefault(false)
+        if (isNextEpisodeAlreadyWatched) return null
+
         val existingPoster = meta.poster.normalizeImageUrl()
         val existingBackdrop = meta.background.normalizeImageUrl()
         val existingLogo = meta.logo.normalizeImageUrl()
@@ -764,8 +788,8 @@ class HomeViewModel @Inject constructor(
             resolveNextUpArtworkFallback(
                 progress = progress,
                 meta = meta,
-                season = video.season ?: return null,
-                episode = video.episode ?: return null
+                season = nextSeason,
+                episode = nextEpisodeNumber
             )
         } else {
             null
@@ -783,8 +807,8 @@ class HomeViewModel @Inject constructor(
             backdrop = existingBackdrop ?: artworkFallback?.backdrop,
             logo = existingLogo,
             videoId = video.id,
-            season = video.season ?: return null,
-            episode = video.episode ?: return null,
+            season = nextSeason,
+            episode = nextEpisodeNumber,
             episodeTitle = video.title,
             episodeDescription = video.overview?.takeIf { it.isNotBlank() },
             thumbnail = existingThumbnail ?: artworkFallback?.thumbnail,
