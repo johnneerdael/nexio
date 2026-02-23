@@ -68,9 +68,25 @@ class AuthManager @Inject constructor(
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
-                        cachedEffectiveUserId = null
-                        cachedEffectiveUserSourceUserId = null
-                        _authState.value = AuthState.SignedOut
+                        val session = auth.currentSessionOrNull()
+                        val hasRefreshToken = session?.refreshToken?.isNotBlank() == true
+                        if (hasRefreshToken) {
+                            Log.w(TAG, "NotAuthenticated status received. Attempting to refresh...")
+                            scope.launch {
+                                try {
+                                    auth.refreshCurrentSession()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to refresh session, properly logging out now.", e)
+                                    cachedEffectiveUserId = null
+                                    cachedEffectiveUserSourceUserId = null
+                                    _authState.value = AuthState.SignedOut
+                                }
+                            }
+                        } else {
+                            cachedEffectiveUserId = null
+                            cachedEffectiveUserSourceUserId = null
+                            _authState.value = AuthState.SignedOut
+                        }
                     }
                     is SessionStatus.Initializing -> {
                         _authState.value = AuthState.Loading
