@@ -65,6 +65,7 @@ fun GridHomeContent(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
+    onItemFocus: (com.nuvio.tv.domain.model.MetaPreview) -> Unit = {},
     onSaveGridFocusState: (Int, Int) -> Unit
 ) {
     val gridState = rememberLazyGridState(
@@ -274,6 +275,7 @@ fun GridHomeContent(
                                 posterCardStyle = posterCardStyle,
                                 modifier = Modifier.animateItemPlacement(animationSpec = tween(220)),
                                 showLabel = uiState.posterLabelsEnabled,
+                                onFocused = { onItemFocus(gridItem.item) },
                                 onClick = {
                                     onNavigateToDetail(
                                         gridItem.item.id,

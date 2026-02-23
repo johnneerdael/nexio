@@ -238,6 +238,9 @@ private fun GridHomeRoute(
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         },
+        onItemFocus = { item ->
+            viewModel.onItemFocus(item)
+        },
         onSaveGridFocusState = { vi, vo ->
             viewModel.saveGridFocusState(vi, vo)
         }
@@ -281,6 +284,9 @@ private fun ModernHomeRoute(
         onRequestTrailerPreview = requestTrailerPreview,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,
+        onItemFocus = { item ->
+            viewModel.onItemFocus(item)
+        },
         onSaveFocusState = saveModernFocusState
     )
 }
