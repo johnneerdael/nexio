@@ -60,6 +60,7 @@ import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.util.formatAddonTypeLabel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -87,11 +88,7 @@ internal fun DiscoverSection(
     val availableTypes = remember(uiState.discoverCatalogs) {
         uiState.discoverCatalogs.map { it.type }.distinct()
     }
-    val selectedTypeLabel = when (uiState.selectedDiscoverType) {
-        "movie" -> stringResource(R.string.type_movie)
-        "series" -> stringResource(R.string.type_series)
-        else -> uiState.selectedDiscoverType.replaceFirstChar { it.uppercase() }
-    }
+    val selectedTypeLabel = formatAddonTypeLabel(uiState.selectedDiscoverType)
     val selectedCatalogLabel = selectedCatalog?.catalogName ?: stringResource(R.string.discover_select_catalog)
     val selectedGenreLabel = uiState.selectedDiscoverGenre ?: stringResource(R.string.discover_genre_default)
 
@@ -117,11 +114,7 @@ internal fun DiscoverSection(
                 value = selectedTypeLabel,
                 expanded = expandedPicker == "type",
                 options = availableTypes.map { type ->
-                    val label = when (type) {
-                        "movie" -> stringResource(R.string.type_movie)
-                        "series" -> stringResource(R.string.type_series)
-                        else -> type.replaceFirstChar { it.uppercase() }
-                    }
+                    val label = formatAddonTypeLabel(type)
                     DiscoverOption(label, type)
                 },
                 onExpandedChange = { shouldExpand ->
@@ -171,7 +164,9 @@ internal fun DiscoverSection(
             val metadataSegments = buildList {
                 add(catalog.addonName)
                 if (uiState.catalogTypeSuffixEnabled) {
-                    add(catalog.type.replaceFirstChar { c -> c.uppercase() })
+                    formatAddonTypeLabel(catalog.type)
+                        .takeIf { it.isNotEmpty() }
+                        ?.let(::add)
                 }
                 uiState.selectedDiscoverGenre?.let(::add)
             }

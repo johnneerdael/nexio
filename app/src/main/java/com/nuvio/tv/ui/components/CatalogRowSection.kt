@@ -50,6 +50,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.util.formatAddonTypeLabel
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -115,19 +116,14 @@ fun CatalogRowSection(
         Modifier
     }
 
-    val strTypeMovie = stringResource(R.string.type_movie)
-    val strTypeSeries = stringResource(R.string.type_series)
-    val strTypeUnknown = stringResource(R.string.type_unknown)
-    val typeLabel = remember(catalogRow.apiType) {
-        when (catalogRow.apiType.lowercase()) {
-            "movie" -> strTypeMovie
-            "series" -> strTypeSeries
-            else -> strTypeUnknown
-        }
+    val typeLabel = remember(catalogRow.rawType, catalogRow.apiType) {
+        formatAddonTypeLabel(
+            catalogRow.rawType.takeIf { it.isNotBlank() } ?: catalogRow.apiType
+        )
     }
-    val catalogTitle = remember(catalogRow.catalogName, catalogRow.apiType, showCatalogTypeSuffix) {
+    val catalogTitle = remember(catalogRow.catalogName, typeLabel, showCatalogTypeSuffix) {
         val formattedName = catalogRow.catalogName.replaceFirstChar { it.uppercase() }
-        if (showCatalogTypeSuffix) "$formattedName - $typeLabel" else formattedName
+        if (showCatalogTypeSuffix && typeLabel.isNotEmpty()) "$formattedName - $typeLabel" else formattedName
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
