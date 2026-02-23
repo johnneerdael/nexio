@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -100,75 +101,76 @@ private const val SETTINGS_DETAIL_FOCUS_DELAY_MS = 120L
 private const val SETTINGS_DETAIL_ANIM_IN_DURATION_MS = 200
 private const val SETTINGS_DETAIL_ANIM_OUT_DURATION_MS = 180
 
-private val SETTINGS_SECTION_SPECS = listOf(
+@Composable
+private fun rememberSettingsSectionSpecs() = listOf(
     SettingsSectionSpec(
         category = SettingsCategory.ACCOUNT,
-        title = "Account",
+        title = stringResource(R.string.settings_account),
         icon = Icons.Default.Person,
-        subtitle = "Account and sync status.",
+        subtitle = stringResource(R.string.settings_account_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.PROFILES,
-        title = "Profiles",
+        title = stringResource(R.string.settings_profiles),
         icon = Icons.Default.People,
-        subtitle = "Manage user profiles.",
+        subtitle = stringResource(R.string.settings_profiles_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.APPEARANCE,
-        title = "Appearance",
+        title = stringResource(R.string.appearance_title),
         icon = Icons.Default.Palette,
-        subtitle = "Theme and color tuning.",
+        subtitle = stringResource(R.string.appearance_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.LAYOUT,
-        title = "Layout",
+        title = stringResource(R.string.settings_layout),
         icon = Icons.Default.GridView,
-        subtitle = "Home structure and poster styles.",
+        subtitle = stringResource(R.string.settings_layout_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.PLUGINS,
-        title = "Plugins",
+        title = stringResource(R.string.settings_plugins),
         icon = Icons.Default.Build,
-        subtitle = "Repositories and providers.",
+        subtitle = stringResource(R.string.settings_plugins_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.INTEGRATION,
-        title = "Integration",
+        title = stringResource(R.string.settings_integration),
         icon = Icons.Default.Link,
-        subtitle = "TMDB and MDBList controls.",
+        subtitle = "",
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.PLAYBACK,
-        title = "Playback",
+        title = stringResource(R.string.settings_playback),
         icon = Icons.Default.Settings,
-        subtitle = "Player, subtitles, and auto-play.",
+        subtitle = stringResource(R.string.settings_playback_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.TRAKT,
         title = "Trakt",
         rawIconRes = R.raw.trakt_tv_glyph,
-        subtitle = "Open Trakt connection screen.",
+        subtitle = stringResource(R.string.settings_trakt_subtitle),
         destination = SettingsSectionDestination.External
     ),
     SettingsSectionSpec(
         category = SettingsCategory.ABOUT,
-        title = "About",
+        title = stringResource(R.string.about_title),
         icon = Icons.Default.Info,
-        subtitle = "Version and policies.",
+        subtitle = stringResource(R.string.settings_about_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
         category = SettingsCategory.DEBUG,
-        title = "Debug",
+        title = stringResource(R.string.settings_debug),
         icon = Icons.Default.BugReport,
-        subtitle = "Developer tools and feature flags.",
+        subtitle = stringResource(R.string.settings_debug_subtitle),
         destination = SettingsSectionDestination.Inline
     )
 )
@@ -182,8 +184,9 @@ fun SettingsScreen(
 ) {
     val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
 
-    val visibleSections = remember(isPrimaryProfileActive) {
-        SETTINGS_SECTION_SPECS.filter { section ->
+    val allSectionSpecs = rememberSettingsSectionSpecs()
+    val visibleSections = remember(isPrimaryProfileActive, allSectionSpecs) {
+        allSectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
                 SettingsCategory.PROFILES -> isPrimaryProfileActive
@@ -427,8 +430,8 @@ private fun PluginsSettingsContent() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SettingsDetailHeader(
-            title = "Plugins",
-            subtitle = "Manage repositories, providers, and plugin states."
+            title = stringResource(R.string.settings_plugins),
+            subtitle = stringResource(R.string.settings_plugins_section_subtitle)
         )
         SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -459,8 +462,8 @@ private fun AccountSettingsInline(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SettingsDetailHeader(
-            title = "Account",
-            subtitle = "Account and sync status."
+            title = stringResource(R.string.settings_account),
+            subtitle = stringResource(R.string.settings_account_section_subtitle)
         )
         SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
             com.nuvio.tv.ui.screens.account.AccountSettingsContent(
@@ -504,8 +507,8 @@ private fun IntegrationSettingsContent(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 SettingsDetailHeader(
-                    title = "Integrations",
-                    subtitle = "Choose TMDB or MDBList settings"
+                    title = stringResource(R.string.settings_integrations_section),
+                    subtitle = stringResource(R.string.settings_integrations_section_subtitle)
                 )
 
                 SettingsGroupCard(
@@ -519,7 +522,7 @@ private fun IntegrationSettingsContent(
                         item {
                             SettingsActionRow(
                                 title = "TMDB",
-                                subtitle = "Metadata enrichment controls",
+                                subtitle = stringResource(R.string.settings_tmdb_subtitle),
                                 onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) },
                                 modifier = Modifier.focusRequester(hubEntryFocusRequester)
                             )
@@ -527,7 +530,7 @@ private fun IntegrationSettingsContent(
                         item {
                             SettingsActionRow(
                                 title = "MDBList",
-                                subtitle = "External ratings providers",
+                                subtitle = stringResource(R.string.settings_mdblist_subtitle),
                                 onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
                             )
                         }

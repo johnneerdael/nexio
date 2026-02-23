@@ -63,6 +63,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 import androidx.compose.ui.text.input.KeyboardType
 import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
@@ -112,8 +114,8 @@ fun PlaybackSettingsScreen(
     BackHandler { onBackPress() }
 
     SettingsStandaloneScaffold(
-        title = "Playback Settings",
-        subtitle = "Configure video playback and subtitle options"
+        title = stringResource(R.string.playback_title),
+        subtitle = stringResource(R.string.playback_subtitle)
     ) {
         PlaybackSettingsContent(viewModel = viewModel)
     }
@@ -177,8 +179,8 @@ fun PlaybackSettingsContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SettingsDetailHeader(
-            title = "Playback Settings",
-            subtitle = "Configure video playback and subtitle options"
+            title = stringResource(R.string.playback_title),
+            subtitle = stringResource(R.string.playback_subtitle)
         )
 
         SettingsGroupCard(
@@ -479,7 +481,7 @@ internal fun RenderTypeSettingsItem(
                 Spacer(modifier = Modifier.width(16.dp))
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = NuvioColors.Primary.copy(alpha = contentAlpha),
                     modifier = Modifier.size(24.dp)
                 )
@@ -707,7 +709,7 @@ internal fun SliderSettingsItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Remove,
-                            contentDescription = "Decrease",
+                            contentDescription = stringResource(R.string.cd_decrease),
                             tint = (if (decreaseFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary).copy(alpha = contentAlpha),
                             modifier = Modifier.size(20.dp)
                         )
@@ -765,7 +767,7 @@ internal fun SliderSettingsItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Increase",
+                            contentDescription = stringResource(R.string.cd_increase),
                             tint = (if (increaseFocused) NuvioColors.OnPrimary else NuvioColors.TextPrimary).copy(alpha = contentAlpha),
                             modifier = Modifier.size(20.dp)
                         )
@@ -908,7 +910,7 @@ internal fun LanguageSelectionDialog(
                     if (showNoneOption) {
                         item {
                             LanguageOptionItem(
-                                name = "None",
+                                name = stringResource(R.string.action_none),
                                 code = null,
                                 isSelected = selectedLanguage == null,
                                 onClick = { onLanguageSelected(null) },
@@ -991,7 +993,7 @@ private fun LanguageOptionItem(
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = NuvioColors.Primary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -1060,7 +1062,7 @@ internal fun ColorSelectionDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Cancel",
+                    text = stringResource(R.string.action_cancel),
                     style = MaterialTheme.typography.bodyLarge,
                     color = NuvioColors.TextPrimary,
                     modifier = Modifier
@@ -1133,7 +1135,7 @@ private fun ColorOption(
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = if (color == Color.White || color == Color.Yellow) Color.Black else Color.White,
                     modifier = Modifier.size(20.dp)
                 )

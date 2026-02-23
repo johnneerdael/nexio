@@ -64,8 +64,8 @@ fun ThemeSettingsScreen(
     BackHandler { onBackPress() }
 
     SettingsStandaloneScaffold(
-        title = "Appearance",
-        subtitle = "Choose your color theme"
+        title = stringResource(R.string.appearance_title),
+        subtitle = stringResource(R.string.appearance_subtitle)
     ) {
         ThemeSettingsContent(viewModel = viewModel)
     }
@@ -82,7 +82,7 @@ fun ThemeSettingsContent(
 
     val supportedLocales = remember {
         listOf(
-            null to "System default",
+            null to stringResource(R.string.appearance_language_system),
             "en" to "English",
             "pl" to "Polski"
         )
@@ -93,7 +93,7 @@ fun ThemeSettingsContent(
                 .getString("locale_tag", null)?.takeIf { it.isNotEmpty() }
         )
     }
-    val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: "System default"
+    val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: stringResource(R.string.appearance_language_system)
     val strRestartHint = stringResource(R.string.appearance_language_restart_hint)
 
     Column(
@@ -101,20 +101,9 @@ fun ThemeSettingsContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SettingsDetailHeader(
-            title = "Appearance",
-            subtitle = "Choose your color theme"
+            title = stringResource(R.string.appearance_title),
+            subtitle = stringResource(R.string.appearance_subtitle)
         )
-
-        SettingsGroupCard(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            SettingsActionRow(
-                title = stringResource(R.string.appearance_language),
-                subtitle = stringResource(R.string.appearance_language_subtitle),
-                value = currentLocaleName,
-                onClick = { showLanguageDialog = true }
-            )
-        }
 
         SettingsGroupCard(
             modifier = Modifier
@@ -141,6 +130,17 @@ fun ThemeSettingsContent(
                     )
                 }
             }
+        }
+
+        SettingsGroupCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SettingsActionRow(
+                title = stringResource(R.string.appearance_language),
+                subtitle = stringResource(R.string.appearance_language_subtitle),
+                value = currentLocaleName,
+                onClick = { showLanguageDialog = true }
+            )
         }
     }
 
@@ -218,12 +218,12 @@ private fun ThemeCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
+                .padding(17.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(55.dp)
                     .clip(CircleShape)
                     .background(palette.secondary),
                 contentAlignment = Alignment.Center
@@ -231,14 +231,14 @@ private fun ThemeCard(
                 if (isSelected) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.cd_selected),
                         tint = palette.onSecondary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(11.dp))
 
             Text(
                 text = theme.displayName,
@@ -246,7 +246,7 @@ private fun ThemeCard(
                 color = if (isFocused || isSelected) NuvioColors.TextPrimary else NuvioColors.TextSecondary
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(7.dp))
 
             Box(
                 modifier = Modifier

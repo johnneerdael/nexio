@@ -38,6 +38,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -66,7 +68,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 ) {
     item {
         Text(
-            text = "Trailer",
+            text = stringResource(R.string.audio_trailer_section),
             style = MaterialTheme.typography.titleMedium,
             color = NuvioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -76,8 +78,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.PlayCircle,
-            title = "Auto-play Trailers",
-            subtitle = "Automatically play trailers on the detail screen after a period of inactivity",
+            title = stringResource(R.string.audio_autoplay_trailers),
+            subtitle = stringResource(R.string.audio_autoplay_trailers_sub),
             isChecked = trailerSettings.enabled,
             onCheckedChange = onSetTrailerEnabled,
             onFocused = onItemFocused,
@@ -89,7 +91,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         item {
             SliderSettingsItem(
                 icon = Icons.Default.Timer,
-                title = "Trailer Delay",
+                title = stringResource(R.string.audio_trailer_delay),
                 value = trailerSettings.delaySeconds,
                 valueText = "${trailerSettings.delaySeconds}s",
                 minValue = 3,
@@ -105,7 +107,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Audio",
+            text = stringResource(R.string.audio_section),
             style = MaterialTheme.typography.titleMedium,
             color = NuvioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -123,8 +125,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
     item {
         val audioLangName = when (playerSettings.preferredAudioLanguage) {
-            AudioLanguageOption.DEFAULT -> "Default (media file)"
-            AudioLanguageOption.DEVICE -> "Device language"
+            AudioLanguageOption.DEFAULT -> stringResource(R.string.audio_lang_default)
+            AudioLanguageOption.DEVICE -> stringResource(R.string.audio_lang_device)
             else -> AVAILABLE_SUBTITLE_LANGUAGES.find {
                 it.code == playerSettings.preferredAudioLanguage
             }?.name ?: playerSettings.preferredAudioLanguage
@@ -132,7 +134,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
         NavigationSettingsItem(
             icon = Icons.Default.Language,
-            title = "Preferred Audio Language",
+            title = stringResource(R.string.audio_preferred_lang),
             subtitle = audioLangName,
             onClick = onShowAudioLanguageDialog,
             onFocused = onItemFocused,
@@ -143,8 +145,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.Speed,
-            title = "Skip Silence",
-            subtitle = "Skip silent portions of audio during playback",
+            title = stringResource(R.string.audio_skip_silence),
+            subtitle = stringResource(R.string.audio_skip_silence_sub),
             isChecked = playerSettings.skipSilence,
             onCheckedChange = onSetSkipSilence,
             onFocused = onItemFocused,
@@ -155,7 +157,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Advanced Audio",
+            text = stringResource(R.string.audio_advanced_section),
             style = MaterialTheme.typography.titleMedium,
             color = NuvioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -164,7 +166,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
     item {
         Text(
-            text = "These settings may cause issues on some devices. Change only if you know what you're doing.",
+            text = stringResource(R.string.audio_advanced_warning),
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFFFF9800),
             modifier = Modifier.padding(bottom = 8.dp)
@@ -173,15 +175,15 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
     item {
         val decoderName = when (playerSettings.decoderPriority) {
-            0 -> "Device decoders only"
-            1 -> "Prefer device decoders"
-            2 -> "Prefer app decoders (FFmpeg)"
-            else -> "Prefer device decoders"
+            0 -> stringResource(R.string.audio_decoder_device_only)
+            1 -> stringResource(R.string.audio_decoder_prefer_device)
+            2 -> stringResource(R.string.audio_decoder_prefer_app)
+            else -> stringResource(R.string.audio_decoder_prefer_device)
         }
 
         NavigationSettingsItem(
             icon = Icons.Default.Tune,
-            title = "Decoder Priority",
+            title = stringResource(R.string.audio_decoder_priority),
             subtitle = decoderName,
             onClick = onShowDecoderPriorityDialog,
             onFocused = onItemFocused,
@@ -192,8 +194,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.VolumeUp,
-            title = "Tunneled Playback",
-            subtitle = "Hardware-level audio/video sync. May improve playback on some Android TV devices",
+            title = stringResource(R.string.audio_tunneled),
+            subtitle = stringResource(R.string.audio_tunneled_sub),
             isChecked = playerSettings.tunnelingEnabled,
             onCheckedChange = onSetTunnelingEnabled,
             onFocused = onItemFocused,
@@ -205,7 +207,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         ToggleSettingsItem(
             icon = Icons.Default.Tune,
             title = "DV7 → HEVC Fallback",
-            subtitle = "Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support",
+            subtitle = stringResource(R.string.audio_dv_sub),
             isChecked = playerSettings.mapDV7ToHevc,
             onCheckedChange = onSetMapDV7ToHevc,
             onFocused = onItemFocused,
@@ -256,8 +258,8 @@ private fun AudioLanguageSelectionDialog(
 ) {
     val focusRequester = remember { FocusRequester() }
     val specialOptions = listOf(
-        AudioLanguageOption.DEFAULT to "Default (media file)",
-        AudioLanguageOption.DEVICE to "Device language"
+        AudioLanguageOption.DEFAULT to stringResource(R.string.audio_lang_default),
+        AudioLanguageOption.DEVICE to stringResource(R.string.audio_lang_device)
     )
     val allOptions = specialOptions + AVAILABLE_SUBTITLE_LANGUAGES.map { it.code to it.name }
 
@@ -277,7 +279,7 @@ private fun AudioLanguageSelectionDialog(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = "Preferred Audio Language",
+                    text = stringResource(R.string.audio_preferred_lang),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
@@ -328,7 +330,7 @@ private fun AudioLanguageSelectionDialog(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = NuvioColors.Primary,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -350,9 +352,9 @@ private fun DecoderPriorityDialog(
 ) {
     val focusRequester = remember { FocusRequester() }
     val options = listOf(
-        Triple(0, "Device decoders only", "Only use built-in hardware decoders. Most compatible but may not support all formats."),
-        Triple(1, "Prefer device decoders", "Use hardware decoders when available, fall back to FFmpeg. Recommended for most devices."),
-        Triple(2, "Prefer app decoders (FFmpeg)", "Use FFmpeg decoders when available. Better format support but higher CPU usage.")
+        Triple(0, stringResource(R.string.audio_decoder_device_only), stringResource(R.string.audio_decoder_device_only_desc)),
+        Triple(1, stringResource(R.string.audio_decoder_prefer_device), stringResource(R.string.audio_decoder_prefer_device_desc)),
+        Triple(2, stringResource(R.string.audio_decoder_prefer_app), stringResource(R.string.audio_decoder_prefer_app_desc))
     )
 
     LaunchedEffect(Unit) {
@@ -371,13 +373,13 @@ private fun DecoderPriorityDialog(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = "Decoder Priority",
+                    text = stringResource(R.string.audio_decoder_priority),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Controls whether hardware or software (FFmpeg) decoders are used for audio and video",
+                    text = stringResource(R.string.audio_decoder_controls),
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
                 )
@@ -431,7 +433,7 @@ private fun DecoderPriorityDialog(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = NuvioColors.Primary,
                                         modifier = Modifier.size(20.dp)
                                     )

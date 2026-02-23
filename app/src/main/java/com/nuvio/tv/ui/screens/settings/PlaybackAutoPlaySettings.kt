@@ -49,6 +49,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -84,8 +86,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.History,
-            title = "Reuse Last Link",
-            subtitle = "Auto-play your last working stream for this same movie/episode when cache is still valid",
+            title = stringResource(R.string.autoplay_reuse_last_link),
+            subtitle = stringResource(R.string.autoplay_reuse_last_link_sub),
             isChecked = playerSettings.streamReuseLastLinkEnabled,
             onCheckedChange = onSetReuseLastLinkEnabled,
             onFocused = onItemFocused
@@ -96,7 +98,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         item {
             NavigationSettingsItem(
                 icon = Icons.Default.Tune,
-                title = "Last Link Cache Duration",
+                title = stringResource(R.string.autoplay_last_link_cache),
                 subtitle = formatReuseCacheDuration(playerSettings.streamReuseLastLinkCacheHours),
                 onClick = onShowReuseLastLinkCacheDialog,
                 onFocused = onItemFocused
@@ -106,13 +108,13 @@ internal fun LazyListScope.autoPlaySettingsItems(
 
     item {
         val modeLabel = when (playerSettings.streamAutoPlayMode) {
-            StreamAutoPlayMode.MANUAL -> "Manual (choose stream)"
-            StreamAutoPlayMode.FIRST_STREAM -> "Auto-play first source"
-            StreamAutoPlayMode.REGEX_MATCH -> "Auto-play regex match"
+            StreamAutoPlayMode.MANUAL -> stringResource(R.string.autoplay_mode_manual)
+            StreamAutoPlayMode.FIRST_STREAM -> stringResource(R.string.autoplay_mode_first)
+            StreamAutoPlayMode.REGEX_MATCH -> stringResource(R.string.autoplay_mode_regex)
         }
         NavigationSettingsItem(
             icon = Icons.Default.PlayArrow,
-            title = "Auto Stream Selection",
+            title = stringResource(R.string.autoplay_stream_selection),
             subtitle = modeLabel,
             onClick = onShowModeDialog,
             onFocused = onItemFocused
@@ -123,8 +125,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
         item {
             ToggleSettingsItem(
                 icon = Icons.Default.SkipNext,
-                title = "Auto-play Next Episode",
-                subtitle = "Start next episode automatically when prompt appears.",
+                title = stringResource(R.string.autoplay_next_episode),
+                subtitle = stringResource(R.string.autoplay_next_episode_sub),
                 isChecked = playerSettings.streamAutoPlayNextEpisodeEnabled,
                 onCheckedChange = onSetStreamAutoPlayNextEpisodeEnabled,
                 onFocused = onItemFocused
@@ -134,12 +136,12 @@ internal fun LazyListScope.autoPlaySettingsItems(
 
     item {
         val thresholdModeSubtitle = when (playerSettings.nextEpisodeThresholdMode) {
-            NextEpisodeThresholdMode.PERCENTAGE -> "Percentage"
-            NextEpisodeThresholdMode.MINUTES_BEFORE_END -> "Minutes before end"
+            NextEpisodeThresholdMode.PERCENTAGE -> stringResource(R.string.autoplay_threshold_pct)
+            NextEpisodeThresholdMode.MINUTES_BEFORE_END -> stringResource(R.string.autoplay_threshold_min)
         }
         NavigationSettingsItem(
             icon = Icons.Default.Tune,
-            title = "Next Episode Threshold Mode",
+            title = stringResource(R.string.autoplay_threshold_mode),
             subtitle = thresholdModeSubtitle,
             onClick = onShowNextEpisodeThresholdModeDialog,
             onFocused = onItemFocused
@@ -151,8 +153,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
             NextEpisodeThresholdMode.PERCENTAGE -> {
                 SliderSettingsItem(
                     icon = Icons.Default.Tune,
-                    title = "Threshold Percentage",
-                    subtitle = "Fallback when no outro timestamp exists.",
+                    title = stringResource(R.string.autoplay_threshold_pct_title),
+                    subtitle = stringResource(R.string.autoplay_threshold_pct_sub),
                     value = (playerSettings.nextEpisodeThresholdPercent * 2f).roundToInt(),
                     valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdPercent)}%",
                     minValue = 194,
@@ -165,8 +167,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
             NextEpisodeThresholdMode.MINUTES_BEFORE_END -> {
                 SliderSettingsItem(
                     icon = Icons.Default.Tune,
-                    title = "Threshold Minutes",
-                    subtitle = "Fallback when no outro timestamp exists.",
+                    title = stringResource(R.string.autoplay_threshold_min_title),
+                    subtitle = stringResource(R.string.autoplay_threshold_pct_sub),
                     value = (playerSettings.nextEpisodeThresholdMinutesBeforeEnd * 2f).roundToInt(),
                     valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdMinutesBeforeEnd)} min",
                     minValue = 2,
@@ -183,13 +185,13 @@ internal fun LazyListScope.autoPlaySettingsItems(
 
         item {
             val sourceLabel = when (playerSettings.streamAutoPlaySource) {
-                StreamAutoPlaySource.ALL_SOURCES -> "All sources"
-                StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> "Installed addons only"
-                StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> "Enabled plugins only"
+                StreamAutoPlaySource.ALL_SOURCES -> stringResource(R.string.autoplay_scope_all)
+                StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> stringResource(R.string.autoplay_scope_addons)
+                StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> stringResource(R.string.autoplay_scope_plugins)
             }
             NavigationSettingsItem(
                 icon = Icons.Default.Tune,
-                title = "Auto-play Source Scope",
+                title = stringResource(R.string.autoplay_scope),
                 subtitle = sourceLabel,
                 onClick = onShowSourceDialog,
                 onFocused = onItemFocused
@@ -199,13 +201,13 @@ internal fun LazyListScope.autoPlaySettingsItems(
         if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
             item {
                 val addonSubtitle = if (playerSettings.streamAutoPlaySelectedAddons.isEmpty()) {
-                    "All installed addons"
+                    stringResource(R.string.autoplay_all_addons)
                 } else {
                     "${playerSettings.streamAutoPlaySelectedAddons.size} selected"
                 }
                 NavigationSettingsItem(
                     icon = Icons.Default.Language,
-                    title = "Allowed Addons",
+                    title = stringResource(R.string.autoplay_allowed_addons),
                     subtitle = addonSubtitle,
                     onClick = onShowAddonSelectionDialog,
                     onFocused = onItemFocused
@@ -216,13 +218,13 @@ internal fun LazyListScope.autoPlaySettingsItems(
         if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
             item {
                 val pluginSubtitle = if (playerSettings.streamAutoPlaySelectedPlugins.isEmpty()) {
-                    "All enabled plugins"
+                    stringResource(R.string.autoplay_all_plugins)
                 } else {
                     "${playerSettings.streamAutoPlaySelectedPlugins.size} selected"
                 }
                 NavigationSettingsItem(
                     icon = Icons.Default.Extension,
-                    title = "Allowed Plugins",
+                    title = stringResource(R.string.autoplay_allowed_plugins),
                     subtitle = pluginSubtitle,
                     onClick = onShowPluginSelectionDialog,
                     onFocused = onItemFocused
@@ -233,12 +235,13 @@ internal fun LazyListScope.autoPlaySettingsItems(
 
     if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH) {
         item {
+            val strRegexPlaceholder = stringResource(R.string.autoplay_regex_placeholder)
             val regexSubtitle = playerSettings.streamAutoPlayRegex.ifBlank {
-                "No pattern set. Example: 4K|2160p|Remux"
+                strRegexPlaceholder
             }
             NavigationSettingsItem(
                 icon = Icons.Default.Tune,
-                title = "Regex Pattern",
+                title = stringResource(R.string.autoplay_regex_title),
                 subtitle = regexSubtitle,
                 onClick = onShowRegexDialog,
                 onFocused = onItemFocused
@@ -328,8 +331,8 @@ internal fun AutoPlaySettingsDialogs(
 
     if (showAddonSelectionDialog) {
         StreamAutoPlayProviderSelectionDialog(
-            title = "Allowed Addons",
-            allLabel = "All installed addons",
+            title = stringResource(R.string.autoplay_allowed_addons),
+            allLabel = stringResource(R.string.autoplay_all_addons),
             items = installedAddonNames,
             selectedItems = playerSettings.streamAutoPlaySelectedAddons,
             onSelectionSaved = onSetSelectedAddons,
@@ -339,8 +342,8 @@ internal fun AutoPlaySettingsDialogs(
 
     if (showPluginSelectionDialog) {
         StreamAutoPlayProviderSelectionDialog(
-            title = "Allowed Plugins",
-            allLabel = "All enabled plugins",
+            title = stringResource(R.string.autoplay_allowed_plugins),
+            allLabel = stringResource(R.string.autoplay_all_plugins),
             items = enabledPluginNames,
             selectedItems = playerSettings.streamAutoPlaySelectedPlugins,
             onSelectionSaved = onSetSelectedPlugins,
@@ -370,13 +373,13 @@ private fun NextEpisodeThresholdModeDialog(
     val options = listOf(
         Triple(
             NextEpisodeThresholdMode.PERCENTAGE,
-            "Percentage",
-            "Show by playback percent when no outro timestamp is available."
+            stringResource(R.string.autoplay_threshold_pct),
+            stringResource(R.string.autoplay_threshold_pct_desc)
         ),
         Triple(
             NextEpisodeThresholdMode.MINUTES_BEFORE_END,
-            "Minutes before end",
-            "Show this many minutes before episode end when no outro timestamp is available."
+            stringResource(R.string.autoplay_threshold_min),
+            stringResource(R.string.autoplay_threshold_min_desc)
         )
     )
 
@@ -396,7 +399,7 @@ private fun NextEpisodeThresholdModeDialog(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = "Next Episode Threshold Mode",
+                    text = stringResource(R.string.autoplay_threshold_mode),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
@@ -448,7 +451,7 @@ private fun NextEpisodeThresholdModeDialog(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = NuvioColors.Primary,
                                         modifier = Modifier.height(20.dp)
                                     )
@@ -485,9 +488,9 @@ private fun StreamAutoPlayModeDialog(
 ) {
     val focusRequester = remember { FocusRequester() }
     val options = listOf(
-        Triple(StreamAutoPlayMode.MANUAL, "Manual", "Always show source list and let me choose."),
-        Triple(StreamAutoPlayMode.FIRST_STREAM, "Auto-play first stream", "Play the first available source automatically."),
-        Triple(StreamAutoPlayMode.REGEX_MATCH, "Auto-play regex match", "Play first source whose text matches your regex pattern.")
+        Triple(StreamAutoPlayMode.MANUAL, stringResource(R.string.autoplay_mode_manual), stringResource(R.string.autoplay_mode_manual_desc)),
+        Triple(StreamAutoPlayMode.FIRST_STREAM, stringResource(R.string.autoplay_mode_first), stringResource(R.string.autoplay_mode_first_desc)),
+        Triple(StreamAutoPlayMode.REGEX_MATCH, stringResource(R.string.autoplay_mode_regex), stringResource(R.string.autoplay_mode_regex_desc))
     )
 
     LaunchedEffect(Unit) {
@@ -506,7 +509,7 @@ private fun StreamAutoPlayModeDialog(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = "Auto Stream Selection",
+                    text = stringResource(R.string.autoplay_stream_selection),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
@@ -559,7 +562,7 @@ private fun StreamAutoPlayModeDialog(
                                 if (isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = NuvioColors.Primary,
                                         modifier = Modifier.height(20.dp)
                                     )
@@ -606,7 +609,7 @@ private fun StreamReuseLastLinkCacheDurationDialog(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = "Last Link Cache Duration",
+                    text = stringResource(R.string.autoplay_last_link_cache),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
@@ -649,7 +652,7 @@ private fun StreamReuseLastLinkCacheDurationDialog(
                                 if (isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = NuvioColors.Primary,
                                         modifier = Modifier.height(20.dp)
                                     )
@@ -673,18 +676,18 @@ private fun StreamAutoPlaySourceDialog(
     val options = listOf(
         Triple(
             StreamAutoPlaySource.ALL_SOURCES,
-            "All sources",
-            "Auto-play can use both installed addons and enabled plugins."
+            stringResource(R.string.autoplay_scope_all),
+            stringResource(R.string.autoplay_scope_all_desc)
         ),
         Triple(
             StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,
-            "Installed addons only",
-            "Auto-play only considers streams coming from your installed addons."
+            stringResource(R.string.autoplay_scope_addons),
+            stringResource(R.string.autoplay_scope_addons_desc)
         ),
         Triple(
             StreamAutoPlaySource.ENABLED_PLUGINS_ONLY,
-            "Enabled plugins only",
-            "Auto-play only considers streams coming from enabled plugins."
+            stringResource(R.string.autoplay_scope_plugins),
+            stringResource(R.string.autoplay_scope_plugins_desc)
         )
     )
 
@@ -704,7 +707,7 @@ private fun StreamAutoPlaySourceDialog(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = "Auto-play Source Scope",
+                    text = stringResource(R.string.autoplay_scope),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
@@ -756,7 +759,7 @@ private fun StreamAutoPlaySourceDialog(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = NuvioColors.Primary,
                                         modifier = Modifier.height(20.dp)
                                     )
@@ -844,7 +847,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                         if (selected.isEmpty()) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Selected",
+                                contentDescription = stringResource(R.string.cd_selected),
                                 tint = NuvioColors.Primary,
                                 modifier = Modifier.height(20.dp)
                             )
@@ -854,7 +857,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
 
                 if (items.isEmpty()) {
                     Text(
-                        text = "No items available",
+                        text = stringResource(R.string.autoplay_no_items),
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioColors.TextSecondary
                     )
@@ -902,7 +905,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                                     if (isSelected) {
                                         Icon(
                                             imageVector = Icons.Default.Check,
-                                            contentDescription = "Selected",
+                                            contentDescription = stringResource(R.string.cd_selected),
                                             tint = NuvioColors.Primary,
                                             modifier = Modifier.height(18.dp)
                                         )
@@ -962,18 +965,18 @@ private fun StreamRegexDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Stream Regex Pattern",
+                    text = stringResource(R.string.autoplay_regex_title),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary
                 )
                 Text(
-                    text = "Matches against stream name/title/description/addon/url. Example: 4K|2160p|Remux",
+                    text = stringResource(R.string.autoplay_regex_matches),
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary
                 )
 
                 Text(
-                    text = "Presets",
+                    text = stringResource(R.string.autoplay_regex_presets),
                     style = MaterialTheme.typography.titleSmall,
                     color = NuvioColors.TextSecondary
                 )
@@ -1092,7 +1095,7 @@ private fun StreamRegexDialog(
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.action_cancel))
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
@@ -1108,7 +1111,7 @@ private fun StreamRegexDialog(
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
-                        Text("Clear")
+                        Text(stringResource(R.string.action_none))
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
@@ -1117,7 +1120,7 @@ private fun StreamRegexDialog(
                             if (value.isNotEmpty()) {
                                 val valid = runCatching { Regex(value, RegexOption.IGNORE_CASE) }.isSuccess
                                 if (!valid) {
-                                    regexError = "Invalid regex pattern"
+                                    regexError = stringResource(R.string.autoplay_invalid_regex)
                                     return@Button
                                 }
                             }
@@ -1131,7 +1134,7 @@ private fun StreamRegexDialog(
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
-                        Text("Save")
+                        Text(stringResource(R.string.action_save))
                     }
                 }
             }
