@@ -17,10 +17,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nuvio.tv.R
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 
 @Composable
@@ -31,8 +33,8 @@ fun TmdbSettingsScreen(
     BackHandler { onBackPress() }
 
     SettingsStandaloneScaffold(
-        title = "TMDB Enrichment",
-        subtitle = "Choose which metadata fields should come from TMDB"
+        title = stringResource(R.string.tmdb_title),
+        subtitle = stringResource(R.string.tmdb_subtitle)
     ) {
         TmdbSettingsContent(viewModel = viewModel)
     }
@@ -51,8 +53,8 @@ fun TmdbSettingsContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SettingsDetailHeader(
-            title = "TMDB Enrichment",
-            subtitle = "Choose which metadata fields should come from TMDB"
+            title = stringResource(R.string.tmdb_title),
+            subtitle = stringResource(R.string.tmdb_subtitle)
         )
 
         SettingsGroupCard(
@@ -66,8 +68,8 @@ fun TmdbSettingsContent(
             ) {
                 item {
                     SettingsToggleRow(
-                        title = "Enable TMDB Enrichment",
-                        subtitle = "Use TMDB as a metadata source to enhance addon data",
+                        title = stringResource(R.string.tmdb_enable_title),
+                        subtitle = stringResource(R.string.tmdb_enable_subtitle),
                         checked = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) },
                         modifier = if (initialFocusRequester != null) {
@@ -84,8 +86,8 @@ fun TmdbSettingsContent(
                         ?.name
                         ?: uiState.language.uppercase()
                     SettingsActionRow(
-                        title = "Language",
-                        subtitle = "TMDB metadata language for title, logo, and enabled fields",
+                        title = stringResource(R.string.tmdb_language_title),
+                        subtitle = stringResource(R.string.tmdb_language_subtitle),
                         value = languageName,
                         enabled = uiState.enabled,
                         onClick = { showLanguageDialog = true }
@@ -94,8 +96,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Artwork",
-                        subtitle = "Logo and backdrop images from TMDB",
+                        title = stringResource(R.string.tmdb_artwork_title),
+                        subtitle = stringResource(R.string.tmdb_artwork_subtitle),
                         checked = uiState.useArtwork,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleArtwork(!uiState.useArtwork)) }
@@ -104,8 +106,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Basic Info",
-                        subtitle = "Description, genres, and rating from TMDB",
+                        title = stringResource(R.string.tmdb_basic_info_title),
+                        subtitle = stringResource(R.string.tmdb_basic_info_subtitle),
                         checked = uiState.useBasicInfo,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleBasicInfo(!uiState.useBasicInfo)) }
@@ -114,8 +116,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Details",
-                        subtitle = "Runtime, release date, country, and language from TMDB",
+                        title = stringResource(R.string.tmdb_details_title),
+                        subtitle = stringResource(R.string.tmdb_details_subtitle),
                         checked = uiState.useDetails,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleDetails(!uiState.useDetails)) }
@@ -124,8 +126,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Credits",
-                        subtitle = "Cast with photos, director, and writer from TMDB",
+                        title = stringResource(R.string.tmdb_credits_title),
+                        subtitle = stringResource(R.string.tmdb_credits_subtitle),
                         checked = uiState.useCredits,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleCredits(!uiState.useCredits)) }
@@ -134,8 +136,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Productions",
-                        subtitle = "Production companies from TMDB",
+                        title = stringResource(R.string.tmdb_productions_title),
+                        subtitle = stringResource(R.string.tmdb_productions_subtitle),
                         checked = uiState.useProductions,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleProductions(!uiState.useProductions)) }
@@ -144,8 +146,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Networks",
-                        subtitle = "Networks with logos from TMDB",
+                        title = stringResource(R.string.tmdb_networks_title),
+                        subtitle = stringResource(R.string.tmdb_networks_subtitle),
                         checked = uiState.useNetworks,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleNetworks(!uiState.useNetworks)) }
@@ -154,8 +156,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "Episodes",
-                        subtitle = "Episode titles, overviews, thumbnails, and runtime from TMDB",
+                        title = stringResource(R.string.tmdb_episodes_title),
+                        subtitle = stringResource(R.string.tmdb_episodes_subtitle),
                         checked = uiState.useEpisodes,
                         enabled = uiState.enabled,
                         onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEpisodes(!uiState.useEpisodes)) }
@@ -164,8 +166,8 @@ fun TmdbSettingsContent(
 
                 item {
                     SettingsToggleRow(
-                        title = "More Like This",
-                        subtitle = "TMDB recommendation backdrops on detail page",
+                        title = stringResource(R.string.tmdb_more_like_this_title),
+                        subtitle = stringResource(R.string.tmdb_more_like_this_subtitle),
                         checked = uiState.useMoreLikeThis,
                         enabled = uiState.enabled,
                         onToggle = {
@@ -182,7 +184,7 @@ fun TmdbSettingsContent(
 
     if (showLanguageDialog) {
         LanguageSelectionDialog(
-            title = "TMDB Language",
+            title = stringResource(R.string.tmdb_language_dialog_title),
             selectedLanguage = uiState.language,
             showNoneOption = false,
             onLanguageSelected = { language ->

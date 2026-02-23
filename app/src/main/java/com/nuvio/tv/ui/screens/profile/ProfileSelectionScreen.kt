@@ -140,7 +140,7 @@ fun ProfileSelectionScreen(
             Spacer(modifier = Modifier.height(ProfileSelectionSpacing.LogoToHeading))
 
             Text(
-                text = "Who's watching?",
+                text = stringResource(R.string.profile_selection_title),
                 color = NuvioColors.TextPrimary,
                 fontSize = 44.sp,
                 fontWeight = FontWeight.Bold,
@@ -150,7 +150,7 @@ fun ProfileSelectionScreen(
             Spacer(modifier = Modifier.height(ProfileSelectionSpacing.HeadingToSubheading))
 
             Text(
-                text = "Select a profile to continue",
+                text = stringResource(R.string.profile_selection_subtitle),
                 color = NuvioColors.TextSecondary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium
@@ -171,7 +171,7 @@ fun ProfileSelectionScreen(
             Spacer(modifier = Modifier.weight(1f, fill = true))
 
             Text(
-                text = "Use D-pad to choose a profile",
+                text = stringResource(R.string.profile_selection_hint),
                 color = NuvioColors.TextTertiary.copy(alpha = 0.9f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
@@ -199,7 +199,7 @@ private fun ProfileGrid(
 
     if (profiles.isEmpty()) {
         Text(
-            text = "No profiles found",
+            text = stringResource(R.string.profile_selection_empty),
             color = NuvioColors.TextSecondary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Medium
@@ -354,7 +354,7 @@ private fun ProfileCard(
         ) {
             if (profile.isPrimary) {
                 Text(
-                    text = "PRIMARY",
+                    text = stringResource(R.string.profile_selection_primary_badge),
                     color = Color(0xFFFFB300),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,

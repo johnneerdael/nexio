@@ -143,7 +143,7 @@ fun AuthQrSignInScreen(
                 )
                 Spacer(modifier = Modifier.height(22.dp))
                 Text(
-                    text = "Sign In With QR",
+                    text = stringResource(R.string.auth_qr_title),
                     style = MaterialTheme.typography.headlineLarge,
                     color = NuvioColors.TextPrimary,
                     textAlign = TextAlign.Center
@@ -191,7 +191,7 @@ fun AuthQrSignInScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Account Login",
+                    text = stringResource(R.string.auth_qr_account_login),
                     style = MaterialTheme.typography.titleLarge,
                     color = NuvioColors.TextPrimary
                 )
@@ -213,7 +213,7 @@ fun AuthQrSignInScreen(
                     )
                 } else if (isSignedIn && isOnboardingMode) {
                     StatusPill(
-                        text = "Finishing sign in...",
+                        text = stringResource(R.string.auth_qr_finishing),
                         containerColor = NuvioColors.BackgroundCard,
                         contentColor = NuvioColors.TextSecondary
                     )
@@ -253,7 +253,7 @@ fun AuthQrSignInScreen(
                     }
                     if (uiState.qrLoginExpiresAtMillis != null) {
                         Text(
-                            text = "Expires in ${formatDuration(remainingMillis)}",
+                            text = stringResource(R.string.auth_qr_expires, formatDuration(remainingMillis)),
                             style = MaterialTheme.typography.bodySmall,
                             color = NuvioColors.TextSecondary
                         )

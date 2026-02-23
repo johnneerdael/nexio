@@ -320,4 +320,354 @@
     <string name="layout_card_radius">Corner Radius</string>
     <string name="layout_reset_default">Reset to Default</string>
     <string name="layout_custom">Custom</string>
+
+
+    <!-- MDBListSettingsScreen -->
+    <string name="mdblist_title">MDBList Ratings</string>
+    <string name="mdblist_subtitle">Configure external ratings shown in the detail hero</string>
+    <string name="mdblist_enable_title">Enable MDBList Ratings</string>
+    <string name="mdblist_enable_subtitle">Fetch ratings from external providers in metadata detail screen</string>
+    <string name="mdblist_api_key_title">API Key</string>
+    <string name="mdblist_api_key_subtitle">Required to fetch ratings from MDBList</string>
+    <string name="mdblist_trakt_title">Trakt</string>
+    <string name="mdblist_trakt_subtitle">Show Trakt score</string>
+    <string name="mdblist_imdb_title">IMDb</string>
+    <string name="mdblist_imdb_subtitle">Show IMDb score (and hide default IMDb line when available)</string>
+    <string name="mdblist_tmdb_title">TMDB</string>
+    <string name="mdblist_tmdb_subtitle">Show TMDB score</string>
+    <string name="mdblist_letterboxd_title">Letterboxd</string>
+    <string name="mdblist_letterboxd_subtitle">Show Letterboxd score</string>
+    <string name="mdblist_tomatoes_title">Rotten Tomatoes</string>
+    <string name="mdblist_tomatoes_subtitle">Show critics score</string>
+    <string name="mdblist_audience_title">Audience Score</string>
+    <string name="mdblist_audience_subtitle">Show audience score</string>
+    <string name="mdblist_metacritic_title">Metacritic</string>
+    <string name="mdblist_metacritic_subtitle">Show Metacritic score</string>
+    <string name="mdblist_dialog_title">MDBList API Key</string>
+    <string name="mdblist_dialog_subtitle">Enter your API key to fetch external ratings</string>
+    <string name="mdblist_dialog_placeholder">Enter MDBList API key</string>
+    <string name="mdblist_not_set">Not set</string>
+    <string name="action_clear">Clear</string>
+
+    <!-- TmdbSettingsScreen -->
+    <string name="tmdb_title">TMDB Enrichment</string>
+    <string name="tmdb_subtitle">Choose which metadata fields should come from TMDB</string>
+    <string name="tmdb_enable_title">Enable TMDB Enrichment</string>
+    <string name="tmdb_enable_subtitle">Use TMDB as a metadata source to enhance addon data</string>
+    <string name="tmdb_language_title">Language</string>
+    <string name="tmdb_language_subtitle">TMDB metadata language for title, logo, and enabled fields</string>
+    <string name="tmdb_artwork_title">Artwork</string>
+    <string name="tmdb_artwork_subtitle">Logo and backdrop images from TMDB</string>
+    <string name="tmdb_basic_info_title">Basic Info</string>
+    <string name="tmdb_basic_info_subtitle">Description, genres, and rating from TMDB</string>
+    <string name="tmdb_details_title">Details</string>
+    <string name="tmdb_details_subtitle">Runtime, release date, country, and language from TMDB</string>
+    <string name="tmdb_credits_title">Credits</string>
+    <string name="tmdb_credits_subtitle">Cast with photos, director, and writer from TMDB</string>
+    <string name="tmdb_productions_title">Productions</string>
+    <string name="tmdb_productions_subtitle">Production companies from TMDB</string>
+    <string name="tmdb_networks_title">Networks</string>
+    <string name="tmdb_networks_subtitle">Networks with logos from TMDB</string>
+    <string name="tmdb_episodes_title">Episodes</string>
+    <string name="tmdb_episodes_subtitle">Episode titles, overviews, thumbnails, and runtime from TMDB</string>
+    <string name="tmdb_more_like_this_title">More Like This</string>
+    <string name="tmdb_more_like_this_subtitle">TMDB recommendation backdrops on detail page</string>
+    <string name="tmdb_language_dialog_title">TMDB Language</string>
+
+    <!-- TraktScreen -->
+    <string name="trakt_description">Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt.</string>
+    <string name="trakt_connected_as">Connected as %1$s</string>
+    <string name="trakt_account_login">Account Login</string>
+    <string name="trakt_awaiting_instruction">Go to trakt.tv/activate and enter this code:</string>
+    <string name="trakt_code_expires">Code expires in %1$s</string>
+    <string name="trakt_token_refreshes">Trakt access token refreshes in %1$s</string>
+    <string name="trakt_login_instruction">Press Login to start Trakt device authentication. A QR code will appear here.</string>
+    <string name="trakt_missing_credentials">Missing TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
+    <string name="trakt_continue_watching_window">Continue Watching Window</string>
+    <string name="trakt_continue_watching_subtitle">Trakt history considered for continue watching</string>
+    <string name="trakt_unaired_next_up">Unaired Next Up Episodes</string>
+    <string name="trakt_unaired_next_up_subtitle">Show upcoming episodes before they air</string>
+    <string name="trakt_unaired_shown">Shown</string>
+    <string name="trakt_unaired_hidden">Hidden</string>
+    <string name="trakt_cached_label">Cached</string>
+    <string name="trakt_stat_movies">Movies</string>
+    <string name="trakt_stat_shows">Shows</string>
+    <string name="trakt_stat_episodes">Episodes</string>
+    <string name="trakt_stat_watched_hours">Watched Hours</string>
+    <string name="trakt_disconnect">Disconnect</string>
+    <string name="trakt_disconnect_title">Disconnect Trakt?</string>
+    <string name="trakt_disconnect_subtitle">This will disconnect your Trakt account from Nuvio.</string>
+    <string name="trakt_login">Login</string>
+    <string name="trakt_retry">Retry</string>
+    <string name="trakt_back">Back</string>
+    <string name="trakt_cw_window_title">Continue Watching Window</string>
+    <string name="trakt_cw_window_subtitle">Choose how much Trakt activity should appear in continue watching.</string>
+    <string name="trakt_unaired_dialog_title">Unaired Next Up Episodes</string>
+    <string name="trakt_unaired_dialog_subtitle">Choose whether Continue Watching should include upcoming episodes before release.</string>
+    <string name="trakt_show_unaired">Show unaired episodes</string>
+    <string name="trakt_hide_unaired">Hide unaired episodes</string>
+    <string name="trakt_all_history">All history</string>
+    <string name="trakt_days_format">%1$d days</string>
+
+    <!-- DebugSettingsScreen -->
+    <string name="debug_title">Debug</string>
+    <string name="debug_subtitle">Developer tools and feature flags (debug builds only)</string>
+    <string name="debug_section_popup">Popup / Dialog Testing</string>
+    <string name="debug_playback_error_title">Playback Error Screen</string>
+    <string name="debug_playback_error_subtitle">Show a simulated playback error popup</string>
+    <string name="debug_section_features">Feature Toggles</string>
+    <string name="debug_account_tab_title">Account Tab</string>
+    <string name="debug_account_tab_subtitle">Show the Account tab in Settings navigation</string>
+    <string name="debug_sync_code_title">Sync Code Features</string>
+    <string name="debug_sync_code_subtitle">Show Generate/Enter Sync Code buttons in Account settings</string>
+    <string name="debug_section_account">Account</string>
+    <string name="debug_manual_signin_title">Manual Sign In</string>
+    <string name="debug_manual_signin_subtitle">Sign in with email and password (Supabase auth)</string>
+    <string name="debug_email_placeholder">Email</string>
+    <string name="debug_password_placeholder">Password</string>
+    <string name="debug_signing_in">Signing in\u2026</string>
+    <string name="debug_sign_in">Sign In</string>
+    <string name="debug_error_dialog_title">Playback Error</string>
+    <string name="debug_error_dialog_subtitle">An error occurred during playback.\n\nError: Test simulated error - this is not a real failure. Source returned HTTP 503 (Service Unavailable).</string>
+    <string name="debug_dismiss">Dismiss</string>
+
+    <!-- ProfileSettingsContent -->
+    <string name="profile_title">Profiles</string>
+    <string name="profile_subtitle">Manage user profiles for this account.</string>
+    <string name="profile_primary_label">Primary</string>
+    <string name="profile_shares_primary">Shares primary\'s %1$s</string>
+    <string name="profile_edit_label">Edit</string>
+    <string name="profile_add">Add Profile</string>
+    <string name="profile_create_title">Create Profile</string>
+    <string name="profile_edit_title">Edit Profile %1$s</string>
+    <string name="profile_name_placeholder">Profile name</string>
+    <string name="profile_avatar_color">Avatar Color</string>
+    <string name="profile_use_primary_addons">Use primary profile\'s addons</string>
+    <string name="profile_use_primary_plugins">Use primary profile\'s plugins</string>
+    <string name="profile_creating">Creating\u2026</string>
+    <string name="profile_create_btn">Create</string>
+    <string name="profile_confirm">Confirm</string>
+    <string name="profile_delete">Delete</string>
+    <string name="profile_addons">addons</string>
+    <string name="profile_plugins">plugins</string>
+
+
+    <!-- AddonManagerScreen -->
+    <string name="addon_title">Addons</string>
+    <string name="addon_readonly_notice">Using primary profile\'s addons and can\'t be changed</string>
+    <string name="addon_install_title">Install addon</string>
+    <string name="addon_install_placeholder">https://example.com</string>
+    <string name="addon_installing">Installing</string>
+    <string name="addon_install_btn">Install</string>
+    <string name="addon_installed_section">Installed</string>
+    <string name="addon_empty">No addons installed. Add one to get started.</string>
+    <string name="addon_remove">Remove</string>
+    <string name="addon_manage_from_phone_title">Manage from phone</string>
+    <string name="addon_manage_from_phone_subtitle">Scan a QR code to manage addons and Home catalogs from your phone</string>
+    <string name="addon_reorder_title">Reorder home catalogs</string>
+    <string name="addon_reorder_subtitle">Controls catalog row order on Home (Classic + Modern + Grid)</string>
+    <string name="addon_qr_scan_instruction">Scan with your phone to manage addons and catalogs</string>
+    <string name="addon_qr_close">Close</string>
+    <string name="addon_confirm_title">Confirm addon &amp; catalog changes</string>
+    <string name="addon_confirm_subtitle">The following changes were made from your phone:</string>
+    <string name="addon_confirm_added">Added:</string>
+    <string name="addon_confirm_removed">Removed:</string>
+    <string name="addon_confirm_catalog_reordered">Catalog order was changed</string>
+    <string name="addon_confirm_catalogs_disabled">Catalogs disabled on Home:</string>
+    <string name="addon_confirm_catalogs_enabled">Catalogs enabled on Home:</string>
+    <string name="addon_confirm_no_changes">No visible changes detected</string>
+    <string name="addon_confirm_reject">Reject</string>
+    <string name="addon_confirm_confirm">Confirm</string>
+
+    <!-- CatalogOrderScreen -->
+    <string name="catalog_order_title">Reorder Home Catalogs</string>
+    <string name="catalog_order_subtitle">This controls catalog row order on Home (Classic + Modern + Grid).</string>
+    <string name="catalog_order_empty">No home catalogs available yet.</string>
+    <string name="catalog_order_disabled_on_home">Disabled on Home</string>
+    <string name="catalog_order_enable">Enable</string>
+    <string name="catalog_order_disable">Disable</string>
+
+
+    <!-- StreamScreen -->
+    <string name="stream_retry">Retry</string>
+    <string name="stream_no_streams">No streams found</string>
+    <string name="stream_no_streams_hint">Try installing more addons to find streams</string>
+    <string name="stream_type_torrent">Torrent</string>
+    <string name="stream_type_youtube">YouTube</string>
+    <string name="stream_type_external">External</string>
+    <string name="stream_player_picker_title">What player should be used?</string>
+    <string name="stream_player_internal">Internal</string>
+    <string name="stream_player_external">External</string>
+
+    <!-- PlayerScreen -->
+    <string name="player_ends_at">Ends at: %1$s</string>
+    <string name="player_via">via %1$s</string>
+    <string name="player_subtitle_delay">Subtitles Delay</string>
+    <string name="player_error_title">Playback Error</string>
+    <string name="player_go_back">Go Back</string>
+    <string name="player_speed_title">Playback Speed</string>
+    <string name="player_more_actions_title">More Actions</string>
+    <string name="player_more_speed">Playback Speed</string>
+    <string name="player_more_aspect_ratio">Aspect Ratio</string>
+    <string name="player_more_open_external">Open in External Player</string>
+
+    <!-- StreamSourcesSidePanel -->
+    <string name="sources_title">Sources</string>
+    <string name="sources_reload">Reload</string>
+    <string name="sources_close">Close</string>
+    <string name="sources_no_streams">No streams found</string>
+
+    <!-- EpisodesSidePanel -->
+    <string name="episodes_panel_close">Close</string>
+    <string name="episodes_panel_back">Back</string>
+    <string name="episodes_panel_reload">Reload</string>
+    <string name="episodes_panel_no_streams">No streams found</string>
+    <string name="episodes_panel_no_episodes">No episodes available</string>
+
+    <!-- AudioDialog -->
+    <string name="audio_dialog_title">Audio</string>
+
+    <!-- SubtitleDialog / SubtitleStyleSidePanel -->
+    <string name="subtitle_dialog_title">Subtitles</string>
+    <string name="subtitle_no_builtin">No built-in subtitles available</string>
+    <string name="subtitle_loading_addon">Loading subtitles from addons\u2026</string>
+    <string name="subtitle_no_addon">No addon subtitles available</string>
+    <string name="subtitle_text_color">Text Color</string>
+    <string name="subtitle_outline_color">Outline Color</string>
+    <string name="subtitle_reset_defaults">Reset Defaults</string>
+    <string name="subtitle_style_title">Subtitle Style</string>
+    <string name="subtitle_style_color">Color</string>
+    <string name="subtitle_style_reset">Reset</string>
+
+    <!-- PauseOverlay -->
+    <string name="pause_you_are_watching">You\'re watching</string>
+    <string name="pause_cast_label">Cast</string>
+    <string name="pause_back_to_details">Back to details</string>
+    <string name="pause_as_character">as %1$s</string>
+
+    <!-- NextEpisodeCardOverlay -->
+    <string name="next_episode_label">Next Episode</string>
+
+
+    <!-- SearchScreen -->
+    <string name="search_keyboard_hint">Press Done on the keyboard to search</string>
+    <string name="search_placeholder">Search movies &amp; series</string>
+
+    <!-- LibraryScreen -->
+    <string name="library_syncing">Syncing Trakt library\u2026</string>
+    <string name="library_title">Library</string>
+    <string name="library_filter_list">List</string>
+    <string name="library_filter_type">Type</string>
+    <string name="library_filter_sort">Sort</string>
+    <string name="library_manage_lists">Manage Lists</string>
+    <string name="library_manage_trakt_lists">Manage Trakt Lists</string>
+    <string name="library_no_lists">No personal lists yet.</string>
+    <string name="library_list_create">Create</string>
+    <string name="library_list_edit">Edit</string>
+    <string name="library_list_move_up">Move Up</string>
+    <string name="library_list_move_down">Move Down</string>
+    <string name="library_list_delete">Delete</string>
+    <string name="library_list_close">Close</string>
+    <string name="library_list_name_label">Name</string>
+    <string name="library_list_description_label">Description</string>
+    <string name="library_list_privacy">Privacy</string>
+    <string name="library_delete_title">Delete this list?</string>
+    <string name="library_delete_subtitle">This removes the list and all list items from Trakt.</string>
+    <string name="library_delete_confirm">Delete</string>
+
+    <!-- AccountSettingsContent -->
+    <string name="account_loading">Loading\u2026</string>
+    <string name="account_sync_description">Sync your library, watch progress, addons, and plugins across devices.</string>
+    <string name="account_signin_qr_title">Sign In with QR</string>
+    <string name="account_signin_qr_subtitle">Scan a QR code and complete email login on your phone</string>
+    <string name="account_signed_in_label">Signed in</string>
+    <string name="account_total_label">Total</string>
+    <string name="account_loading_sync">Loading sync data\u2026</string>
+    <string name="account_sign_out">Sign Out</string>
+
+    <!-- AuthSignInScreen -->
+    <string name="auth_signin_title">Sign In</string>
+    <string name="auth_signin_tv_disabled">Email/password entry on TV is disabled. Continue with QR sign in.</string>
+    <string name="auth_signin_qr_btn">Continue with QR</string>
+
+    <!-- AuthQrSignInScreen -->
+    <string name="auth_qr_title">Sign In With QR</string>
+    <string name="auth_qr_account_login">Account Login</string>
+    <string name="auth_qr_finishing">Finishing sign in\u2026</string>
+    <string name="auth_qr_code_label">Code: %1$s</string>
+    <string name="auth_qr_expires">Expires in %1$s</string>
+
+    <!-- SyncCodeGenerateScreen -->
+    <string name="sync_generate_title">Generate Sync Code</string>
+    <string name="sync_generate_subtitle">Create a PIN to protect your sync code. Share the code with your other devices.</string>
+    <string name="sync_generate_code_label">Your Sync Code</string>
+    <string name="sync_generate_instruction">Enter this code and your PIN on your other device to link them.</string>
+    <string name="sync_generate_done">Done</string>
+    <string name="sync_generate_pin_label">Choose a PIN (4-8 characters)</string>
+    <string name="sync_generate_pin_placeholder">Enter PIN</string>
+
+    <!-- SyncCodeClaimScreen -->
+    <string name="sync_claim_title">Link Device</string>
+    <string name="sync_claim_subtitle">Enter the sync code and PIN from your other device to link this device.</string>
+    <string name="sync_claim_success">Device linked successfully! Your addons and plugins will now sync.</string>
+    <string name="sync_claim_done">Done</string>
+    <string name="sync_claim_code_label">Sync Code</string>
+    <string name="sync_claim_code_placeholder">XXXX-XXXX-XXXX-XXXX-XXXX</string>
+    <string name="sync_claim_pin_label">PIN</string>
+    <string name="sync_claim_pin_placeholder">Enter PIN</string>
+
+    <!-- PluginScreen -->
+    <string name="plugin_readonly_notice">Using primary profile\'s plugins and can\'t be changed</string>
+    <string name="plugin_repositories_section">Repositories (%1$d)</string>
+    <string name="plugin_providers_section">Providers (%1$d)</string>
+    <string name="plugin_title">Plugins</string>
+    <string name="plugin_subtitle">Manage local scrapers and providers</string>
+    <string name="plugin_add_repository">Add repository</string>
+    <string name="plugin_add_btn">Add</string>
+    <string name="plugin_manage_from_phone_title">Manage from phone</string>
+    <string name="plugin_manage_from_phone_subtitle">Scan a QR code to add or remove repositories from your phone</string>
+    <string name="plugin_qr_instruction">Scan with your phone to manage repositories</string>
+    <string name="plugin_qr_close">Close</string>
+    <string name="plugin_confirm_title">Confirm repository changes</string>
+    <string name="plugin_confirm_subtitle">The following changes were made from your phone:</string>
+    <string name="plugin_confirm_added">Added:</string>
+    <string name="plugin_confirm_removed">Removed:</string>
+    <string name="plugin_confirm_no_changes">No changes detected</string>
+    <string name="plugin_confirm_total">Total repositories: %1$d</string>
+    <string name="plugin_confirm_reject">Reject</string>
+    <string name="plugin_confirm_confirm">Confirm</string>
+    <string name="plugin_updated_format">Updated: %1$s</string>
+    <string name="plugin_test_btn">Test</string>
+    <string name="plugin_test_results">Test Results (%1$d streams)</string>
+
+    <!-- ProfileSelectionScreen -->
+    <string name="profile_selection_title">Who\'s watching?</string>
+    <string name="profile_selection_subtitle">Select a profile to continue</string>
+    <string name="profile_selection_hint">Use D-pad to choose a profile</string>
+    <string name="profile_selection_empty">No profiles found</string>
+    <string name="profile_selection_primary_badge">PRIMARY</string>
+
+    <!-- CastDetailScreen -->
+    <string name="cast_detail_error">Something went wrong</string>
+    <string name="cast_detail_retry">Retry</string>
+    <string name="cast_detail_filmography">Filmography</string>
+
+    <!-- CatalogSeeAllScreen -->
+    <string name="catalog_see_all_from">from %1$s</string>
+    <string name="catalog_see_all_empty_title">No items available</string>
+    <string name="catalog_see_all_empty_subtitle">Try a different catalog or check back later</string>
+
+    <!-- LayoutSelectionScreen -->
+    <string name="layout_selection_welcome">Welcome to Nuvio</string>
+    <string name="layout_selection_subtitle">Choose your home screen layout</string>
+    <string name="layout_selection_continue">Continue</string>
+
+    <!-- UpdatePromptDialog -->
+    <string name="update_title">App Update</string>
+    <string name="update_downloading">Downloading update</string>
+    <string name="update_unknown_sources">Allow installs from unknown sources to continue.</string>
+    <string name="update_close">Close</string>
+    <string name="update_open_settings">Open Settings</string>
+    <string name="update_install">Install</string>
+    <string name="update_ignore">Ignore</string>
 </resources>

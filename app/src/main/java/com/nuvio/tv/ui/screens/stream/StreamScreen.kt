@@ -78,6 +78,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -697,7 +699,7 @@ private fun ErrorState(
             scale = CardDefaults.scale(focusedScale = 1.02f)
         ) {
             Text(
-                text = "Retry",
+                text = stringResource(R.string.stream_retry),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (isFocused) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
@@ -714,7 +716,7 @@ private fun EmptyState() {
         modifier = Modifier.padding(32.dp)
     ) {
         Text(
-            text = "No streams found",
+            text = stringResource(R.string.stream_no_streams),
             style = MaterialTheme.typography.bodyLarge,
             color = NuvioTheme.extendedColors.textSecondary,
             textAlign = TextAlign.Center
@@ -723,7 +725,7 @@ private fun EmptyState() {
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "Try installing more addons to find streams",
+            text = stringResource(R.string.stream_no_streams_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = NuvioTheme.extendedColors.textSecondary,
             textAlign = TextAlign.Center
@@ -857,13 +859,13 @@ private fun StreamCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (stream.isTorrent()) {
-                        StreamTypeChip(text = "Torrent", color = NuvioColors.Secondary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NuvioColors.Secondary)
                     }
                     if (stream.isYouTube()) {
-                        StreamTypeChip(text = "YouTube", color = Color(0xFFFF0000))
+                        StreamTypeChip(text = stringResource(R.string.stream_type_youtube), color = Color(0xFFFF0000))
                     }
                     if (stream.isExternal()) {
-                        StreamTypeChip(text = "External", color = NuvioColors.Primary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NuvioColors.Primary)
                     }
                 }
             }
@@ -939,7 +941,7 @@ private fun PlayerChoiceDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "What player should be used?",
+                    text = stringResource(R.string.stream_player_picker_title),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary,
                     textAlign = TextAlign.Center
@@ -972,7 +974,7 @@ private fun PlayerChoiceDialog(
                         scale = CardDefaults.scale(focusedScale = 1.05f)
                     ) {
                         Text(
-                            text = "Internal",
+                            text = stringResource(R.string.stream_player_internal),
                             style = MaterialTheme.typography.titleMedium,
                             color = if (internalFocused) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
                             modifier = Modifier
@@ -1002,7 +1004,7 @@ private fun PlayerChoiceDialog(
                         scale = CardDefaults.scale(focusedScale = 1.05f)
                     ) {
                         Text(
-                            text = "External",
+                            text = stringResource(R.string.stream_player_external),
                             style = MaterialTheme.typography.titleMedium,
                             color = if (externalFocused) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
                             modifier = Modifier

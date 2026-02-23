@@ -58,6 +58,8 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -217,7 +219,7 @@ fun SearchScreen(
                 if (trimmedSubmittedQuery.length < 2 || hasPendingUnsubmittedQuery) {
                     item {
                         Text(
-                            text = "Press Done on the keyboard to search",
+                            text = stringResource(R.string.search_keyboard_hint),
                             style = androidx.tv.material3.MaterialTheme.typography.bodySmall,
                             color = NuvioColors.TextSecondary,
                             modifier = Modifier
@@ -364,7 +366,7 @@ private fun SearchInputField(
         shape = RoundedCornerShape(12.dp),
         placeholder = {
             Text(
-                text = "Search movies & series",
+                text = stringResource(R.string.search_placeholder),
                 color = NuvioColors.TextTertiary
             )
         },

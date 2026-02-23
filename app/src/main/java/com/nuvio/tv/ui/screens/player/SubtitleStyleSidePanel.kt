@@ -46,6 +46,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.ui.theme.NuvioColors
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 private val PANEL_TEXT_COLORS = listOf(
     Color.White,
@@ -101,7 +103,7 @@ internal fun SubtitleStyleSidePanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Subtitle Style",
+                    text = stringResource(R.string.subtitle_style_title),
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White
                 )
@@ -184,7 +186,7 @@ internal fun SubtitleStyleSidePanel(
                                 onClick = { onEvent(PlayerEvent.OnSetSubtitleOutlineEnabled(!subtitleStyle.outlineEnabled)) }
                             )
                             Text(
-                                text = "Color",
+                                text = stringResource(R.string.subtitle_style_color),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.7f)
                             )
@@ -241,7 +243,7 @@ internal fun SubtitleStyleSidePanel(
                         shape = CardDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
                         Text(
-                            text = "Reset",
+                            text = stringResource(R.string.subtitle_style_reset),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)

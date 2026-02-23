@@ -44,6 +44,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 @Composable
 internal fun StreamItem(
@@ -95,13 +97,13 @@ internal fun StreamItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (stream.isTorrent()) {
-                        StreamTypeChip(text = "Torrent", color = NuvioColors.Secondary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NuvioColors.Secondary)
                     }
                     if (stream.isYouTube()) {
-                        StreamTypeChip(text = "YouTube", color = Color(0xFFFF0000))
+                        StreamTypeChip(text = stringResource(R.string.stream_type_youtube), color = Color(0xFFFF0000))
                     }
                     if (stream.isExternal()) {
-                        StreamTypeChip(text = "External", color = NuvioColors.Primary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NuvioColors.Primary)
                     }
                 }
             }

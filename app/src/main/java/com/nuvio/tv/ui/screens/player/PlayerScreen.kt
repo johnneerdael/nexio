@@ -1090,7 +1090,7 @@ private fun PlayerControlsOverlay(
                                 exit = fadeOut(animationSpec = tween(durationMillis = 180))
                             ) {
                                 Text(
-                                    text = "via ${uiState.currentStreamName}",
+                                    text = stringResource(R.string.player_via, uiState.currentStreamName ?: ""),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.68f),
                                     maxLines = 2,
@@ -1340,7 +1340,7 @@ private fun PlayerClockOverlay(
             color = Color.White.copy(alpha = 0.96f)
         )
         Text(
-            text = "Ends at: $endTimeText",
+            text = stringResource(R.string.player_ends_at, endTimeText),
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 10.sp),
             color = Color.White.copy(alpha = 0.78f)
         )
@@ -1441,7 +1441,7 @@ private fun SubtitleDelayOverlay(subtitleDelayMs: Int) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Subtitles Delay",
+                text = stringResource(R.string.player_subtitle_delay),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = Color.White
             )
@@ -1535,7 +1535,7 @@ private fun ErrorOverlay(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Playback Error",
+                text = stringResource(R.string.player_error_title),
                 style = MaterialTheme.typography.headlineMedium,
                 color = Color.White
             )
@@ -1554,7 +1554,7 @@ private fun ErrorOverlay(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 DialogButton(
-                    text = "Go Back",
+                    text = stringResource(R.string.player_go_back),
                     onClick = onBack,
                     isPrimary = true,
                     modifier = Modifier
@@ -1583,7 +1583,7 @@ private fun SpeedSelectionDialog(
                 modifier = Modifier.padding(24.dp)
             ) {
                 Text(
-                    text = "Playback Speed",
+                    text = stringResource(R.string.player_speed_title),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary,
                     modifier = Modifier.padding(bottom = 16.dp)
@@ -1625,22 +1625,22 @@ private fun MoreActionsDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "More Actions",
+                    text = stringResource(R.string.player_more_actions_title),
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioColors.TextPrimary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
                 MoreActionItem(
-                    text = "Playback Speed",
+                    text = stringResource(R.string.player_more_speed),
                     onClick = onPlaybackSpeed
                 )
                 MoreActionItem(
-                    text = "Aspect Ratio",
+                    text = stringResource(R.string.player_more_aspect_ratio),
                     onClick = onToggleAspectRatio
                 )
                 MoreActionItem(
-                    text = "Open in External Player",
+                    text = stringResource(R.string.player_more_open_external),
                     onClick = onOpenInExternalPlayer
                 )
             }
