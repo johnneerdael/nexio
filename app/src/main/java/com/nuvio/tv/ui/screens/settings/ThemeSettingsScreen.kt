@@ -2,6 +2,9 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -55,6 +58,7 @@ import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.ThemeColors
+import kotlinx.coroutines.delay
 
 @Composable
 fun ThemeSettingsScreen(
@@ -78,6 +82,7 @@ fun ThemeSettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var pendingLanguageRestart by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val strLanguageSystem = stringResource(R.string.appearance_language_system)
@@ -96,6 +101,16 @@ fun ThemeSettingsContent(
     }
     val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: stringResource(R.string.appearance_language_system)
     val strRestartHint = stringResource(R.string.appearance_language_restart_hint)
+
+    LaunchedEffect(pendingLanguageRestart, showLanguageDialog) {
+        if (pendingLanguageRestart && !showLanguageDialog) {
+            // Let the dialog window detach before recreating the Activity to avoid focus/window ANRs.
+            delay(150)
+            context.findActivity()?.recreate()
+                ?: Toast.makeText(context, strRestartHint, Toast.LENGTH_LONG).show()
+            pendingLanguageRestart = false
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -161,11 +176,14 @@ fun ThemeSettingsContent(
                 val isSelected = tag == selectedTag
                 Button(
                     onClick = {
+                        val previousTag = selectedTag
                         context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
                             .edit().putString("locale_tag", tag ?: "").apply()
                         selectedTag = tag
                         showLanguageDialog = false
-                        Toast.makeText(context, strRestartHint, Toast.LENGTH_LONG).show()
+                        if (previousTag != tag) {
+                            pendingLanguageRestart = true
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -180,6 +198,12 @@ fun ThemeSettingsContent(
             }
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable
