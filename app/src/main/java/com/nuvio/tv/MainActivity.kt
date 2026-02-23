@@ -702,6 +702,7 @@ private fun LegacySidebarButton(
                 text = label,
                 color = contentColor,
                 maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 textAlign = TextAlign.Start,
                 modifier = Modifier
                     .align(Alignment.CenterStart)

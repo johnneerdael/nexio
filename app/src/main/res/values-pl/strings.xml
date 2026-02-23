@@ -1,4 +1,7 @@
 <resources>
+    <string name="type_movie">Film</string>
+    <string name="type_series">Serial</string>
+
     <!-- HomeScreen -->
     <string name="home_no_addons">Brak zainstalowanych dodatków. Dodaj jeden, aby zacząć.</string>
     <string name="home_no_catalog_addons">Brak dodatków katalogowych. Zainstaluj dodatek katalogowy, aby zobaczyć treści.</string>
@@ -248,6 +251,12 @@
     <!-- LayoutSettingsScreen -->
     <string name="layout_title">Ustawienia układu</string>
     <string name="layout_subtitle">Dostosuj układ strony głównej, widoczność treści i zachowanie kart</string>
+    <string name="layout_classic">Klasyczny</string>
+    <string name="layout_grid">Siatka</string>
+    <string name="layout_modern">Nowoczesny</string>
+    <string name="layout_classic_desc">Przewijaj kategorie poziomo</string>
+    <string name="layout_grid_desc">Przeglądaj wszystko w siatce z sekcją hero</string>
+    <string name="layout_modern_desc">Stały hero z jednym aktywnym rzędem dla szybszego przeglądania</string>
     <string name="layout_section_home">Układ strony głównej</string>
     <string name="layout_section_home_desc">Wybierz strukturę i źródło hero.</string>
     <string name="layout_landscape_posters">Poziome plakaty</string>
@@ -260,7 +269,7 @@
     <string name="layout_section_content_desc">Kontroluj co pojawia się na stronie głównej i w wyszukiwarce.</string>
     <string name="layout_collapse_sidebar">Zwiń pasek boczny</string>
     <string name="layout_collapse_sidebar_sub">Ukryj pasek boczny domyślnie; pokaż po skupieniu.</string>
-    <string name="layout_modern_sidebar">Nowoczesny pasek boczny WŁ/WYŁ</string>
+    <string name="layout_modern_sidebar">Nowoczesny pasek boczny</string>
     <string name="layout_modern_sidebar_sub">Włącz pływającą nawigację boczną.</string>
     <string name="layout_modern_sidebar_blur">Rozmycie nowoczesnego paska bocznego</string>
     <string name="layout_modern_sidebar_blur_sub">Przełącz efekt rozmycia dla nowoczesnych powierzchni bocznych.</string>
@@ -689,6 +698,15 @@
     <string name="discover_title">Odkrywaj</string>
     <string name="discover_load_more">Zaladuj wiecej</string>
     <string name="discover_loading">Ladowanie...</string>
+    <string name="discover_filter_type">Typ</string>
+    <string name="discover_filter_catalog">Katalog</string>
+    <string name="discover_filter_genre">Gatunek</string>
+    <string name="discover_select_catalog">Wybierz</string>
+    <string name="discover_genre_default">Domyślny</string>
+    <string name="discover_empty_no_catalog_title">Wybierz katalog</string>
+    <string name="discover_empty_no_catalog_subtitle">Wybierz katalog odkrywania, aby przeglądać</string>
+    <string name="discover_empty_no_content_title">Brak treści</string>
+    <string name="discover_empty_no_content_subtitle">Spróbuj innego gatunku lub katalogu</string>
 
     <!-- AddonManagerScreen -->
     <string name="addon_confirm_total_addons">Lacznie dodatkow: %1$d</string>
@@ -710,7 +728,7 @@
     <string name="audio_dv_title">DV7 - Fallback HEVC</string>
 
     <!-- SidebarNavigation / MainActivity -->
-    <string name="nav_home">Strona główna</string>
+    <string name="nav_home">Główna</string>
     <string name="nav_search">Szukaj</string>
     <string name="nav_library">Biblioteka</string>
     <string name="nav_addons">Dodatki</string>

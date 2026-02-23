@@ -214,7 +214,11 @@ private fun LayoutOptionCard(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = layout.displayName,
+                    text = when (layout) {
+                        HomeLayout.CLASSIC -> stringResource(R.string.layout_classic)
+                        HomeLayout.GRID -> stringResource(R.string.layout_grid)
+                        HomeLayout.MODERN -> stringResource(R.string.layout_modern)
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
                 )
@@ -223,9 +227,9 @@ private fun LayoutOptionCard(
 
             Text(
                 text = when (layout) {
-                    HomeLayout.CLASSIC -> "Scroll through categories horizontally"
-                    HomeLayout.GRID -> "Browse everything in a vertical grid with a hero section"
-                    HomeLayout.MODERN -> "Fixed hero with a single active row for faster browsing"
+                    HomeLayout.CLASSIC -> stringResource(R.string.layout_classic_desc)
+                    HomeLayout.GRID -> stringResource(R.string.layout_grid_desc)
+                    HomeLayout.MODERN -> stringResource(R.string.layout_modern_desc)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = NuvioColors.TextTertiary

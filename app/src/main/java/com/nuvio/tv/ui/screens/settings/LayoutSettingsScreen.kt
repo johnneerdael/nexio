@@ -725,7 +725,11 @@ private fun LayoutCard(
                     )
                 }
                 Text(
-                    text = layout.displayName,
+                    text = when (layout) {
+                        HomeLayout.CLASSIC -> stringResource(R.string.layout_classic)
+                        HomeLayout.GRID -> stringResource(R.string.layout_grid)
+                        HomeLayout.MODERN -> stringResource(R.string.layout_modern)
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
                 )

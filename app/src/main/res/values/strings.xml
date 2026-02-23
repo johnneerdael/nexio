@@ -1,5 +1,6 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="type_movie">Movie</string>
+    <string name="type_series">Series</string>
 
     <!-- HomeScreen -->
     <string name="home_no_addons">No addons installed. Add one to get started.</string>
@@ -250,6 +251,12 @@
     <!-- LayoutSettingsScreen -->
     <string name="layout_title">Layout Settings</string>
     <string name="layout_subtitle">Adjust home layout, content visibility, and poster behavior</string>
+    <string name="layout_classic">Classic View</string>
+    <string name="layout_grid">Grid View</string>
+    <string name="layout_modern">Modern View</string>
+    <string name="layout_classic_desc">Scroll through categories horizontally</string>
+    <string name="layout_grid_desc">Browse everything in a vertical grid with a hero section</string>
+    <string name="layout_modern_desc">Fixed hero with a single active row for faster browsing</string>
     <string name="layout_section_home">Home Layout</string>
     <string name="layout_section_home_desc">Choose structure and hero source.</string>
     <string name="layout_landscape_posters">Landscape Posters</string>
@@ -262,7 +269,7 @@
     <string name="layout_section_content_desc">Control what appears on home and search.</string>
     <string name="layout_collapse_sidebar">Collapse Sidebar</string>
     <string name="layout_collapse_sidebar_sub">Hide sidebar by default; show when focused.</string>
-    <string name="layout_modern_sidebar">Modern Sidebar ON/OFF</string>
+    <string name="layout_modern_sidebar">Modern Sidebar</string>
     <string name="layout_modern_sidebar_sub">Enable floating sidebar navigation.</string>
     <string name="layout_modern_sidebar_blur">Modern Sidebar Blur</string>
     <string name="layout_modern_sidebar_blur_sub">Toggle blur effect for modern sidebar surfaces.</string>
@@ -691,6 +698,15 @@
     <string name="discover_title">Discover</string>
     <string name="discover_load_more">Load more</string>
     <string name="discover_loading">Loading...</string>
+    <string name="discover_filter_type">Type</string>
+    <string name="discover_filter_catalog">Catalog</string>
+    <string name="discover_filter_genre">Genre</string>
+    <string name="discover_select_catalog">Select</string>
+    <string name="discover_genre_default">Default</string>
+    <string name="discover_empty_no_catalog_title">Select a catalog</string>
+    <string name="discover_empty_no_catalog_subtitle">Choose a discover catalog to browse</string>
+    <string name="discover_empty_no_content_title">No content found</string>
+    <string name="discover_empty_no_content_subtitle">Try a different genre or catalog</string>
 
     <!-- AddonManagerScreen -->
     <string name="addon_confirm_total_addons">Total addons: %1$d</string>

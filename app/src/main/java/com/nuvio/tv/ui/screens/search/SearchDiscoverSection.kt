@@ -87,9 +87,13 @@ internal fun DiscoverSection(
     val availableTypes = remember(uiState.discoverCatalogs) {
         uiState.discoverCatalogs.map { it.type }.distinct()
     }
-    val selectedTypeLabel = uiState.selectedDiscoverType.replaceFirstChar { it.uppercase() }
-    val selectedCatalogLabel = selectedCatalog?.catalogName ?: "Select"
-    val selectedGenreLabel = uiState.selectedDiscoverGenre ?: "Default"
+    val selectedTypeLabel = when (uiState.selectedDiscoverType) {
+        "movie" -> stringResource(R.string.type_movie)
+        "series" -> stringResource(R.string.type_series)
+        else -> uiState.selectedDiscoverType.replaceFirstChar { it.uppercase() }
+    }
+    val selectedCatalogLabel = selectedCatalog?.catalogName ?: stringResource(R.string.discover_select_catalog)
+    val selectedGenreLabel = uiState.selectedDiscoverGenre ?: stringResource(R.string.discover_genre_default)
 
     Column(
         modifier = modifier
@@ -109,11 +113,16 @@ internal fun DiscoverSection(
         ) {
             DiscoverDropdownPicker(
                 modifier = Modifier.weight(1f),
-                title = "Type",
+                title = stringResource(R.string.discover_filter_type),
                 value = selectedTypeLabel,
                 expanded = expandedPicker == "type",
                 options = availableTypes.map { type ->
-                    DiscoverOption(type.replaceFirstChar { it.uppercase() }, type)
+                    val label = when (type) {
+                        "movie" -> stringResource(R.string.type_movie)
+                        "series" -> stringResource(R.string.type_series)
+                        else -> type.replaceFirstChar { it.uppercase() }
+                    }
+                    DiscoverOption(label, type)
                 },
                 onExpandedChange = { shouldExpand ->
                     expandedPicker = if (shouldExpand) "type" else null
@@ -126,7 +135,7 @@ internal fun DiscoverSection(
 
             DiscoverDropdownPicker(
                 modifier = Modifier.weight(1f),
-                title = "Catalog",
+                title = stringResource(R.string.discover_filter_catalog),
                 value = selectedCatalogLabel,
                 expanded = expandedPicker == "catalog",
                 options = filteredCatalogs.map { DiscoverOption(it.catalogName, it.key) },
@@ -141,11 +150,11 @@ internal fun DiscoverSection(
 
             DiscoverDropdownPicker(
                 modifier = Modifier.weight(1f),
-                title = "Genre",
+                title = stringResource(R.string.discover_filter_genre),
                 value = selectedGenreLabel,
                 expanded = expandedPicker == "genre",
                 options = buildList {
-                    add(DiscoverOption("Default", "__default__"))
+                    add(DiscoverOption(stringResource(R.string.discover_genre_default), "__default__"))
                     addAll(genres.map { DiscoverOption(it, it) })
                 },
                 onExpandedChange = { shouldExpand ->
@@ -212,16 +221,16 @@ internal fun DiscoverSection(
 
             uiState.discoverInitialized && selectedCatalog == null -> {
                 EmptyScreenState(
-                    title = "Select a catalog",
-                    subtitle = "Choose a discover catalog to browse",
+                    title = stringResource(R.string.discover_empty_no_catalog_title),
+                    subtitle = stringResource(R.string.discover_empty_no_catalog_subtitle),
                     icon = Icons.Default.Search
                 )
             }
 
             uiState.discoverInitialized && !uiState.discoverLoading && selectedCatalog != null -> {
                 EmptyScreenState(
-                    title = "No content found",
-                    subtitle = "Try a different genre or catalog",
+                    title = stringResource(R.string.discover_empty_no_content_title),
+                    subtitle = stringResource(R.string.discover_empty_no_content_subtitle),
                     icon = Icons.Default.Search
                 )
             }

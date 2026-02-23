@@ -115,13 +115,19 @@ fun CatalogRowSection(
         Modifier
     }
 
+    val strTypeMovie = stringResource(R.string.type_movie)
+    val strTypeSeries = stringResource(R.string.type_series)
+    val strTypeUnknown = stringResource(R.string.type_unknown)
+    val typeLabel = remember(catalogRow.apiType) {
+        when (catalogRow.apiType.lowercase()) {
+            "movie" -> strTypeMovie
+            "series" -> strTypeSeries
+            else -> strTypeUnknown
+        }
+    }
     val catalogTitle = remember(catalogRow.catalogName, catalogRow.apiType, showCatalogTypeSuffix) {
         val formattedName = catalogRow.catalogName.replaceFirstChar { it.uppercase() }
-        if (showCatalogTypeSuffix) {
-            "$formattedName - ${catalogRow.apiType.replaceFirstChar { it.uppercase() }}"
-        } else {
-            formattedName
-        }
+        if (showCatalogTypeSuffix) "$formattedName - $typeLabel" else formattedName
     }
 
     Column(modifier = modifier.fillMaxWidth()) {

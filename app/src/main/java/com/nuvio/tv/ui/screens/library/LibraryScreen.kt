@@ -74,6 +74,14 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
+@Composable
+private fun localizedTypeLabel(key: String): String = when (key) {
+    LibraryTypeTab.ALL_KEY -> stringResource(R.string.library_type_all)
+    "movie" -> stringResource(R.string.type_movie)
+    "series" -> stringResource(R.string.type_series)
+    else -> key.replaceFirstChar { it.titlecase() }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun LibraryScreen(
@@ -211,7 +219,7 @@ fun LibraryScreen(
 
         item {
             if (uiState.visibleItems.isEmpty()) {
-                val selectedTypeLabel = uiState.selectedTypeTab?.label?.lowercase() ?: stringResource(R.string.library_type_items)
+                val selectedTypeLabel = uiState.selectedTypeTab?.let { localizedTypeLabel(it.key) }?.lowercase() ?: stringResource(R.string.library_type_items)
                 val title = when (uiState.sourceMode) {
                     LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_title, selectedTypeLabel)
                     LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_title, selectedTypeLabel)
@@ -328,7 +336,7 @@ private fun LibrarySelectorsRow(
     onSelectSort: (LibrarySortOption) -> Unit
 ) {
     val selectedListLabel = listTabs.firstOrNull { it.key == selectedListKey }?.title ?: "Select"
-    val selectedTypeLabel = selectedTypeTab?.label ?: stringResource(R.string.library_type_all)
+    val selectedTypeLabel = selectedTypeTab?.let { localizedTypeLabel(it.key) } ?: stringResource(R.string.library_type_all)
     val selectedSortLabel = selectedSortOption.label
 
     Row(
@@ -362,7 +370,7 @@ private fun LibrarySelectorsRow(
             title = stringResource(R.string.library_filter_type),
             value = selectedTypeLabel,
             expanded = expandedPicker == "type",
-            options = typeTabs.map { LibraryOption(it.label, it.key) },
+            options = typeTabs.map { LibraryOption(localizedTypeLabel(it.key), it.key) },
             onExpandedChange = { onExpandedChange("type", it) },
             onSelect = { option ->
                 typeTabs.firstOrNull { it.key == option.value }?.let(onSelectType)
