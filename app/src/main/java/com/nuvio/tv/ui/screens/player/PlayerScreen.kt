@@ -159,6 +159,12 @@ fun PlayerScreen(
         handleBackPress()
     }
 
+    LaunchedEffect(uiState.playbackEnded, uiState.error) {
+        if (uiState.playbackEnded && uiState.error == null) {
+            onBackPress()
+        }
+    }
+
     // Handle lifecycle events
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->

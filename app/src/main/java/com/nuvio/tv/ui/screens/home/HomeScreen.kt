@@ -1,5 +1,9 @@
 package com.nuvio.tv.ui.screens.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,6 +55,7 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
     var hasEnteredCatalogContent by rememberSaveable { mutableStateOf(false) }
+    var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(hasCatalogContent) {
         if (hasCatalogContent) {
@@ -122,6 +127,15 @@ fun HomeScreen(
 
             else -> {
                 val shouldShowLoadingGate = !hasEnteredCatalogContent && !hasCatalogContent
+                LaunchedEffect(shouldShowLoadingGate) {
+                    if (shouldShowLoadingGate) {
+                        showHomeContentWithAnimation = false
+                    } else {
+                        // Flip on the next frame so AnimatedVisibility can run enter transition.
+                        kotlinx.coroutines.yield()
+                        showHomeContentWithAnimation = true
+                    }
+                }
                 if (shouldShowLoadingGate) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -130,31 +144,40 @@ fun HomeScreen(
                         LoadingIndicator()
                     }
                 } else {
-                    when (uiState.homeLayout) {
-                        HomeLayout.CLASSIC -> ClassicHomeRoute(
-                            viewModel = viewModel,
-                            uiState = uiState,
-                            posterCardStyle = posterCardStyle,
-                            onNavigateToDetail = onNavigateToDetail,
-                            onContinueWatchingClick = onContinueWatchingClick,
-                            onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
-                        )
+                    AnimatedVisibility(
+                        visible = showHomeContentWithAnimation,
+                        enter = fadeIn(animationSpec = tween(320)) +
+                            slideInVertically(
+                                initialOffsetY = { it / 24 },
+                                animationSpec = tween(320)
+                            )
+                    ) {
+                        when (uiState.homeLayout) {
+                            HomeLayout.CLASSIC -> ClassicHomeRoute(
+                                viewModel = viewModel,
+                                uiState = uiState,
+                                posterCardStyle = posterCardStyle,
+                                onNavigateToDetail = onNavigateToDetail,
+                                onContinueWatchingClick = onContinueWatchingClick,
+                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
+                            )
 
-                        HomeLayout.GRID -> GridHomeRoute(
-                            viewModel = viewModel,
-                            uiState = uiState,
-                            posterCardStyle = posterCardStyle,
-                            onNavigateToDetail = onNavigateToDetail,
-                            onContinueWatchingClick = onContinueWatchingClick,
-                            onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
-                        )
+                            HomeLayout.GRID -> GridHomeRoute(
+                                viewModel = viewModel,
+                                uiState = uiState,
+                                posterCardStyle = posterCardStyle,
+                                onNavigateToDetail = onNavigateToDetail,
+                                onContinueWatchingClick = onContinueWatchingClick,
+                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
+                            )
 
-                        HomeLayout.MODERN -> ModernHomeRoute(
-                            viewModel = viewModel,
-                            uiState = uiState,
-                            onNavigateToDetail = onNavigateToDetail,
-                            onContinueWatchingClick = onContinueWatchingClick
-                        )
+                            HomeLayout.MODERN -> ModernHomeRoute(
+                                viewModel = viewModel,
+                                uiState = uiState,
+                                onNavigateToDetail = onNavigateToDetail,
+                                onContinueWatchingClick = onContinueWatchingClick
+                            )
+                        }
                     }
                 }
             }
