@@ -861,7 +861,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = "Confirm",
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                                color = Color.White
+                                color = NuvioColors.OnSecondary
                             )
                         }
                     }

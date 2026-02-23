@@ -460,8 +460,8 @@ private fun AddRepositoryInline(
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioColors.Secondary,
                         focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.White
+                        contentColor = NuvioColors.OnSecondary,
+                        focusedContentColor = NuvioColors.OnSecondaryVariant
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(
@@ -826,7 +826,7 @@ private fun ConfirmRepoChangesDialog(
                             Text(
                                 text = "Confirm",
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                                color = Color.White
+                                color = NuvioColors.OnSecondary
                             )
                         }
                     }

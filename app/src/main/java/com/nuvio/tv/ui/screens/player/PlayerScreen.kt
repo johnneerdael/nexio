@@ -1740,7 +1740,7 @@ internal fun DialogButton(
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = if (isPrimary) NuvioColors.OnPrimary else NuvioColors.TextPrimary,
+            color = if (isPrimary) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }

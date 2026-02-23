@@ -162,7 +162,7 @@ private fun ThemeCard(
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Selected",
-                        tint = Color.White,
+                        tint = palette.onSecondary,
                         modifier = Modifier.size(28.dp)
                     )
                 }

@@ -382,7 +382,7 @@ private fun ActionIconButtonPainter(
             containerColor = NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
             contentColor = NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.OnPrimary
+            focusedContentColor = NuvioColors.OnSecondary
         ),
         border = IconButtonDefaults.border(
             focusedBorder = Border(
@@ -461,7 +461,7 @@ private fun ActionIconButton(
             containerColor = if (selected) selectedContainerColor else NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
             contentColor = if (selected) selectedContentColor else NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.OnPrimary
+            focusedContentColor = NuvioColors.OnSecondary
         ),
         border = IconButtonDefaults.border(
             focusedBorder = Border(

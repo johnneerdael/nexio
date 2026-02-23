@@ -610,9 +610,9 @@ private fun CastDetailError(
                 onClick = onRetry,
                 colors = ButtonDefaults.colors(
                     containerColor = NuvioColors.Secondary,
-                    contentColor = Color.White,
+                    contentColor = NuvioColors.OnSecondary,
                     focusedContainerColor = NuvioColors.SecondaryVariant,
-                    focusedContentColor = Color.White
+                    focusedContentColor = NuvioColors.OnSecondaryVariant
                 )
             ) {
                 Text("Retry")

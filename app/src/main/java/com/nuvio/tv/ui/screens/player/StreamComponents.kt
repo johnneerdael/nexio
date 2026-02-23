@@ -202,9 +202,9 @@ internal fun AddonChip(
             selectedContainerColor = NuvioColors.Secondary.copy(alpha = 0.3f),
             focusedSelectedContainerColor = NuvioColors.Secondary,
             contentColor = NuvioColors.TextSecondary,
-            focusedContentColor = NuvioColors.OnPrimary,
-            selectedContentColor = Color.White,
-            focusedSelectedContentColor = NuvioColors.OnPrimary
+            focusedContentColor = NuvioColors.OnSecondary,
+            selectedContentColor = NuvioColors.OnSecondary,
+            focusedSelectedContentColor = NuvioColors.OnSecondary
         ),
         border = FilterChipDefaults.border(
             border = Border(
@@ -229,7 +229,7 @@ internal fun AddonChip(
         Text(
             text = name,
             style = MaterialTheme.typography.labelLarge,
-            color = Color.White
+            color = if (isSelected) NuvioColors.OnSecondary else Color.Unspecified
         )
     }
 }

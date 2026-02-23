@@ -127,8 +127,8 @@ fun SyncCodeGenerateScreen(
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioColors.Secondary,
                         focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.White
+                        contentColor = NuvioColors.OnSecondary,
+                        focusedContentColor = NuvioColors.OnSecondaryVariant
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()
@@ -174,8 +174,8 @@ fun SyncCodeGenerateScreen(
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioColors.Secondary,
                         focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = Color.White,
-                        focusedContentColor = Color.White
+                        contentColor = NuvioColors.OnSecondary,
+                        focusedContentColor = NuvioColors.OnSecondaryVariant
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()

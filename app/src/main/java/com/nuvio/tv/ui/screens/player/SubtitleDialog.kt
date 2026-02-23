@@ -237,7 +237,7 @@ private fun SubtitleTab(
                     Text(
                         text = badgeCount.toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White
+                        color = if (isSelected) Color.White else NuvioColors.OnSecondary
                     )
                 }
             }
