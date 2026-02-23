@@ -68,7 +68,7 @@ fun MDBListSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
+                item(key = "mdblist_enabled") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_enable_title),
                         subtitle = stringResource(R.string.mdblist_enable_subtitle),
@@ -82,7 +82,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_api_key") {
                     SettingsActionRow(
                         title = stringResource(R.string.mdblist_api_key_title),
                         subtitle = stringResource(R.string.mdblist_api_key_subtitle),
@@ -92,7 +92,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_trakt") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_trakt_title),
                         subtitle = stringResource(R.string.mdblist_trakt_subtitle),
@@ -102,7 +102,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_imdb") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_imdb_title),
                         subtitle = stringResource(R.string.mdblist_imdb_subtitle),
@@ -112,7 +112,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_tmdb") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_tmdb_title),
                         subtitle = stringResource(R.string.mdblist_tmdb_subtitle),
@@ -122,7 +122,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_letterboxd") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_letterboxd_title),
                         subtitle = stringResource(R.string.mdblist_letterboxd_subtitle),
@@ -132,7 +132,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_tomatoes") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_tomatoes_title),
                         subtitle = stringResource(R.string.mdblist_tomatoes_subtitle),
@@ -142,7 +142,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_audience") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_audience_title),
                         subtitle = stringResource(R.string.mdblist_audience_subtitle),
@@ -152,7 +152,7 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "mdblist_metacritic") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_metacritic_title),
                         subtitle = stringResource(R.string.mdblist_metacritic_subtitle),

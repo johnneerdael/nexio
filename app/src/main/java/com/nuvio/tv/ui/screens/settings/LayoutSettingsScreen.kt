@@ -3,9 +3,6 @@
 package com.nuvio.tv.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -107,6 +104,7 @@ fun LayoutSettingsContent(
     val homeLayoutHeaderFocus = initialFocusRequester ?: defaultHomeLayoutHeaderFocus
 
     var focusedSection by remember { mutableStateOf<LayoutSettingsSection?>(null) }
+    var activePreviewLayout by remember(uiState.selectedLayout) { mutableStateOf(uiState.selectedLayout) }
 
     LaunchedEffect(homeLayoutExpanded, focusedSection) {
         if (!homeLayoutExpanded && focusedSection == LayoutSettingsSection.HOME_LAYOUT) {
@@ -155,7 +153,7 @@ fun LayoutSettingsContent(
             contentPadding = PaddingValues(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
+            item(key = "home_layout_section") {
                 CollapsibleSectionCard(
                     title = stringResource(R.string.layout_section_home),
                     description = stringResource(R.string.layout_section_home_desc),
@@ -171,28 +169,40 @@ fun LayoutSettingsContent(
                         LayoutCard(
                             layout = HomeLayout.MODERN,
                             isSelected = uiState.selectedLayout == HomeLayout.MODERN,
+                            showLivePreview = activePreviewLayout == HomeLayout.MODERN || uiState.selectedLayout == HomeLayout.MODERN,
                             onClick = {
                                 viewModel.onEvent(LayoutSettingsEvent.SelectLayout(HomeLayout.MODERN))
                             },
-                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT },
+                            onFocused = {
+                                focusedSection = LayoutSettingsSection.HOME_LAYOUT
+                                activePreviewLayout = HomeLayout.MODERN
+                            },
                             modifier = Modifier.weight(1f)
                         )
                         LayoutCard(
                             layout = HomeLayout.GRID,
                             isSelected = uiState.selectedLayout == HomeLayout.GRID,
+                            showLivePreview = activePreviewLayout == HomeLayout.GRID || uiState.selectedLayout == HomeLayout.GRID,
                             onClick = {
                                 viewModel.onEvent(LayoutSettingsEvent.SelectLayout(HomeLayout.GRID))
                             },
-                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT },
+                            onFocused = {
+                                focusedSection = LayoutSettingsSection.HOME_LAYOUT
+                                activePreviewLayout = HomeLayout.GRID
+                            },
                             modifier = Modifier.weight(1f)
                         )
                         LayoutCard(
                             layout = HomeLayout.CLASSIC,
                             isSelected = uiState.selectedLayout == HomeLayout.CLASSIC,
+                            showLivePreview = activePreviewLayout == HomeLayout.CLASSIC || uiState.selectedLayout == HomeLayout.CLASSIC,
                             onClick = {
                                 viewModel.onEvent(LayoutSettingsEvent.SelectLayout(HomeLayout.CLASSIC))
                             },
-                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT },
+                            onFocused = {
+                                focusedSection = LayoutSettingsSection.HOME_LAYOUT
+                                activePreviewLayout = HomeLayout.CLASSIC
+                            },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -259,7 +269,7 @@ fun LayoutSettingsContent(
                 }
             }
 
-            item {
+            item(key = "home_content_section") {
                 CollapsibleSectionCard(
                     title = stringResource(R.string.layout_section_content),
                     description = stringResource(R.string.layout_section_content_desc),
@@ -367,7 +377,7 @@ fun LayoutSettingsContent(
                 }
             }
 
-            item {
+            item(key = "detail_page_section") {
                 CollapsibleSectionCard(
                     title = stringResource(R.string.layout_section_detail),
                     description = stringResource(R.string.layout_section_detail_desc),
@@ -418,7 +428,7 @@ fun LayoutSettingsContent(
                 }
             }
 
-            item {
+            item(key = "focused_poster_section") {
                 CollapsibleSectionCard(
                     title = stringResource(R.string.layout_section_focused),
                     description = stringResource(R.string.layout_section_focused_desc),
@@ -528,7 +538,7 @@ fun LayoutSettingsContent(
                 }
             }
 
-            item {
+            item(key = "poster_style_section") {
                 CollapsibleSectionCard(
                     title = stringResource(R.string.layout_section_card_style),
                     description = stringResource(R.string.layout_section_card_style_desc),
@@ -582,11 +592,7 @@ private fun CollapsibleSectionCard(
             onFocused = onFocused
         )
 
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
+        if (expanded) {
             SettingsGroupCard {
                 content()
             }
@@ -631,7 +637,7 @@ private fun ModernTrailerPlaybackTargetRow(
         contentPadding = PaddingValues(end = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item {
+        item(key = "trailer_target_expanded_card") {
             SettingsChoiceChip(
                 label = stringResource(R.string.layout_trailer_expanded_card),
                 selected = selectedTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
@@ -641,7 +647,7 @@ private fun ModernTrailerPlaybackTargetRow(
                 onFocused = onFocused
             )
         }
-        item {
+        item(key = "trailer_target_hero_media") {
             SettingsChoiceChip(
                 label = stringResource(R.string.layout_trailer_hero_media),
                 selected = selectedTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
@@ -658,6 +664,7 @@ private fun ModernTrailerPlaybackTargetRow(
 private fun LayoutCard(
     layout: HomeLayout,
     isSelected: Boolean,
+    showLivePreview: Boolean,
     onClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier
@@ -701,10 +708,14 @@ private fun LayoutCard(
                     .fillMaxWidth()
                     .height(112.dp)
             ) {
-                when (layout) {
-                    HomeLayout.CLASSIC -> ClassicLayoutPreview(modifier = Modifier.fillMaxWidth())
-                    HomeLayout.GRID -> GridLayoutPreview(modifier = Modifier.fillMaxWidth())
-                    HomeLayout.MODERN -> ModernLayoutPreview(modifier = Modifier.fillMaxWidth())
+                if (showLivePreview) {
+                    when (layout) {
+                        HomeLayout.CLASSIC -> ClassicLayoutPreview(modifier = Modifier.fillMaxWidth())
+                        HomeLayout.GRID -> GridLayoutPreview(modifier = Modifier.fillMaxWidth())
+                        HomeLayout.MODERN -> ModernLayoutPreview(modifier = Modifier.fillMaxWidth())
+                    }
+                } else {
+                    LayoutPreviewPlaceholder()
                 }
             }
 
@@ -732,6 +743,44 @@ private fun LayoutCard(
                     },
                     style = MaterialTheme.typography.labelLarge,
                     color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayoutPreviewPlaceholder() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(112.dp)
+            .background(
+                color = NuvioColors.BackgroundCard,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .height(10.dp)
+                .background(NuvioColors.Border, RoundedCornerShape(999.dp))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(10.dp))
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(3) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(10.dp)
+                        .background(NuvioColors.Border, RoundedCornerShape(999.dp))
                 )
             }
         }

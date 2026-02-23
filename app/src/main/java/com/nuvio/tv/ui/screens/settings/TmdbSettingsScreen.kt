@@ -66,7 +66,7 @@ fun TmdbSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
+                item(key = "tmdb_enabled") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_enable_title),
                         subtitle = stringResource(R.string.tmdb_enable_subtitle),
@@ -80,7 +80,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_language") {
                     val languageName = AVAILABLE_SUBTITLE_LANGUAGES
                         .find { it.code == uiState.language }
                         ?.name
@@ -94,7 +94,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_artwork") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_artwork_title),
                         subtitle = stringResource(R.string.tmdb_artwork_subtitle),
@@ -104,7 +104,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_basic_info") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_basic_info_title),
                         subtitle = stringResource(R.string.tmdb_basic_info_subtitle),
@@ -114,7 +114,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_details") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_details_title),
                         subtitle = stringResource(R.string.tmdb_details_subtitle),
@@ -124,7 +124,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_credits") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_credits_title),
                         subtitle = stringResource(R.string.tmdb_credits_subtitle),
@@ -134,7 +134,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_productions") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_productions_title),
                         subtitle = stringResource(R.string.tmdb_productions_subtitle),
@@ -144,7 +144,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_networks") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_networks_title),
                         subtitle = stringResource(R.string.tmdb_networks_subtitle),
@@ -154,7 +154,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_episodes") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_episodes_title),
                         subtitle = stringResource(R.string.tmdb_episodes_subtitle),
@@ -164,7 +164,7 @@ fun TmdbSettingsContent(
                     )
                 }
 
-                item {
+                item(key = "tmdb_more_like_this") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_more_like_this_title),
                         subtitle = stringResource(R.string.tmdb_more_like_this_subtitle),

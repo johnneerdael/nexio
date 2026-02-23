@@ -62,7 +62,7 @@ fun AccountSettingsContent(
     ) {
         when (val authState = uiState.authState) {
             is AuthState.Loading -> {
-                item {
+                item(key = "account_loading") {
                     Text(
                         text = stringResource(R.string.account_loading),
                         style = MaterialTheme.typography.bodyMedium,
@@ -72,14 +72,14 @@ fun AccountSettingsContent(
             }
 
             is AuthState.SignedOut -> {
-                item {
+                item(key = "account_signed_out_info") {
                     Text(
                         text = stringResource(R.string.account_sync_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = NuvioColors.TextSecondary
                     )
                 }
-                item {
+                item(key = "account_sign_in_qr") {
                     SettingsActionButton(
                         icon = Icons.Default.VpnKey,
                         title = stringResource(R.string.account_signin_qr_title),
@@ -90,16 +90,18 @@ fun AccountSettingsContent(
             }
 
             is AuthState.FullAccount -> {
-                item { StatusCard(label = stringResource(R.string.account_signed_in_label), value = authState.email) }
+                item(key = "account_status") {
+                    StatusCard(label = stringResource(R.string.account_signed_in_label), value = authState.email)
+                }
 
                 val overview = uiState.syncOverview
                 if (overview != null) {
-                    item { SyncOverviewCard(overview) }
+                    item(key = "account_sync_overview") { SyncOverviewCard(overview) }
                 } else if (uiState.isSyncOverviewLoading) {
-                    item { SyncOverviewLoadingCard() }
+                    item(key = "account_sync_overview_loading") { SyncOverviewLoadingCard() }
                 }
 
-                item { SignOutSettingsButton(onClick = { viewModel.signOut() }) }
+                item(key = "account_sign_out") { SignOutSettingsButton(onClick = { viewModel.signOut() }) }
             }
 
         }

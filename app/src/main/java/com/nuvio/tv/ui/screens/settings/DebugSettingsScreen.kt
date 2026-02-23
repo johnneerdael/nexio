@@ -70,7 +70,7 @@ fun DebugSettingsContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ── Popup / Dialog Testing ──
-            item {
+            item(key = "debug_popup_header") {
                 Text(
                     text = stringResource(R.string.debug_section_popup),
                     style = MaterialTheme.typography.titleSmall,
@@ -79,7 +79,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_playback_error") {
                 DebugActionCard(
                     title = stringResource(R.string.debug_playback_error_title),
                     subtitle = stringResource(R.string.debug_playback_error_subtitle),
@@ -88,7 +88,7 @@ fun DebugSettingsContent(
             }
 
             // ── Feature Toggles ──
-            item {
+            item(key = "debug_feature_toggles_header") {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.debug_section_features),
@@ -98,7 +98,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_toggle_account_tab") {
                 DebugToggleCard(
                     title = stringResource(R.string.debug_account_tab_title),
                     subtitle = stringResource(R.string.debug_account_tab_subtitle),
@@ -107,7 +107,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_toggle_sync_code") {
                 DebugToggleCard(
                     title = stringResource(R.string.debug_sync_code_title),
                     subtitle = stringResource(R.string.debug_sync_code_subtitle),
@@ -117,7 +117,7 @@ fun DebugSettingsContent(
             }
 
             // ── Manual Sign In ──
-            item {
+            item(key = "debug_account_header") {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.debug_section_account),
@@ -127,7 +127,7 @@ fun DebugSettingsContent(
                 )
             }
 
-            item {
+            item(key = "debug_sign_in_card") {
                 DebugSignInCard(
                     isLoading = uiState.signInLoading,
                     result = uiState.signInResult,

@@ -66,7 +66,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
-    item {
+    item(key = "audio_trailer_header") {
         Text(
             text = stringResource(R.string.audio_trailer_section),
             style = MaterialTheme.typography.titleMedium,
@@ -75,7 +75,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_trailer_enabled") {
         ToggleSettingsItem(
             icon = Icons.Default.PlayCircle,
             title = stringResource(R.string.audio_autoplay_trailers),
@@ -88,7 +88,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     }
 
     if (trailerSettings.enabled) {
-        item {
+        item(key = "audio_trailer_delay") {
             SliderSettingsItem(
                 icon = Icons.Default.Timer,
                 title = stringResource(R.string.audio_trailer_delay),
@@ -104,7 +104,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         }
     }
 
-    item {
+    item(key = "audio_header") {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.audio_section),
@@ -114,7 +114,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_passthrough_info") {
         Text(
             text = stringResource(R.string.audio_passthrough_info),
             style = MaterialTheme.typography.bodySmall,
@@ -123,7 +123,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_preferred_language") {
         val audioLangName = when (playerSettings.preferredAudioLanguage) {
             AudioLanguageOption.DEFAULT -> stringResource(R.string.audio_lang_default)
             AudioLanguageOption.DEVICE -> stringResource(R.string.audio_lang_device)
@@ -142,7 +142,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_skip_silence") {
         ToggleSettingsItem(
             icon = Icons.Default.Speed,
             title = stringResource(R.string.audio_skip_silence),
@@ -154,7 +154,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_advanced_header") {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.audio_advanced_section),
@@ -164,7 +164,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_advanced_warning") {
         Text(
             text = stringResource(R.string.audio_advanced_warning),
             style = MaterialTheme.typography.bodySmall,
@@ -173,7 +173,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_decoder_priority") {
         val decoderName = when (playerSettings.decoderPriority) {
             0 -> stringResource(R.string.audio_decoder_device_only)
             1 -> stringResource(R.string.audio_decoder_prefer_device)
@@ -191,7 +191,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_tunneled_playback") {
         ToggleSettingsItem(
             icon = Icons.Default.VolumeUp,
             title = stringResource(R.string.audio_tunneled),
@@ -203,7 +203,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
         )
     }
 
-    item {
+    item(key = "audio_dv7_hevc_fallback") {
         ToggleSettingsItem(
             icon = Icons.Default.Tune,
             title = stringResource(R.string.audio_dv_title),
@@ -290,7 +290,10 @@ private fun AudioLanguageSelectionDialog(
                     modifier = Modifier.height(400.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(allOptions.size) { index ->
+                    items(
+                        count = allOptions.size,
+                        key = { index -> allOptions[index].first }
+                    ) { index ->
                         val (code, name) = allOptions[index]
                         val isSelected = code == selectedLanguage
                         var isFocused by remember { mutableStateOf(false) }
@@ -388,7 +391,10 @@ private fun DecoderPriorityDialog(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(options.size) { index ->
+                    items(
+                        count = options.size,
+                        key = { index -> options[index].first.toString() }
+                    ) { index ->
                         val (priority, title, description) = options[index]
                         val isSelected = priority == selectedPriority
 

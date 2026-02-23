@@ -76,7 +76,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
-    item {
+    item(key = "subtitle_header") {
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.sub_section),
@@ -86,7 +86,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_preferred_language") {
         val languageName = if (playerSettings.subtitleStyle.preferredLanguage == "none") {
             stringResource(R.string.action_none)
         } else {
@@ -105,7 +105,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_secondary_language") {
         val secondaryLanguageName = playerSettings.subtitleStyle.secondaryPreferredLanguage?.let { code ->
             AVAILABLE_SUBTITLE_LANGUAGES.find { it.code == code }?.name
         } ?: stringResource(R.string.sub_not_set)
@@ -120,7 +120,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_organization") {
         NavigationSettingsItem(
             icon = Icons.Default.Subtitles,
             title = stringResource(R.string.sub_organization),
@@ -131,7 +131,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_size") {
         SliderSettingsItem(
             icon = Icons.Default.FormatSize,
             title = stringResource(R.string.sub_size),
@@ -146,7 +146,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_vertical_offset") {
         SliderSettingsItem(
             icon = Icons.Default.VerticalAlignBottom,
             title = stringResource(R.string.sub_vertical_offset),
@@ -161,7 +161,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_bold") {
         ToggleSettingsItem(
             icon = Icons.Default.FormatBold,
             title = stringResource(R.string.sub_bold),
@@ -173,7 +173,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_text_color") {
         ColorSettingsItem(
             icon = Icons.Default.Palette,
             title = stringResource(R.string.sub_text_color),
@@ -184,7 +184,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_background_color") {
         ColorSettingsItem(
             icon = Icons.Default.Palette,
             title = stringResource(R.string.sub_bg_color),
@@ -196,7 +196,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_outline_toggle") {
         ToggleSettingsItem(
             icon = Icons.Default.ClosedCaption,
             title = stringResource(R.string.sub_outline),
@@ -209,7 +209,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     }
 
     if (playerSettings.subtitleStyle.outlineEnabled) {
-        item {
+        item(key = "subtitle_outline_color") {
             ColorSettingsItem(
                 icon = Icons.Default.Palette,
                 title = stringResource(R.string.sub_outline_color),
@@ -221,7 +221,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         }
     }
 
-    item {
+    item(key = "subtitle_advanced_header") {
         Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.sub_advanced_section),
@@ -231,7 +231,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         )
     }
 
-    item {
+    item(key = "subtitle_libass_disabled") {
         ToggleSettingsItem(
             icon = Icons.Default.Subtitles,
             title = stringResource(R.string.sub_libass),
@@ -244,7 +244,7 @@ internal fun LazyListScope.subtitleSettingsItems(
     }
 
     if (false) { // Libass temporarily disabled for maintenance
-        item {
+        item(key = "subtitle_libass_render_header") {
             Text(
                 text = stringResource(R.string.sub_libass_mode),
                 style = MaterialTheme.typography.titleMedium,
@@ -253,7 +253,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_overlay_gl") {
             RenderTypeSettingsItem(
                 title = stringResource(R.string.sub_mode_overlay_gl),
                 subtitle = stringResource(R.string.sub_mode_overlay_gl_sub),
@@ -263,7 +263,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_overlay_canvas") {
             RenderTypeSettingsItem(
                 title = stringResource(R.string.sub_mode_overlay_canvas),
                 subtitle = "HDR support with canvas rendering. May block UI thread.",
@@ -273,7 +273,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_effects_gl") {
             RenderTypeSettingsItem(
                 title = stringResource(R.string.sub_mode_effects_gl),
                 subtitle = stringResource(R.string.sub_mode_effects_gl_sub),
@@ -283,7 +283,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_effects_canvas") {
             RenderTypeSettingsItem(
                 title = stringResource(R.string.sub_mode_effects_canvas),
                 subtitle = stringResource(R.string.sub_mode_effects_canvas_sub),
@@ -293,7 +293,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             )
         }
 
-        item {
+        item(key = "subtitle_libass_cues") {
             RenderTypeSettingsItem(
                 title = stringResource(R.string.sub_mode_standard),
                 subtitle = stringResource(R.string.sub_mode_standard_sub),
@@ -447,7 +447,10 @@ private fun SubtitleOrganizationModeDialog(
                 androidx.compose.foundation.lazy.LazyColumn(
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
                 ) {
-                    items(options) { (mode, title, description) ->
+                    items(
+                        items = options,
+                        key = { it.first.name }
+                    ) { (mode, title, description) ->
                         val isSelected = mode == selectedMode
 
                         RenderTypeSettingsItem(
