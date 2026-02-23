@@ -499,6 +499,7 @@
     <string name="stream_retry">Ponów</string>
     <string name="stream_no_streams">Nie znaleziono źródeł</string>
     <string name="stream_no_streams_hint">Spróbuj zainstalować więcej dodatków, aby znaleźć źródła</string>
+    <string name="stream_finding_source">Wyszukiwanie źródła strumienia</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="stream_type_external">Zewnętrzny</string>

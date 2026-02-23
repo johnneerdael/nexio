@@ -1,8 +1,10 @@
 package com.nuvio.tv.ui.screens.stream
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.R
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.PlayerPreference
@@ -15,6 +17,7 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +32,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
     private val metaRepository: MetaRepository,
@@ -171,7 +175,7 @@ class StreamScreenViewModel @Inject constructor(
                     it.copy(
                         isDirectAutoPlayFlow = true,
                         showDirectAutoPlayOverlay = true,
-                        directAutoPlayMessage = "FINDING STREAM SOURCE"
+                        directAutoPlayMessage = context.getString(R.string.stream_finding_source)
                     )
                 }
             }

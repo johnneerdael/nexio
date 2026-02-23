@@ -182,19 +182,13 @@ fun StreamScreen(
                 visible = true,
                 backdropUrl = uiState.backdrop ?: uiState.poster,
                 logoUrl = uiState.logo,
+                message = if (uiState.directAutoPlayMessage != null) {
+                    stringResource(R.string.stream_finding_source)
+                } else {
+                    null
+                },
                 modifier = Modifier.fillMaxSize()
             )
-            uiState.directAutoPlayMessage?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.72f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(top = 144.dp)
-                )
-            }
         } else {
             // Content overlay
             Row(
