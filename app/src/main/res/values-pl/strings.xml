@@ -56,6 +56,11 @@
     <string name="episodes_season_actions">Akcje sezonu</string>
 
     <!-- MetaDetailsScreen -->
+    <string name="detail_btn_play">Odtwórz</string>
+    <string name="detail_btn_resume">Wznów</string>
+    <string name="detail_btn_play_episode">Odtwórz S%1$dE%2$d</string>
+    <string name="detail_btn_resume_episode">Wznów S%1$dE%2$d</string>
+    <string name="detail_btn_next_episode">Następny S%1$dE%2$d</string>
     <string name="detail_tab_cast">Twórcy i obsada</string>
     <string name="detail_tab_ratings">Oceny</string>
     <string name="detail_tab_more_like_this">Podobne</string>
