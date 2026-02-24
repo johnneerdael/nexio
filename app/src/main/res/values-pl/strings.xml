@@ -111,6 +111,11 @@
     <string name="settings_debug_subtitle">Narzędzia deweloperskie i flagi funkcji.</string>
     <string name="settings_plugins_section_subtitle">Zarządzaj repozytoriami, dostawcami i stanami wtyczek.</string>
     <string name="settings_account_section_subtitle">Status konta i synchronizacji.</string>
+    <string name="account_stat_addons">dodatki</string>
+    <string name="account_stat_plugins">wtyczki</string>
+    <string name="account_stat_library">biblioteka</string>
+    <string name="account_stat_progress">postęp</string>
+    <string name="account_stat_watched">obejrzane</string>
     <string name="settings_integrations_section">Integracje</string>
     <string name="settings_integrations_section_subtitle">Wybierz ustawienia TMDB lub MDBList</string>
     <string name="settings_tmdb_subtitle">Kontrolki wzbogacania metadanych</string>
@@ -132,6 +137,7 @@
     <string name="playback_pause_overlay">Ekran pauzy</string>
     <string name="playback_pause_overlay_sub">Pokaż ekran ze szczegółami po 5 sekundach pauzy.</string>
     <string name="playback_show_clock_sub">Pokaż aktualny czas i czas zakończenia podczas wyświetlania kontrolek.</string>
+    <string name="playback_osd_clock">Zegar OSD</string>
     <string name="playback_skip_intro">Pomiń intro</string>
     <string name="playback_skip_intro_sub">Używaj introdb.app do wykrywania intro i podsumowań.</string>
     <string name="playback_auto_frame_rate">Auto częstotliwość odświeżania</string>
@@ -394,6 +400,10 @@
     <string name="trakt_connected_as">Połączono jako %1$s</string>
     <string name="trakt_account_login">Logowanie do konta</string>
     <string name="trakt_awaiting_instruction">Przejdź na trakt.tv/activate i wprowadź ten kod:</string>
+    <string name="trakt_waiting_approval">Oczekiwanie na zatwierdzenie…</string>
+    <string name="qr_login_approved">Logowanie zatwierdzone. Trwa kończenie…</string>
+    <string name="qr_login_pending">Oczekiwanie na zatwierdzenie na telefonie…</string>
+    <string name="qr_login_expired">Kod QR wygasł. Wygeneruj nowy.</string>
     <string name="trakt_code_expires">Kod wygasa za %1$s</string>
     <string name="trakt_token_refreshes">Token dostępu Trakt odświeży się za %1$s</string>
     <string name="trakt_login_instruction">Naciśnij Zaloguj, aby rozpocząć uwierzytelnianie urządzenia Trakt. Tutaj pojawi się kod QR.</string>
@@ -539,6 +549,14 @@
     <string name="episodes_panel_reload">Odśwież</string>
     <string name="episodes_panel_no_streams">Nie znaleziono źródeł</string>
     <string name="episodes_panel_no_episodes">Brak dostępnych odcinków</string>
+    <string name="episodes_panel_title">Odcinki</string>
+    <string name="episodes_panel_streams_title">Strumienie</string>
+    <string name="player_speed_normal">Normalna</string>
+    <string name="player_aspect_fit">Dopasuj (oryginalny)</string>
+    <string name="player_aspect_stretch">Rozciągnij</string>
+    <string name="player_aspect_fit_width">Dopasuj szerokość</string>
+    <string name="player_aspect_fit_height">Dopasuj wysokość</string>
+    <string name="player_aspect_crop">Przytnij</string>
 
     <!-- AudioDialog -->
     <string name="audio_dialog_title">Dźwięk</string>
@@ -551,6 +569,21 @@
     <string name="subtitle_text_color">Kolor tekstu</string>
     <string name="subtitle_outline_color">Kolor obrysu</string>
     <string name="subtitle_reset_defaults">Przywróć domyślne</string>
+    <string name="subtitle_tab_builtin">Wbudowane</string>
+    <string name="subtitle_tab_addons">Dodatki</string>
+    <string name="subtitle_tab_languages">Języki</string>
+    <string name="subtitle_tab_style">Styl</string>
+    <string name="subtitle_tab_delay">Opóźnienie</string>
+    <string name="subtitle_none">Brak</string>
+    <string name="subtitle_all">Wszystkie</string>
+    <string name="subtitle_section_core">Podstawowe</string>
+    <string name="subtitle_section_advanced">Zaawansowane</string>
+    <string name="subtitle_font_size">Rozmiar czcionki</string>
+    <string name="subtitle_bold">Pogrubienie</string>
+    <string name="subtitle_outline">Obramowanie</string>
+    <string name="subtitle_bottom_offset">Przesunięcie od dołu</string>
+    <string name="subtitle_on">Wł.</string>
+    <string name="subtitle_off">Wył.</string>
     <string name="subtitle_style_title">Styl napisów</string>
     <string name="subtitle_style_color">Kolor</string>
     <string name="subtitle_style_reset">Resetuj</string>

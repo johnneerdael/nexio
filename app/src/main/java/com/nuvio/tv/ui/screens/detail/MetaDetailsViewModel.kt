@@ -749,6 +749,15 @@ class MetaDetailsViewModel @Inject constructor(
                         nextEpisode = null,
                         displayText = context.getString(R.string.detail_btn_resume)
                     )
+                } else {
+                    NextToWatch(
+                        watchProgress = null,
+                        isResume = false,
+                        nextVideoId = meta.id,
+                        nextSeason = null,
+                        nextEpisode = null,
+                        displayText = context.getString(R.string.detail_btn_play)
+                    )
                 }
                 updateNextToWatch(nextToWatch)
                 return@launch
