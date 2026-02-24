@@ -113,46 +113,10 @@ private data class PeopleTabItem(
     val focusRequester: FocusRequester
 )
 
-private data class DetailReturnEpisodeFocusRequest(
-    val season: Int?,
-    val episode: Int?
-)
-
-private fun resolveDetailReturnEpisodeFocusTarget(
-    meta: Meta,
-    request: DetailReturnEpisodeFocusRequest?,
-    episodeProgressMap: Map<Pair<Int, Int>, WatchProgress>,
-    watchedEpisodes: Set<Pair<Int, Int>>
-): Video? {
-    val requestedSeason = request?.season ?: return null
-    val requestedEpisode = request.episode ?: return null
-
-    val orderedEpisodes = meta.videos
-        .filter { it.season != null && it.episode != null }
-        .sortedWith(compareBy({ it.season }, { it.episode }))
-    if (orderedEpisodes.isEmpty()) return null
-
-    val matchedIndex = orderedEpisodes.indexOfFirst {
-        it.season == requestedSeason && it.episode == requestedEpisode
-    }
-    if (matchedIndex < 0) return null
-
-    val isCompleted = episodeProgressMap[requestedSeason to requestedEpisode]?.isCompleted() == true ||
-        watchedEpisodes.contains(requestedSeason to requestedEpisode)
-
-    return if (isCompleted) {
-        orderedEpisodes.getOrNull(matchedIndex + 1) ?: orderedEpisodes[matchedIndex]
-    } else {
-        orderedEpisodes[matchedIndex]
-    }
-}
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
-    returnFocusSeason: Int? = null,
-    returnFocusEpisode: Int? = null,
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
@@ -285,10 +249,6 @@ fun MetaDetailsScreen(
 
                 MetaDetailsContent(
                     meta = meta,
-                    detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
-                        season = returnFocusSeason,
-                        episode = returnFocusEpisode
-                    ),
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
                     episodesForSeason = uiState.episodesForSeason,
@@ -480,7 +440,6 @@ fun MetaDetailsScreen(
 @Composable
 private fun MetaDetailsContent(
     meta: Meta,
-    detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
     seasons: List<Int>,
     selectedSeason: Int,
     episodesForSeason: List<Video>,
@@ -558,13 +517,6 @@ private fun MetaDetailsContent(
     var pendingRestoreMoreLikeItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
-    var initialDetailReturnFocusHandled by rememberSaveable(
-        meta.id,
-        detailReturnEpisodeFocusRequest?.season,
-        detailReturnEpisodeFocusRequest?.episode
-    ) {
-        mutableStateOf(false)
-    }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     fun clearPendingRestore() {
@@ -618,48 +570,6 @@ private fun MetaDetailsContent(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
-    }
-
-    LaunchedEffect(
-        meta.id,
-        detailReturnEpisodeFocusRequest?.season,
-        detailReturnEpisodeFocusRequest?.episode,
-        nextToWatch,
-        episodeProgressMap,
-        watchedEpisodes
-    ) {
-        if (initialDetailReturnFocusHandled) return@LaunchedEffect
-        if (!isSeries) {
-            initialDetailReturnFocusHandled = true
-            return@LaunchedEffect
-        }
-        val request = detailReturnEpisodeFocusRequest
-        if (request?.season == null || request.episode == null) {
-            initialDetailReturnFocusHandled = true
-            return@LaunchedEffect
-        }
-        if (nextToWatch == null) return@LaunchedEffect
-
-        val targetEpisode = resolveDetailReturnEpisodeFocusTarget(
-            meta = meta,
-            request = request,
-            episodeProgressMap = episodeProgressMap,
-            watchedEpisodes = watchedEpisodes
-        )
-        initialDetailReturnFocusHandled = true
-        targetEpisode ?: return@LaunchedEffect
-
-        val targetSeason = targetEpisode.season
-        if (targetSeason != null && selectedSeason != targetSeason) {
-            onSeasonSelected(targetSeason)
-        }
-        initialHeroFocusRequested = true
-        markEpisodeRestore(targetEpisode.id)
-        if (seasons.isNotEmpty()) {
-            listState.scrollToItem(2)
-            delay(32)
-        }
-        restoreFocusToken += 1
     }
 
     // Track if scrolled past hero (first item)
