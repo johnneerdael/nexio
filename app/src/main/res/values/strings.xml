@@ -63,6 +63,9 @@
     <string name="detail_btn_resume_episode">Resume S%1$dE%2$d</string>
     <string name="detail_btn_next_episode">Next S%1$dE%2$d</string>
     <string name="detail_tab_cast">Creator and Cast</string>
+    <string name="cast_role_creator">Creator</string>
+    <string name="cast_role_director">Director</string>
+    <string name="cast_role_writer">Writer</string>
     <string name="detail_tab_ratings">Ratings</string>
     <string name="detail_tab_more_like_this">More like this</string>
     <string name="detail_section_network">Network</string>

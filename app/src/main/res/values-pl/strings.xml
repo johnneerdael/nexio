@@ -62,6 +62,9 @@
     <string name="detail_btn_resume_episode">Wznów S%1$dE%2$d</string>
     <string name="detail_btn_next_episode">Następny S%1$dE%2$d</string>
     <string name="detail_tab_cast">Twórcy i obsada</string>
+    <string name="cast_role_creator">Twórca</string>
+    <string name="cast_role_director">Reżyser</string>
+    <string name="cast_role_writer">Scenarzysta</string>
     <string name="detail_tab_ratings">Oceny</string>
     <string name="detail_tab_more_like_this">Podobne</string>
     <string name="detail_section_network">Stacja</string>
