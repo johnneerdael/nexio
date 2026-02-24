@@ -6,24 +6,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -34,14 +29,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
-import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 
@@ -143,104 +136,9 @@ internal fun ModernHeroMediaLayer(
 }
 
 @Composable
-private fun PreviewCarouselCard(
-    imageUrl: String?,
-    cardWidth: Dp,
-    cardHeight: Dp
-) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val requestWidthPx = remember(cardWidth, density) {
-        with(density) { cardWidth.roundToPx() }
-    }
-    val requestHeightPx = remember(cardHeight, density) {
-        with(density) { cardHeight.roundToPx() }
-    }
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .crossfade(false)
-            .size(width = requestWidthPx, height = requestHeightPx)
-            .build()
-    }
-    Box(
-        modifier = Modifier
-            .width(cardWidth)
-            .height(cardHeight)
-            .clip(RoundedCornerShape(10.dp))
-    ) {
-        if (imageUrl.isNullOrBlank()) {
-            MonochromePosterPlaceholder()
-        } else {
-            AsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.36f))
-        )
-    }
-}
-
-@Composable
-private fun ModernNextRowPreviewStrip(
-    previewRow: HeroCarouselRow?,
-    rowHorizontalPadding: Dp,
-    rowItemSpacing: Dp,
-    previewVisibleHeight: Dp,
-    previewCardWidth: Dp,
-    previewCardHeight: Dp
-) {
-    if (previewRow == null) return
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp)
-    ) {
-        Text(
-            text = previewRow.title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = NuvioColors.TextPrimary,
-            modifier = Modifier.padding(start = rowHorizontalPadding, bottom = 10.dp)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(previewVisibleHeight)
-                .clipToBounds()
-        ) {
-            LazyRow(
-                userScrollEnabled = false,
-                contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
-                horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
-            ) {
-                itemsIndexed(
-                    previewRow.items.take(12),
-                    key = { _, item -> item.key },
-                    contentType = { _, _ -> "modern_preview_card" }
-                ) { _, item ->
-                    PreviewCarouselCard(
-                        imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop,
-                        cardWidth = previewCardWidth,
-                        cardHeight = previewCardHeight
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
 internal fun HeroTitleBlock(
     preview: HeroPreview?,
     portraitMode: Boolean,
-    shouldRenderPreviewRow: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (preview == null) return
@@ -248,7 +146,7 @@ internal fun HeroTitleBlock(
     val descriptionMaxLines = if (portraitMode) 4 else 5
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
-    val metaScale = if (portraitMode && shouldRenderPreviewRow) 0.90f else 1f
+    val metaScale = 1f
     val titleSpacing = 8.dp * titleScale
     val metaSpacing = 8.dp * metaScale
     val imdbMetaSpacing = 4.dp * metaScale

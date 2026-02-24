@@ -622,7 +622,6 @@ fun ModernHomeContent(
         HeroTitleBlock(
             preview = resolvedHero,
             portraitMode = !useLandscapePosters,
-            shouldRenderPreviewRow = false,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(
@@ -751,4 +750,3 @@ fun ModernHomeContent(
         )
     }
 }
-

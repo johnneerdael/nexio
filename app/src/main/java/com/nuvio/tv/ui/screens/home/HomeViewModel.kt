@@ -177,12 +177,7 @@ class HomeViewModel @Inject constructor(
             )
         }
 
-        val modernLayoutPrefsFlow = combine(
-            layoutPreferenceDataStore.modernLandscapePostersEnabled,
-            layoutPreferenceDataStore.modernNextRowPreviewEnabled
-        ) { modernLandscapePostersEnabled, modernNextRowPreviewEnabled ->
-            modernLandscapePostersEnabled to modernNextRowPreviewEnabled
-        }
+        val modernLayoutPrefsFlow = layoutPreferenceDataStore.modernLandscapePostersEnabled
 
         val baseLayoutUiPrefsFlow = combine(
             coreLayoutPrefsFlow,
@@ -199,7 +194,6 @@ class HomeViewModel @Inject constructor(
                 catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
                 catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
                 modernLandscapePostersEnabled = false,
-                modernNextRowPreviewEnabled = true,
                 focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
                 focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
                 focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
@@ -217,8 +211,7 @@ class HomeViewModel @Inject constructor(
                 modernLayoutPrefsFlow
             ) { basePrefs, modernPrefs ->
                 basePrefs.copy(
-                    modernLandscapePostersEnabled = modernPrefs.first,
-                    modernNextRowPreviewEnabled = modernPrefs.second
+                    modernLandscapePostersEnabled = modernPrefs
                 )
             }
                 .distinctUntilChanged()
@@ -243,7 +236,6 @@ class HomeViewModel @Inject constructor(
                         catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
                         catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
-                        modernNextRowPreviewEnabled = prefs.modernNextRowPreviewEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
                         focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
@@ -301,7 +293,6 @@ class HomeViewModel @Inject constructor(
         val catalogAddonNameEnabled: Boolean,
         val catalogTypeSuffixEnabled: Boolean,
         val modernLandscapePostersEnabled: Boolean,
-        val modernNextRowPreviewEnabled: Boolean,
         val focusedBackdropExpandEnabled: Boolean,
         val focusedBackdropExpandDelaySeconds: Int,
         val focusedBackdropTrailerEnabled: Boolean,
