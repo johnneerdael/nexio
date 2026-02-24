@@ -3,8 +3,10 @@
 package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
@@ -95,95 +97,6 @@ import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
-private const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
-private const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.62f
-private const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
-private const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 90L
-private val MODERN_ROW_HEADER_FOCUS_INSET = 56.dp
-private val MODERN_LANDSCAPE_LOGO_GRADIENT = Brush.verticalGradient(
-    colorStops = arrayOf(
-        0.0f to Color.Transparent,
-        0.58f to Color.Transparent,
-        1.0f to Color.Black.copy(alpha = 0.75f)
-    )
-)
-
-@Immutable
-private data class HeroPreview(
-    val title: String,
-    val logo: String?,
-    val description: String?,
-    val contentTypeText: String?,
-    val yearText: String?,
-    val imdbText: String?,
-    val genres: List<String>,
-    val poster: String?,
-    val backdrop: String?,
-    val imageUrl: String?
-)
-
-@Immutable
-private sealed class ModernPayload {
-    data class ContinueWatching(val item: ContinueWatchingItem) : ModernPayload()
-    data class Catalog(
-        val focusKey: String,
-        val itemId: String,
-        val itemType: String,
-        val addonBaseUrl: String,
-        val trailerTitle: String,
-        val trailerReleaseInfo: String?,
-        val trailerApiType: String
-    ) : ModernPayload()
-}
-
-@Immutable
-private data class FocusedCatalogSelection(
-    val focusKey: String,
-    val payload: ModernPayload.Catalog
-)
-
-@Immutable
-private data class ModernCarouselItem(
-    val key: String,
-    val title: String,
-    val subtitle: String?,
-    val imageUrl: String?,
-    val heroPreview: HeroPreview,
-    val payload: ModernPayload,
-    val metaPreview: MetaPreview? = null
-)
-
-@Immutable
-private data class HeroCarouselRow(
-    val key: String,
-    val title: String,
-    val globalRowIndex: Int,
-    val items: List<ModernCarouselItem>,
-    val catalogId: String? = null,
-    val addonId: String? = null,
-    val apiType: String? = null,
-    val supportsSkip: Boolean = false,
-    val hasMore: Boolean = false,
-    val isLoading: Boolean = false
-)
-
-private data class CarouselRowLookups(
-    val rowIndexByKey: Map<String, Int>,
-    val rowByKey: Map<String, HeroCarouselRow>,
-    val activeRowKeys: Set<String>,
-    val activeItemKeysByRow: Map<String, Set<String>>,
-    val activeCatalogItemIds: Set<String>
-)
-
-private class ModernHomeUiCaches {
-    val focusedItemByRow = mutableMapOf<String, Int>()
-    val itemFocusRequesters = mutableMapOf<String, MutableMap<String, FocusRequester>>()
-    val rowListStates = mutableMapOf<String, LazyListState>()
-    val loadMoreRequestedTotals = mutableMapOf<String, Int>()
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ModernHomeContent(
     uiState: HomeUiState,
@@ -319,6 +232,9 @@ fun ModernHomeContent(
         initialFirstVisibleItemIndex = focusState.verticalScrollIndex,
         initialFirstVisibleItemScrollOffset = focusState.verticalScrollOffset
     )
+    val isVerticalRowsScrolling by remember(verticalRowListState) {
+        derivedStateOf { verticalRowListState.isScrollInProgress }
+    }
 
     val uiCaches = remember { ModernHomeUiCaches() }
     val focusedItemByRow = uiCaches.focusedItemByRow
@@ -329,6 +245,7 @@ fun ModernHomeContent(
     var activeItemIndex by remember { mutableIntStateOf(0) }
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingRowFocusNonce by remember { mutableIntStateOf(0) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
@@ -347,13 +264,16 @@ fun ModernHomeContent(
         expansionInteractionNonce,
         shouldActivateFocusedPosterFlow,
         trailerPlaybackTarget,
-        uiState.focusedPosterBackdropExpandDelaySeconds
+        uiState.focusedPosterBackdropExpandDelaySeconds,
+        isVerticalRowsScrolling
     ) {
         expandedCatalogFocusKey = null
         if (!shouldActivateFocusedPosterFlow) return@LaunchedEffect
+        if (isVerticalRowsScrolling) return@LaunchedEffect
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
         delay(uiState.focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(1) * 1000L)
         if (shouldActivateFocusedPosterFlow &&
+            !isVerticalRowsScrolling &&
             focusedCatalogSelection?.focusKey == selection.focusKey
         ) {
             expandedCatalogFocusKey = selection.focusKey
@@ -362,9 +282,13 @@ fun ModernHomeContent(
 
     LaunchedEffect(
         focusedCatalogSelection?.focusKey,
-        effectiveAutoplayEnabled
+        effectiveAutoplayEnabled,
+        isVerticalRowsScrolling
     ) {
         if (!effectiveAutoplayEnabled) {
+            return@LaunchedEffect
+        }
+        if (isVerticalRowsScrolling) {
             return@LaunchedEffect
         }
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
@@ -416,6 +340,7 @@ fun ModernHomeContent(
                 ?: resolvedRow.items.firstOrNull()?.heroPreview
             pendingRowFocusKey = resolvedRow.key
             pendingRowFocusIndex = resolvedIndex
+            pendingRowFocusNonce++
             restoredFromSavedState = true
             return@LaunchedEffect
         }
@@ -434,6 +359,7 @@ fun ModernHomeContent(
         if (!focusState.hasSavedFocus && !hadActiveRow) {
             pendingRowFocusKey = resolvedActive.key
             pendingRowFocusIndex = resolvedIndex
+            pendingRowFocusNonce++
         }
     }
 
@@ -448,12 +374,6 @@ fun ModernHomeContent(
         if (targetIndex > 0 || targetOffset > 0) {
             verticalRowListState.scrollToItem(targetIndex, targetOffset)
         }
-    }
-
-    LaunchedEffect(pendingRowFocusKey, pendingRowFocusIndex, rowIndexByKey) {
-        val targetRowKey = pendingRowFocusKey ?: return@LaunchedEffect
-        val targetRowIndex = rowIndexByKey[targetRowKey] ?: return@LaunchedEffect
-        runCatching { verticalRowListState.scrollToItem(targetRowIndex) }
     }
 
     val activeRow by remember(carouselRows, rowByKey, activeRowKey) {
@@ -491,9 +411,11 @@ fun ModernHomeContent(
     }
     val latestHeroRow by rememberUpdatedState(activeRow)
     val latestHeroIndex by rememberUpdatedState(clampedActiveItemIndex)
-    LaunchedEffect(activeHeroItemKey) {
+    LaunchedEffect(activeHeroItemKey, isVerticalRowsScrolling) {
+        if (isVerticalRowsScrolling) return@LaunchedEffect
         val targetHeroKey = activeHeroItemKey ?: return@LaunchedEffect
         delay(MODERN_HERO_FOCUS_DEBOUNCE_MS)
+        if (isVerticalRowsScrolling) return@LaunchedEffect
         val row = latestHeroRow ?: return@LaunchedEffect
         val latestKey = row.items.getOrNull(latestHeroIndex)?.key ?: row.items.firstOrNull()?.key
         if (latestKey != targetHeroKey) return@LaunchedEffect
@@ -582,10 +504,12 @@ fun ModernHomeContent(
         val shouldPlayHeroTrailer by remember(
             effectiveAutoplayEnabled,
             trailerPlaybackTarget,
-            heroTrailerUrl
+            heroTrailerUrl,
+            isVerticalRowsScrolling
         ) {
             derivedStateOf {
                 effectiveAutoplayEnabled &&
+                    !isVerticalRowsScrolling &&
                     trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
                     !heroTrailerUrl.isNullOrBlank()
             }
@@ -609,12 +533,18 @@ fun ModernHomeContent(
         val rowsViewportHeightFraction = if (useLandscapePosters) 0.50f else 0.54f
         val rowsViewportHeight = maxHeight * rowsViewportHeightFraction
         val localDensity = LocalDensity.current
-        val verticalRowBringIntoViewSpec = remember(localDensity) {
+        val verticalRowBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
             val topInsetPx = with(localDensity) { MODERN_ROW_HEADER_FOCUS_INSET.toPx() }
             object : BringIntoViewSpec {
-                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-                    return offset - topInsetPx
-                }
+                @Suppress("DEPRECATION")
+                override val scrollAnimationSpec: AnimationSpec<Float> =
+                    defaultBringIntoViewSpec.scrollAnimationSpec
+
+                override fun calculateScrollDistance(
+                    offset: Float,
+                    size: Float,
+                    containerSize: Float
+                ): Float = offset - topInsetPx
             }
         }
         val bgColor = NuvioColors.Background
@@ -703,9 +633,7 @@ fun ModernHomeContent(
                 .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
         )
 
-        CompositionLocalProvider(
-            LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec
-        ) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec) {
             LazyColumn(
                 state = verticalRowListState,
                 modifier = Modifier
@@ -732,6 +660,7 @@ fun ModernHomeContent(
                         requesterFor = ::requesterFor,
                         pendingRowFocusKey = pendingRowFocusKey,
                         pendingRowFocusIndex = pendingRowFocusIndex,
+                        pendingRowFocusNonce = pendingRowFocusNonce,
                         onPendingRowFocusCleared = {
                             pendingRowFocusKey = null
                             pendingRowFocusIndex = null
@@ -802,6 +731,7 @@ fun ModernHomeContent(
                 }
                 pendingRowFocusKey = if (targetIndex != null) "continue_watching" else null
                 pendingRowFocusIndex = targetIndex
+                pendingRowFocusNonce++
                 onRemoveContinueWatching(
                     selectedOptionsItem.contentId(),
                     selectedOptionsItem.season(),
@@ -822,1099 +752,3 @@ fun ModernHomeContent(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun ModernContinueWatchingRowItem(
-    payload: ModernPayload.ContinueWatching,
-    requester: FocusRequester,
-    cardWidth: Dp,
-    imageHeight: Dp,
-    onFocused: () -> Unit,
-    onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
-    onShowOptions: (ContinueWatchingItem) -> Unit
-) {
-    ContinueWatchingCard(
-        item = payload.item,
-        onClick = { onContinueWatchingClick(payload.item) },
-        onLongPress = { onShowOptions(payload.item) },
-        cardWidth = cardWidth,
-        imageHeight = imageHeight,
-        modifier = Modifier
-            .focusRequester(requester)
-            .onFocusChanged {
-                if (it.isFocused) {
-                    onFocused()
-                }
-            }
-    )
-}
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun ModernCatalogRowItem(
-    item: ModernCarouselItem,
-    payload: ModernPayload.Catalog,
-    requester: FocusRequester,
-    useLandscapePosters: Boolean,
-    showLabels: Boolean,
-    posterCardCornerRadius: Dp,
-    modernCatalogCardWidth: Dp,
-    modernCatalogCardHeight: Dp,
-    focusedPosterBackdropTrailerMuted: Boolean,
-    effectiveExpandEnabled: Boolean,
-    effectiveAutoplayEnabled: Boolean,
-    trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
-    expandedCatalogFocusKey: String?,
-    trailerPreviewUrls: Map<String, String>,
-    onFocused: () -> Unit,
-    onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
-    onNavigateToDetail: (String, String, String) -> Unit,
-    onBackdropInteraction: () -> Unit,
-    onExpandedCatalogFocusKeyChange: (String?) -> Unit
-) {
-    val focusKey = payload.focusKey
-    val suppressCardExpansionForHeroTrailer =
-        effectiveAutoplayEnabled &&
-            trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
-    val isBackdropExpanded =
-        effectiveExpandEnabled &&
-            expandedCatalogFocusKey == focusKey &&
-            !suppressCardExpansionForHeroTrailer
-    val playTrailerInExpandedCard =
-        effectiveAutoplayEnabled &&
-            trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
-            isBackdropExpanded
-    val trailerPreviewUrl = if (playTrailerInExpandedCard) {
-        trailerPreviewUrls[payload.itemId]
-    } else {
-        null
-    }
-
-    ModernCarouselCard(
-        item = item,
-        useLandscapePosters = useLandscapePosters,
-        showLabels = showLabels,
-        cardCornerRadius = posterCardCornerRadius,
-        cardWidth = modernCatalogCardWidth,
-        cardHeight = modernCatalogCardHeight,
-        focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
-        isBackdropExpanded = isBackdropExpanded,
-        playTrailerInExpandedCard = playTrailerInExpandedCard,
-        focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-        trailerPreviewUrl = trailerPreviewUrl,
-        focusRequester = requester,
-        onFocused = {
-            onFocused()
-            onCatalogSelectionFocused(
-                FocusedCatalogSelection(
-                    focusKey = focusKey,
-                    payload = payload
-                )
-            )
-        },
-        onClick = {
-            onNavigateToDetail(
-                payload.itemId,
-                payload.itemType,
-                payload.addonBaseUrl
-            )
-        },
-        onBackdropInteraction = onBackdropInteraction,
-        onTrailerEnded = { onExpandedCatalogFocusKeyChange(null) }
-    )
-}
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun ModernRowSection(
-    row: HeroCarouselRow,
-    rowTitleBottom: Dp,
-    defaultBringIntoViewSpec: BringIntoViewSpec,
-    focusStateCatalogRowScrollStates: Map<String, Int>,
-    rowListStates: MutableMap<String, LazyListState>,
-    focusedItemByRow: MutableMap<String, Int>,
-    loadMoreRequestedTotals: MutableMap<String, Int>,
-    requesterFor: (String, String) -> FocusRequester,
-    pendingRowFocusKey: String?,
-    pendingRowFocusIndex: Int?,
-    onPendingRowFocusCleared: () -> Unit,
-    onRowItemFocused: (String, Int, Boolean) -> Unit,
-    useLandscapePosters: Boolean,
-    showLabels: Boolean,
-    posterCardCornerRadius: Dp,
-    focusedPosterBackdropTrailerMuted: Boolean,
-    effectiveExpandEnabled: Boolean,
-    effectiveAutoplayEnabled: Boolean,
-    trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
-    expandedCatalogFocusKey: String?,
-    trailerPreviewUrls: Map<String, String>,
-    modernCatalogCardWidth: Dp,
-    modernCatalogCardHeight: Dp,
-    continueWatchingCardWidth: Dp,
-    continueWatchingCardHeight: Dp,
-    onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
-    onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
-    onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
-    onNavigateToDetail: (String, String, String) -> Unit,
-    onLoadMoreCatalog: (String, String, String) -> Unit,
-    onBackdropInteraction: () -> Unit,
-    onExpandedCatalogFocusKeyChange: (String?) -> Unit
-) {
-    Column {
-        Text(
-            text = row.title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = NuvioColors.TextPrimary,
-            modifier = Modifier.padding(start = 52.dp, bottom = rowTitleBottom)
-        )
-
-        val rowListState = rowListStates.getOrPut(row.key) {
-            LazyListState(
-                firstVisibleItemIndex = focusStateCatalogRowScrollStates[row.key] ?: 0
-            )
-        }
-        val currentRowState = rememberUpdatedState(row)
-        val loadMoreCatalogId = row.catalogId
-        val loadMoreAddonId = row.addonId
-        val loadMoreApiType = row.apiType
-        val canObserveLoadMore = row.supportsSkip &&
-            row.hasMore &&
-            !loadMoreCatalogId.isNullOrBlank() &&
-            !loadMoreAddonId.isNullOrBlank() &&
-            !loadMoreApiType.isNullOrBlank()
-
-        LaunchedEffect(row.key, pendingRowFocusKey, pendingRowFocusIndex) {
-            if (pendingRowFocusKey != row.key) return@LaunchedEffect
-            val targetIndex = (pendingRowFocusIndex ?: 0)
-                .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-            val targetItemKey = row.items.getOrNull(targetIndex)?.key ?: return@LaunchedEffect
-            val requester = requesterFor(row.key, targetItemKey)
-            var didFocus = false
-            var didScrollToTarget = false
-            repeat(20) {
-                didFocus = runCatching {
-                    requester.requestFocus()
-                    true
-                }.getOrDefault(false)
-                if (didFocus) {
-                    return@repeat
-                }
-                if (!didScrollToTarget) {
-                    runCatching { rowListState.scrollToItem(targetIndex) }
-                    didScrollToTarget = true
-                }
-                withFrameNanos { }
-            }
-            if (!didFocus) {
-                val fallbackIndex = rowListState.firstVisibleItemIndex
-                    .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                val fallbackItemKey = row.items.getOrNull(fallbackIndex)?.key
-                didFocus = runCatching {
-                    if (fallbackItemKey != null) {
-                        requesterFor(row.key, fallbackItemKey).requestFocus()
-                    }
-                    true
-                }.getOrDefault(false)
-            }
-            if (didFocus) {
-                onPendingRowFocusCleared()
-            }
-        }
-
-        if (canObserveLoadMore) {
-            LaunchedEffect(
-                row.key,
-                rowListState,
-                canObserveLoadMore
-            ) {
-                snapshotFlow {
-                    val layoutInfo = rowListState.layoutInfo
-                    val total = layoutInfo.totalItemsCount
-                    val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    lastVisible to total
-                }
-                    .distinctUntilChanged()
-                    .collect { (lastVisible, total) ->
-                        if (total <= 0) return@collect
-                        val rowState = currentRowState.value
-                        val isNearEnd = lastVisible >= total - 4
-                        if (!isNearEnd) {
-                            loadMoreRequestedTotals.remove(rowState.key)
-                            return@collect
-                        }
-                        val lastRequestedTotal = loadMoreRequestedTotals[rowState.key]
-                        if (rowState.hasMore &&
-                            !rowState.isLoading &&
-                            lastRequestedTotal != total
-                        ) {
-                            loadMoreRequestedTotals[rowState.key] = total
-                            onLoadMoreCatalog(
-                                loadMoreCatalogId,
-                                loadMoreAddonId,
-                                loadMoreApiType
-                            )
-                        }
-                    }
-            }
-        }
-
-        CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
-            LazyRow(
-                state = rowListState,
-                modifier = Modifier.focusRestorer {
-                    val rememberedIndex = (focusedItemByRow[row.key] ?: 0)
-                        .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                    val fallbackIndex = rowListState.firstVisibleItemIndex
-                        .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                    val restoreIndex = if (rememberedIndex in row.items.indices) {
-                        rememberedIndex
-                    } else {
-                        fallbackIndex
-                    }
-                    val itemKey = row.items.getOrNull(restoreIndex)?.key ?: row.items.first().key
-                    requesterFor(row.key, itemKey)
-                },
-                contentPadding = PaddingValues(horizontal = 52.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                itemsIndexed(
-                    items = row.items,
-                    key = { _, item -> item.key },
-                    contentType = { _, item ->
-                        when (item.payload) {
-                            is ModernPayload.ContinueWatching -> "modern_cw_card"
-                            is ModernPayload.Catalog -> "modern_catalog_card"
-                        }
-                    }
-                ) { index, item ->
-                    val requester = requesterFor(row.key, item.key)
-                    val isContinueWatchingRow = row.key == "continue_watching"
-                    val onFocused = {
-                        onRowItemFocused(row.key, index, isContinueWatchingRow)
-                    }
-
-                    when (val payload = item.payload) {
-                        is ModernPayload.ContinueWatching -> {
-                            ModernContinueWatchingRowItem(
-                                payload = payload,
-                                requester = requester,
-                                cardWidth = continueWatchingCardWidth,
-                                imageHeight = continueWatchingCardHeight,
-                                onFocused = onFocused,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onShowOptions = onContinueWatchingOptions
-                            )
-                        }
-
-                        is ModernPayload.Catalog -> {
-                            ModernCatalogRowItem(
-                                item = item,
-                                payload = payload,
-                                requester = requester,
-                                useLandscapePosters = useLandscapePosters,
-                                showLabels = showLabels,
-                                posterCardCornerRadius = posterCardCornerRadius,
-                                modernCatalogCardWidth = modernCatalogCardWidth,
-                                modernCatalogCardHeight = modernCatalogCardHeight,
-                                focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-                                effectiveExpandEnabled = effectiveExpandEnabled,
-                                effectiveAutoplayEnabled = effectiveAutoplayEnabled,
-                                trailerPlaybackTarget = trailerPlaybackTarget,
-                                expandedCatalogFocusKey = expandedCatalogFocusKey,
-                                trailerPreviewUrls = trailerPreviewUrls,
-                                onFocused = onFocused,
-                                onCatalogSelectionFocused = onCatalogSelectionFocused,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onBackdropInteraction = onBackdropInteraction,
-                                onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun buildContinueWatchingItem(
-    item: ContinueWatchingItem,
-    useLandscapePosters: Boolean,
-    airsDateTemplate: String = "Airs %s"
-): ModernCarouselItem {
-    val heroPreview = when (item) {
-        is ContinueWatchingItem.InProgress -> HeroPreview(
-            title = item.progress.name,
-            logo = item.progress.logo,
-            description = item.episodeDescription ?: item.progress.episodeTitle,
-            contentTypeText = item.progress.contentType.replaceFirstChar { ch -> ch.uppercase() },
-            yearText = null,
-            imdbText = null,
-            genres = emptyList(),
-            poster = item.progress.poster,
-            backdrop = item.progress.backdrop,
-            imageUrl = if (useLandscapePosters) {
-                item.progress.backdrop ?: item.progress.poster
-            } else {
-                item.progress.poster ?: item.progress.backdrop
-            }
-        )
-        is ContinueWatchingItem.NextUp -> HeroPreview(
-            title = item.info.name,
-            logo = item.info.logo,
-            description = item.info.episodeDescription
-                ?: item.info.episodeTitle
-                ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
-            contentTypeText = item.info.contentType.replaceFirstChar { ch -> ch.uppercase() },
-            yearText = null,
-            imdbText = null,
-            genres = emptyList(),
-            poster = item.info.poster,
-            backdrop = item.info.backdrop,
-            imageUrl = if (useLandscapePosters) {
-                firstNonBlank(item.info.backdrop, item.info.poster, item.info.thumbnail)
-            } else {
-                firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
-            }
-        )
-    }
-
-    val imageUrl = when (item) {
-        is ContinueWatchingItem.InProgress -> if (useLandscapePosters) {
-            if (isSeriesType(item.progress.contentType)) {
-                firstNonBlank(item.episodeThumbnail, item.progress.poster, item.progress.backdrop)
-            } else {
-                firstNonBlank(item.progress.backdrop, item.progress.poster)
-            }
-        } else {
-            if (isSeriesType(item.progress.contentType)) {
-                firstNonBlank(heroPreview.poster, item.progress.poster, item.progress.backdrop)
-            } else {
-                firstNonBlank(item.progress.poster, item.progress.backdrop)
-            }
-        }
-        is ContinueWatchingItem.NextUp -> if (useLandscapePosters) {
-            if (item.info.hasAired) {
-                firstNonBlank(item.info.thumbnail, item.info.poster, item.info.backdrop)
-            } else {
-                firstNonBlank(item.info.backdrop, item.info.poster, item.info.thumbnail)
-            }
-        } else {
-            firstNonBlank(item.info.poster, item.info.backdrop, item.info.thumbnail)
-        }
-    }
-
-    return ModernCarouselItem(
-        key = continueWatchingItemKey(item),
-        title = when (item) {
-            is ContinueWatchingItem.InProgress -> item.progress.name
-            is ContinueWatchingItem.NextUp -> item.info.name
-        },
-        subtitle = when (item) {
-            is ContinueWatchingItem.InProgress -> item.progress.episodeDisplayString ?: item.progress.episodeTitle
-            is ContinueWatchingItem.NextUp -> {
-                val code = "S${item.info.season}E${item.info.episode}"
-                if (item.info.hasAired) {
-                    code
-                } else {
-                    item.info.airDateLabel?.let { "$code • Airs $it" } ?: "$code • Upcoming"
-                }
-            }
-        },
-        imageUrl = imageUrl,
-        heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
-        payload = ModernPayload.ContinueWatching(item)
-    )
-}
-
-private fun buildCatalogItem(
-    item: MetaPreview,
-    row: CatalogRow,
-    useLandscapePosters: Boolean,
-    occurrence: Int
-): ModernCarouselItem {
-    val heroPreview = HeroPreview(
-        title = item.name,
-        logo = item.logo,
-        description = item.description,
-        contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
-        yearText = extractYear(item.releaseInfo),
-        imdbText = item.imdbRating?.let { String.format("%.1f", it) },
-        genres = item.genres.take(3),
-        poster = item.poster,
-        backdrop = item.background,
-        imageUrl = if (useLandscapePosters) {
-            item.background ?: item.poster
-        } else {
-            item.poster ?: item.background
-        }
-    )
-
-    return ModernCarouselItem(
-        key = "catalog_${row.key()}_${item.id}_${occurrence}",
-        title = item.name,
-        subtitle = item.releaseInfo,
-        imageUrl = if (useLandscapePosters) {
-            item.background ?: item.poster
-        } else {
-            item.poster ?: item.background
-        },
-        heroPreview = heroPreview,
-        payload = ModernPayload.Catalog(
-            focusKey = "${row.key()}::${item.id}",
-            itemId = item.id,
-            itemType = item.type.toApiString(),
-            addonBaseUrl = row.addonBaseUrl,
-            trailerTitle = item.name,
-            trailerReleaseInfo = item.releaseInfo,
-            trailerApiType = item.apiType
-        ),
-        metaPreview = item
-    )
-}
-
-private fun continueWatchingItemKey(item: ContinueWatchingItem): String {
-    return when (item) {
-        is ContinueWatchingItem.InProgress ->
-            "cw_inprogress_${item.progress.contentId}_${item.progress.videoId}_${item.progress.season ?: -1}_${item.progress.episode ?: -1}"
-        is ContinueWatchingItem.NextUp ->
-            "cw_nextup_${item.info.contentId}_${item.info.videoId}_${item.info.season}_${item.info.episode}"
-    }
-}
-
-private fun catalogRowKey(row: CatalogRow): String {
-    return "${row.addonId}_${row.apiType}_${row.catalogId}"
-}
-
-private fun catalogRowTitle(
-    row: CatalogRow,
-    showCatalogTypeSuffix: Boolean
-): String {
-    val catalogName = row.catalogName.replaceFirstChar { it.uppercase() }
-    return if (showCatalogTypeSuffix) {
-        "$catalogName - ${row.apiType.replaceFirstChar { it.uppercase() }}"
-    } else {
-        catalogName
-    }
-}
-
-private fun CatalogRow.key(): String {
-    return "${addonId}_${apiType}_${catalogId}"
-}
-
-private fun isSeriesType(type: String?): Boolean {
-    return type.equals("series", ignoreCase = true) || type.equals("tv", ignoreCase = true)
-}
-
-private fun firstNonBlank(vararg candidates: String?): String? {
-    return candidates.firstOrNull { !it.isNullOrBlank() }?.trim()
-}
-
-private fun extractYear(releaseInfo: String?): String? {
-    if (releaseInfo.isNullOrBlank()) return null
-    return YEAR_REGEX.find(releaseInfo)?.value
-}
-
-private fun ContinueWatchingItem.contentId(): String {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.contentId
-        is ContinueWatchingItem.NextUp -> info.contentId
-    }
-}
-
-private fun ContinueWatchingItem.contentType(): String {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.contentType
-        is ContinueWatchingItem.NextUp -> info.contentType
-    }
-}
-
-private fun ContinueWatchingItem.season(): Int? {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.season
-        is ContinueWatchingItem.NextUp -> info.season
-    }
-}
-
-private fun ContinueWatchingItem.episode(): Int? {
-    return when (this) {
-        is ContinueWatchingItem.InProgress -> progress.episode
-        is ContinueWatchingItem.NextUp -> info.episode
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ModernCarouselCard(
-    item: ModernCarouselItem,
-    useLandscapePosters: Boolean,
-    showLabels: Boolean,
-    cardCornerRadius: Dp,
-    cardWidth: Dp,
-    cardHeight: Dp,
-    focusedPosterBackdropExpandEnabled: Boolean,
-    isBackdropExpanded: Boolean,
-    playTrailerInExpandedCard: Boolean,
-    focusedPosterBackdropTrailerMuted: Boolean,
-    trailerPreviewUrl: String?,
-    focusRequester: FocusRequester,
-    onFocused: () -> Unit,
-    onClick: () -> Unit,
-    onBackdropInteraction: () -> Unit,
-    onTrailerEnded: () -> Unit
-) {
-    val cardShape = RoundedCornerShape(cardCornerRadius)
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val expandedCardWidth = cardHeight * (16f / 9f)
-    val targetCardWidth = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-        expandedCardWidth
-    } else {
-        cardWidth
-    }
-    val animatedCardWidth by if (focusedPosterBackdropExpandEnabled) {
-        animateDpAsState(
-            targetValue = targetCardWidth,
-            label = "modernCardWidth"
-        )
-    } else {
-        rememberUpdatedState(cardWidth)
-    }
-    val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
-        item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
-    } else {
-        item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
-    }
-    // Keep decode target stable across expand/collapse to avoid recreating image requests/painters
-    // purely due to animated width changes.
-    val maxRequestCardWidth = if (focusedPosterBackdropExpandEnabled) {
-        maxOf(cardWidth, expandedCardWidth)
-    } else {
-        cardWidth
-    }
-    val requestWidthPx = remember(maxRequestCardWidth, density) {
-        with(density) { maxRequestCardWidth.roundToPx() }
-    }
-    val requestHeightPx = remember(cardHeight, density) {
-        with(density) { cardHeight.roundToPx() }
-    }
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
-        imageUrl?.let {
-            ImageRequest.Builder(context)
-                .data(it)
-                .crossfade(false)
-                .size(width = requestWidthPx, height = requestHeightPx)
-                .build()
-        }
-    }
-    val logoHeight = cardHeight * 0.34f
-    val logoHeightPx = remember(logoHeight, density) {
-        with(density) { logoHeight.roundToPx() }
-    }
-    val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
-        with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
-    }
-    val logoModel = remember(context, item.heroPreview.logo, maxLogoWidthPx, logoHeightPx) {
-        item.heroPreview.logo?.let {
-            ImageRequest.Builder(context)
-                .data(it)
-                .crossfade(false)
-                .size(width = maxLogoWidthPx, height = logoHeightPx)
-                .build()
-        }
-    }
-    val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
-    val hasImage = !imageUrl.isNullOrBlank()
-    val hasLandscapeLogo = useLandscapePosters && !item.heroPreview.logo.isNullOrBlank()
-    val backgroundCardColor = NuvioColors.BackgroundCard
-    val focusRingColor = NuvioColors.FocusRing
-    val titleMedium = MaterialTheme.typography.titleMedium
-    val focusedBorder = remember(cardShape, focusRingColor) {
-        Border(
-            border = BorderStroke(2.dp, focusRingColor),
-            shape = cardShape
-        )
-    }
-    val titleStyle = remember(titleMedium) {
-        titleMedium.copy(fontWeight = FontWeight.Medium)
-    }
-
-    Column(
-        modifier = Modifier.width(animatedCardWidth),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(cardHeight)
-                .focusRequester(focusRequester)
-                .onFocusChanged {
-                    if (it.isFocused) {
-                        onFocused()
-                    }
-                }
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    if (focusedPosterBackdropExpandEnabled && shouldResetBackdropTimer(event.key)) {
-                        onBackdropInteraction()
-                    }
-                    false
-                },
-            shape = CardDefaults.shape(shape = cardShape),
-            colors = CardDefaults.colors(
-                containerColor = backgroundCardColor,
-                focusedContainerColor = backgroundCardColor
-            ),
-            border = CardDefaults.border(
-                focusedBorder = focusedBorder
-            ),
-            scale = CardDefaults.scale(focusedScale = 1f)
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (hasImage) {
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = item.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    MonochromePosterPlaceholder()
-                }
-
-                if (shouldPlayTrailerInCard) {
-                    TrailerPlayer(
-                        trailerUrl = trailerPreviewUrl,
-                        isPlaying = true,
-                        onEnded = onTrailerEnded,
-                        muted = focusedPosterBackdropTrailerMuted,
-                        cropToFill = true,
-                        overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                if (hasLandscapeLogo) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MODERN_LANDSCAPE_LOGO_GRADIENT)
-                    )
-                    AsyncImage(
-                        model = logoModel,
-                        contentDescription = item.title,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .fillMaxWidth(0.62f)
-                            .height(cardHeight * 0.34f)
-                            .padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
-                        contentScale = ContentScale.Fit,
-                        alignment = Alignment.CenterStart
-                    )
-                }
-            }
-        }
-
-        if (showLabels && !isBackdropExpanded) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
-            ) {
-                Text(
-                    text = item.title,
-                    style = titleStyle,
-                    color = NuvioColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                item.subtitle?.takeIf { it.isNotBlank() }?.let { subtitle ->
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = NuvioColors.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModernHeroMediaLayer(
-    heroBackdrop: String?,
-    heroBackdropAlpha: Float,
-    shouldPlayHeroTrailer: Boolean,
-    heroTrailerUrl: String?,
-    heroTrailerAlpha: Float,
-    muted: Boolean,
-    bgColor: Color,
-    onTrailerEnded: () -> Unit,
-    onFirstFrameRendered: () -> Unit,
-    modifier: Modifier,
-    requestWidthPx: Int,
-    requestHeightPx: Int
-) {
-    val localContext = LocalContext.current
-    val verticalOverlayGradient = remember(bgColor) {
-        Brush.verticalGradient(
-            0.78f to Color.Transparent,
-            0.90f to bgColor.copy(alpha = 0.72f),
-            0.96f to bgColor.copy(alpha = 0.98f),
-            1.0f to bgColor
-        )
-    }
-    Box(modifier = modifier) {
-        Crossfade(
-            targetState = heroBackdrop,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = heroBackdropAlpha },
-            animationSpec = tween(durationMillis = 350),
-            label = "modernHeroBackground"
-        ) { imageUrl ->
-            val imageModel = remember(localContext, imageUrl, requestWidthPx, requestHeightPx) {
-                ImageRequest.Builder(localContext)
-                    .data(imageUrl)
-                    .crossfade(false)
-                    .size(width = requestWidthPx, height = requestHeightPx)
-                    .build()
-            }
-            AsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.TopEnd
-            )
-        }
-
-        if (shouldPlayHeroTrailer) {
-            TrailerPlayer(
-                trailerUrl = heroTrailerUrl,
-                isPlaying = true,
-                onEnded = onTrailerEnded,
-                onFirstFrameRendered = onFirstFrameRendered,
-                muted = muted,
-                cropToFill = true,
-                overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = heroTrailerAlpha }
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    val horizontalGradient = Brush.horizontalGradient(
-                        0.0f to bgColor.copy(alpha = 0.96f),
-                        0.10f to bgColor.copy(alpha = 0.72f),
-                        0.30f to Color.Transparent
-                    )
-                    val radialGradient = Brush.radialGradient(
-                        colorStops = arrayOf(
-                            0.0f to bgColor.copy(alpha = 0.78f),
-                            0.55f to bgColor.copy(alpha = 0.52f),
-                            0.80f to bgColor.copy(alpha = 0.16f),
-                            1.0f to Color.Transparent
-                        ),
-                        center = Offset(0f, size.height / 2f),
-                        radius = size.height
-                    )
-                    onDrawBehind {
-                        drawRect(brush = horizontalGradient, size = size)
-                        drawRect(brush = radialGradient, size = size)
-                    }
-                }
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(verticalOverlayGradient)
-        )
-    }
-}
-
-@Composable
-private fun PreviewCarouselCard(
-    imageUrl: String?,
-    cardWidth: Dp,
-    cardHeight: Dp
-) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val requestWidthPx = remember(cardWidth, density) {
-        with(density) { cardWidth.roundToPx() }
-    }
-    val requestHeightPx = remember(cardHeight, density) {
-        with(density) { cardHeight.roundToPx() }
-    }
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .crossfade(false)
-            .size(width = requestWidthPx, height = requestHeightPx)
-            .build()
-    }
-    Box(
-        modifier = Modifier
-            .width(cardWidth)
-            .height(cardHeight)
-            .clip(RoundedCornerShape(10.dp))
-    ) {
-        if (imageUrl.isNullOrBlank()) {
-            MonochromePosterPlaceholder()
-        } else {
-            AsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.36f))
-        )
-    }
-}
-
-@Composable
-private fun ModernNextRowPreviewStrip(
-    previewRow: HeroCarouselRow?,
-    rowHorizontalPadding: Dp,
-    rowItemSpacing: Dp,
-    previewVisibleHeight: Dp,
-    previewCardWidth: Dp,
-    previewCardHeight: Dp
-) {
-    if (previewRow == null) return
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp)
-    ) {
-        Text(
-            text = previewRow.title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = NuvioColors.TextPrimary,
-            modifier = Modifier.padding(start = rowHorizontalPadding, bottom = 10.dp)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(previewVisibleHeight)
-                .clipToBounds()
-        ) {
-            LazyRow(
-                userScrollEnabled = false,
-                contentPadding = PaddingValues(horizontal = rowHorizontalPadding),
-                horizontalArrangement = Arrangement.spacedBy(rowItemSpacing)
-            ) {
-                itemsIndexed(
-                    previewRow.items.take(12),
-                    key = { _, item -> item.key },
-                    contentType = { _, _ -> "modern_preview_card" }
-                ) { _, item ->
-                    PreviewCarouselCard(
-                        imageUrl = item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop,
-                        cardWidth = previewCardWidth,
-                        cardHeight = previewCardHeight
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun shouldResetBackdropTimer(key: Key): Boolean {
-    return when (key) {
-        Key.DirectionUp,
-        Key.DirectionDown,
-        Key.DirectionLeft,
-        Key.DirectionRight,
-        Key.DirectionCenter,
-        Key.Enter,
-        Key.NumPadEnter,
-        Key.Back -> true
-        else -> false
-    }
-}
-
-@Composable
-private fun HeroTitleBlock(
-    preview: HeroPreview?,
-    portraitMode: Boolean,
-    shouldRenderPreviewRow: Boolean,
-    modifier: Modifier = Modifier
-) {
-    if (preview == null) return
-
-    val descriptionMaxLines = if (portraitMode) 4 else 5
-    val descriptionScale = if (portraitMode) 0.90f else 1f
-    val titleScale = if (portraitMode) 0.92f else 1f
-    val metaScale = if (portraitMode && shouldRenderPreviewRow) 0.90f else 1f
-    val titleSpacing = 8.dp * titleScale
-    val metaSpacing = 8.dp * metaScale
-    val imdbMetaSpacing = 4.dp * metaScale
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val headlineLarge = MaterialTheme.typography.headlineLarge
-    val labelMedium = MaterialTheme.typography.labelMedium
-    val bodyMedium = MaterialTheme.typography.bodyMedium
-    val logoMaxWidthPx = remember(density) { with(density) { 220.dp.roundToPx() } }
-    val logoHeightPx = remember(density) { with(density) { 100.dp.roundToPx() } }
-    val logoModel = remember(context, preview.logo, logoMaxWidthPx, logoHeightPx) {
-        preview.logo?.let {
-            ImageRequest.Builder(context)
-                .data(it)
-                .crossfade(false)
-                .size(width = logoMaxWidthPx, height = logoHeightPx)
-                .build()
-        }
-    }
-    val imdbLogoModel = remember(context) {
-        ImageRequest.Builder(context)
-            .data(com.nuvio.tv.R.raw.imdb_logo_2016)
-            .decoderFactory(SvgDecoder.Factory())
-            .build()
-    }
-    val scaledTitleStyle = remember(headlineLarge, titleScale) {
-        headlineLarge.copy(
-            fontSize = headlineLarge.fontSize * titleScale,
-            lineHeight = headlineLarge.lineHeight * titleScale
-        )
-    }
-    val scaledDescriptionStyle = remember(bodyMedium, descriptionScale) {
-        bodyMedium.copy(
-            fontSize = bodyMedium.fontSize * descriptionScale,
-            lineHeight = bodyMedium.lineHeight * descriptionScale
-        )
-    }
-
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(titleSpacing)
-    ) {
-        if (!preview.logo.isNullOrBlank()) {
-            AsyncImage(
-                model = logoModel,
-                contentDescription = preview.title,
-                modifier = Modifier
-                    .height(100.dp)
-                    .widthIn(min = 100.dp, max = 220.dp)
-                    .fillMaxWidth(),
-                contentScale = ContentScale.Fit,
-                alignment = Alignment.CenterStart
-            )
-        } else {
-            Text(
-                text = preview.title,
-                style = scaledTitleStyle,
-                color = NuvioColors.TextPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(metaSpacing)
-        ) {
-            var hasLeadingMeta = false
-
-            preview.contentTypeText?.takeIf { it.isNotBlank() }?.let { contentType ->
-                Text(
-                    text = contentType,
-                    style = labelMedium,
-                    color = NuvioColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                hasLeadingMeta = true
-            }
-
-            preview.genres.firstOrNull()?.takeIf { it.isNotBlank() }?.let { genre ->
-                if (hasLeadingMeta) {
-                    HeroMetaDivider(metaScale)
-                }
-                Text(
-                    text = genre,
-                    style = labelMedium,
-                    color = NuvioColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                hasLeadingMeta = true
-            }
-
-            val yearText = preview.yearText
-            val imdbText = preview.imdbText
-            val hasYearOrImdb = !yearText.isNullOrBlank() || !imdbText.isNullOrBlank()
-            if (hasYearOrImdb) {
-                if (hasLeadingMeta) {
-                    HeroMetaDivider(metaScale)
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(metaSpacing)
-                ) {
-                    if (!yearText.isNullOrBlank()) {
-                        Text(
-                            text = yearText,
-                            style = labelMedium,
-                            color = NuvioColors.TextSecondary,
-                            maxLines = 1
-                        )
-                    }
-                    if (!imdbText.isNullOrBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(imdbMetaSpacing)
-                        ) {
-                            AsyncImage(
-                                model = imdbLogoModel,
-                                contentDescription = "IMDb",
-                                modifier = Modifier.size(30.dp * metaScale),
-                                contentScale = ContentScale.Fit
-                            )
-                            Text(
-                                text = imdbText,
-                                style = labelMedium,
-                                color = NuvioColors.TextSecondary,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-                hasLeadingMeta = true
-            }
-        }
-
-        preview.description?.takeIf { it.isNotBlank() }?.let { description ->
-            Text(
-                text = description,
-                style = scaledDescriptionStyle,
-                color = NuvioColors.TextPrimary,
-                maxLines = descriptionMaxLines,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun HeroMetaDivider(scale: Float) {
-    Box(
-        modifier = Modifier
-            .size((4.dp * scale).coerceAtLeast(2.dp))
-            .clip(RoundedCornerShape(percent = 50))
-            .background(NuvioColors.TextTertiary.copy(alpha = 0.78f))
-    )
-}
