@@ -16,6 +16,9 @@
     <string name="cw_upcoming">Upcoming</string>
     <string name="cw_next_up">Next Up</string>
     <string name="cw_resume">Resume</string>
+    <string name="cw_hours_min_left">%1$dh %2$dm left</string>
+    <string name="cw_min_left">%1$dm left</string>
+    <string name="cw_almost_done">Almost done</string>
     <string name="cw_airs_date">Airs %1$s</string>
     <string name="cw_action_go_to_details">Go to details</string>
     <string name="cw_action_remove">Remove</string>

@@ -15,6 +15,9 @@
     <string name="cw_upcoming">Nadchodzące</string>
     <string name="cw_next_up">Następny odcinek</string>
     <string name="cw_resume">Wznów</string>
+    <string name="cw_hours_min_left">Zostało %1$dg %2$dm</string>
+    <string name="cw_min_left">Zostało %1$dm</string>
+    <string name="cw_almost_done">Prawie koniec</string>
     <string name="cw_airs_date">Emisja %1$s</string>
     <string name="cw_action_go_to_details">Przejdź do szczegółów</string>
     <string name="cw_action_remove">Usuń</string>
