@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.TrailerSettings
+import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.ui.theme.NuvioColors
 
 private enum class PlaybackSection {
@@ -93,11 +95,13 @@ internal fun PlaybackSettingsSections(
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
+    onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
+    onSetOsdClockEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetTrailerEnabled: (Boolean) -> Unit,
@@ -120,6 +124,8 @@ internal fun PlaybackSettingsSections(
     onSetBufferForPlaybackAfterRebufferMs: (Int) -> Unit,
     onSetBufferTargetSizeMb: (Int) -> Unit,
     onSetBufferBackBufferDurationMs: (Int) -> Unit,
+    onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
+    onSetVodCacheSizeMb: (Int) -> Unit,
     onResetBufferSettingsToDefaults: () -> Unit,
     onResetNetworkSettingsToDefaults: () -> Unit
 ) {
@@ -208,6 +214,18 @@ internal fun PlaybackSettingsSections(
 
             item {
                 ToggleSettingsItem(
+                    icon = Icons.Default.Timer,
+                    title = "OSD Clock",
+                    subtitle = "Show local time and remaining playback time while controls are visible.",
+                    isChecked = playerSettings.osdClockEnabled,
+                    onCheckedChange = onSetOsdClockEnabled,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = !isExternalPlayer
+                )
+            }
+
+            item {
+                ToggleSettingsItem(
                     icon = Icons.Default.History,
                     title = "Skip Intro",
                     subtitle = "Use introdb.app to detect intros and recaps.",
@@ -275,6 +293,8 @@ internal fun PlaybackSettingsSections(
                 onShowNextEpisodeThresholdModeDialog = onShowNextEpisodeThresholdModeDialog,
                 onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
                 onSetStreamAutoPlayNextEpisodeEnabled = onSetStreamAutoPlayNextEpisodeEnabled,
+                onSetStreamAutoPlayPreferBingeGroupForNextEpisode =
+                    onSetStreamAutoPlayPreferBingeGroupForNextEpisode,
                 onSetNextEpisodeThresholdPercent = onSetNextEpisodeThresholdPercent,
                 onSetNextEpisodeThresholdMinutesBeforeEnd = onSetNextEpisodeThresholdMinutesBeforeEnd,
                 onSetReuseLastLinkEnabled = onSetReuseLastLinkEnabled,
@@ -351,6 +371,8 @@ internal fun PlaybackSettingsSections(
                 onSetBufferForPlaybackAfterRebufferMs = onSetBufferForPlaybackAfterRebufferMs,
                 onSetBufferTargetSizeMb = onSetBufferTargetSizeMb,
                 onSetBufferBackBufferDurationMs = onSetBufferBackBufferDurationMs,
+                onSetVodCacheSizeMode = onSetVodCacheSizeMode,
+                onSetVodCacheSizeMb = onSetVodCacheSizeMb,
                 onResetToDefaults = onResetBufferSettingsToDefaults,
                 onSetUseParallelConnections = onSetUseParallelConnections,
                 onSetParallelConnectionCount = onSetParallelConnectionCount,

@@ -25,6 +25,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.ui.theme.NuvioColors
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -37,6 +38,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     onSetBufferTargetSizeMb: (Int) -> Unit,
     onSetBufferBackBufferDurationMs: (Int) -> Unit,
     onResetToDefaults: () -> Unit,
+    onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
+    onSetVodCacheSizeMb: (Int) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetParallelConnectionCount: (Int) -> Unit,
     onSetParallelChunkSizeMb: (Int) -> Unit,
@@ -174,6 +177,53 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
                 color = NuvioColors.TextPrimary
             )
         }
+    }
+
+    item {
+        Text(
+            text = "Disk Cache",
+            style = MaterialTheme.typography.titleMedium,
+            color = NuvioColors.TextSecondary,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+    }
+
+    item {
+        val autoMode = playerSettings.vodCacheSizeMode == VodCacheSizeMode.AUTO
+        ToggleSettingsItem(
+            icon = Icons.Default.Storage,
+            title = "Auto VOD Cache Size",
+            subtitle = "Automatically use a free-space based cache cap for progressive streams.",
+            isChecked = autoMode,
+            onCheckedChange = { enabled ->
+                onSetVodCacheSizeMode(if (enabled) VodCacheSizeMode.AUTO else VodCacheSizeMode.MANUAL)
+            }
+        )
+    }
+
+    if (playerSettings.vodCacheSizeMode == VodCacheSizeMode.MANUAL) {
+        item {
+            SliderSettingsItem(
+                icon = Icons.Default.Storage,
+                title = "VOD Cache Size",
+                subtitle = "Maximum disk usage for progressive VOD cache (LRU-evicted).",
+                value = playerSettings.vodCacheSizeMb,
+                valueText = "${playerSettings.vodCacheSizeMb} MB",
+                minValue = PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
+                maxValue = PlayerSettings.MAX_VOD_CACHE_SIZE_MB,
+                step = 50,
+                onValueChange = onSetVodCacheSizeMb
+            )
+        }
+    }
+
+    item {
+        Text(
+            text = "Range: ${PlayerSettings.MIN_VOD_CACHE_SIZE_MB}-${PlayerSettings.MAX_VOD_CACHE_SIZE_MB} MB. Auto mode targets about 10% of free space.",
+            style = MaterialTheme.typography.bodySmall,
+            color = NuvioColors.TextSecondary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
     }
 
     item {

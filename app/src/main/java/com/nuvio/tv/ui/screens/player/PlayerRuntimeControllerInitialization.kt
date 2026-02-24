@@ -79,6 +79,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
             mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
+            mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
+            mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
 
             
             trackSelector = DefaultTrackSelector(context).apply {
@@ -236,6 +238,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         _uiState.update { 
                             it.copy(
                                 isBuffering = isBuffering,
+                                playbackEnded = playbackState == Player.STATE_ENDED,
                                 duration = playerDuration.coerceAtLeast(0L)
                             )
                         }

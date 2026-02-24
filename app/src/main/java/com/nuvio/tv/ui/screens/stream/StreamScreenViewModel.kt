@@ -185,6 +185,7 @@ class StreamScreenViewModel @Inject constructor(
                                 season = season,
                                 episode = episode,
                                 episodeTitle = episodeName,
+                                bingeGroup = null,
                                 rememberedAudioLanguage = cached.rememberedAudioLanguage,
                                 rememberedAudioName = cached.rememberedAudioName
                             )
@@ -381,6 +382,7 @@ class StreamScreenViewModel @Inject constructor(
             season = season,
             episode = episode,
             episodeTitle = episodeName,
+            bingeGroup = stream.behaviorHints?.bingeGroup,
             rememberedAudioLanguage = null,
             rememberedAudioName = null
         )
@@ -423,6 +425,7 @@ data class StreamPlaybackInfo(
     val season: Int?,
     val episode: Int?,
     val episodeTitle: String?,
+    val bingeGroup: String?,
     val rememberedAudioLanguage: String?,
     val rememberedAudioName: String?
 )
