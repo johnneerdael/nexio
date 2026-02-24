@@ -615,6 +615,7 @@ fun ModernHomeContent(
             showNextRowPreview = showNextRowPreview,
             onContinueWatchingClick = onContinueWatchingClick,
             onContinueWatchingOptions = { optionsItem = it },
+            onItemFocus = onItemFocus,
             onCatalogSelectionFocused = { selection ->
                 if (focusedCatalogSelection != selection) {
                     focusedCatalogSelection = selection
@@ -887,6 +888,7 @@ private fun ModernCatalogRowItem(
     expandedCatalogFocusKey: String?,
     trailerPreviewUrls: Map<String, String>,
     onFocused: () -> Unit,
+    onItemFocus: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onMoveToRow: (Int) -> Boolean,
@@ -926,6 +928,7 @@ private fun ModernCatalogRowItem(
         focusRequester = requester,
         onFocused = {
             onFocused()
+            item.metaPreview?.let { onItemFocus(it) }
             onCatalogSelectionFocused(
                 FocusedCatalogSelection(
                     focusKey = focusKey,
@@ -981,6 +984,7 @@ private fun ModernActiveRowContentSection(
     showNextRowPreview: Boolean,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
@@ -1154,6 +1158,7 @@ private fun ModernActiveRowContentSection(
                                 expandedCatalogFocusKey = expandedCatalogFocusKey,
                                 trailerPreviewUrls = trailerPreviewUrls,
                                 onFocused = onFocused,
+                                onItemFocus = onItemFocus,
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onMoveToRow = onMoveToRow,

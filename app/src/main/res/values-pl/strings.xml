@@ -119,13 +119,13 @@
     <!-- PlaybackSettingsSections -->
     <string name="playback_section_general">Ogólne</string>
     <string name="playback_section_general_desc">Podstawowe zachowanie odtwarzacza.</string>
-    <string name="playback_loading_overlay">Nakładka ładowania</string>
+    <string name="playback_loading_overlay">Ekan ładowania</string>
     <string name="playback_loading_overlay_sub">Pokaż ekran ładowania do pojawienia się pierwszej klatki.</string>
-    <string name="playback_pause_overlay">Nakładka pauzy</string>
-    <string name="playback_pause_overlay_sub">Pokaż nakładkę ze szczegółami po 5 sekundach pauzy.</string>
+    <string name="playback_pause_overlay">Ekran pauzy</string>
+    <string name="playback_pause_overlay_sub">Pokaż ekran ze szczegółami po 5 sekundach pauzy.</string>
     <string name="playback_show_clock_sub">Pokaż aktualny czas i czas zakończenia podczas wyświetlania kontrolek.</string>
     <string name="playback_skip_intro">Pomiń intro</string>
-    <string name="playback_skip_intro_sub">Używaj introdb.app do wykrywania intro i recap.</string>
+    <string name="playback_skip_intro_sub">Używaj introdb.app do wykrywania intro i podsumowań.</string>
     <string name="playback_auto_frame_rate">Auto częstotliwość odświeżania</string>
     <string name="playback_section_player">Odtwarzacz i wybór źródła</string>
     <string name="playback_section_player_desc">Preferencje odtwarzacza, auto-play i filtrowanie źródeł.</string>
@@ -220,7 +220,7 @@
     <string name="autoplay_next_episode_sub">Automatycznie rozpocznij następny odcinek gdy pojawi się monit.</string>
     <string name="autoplay_threshold_pct">Procent</string>
     <string name="autoplay_threshold_min">Minut przed końcem</string>
-    <string name="autoplay_threshold_mode">Tryb progu następnego odcinka</string>
+    <string name="autoplay_threshold_mode">Określanie progu następnego odcinka</string>
     <string name="autoplay_threshold_pct_title">Próg procentowy</string>
     <string name="autoplay_threshold_pct_sub">Zapasowy gdy brak znacznika outro.</string>
     <string name="autoplay_threshold_min_title">Próg minutowy</string>
@@ -291,15 +291,15 @@
     <string name="layout_trailer_button_sub">Pokaż przycisk zwiastuna na stronie szczegółów (tylko gdy zwiastun jest dostępny).</string>
     <string name="layout_prefer_external_meta">Preferuj metadane z zewnętrznego dodatku</string>
     <string name="layout_prefer_external_meta_sub">Używaj metadanych z zewnętrznego dodatku zamiast dodatku katalogowego.</string>
-    <string name="layout_section_focused">Skupiony plakat</string>
-    <string name="layout_section_focused_desc">Zaawansowane zachowanie skupionych kart plakatów.</string>
-    <string name="layout_expand_poster">Rozwiń skupiony plakat do tła</string>
-    <string name="layout_expand_poster_sub">Rozwiń skupiony plakat po opóźnieniu bezczynności.</string>
+    <string name="layout_section_focused">Zaznaczony plakat</string>
+    <string name="layout_section_focused_desc">Zaawansowane zachowanie zaznaczonych kart plakatów.</string>
+    <string name="layout_expand_poster">Rozwiń zaznaczony plakat do tła</string>
+    <string name="layout_expand_poster_sub">Rozwiń zaznaczony plakat po opóźnieniu bezczynności.</string>
     <string name="layout_expand_delay">Opóźnienie rozwinięcia tła</string>
-    <string name="layout_expand_delay_sub">Jak długo czekać przed rozwinięciem skupionych kart.</string>
+    <string name="layout_expand_delay_sub">Jak długo czekać przed rozwinięciem zaznaczonych kart.</string>
     <string name="layout_autoplay_trailer">Auto-odtwarzanie zwiastuna</string>
     <string name="layout_autoplay_trailer_expanded">Auto-odtwarzanie zwiastuna w rozszerzonej karcie</string>
-    <string name="layout_autoplay_trailer_sub">Odtwarzaj podgląd zwiastuna dla skupionej treści gdy dostępny.</string>
+    <string name="layout_autoplay_trailer_sub">Odtwarzaj podgląd zwiastuna dla zaznaczonej treści gdy dostępny.</string>
     <string name="layout_autoplay_trailer_expanded_sub">Odtwarzaj zwiastun w rozszerzonym tle gdy dostępny.</string>
     <string name="layout_trailer_muted">Odtwarzaj zwiastun bez dźwięku</string>
     <string name="layout_trailer_muted_sub_preview">Wycisz audio zwiastuna podczas podglądu auto-play.</string>
@@ -560,6 +560,9 @@
     <!-- SearchScreen -->
     <string name="search_keyboard_hint">Naciśnij Gotowe na klawiaturze, aby wyszukać</string>
     <string name="search_placeholder">Szukaj filmów i seriali</string>
+    <string name="search_start_title">Zacznij szukać</string>
+    <string name="search_start_subtitle">Wpisz co najmniej 2 znaki</string>
+    <string name="search_start_subtitle_no_discover">Odkrywanie jest wyłączone. Wpisz co najmniej 2 znaki</string>
 
     <!-- LibraryScreen -->
     <string name="library_syncing">Synchronizowanie biblioteki Trakt\u2026</string>
