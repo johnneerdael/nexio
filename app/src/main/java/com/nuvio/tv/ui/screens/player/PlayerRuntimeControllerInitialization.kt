@@ -9,6 +9,7 @@ import android.util.Log
 import android.view.accessibility.CaptioningManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -18,6 +19,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ForwardingRenderer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -73,6 +75,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
+
+            mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
+            mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
+            mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
 
             
             trackSelector = DefaultTrackSelector(context).apply {
@@ -133,12 +139,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             
             subtitleDelayUs.set(_uiState.value.subtitleDelayMs.toLong() * 1000L)
+            val mapDv7ToHevcEnabled =
+                playerSettings.mapDV7ToHevc || dv7ToHevcForcedStreamUrls.contains(url)
+            isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
+            val codecSelector = createDolbyVisionFallbackCodecSelector(mapDv7ToHevcEnabled)
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
                 subtitleDelayUsProvider = subtitleDelayUs::get
             )
                 .setExtensionRendererMode(playerSettings.decoderPriority)
-                .setMapDV7ToHevc(playerSettings.mapDV7ToHevc)
+                .setEnableDecoderFallback(true)
+                .setMapDV7ToHevc(mapDv7ToHevcEnabled)
+                .setMediaCodecSelector(codecSelector)
 
             _exoPlayer = if (useLibass) {
                 
@@ -302,6 +314,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        if (error.isDolbyVisionDecoderFailure() &&
+                            !isMapDv7ToHevcActiveForCurrentPlayback
+                        ) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "Dolby Vision decoder failure detected, retrying with DV7->HEVC " +
+                                    "fallback host=${Uri.parse(currentStreamUrl).host ?: "unknown"} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            dv7ToHevcForcedStreamUrls.add(currentStreamUrl)
+                            retryCurrentStreamWithDolbyVisionFallback(currentPosition)
+                            return
+                        }
+
                         val timeoutError = error.findCause<SocketTimeoutException>()
                         if (timeoutError != null &&
                             timeoutRecoveryAttempts < PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS
@@ -407,4 +433,39 @@ private inline fun <reified T : Throwable> Throwable.findCause(): T? {
         current = current.cause
     }
     return null
+}
+
+private fun PlaybackException.isDolbyVisionDecoderFailure(): Boolean {
+    if (errorCode != PlaybackException.ERROR_CODE_DECODING_FAILED) return false
+    val details = buildString {
+        append(message ?: "")
+        append(' ')
+        append(cause?.message ?: "")
+        append(' ')
+        append(cause?.cause?.message ?: "")
+    }
+    return details.contains("dolby-vision", ignoreCase = true) &&
+        details.contains("decoder failed", ignoreCase = true)
+}
+
+private fun createDolbyVisionFallbackCodecSelector(
+    forceHdr10Fallback: Boolean
+): MediaCodecSelector {
+    if (!forceHdr10Fallback) return MediaCodecSelector.DEFAULT
+
+    return MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+        if (mimeType == MimeTypes.VIDEO_DOLBY_VISION) {
+            MediaCodecSelector.DEFAULT.getDecoderInfos(
+                MimeTypes.VIDEO_H265,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder
+            )
+        } else {
+            MediaCodecSelector.DEFAULT.getDecoderInfos(
+                mimeType,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder
+            )
+        }
+    }
 }

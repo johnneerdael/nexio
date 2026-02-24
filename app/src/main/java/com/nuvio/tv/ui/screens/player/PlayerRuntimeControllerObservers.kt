@@ -314,3 +314,16 @@ internal fun PlayerRuntimeController.retryCurrentStreamAfterTimeout(fromPosition
         }
     }
 }
+
+internal fun PlayerRuntimeController.retryCurrentStreamWithDolbyVisionFallback(fromPositionMs: Long) {
+    pendingResumeProgress = null
+    _uiState.update {
+        it.copy(
+            pendingSeekPosition = if (fromPositionMs > 0L) fromPositionMs else null,
+            error = null,
+            showLoadingOverlay = it.loadingOverlayEnabled
+        )
+    }
+    releasePlayer()
+    initializePlayer(currentStreamUrl, currentHeaders)
+}
