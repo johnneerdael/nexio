@@ -90,7 +90,8 @@ fun ThemeSettingsContent(
         listOf(
             null to strLanguageSystem,
             "en" to "English",
-            "pl" to "Polski"
+            "pl" to "Polski",
+            "es-419" to "Español (Latinoamérica)"
         )
     }
     var selectedTag by remember {
