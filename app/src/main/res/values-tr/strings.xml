@@ -17,6 +17,9 @@
     <string name="cw_upcoming">Yaklaşanlar</string>
     <string name="cw_next_up">Sıradaki</string>
     <string name="cw_resume">Devam Et</string>
+    <string name="cw_hours_min_left">%1$d sa %2$d dk kaldı</string>
+    <string name="cw_min_left">%1$d dk kaldı</string>
+    <string name="cw_almost_done">Neredeyse bitti</string>
     <string name="cw_airs_date">Yayın tarihi: %1$s</string>
     <string name="cw_action_go_to_details">Detaylara git</string>
     <string name="cw_action_remove">Kaldır</string>
@@ -55,7 +58,15 @@
     <string name="episodes_season_actions">Sezon ayarları</string>
 
     <!-- MetaDetailsScreen -->
+    <string name="detail_btn_play">Oynat</string>
+    <string name="detail_btn_resume">Devam Et</string>
+    <string name="detail_btn_play_episode">Oynat S%1$dB%2$d</string>
+    <string name="detail_btn_resume_episode">Devam Et S%1$dB%2$d</string>
+    <string name="detail_btn_next_episode">Sıradaki S%1$dB%2$d</string>
     <string name="detail_tab_cast">Yaratıcı ve Oyuncular</string>
+    <string name="cast_role_creator">Yapımcı</string>
+    <string name="cast_role_director">Yönetmen</string>
+    <string name="cast_role_writer">Yazar</string>
     <string name="detail_tab_ratings">Değerlendirmeler</string>
     <string name="detail_tab_more_like_this">Benzer İçerikler</string>
     <string name="detail_section_network">Kanal</string>
@@ -105,6 +116,11 @@
     <string name="settings_debug_subtitle">Geliştirici araçları ve özellik bayrakları.</string>
     <string name="settings_plugins_section_subtitle">Depoları, sağlayıcıları ve eklenti durumlarını yönetin.</string>
     <string name="settings_account_section_subtitle">Hesap ve senkronizasyon durumu.</string>
+    <string name="account_stat_addons">eklentiler</string>
+    <string name="account_stat_plugins">pluginler</string>
+    <string name="account_stat_library">kütüphane</string>
+    <string name="account_stat_progress">ilerleme</string>
+    <string name="account_stat_watched">izlenen</string>
     <string name="settings_integrations_section">Entegrasyonlar</string>
     <string name="settings_integrations_section_subtitle">TMDB veya MDBList ayarlarını seçin</string>
     <string name="settings_tmdb_subtitle">Meta veri zenginleştirme kontrolleri</string>
@@ -126,6 +142,7 @@
     <string name="playback_pause_overlay">Duraklatma Ekranı</string>
     <string name="playback_pause_overlay_sub">Duraklatıldığında 5 saniye sonra detaylar ekranını göster.</string>
     <string name="playback_show_clock_sub">Kontroller görünürken mevcut saati ve bitiş saatini göster.</string>
+    <string name="playback_osd_clock">Ekran Saati (OSD)</string>
     <string name="playback_skip_intro">İntroyu Atla</string>
     <string name="playback_skip_intro_sub">İntro ve özetleri algılamak için introdb.app kullan.</string>
     <string name="playback_auto_frame_rate">Otomatik Kare Hızı</string>
@@ -222,7 +239,7 @@
     <string name="autoplay_next_episode_sub">Ekran çıktığında sonraki bölümü otomatik olarak başlat.</string>
     <string name="autoplay_threshold_pct">Yüzde</string>
     <string name="autoplay_threshold_min">Bitişten önceki dakika</string>
-    <string name="autoplay_threshold_mode">Sonraki Bölüm Eşiği Modu</string>
+    <string name="autoplay_threshold_mode">Sonraki Bölüm Eşiği Mantığı</string>
     <string name="autoplay_threshold_pct_title">Eşik Yüzdesi</string>
     <string name="autoplay_threshold_pct_sub">Bitiş zaman damgası olmadığında kullanılacak alternatif oran.</string>
     <string name="autoplay_threshold_min_title">Eşik Dakikası</string>
@@ -293,15 +310,15 @@
     <string name="layout_trailer_button_sub">Ayrıntı sayfasında fragman düğmesi göster (sadece fragman mevcutsa).</string>
     <string name="layout_prefer_external_meta">Harici eklentinin meta verisini tercih et</string>
     <string name="layout_prefer_external_meta_sub">Katalog eklentisi yerine harici (ekstra) eklentiden gelen meta verileri kullanın.</string>
-    <string name="layout_section_focused">Odaklanılan Poster</string>
-    <string name="layout_section_focused_desc">Odaklanılan kartlar için gelişmiş ayarlamalar.</string>
-    <string name="layout_expand_poster">Odaklanılan Posteri Arkaplana Genişlet</string>
-    <string name="layout_expand_poster_sub">Kısa bir bekleme sonrası odaklanılan posteri büyütür.</string>
+    <string name="layout_section_focused">Seçilen Poster</string>
+    <string name="layout_section_focused_desc">Seçilen kartlar için gelişmiş ayarlamalar.</string>
+    <string name="layout_expand_poster">Seçilen Posteri Arkaplana Genişlet</string>
+    <string name="layout_expand_poster_sub">Kısa bir bekleme sonrası seçilen posteri büyütür.</string>
     <string name="layout_expand_delay">Genişletme Gecikmesi</string>
-    <string name="layout_expand_delay_sub">Odaklanılan kartların genişletilmesinden önce ne kadar bekleneceği.</string>
+    <string name="layout_expand_delay_sub">Seçilen kartların genişletilmesinden önce ne kadar bekleneceği.</string>
     <string name="layout_autoplay_trailer">Fragmanı Otomatik Oynat</string>
     <string name="layout_autoplay_trailer_expanded">Genişletilmiş Kartta Fragmanı Otomatik Oynat</string>
-    <string name="layout_autoplay_trailer_sub">Mevcut olduğunda odaklanılan içerik için fragman önizlemesini oynatın.</string>
+    <string name="layout_autoplay_trailer_sub">Mevcut olduğunda seçilen içerik için fragman önizlemesini oynatın.</string>
     <string name="layout_autoplay_trailer_expanded_sub">Mevcut Olduğunda fragmanı genişletilmiş arka plan içinde oynatın.</string>
     <string name="layout_trailer_muted">Fragmanı Sessiz Oynat</string>
     <string name="layout_trailer_muted_sub_preview">Otomatik oynatma önizlemesi sırasında fragman sesini kapat.</string>
@@ -387,6 +404,10 @@
     <string name="trakt_connected_as">%1$s olarak bağlı</string>
     <string name="trakt_account_login">Hesap Girişi</string>
     <string name="trakt_awaiting_instruction">trakt.tv/activate adresine gidin ve bu kodu girin:</string>
+    <string name="trakt_waiting_approval">Onay bekleniyor…</string>
+    <string name="qr_login_approved">Giriş onaylandı. Oturum açılıyor…</string>
+    <string name="qr_login_pending">Telefonunuzdan onay vermeniz bekleniyor…</string>
+    <string name="qr_login_expired">QR kodun süresi doldu. Yeni bir kod oluşturun.</string>
     <string name="trakt_code_expires">Kodun süresi %1$s sonra dolacak</string>
     <string name="trakt_token_refreshes">Trakt erişim jetonu %1$s içinde yenilenir</string>
     <string name="trakt_login_instruction">Trakt cihazı kimlik doğrulamasını başlatmak için Giriş\'e basın. Burada bir QR kodu görünecektir.</string>
@@ -532,6 +553,14 @@
     <string name="episodes_panel_reload">Yeniden Yükle</string>
     <string name="episodes_panel_no_streams">Kaynak bulunamadı</string>
     <string name="episodes_panel_no_episodes">Henüz bölüm yok</string>
+    <string name="episodes_panel_title">Bölümler</string>
+    <string name="episodes_panel_streams_title">Kaynaklar</string>
+    <string name="player_speed_normal">Normal</string>
+    <string name="player_aspect_fit">Sığdır (Orijinal)</string>
+    <string name="player_aspect_stretch">Genişlet</string>
+    <string name="player_aspect_fit_width">Genişliğe Sığdır</string>
+    <string name="player_aspect_fit_height">Yüksekliğe Sığdır</string>
+    <string name="player_aspect_crop">Kırp</string>
 
     <!-- AudioDialog -->
     <string name="audio_dialog_title">Ses</string>
@@ -544,6 +573,21 @@
     <string name="subtitle_text_color">Metin Rengi</string>
     <string name="subtitle_outline_color">Dış Çizgi Rengi</string>
     <string name="subtitle_reset_defaults">Varsayılanlara Sıfırla</string>
+    <string name="subtitle_tab_builtin">Gömülü</string>
+    <string name="subtitle_tab_addons">Eklentiler</string>
+    <string name="subtitle_tab_languages">Diller</string>
+    <string name="subtitle_tab_style">Stil</string>
+    <string name="subtitle_tab_delay">Gecikme</string>
+    <string name="subtitle_none">Hiçbiri</string>
+    <string name="subtitle_all">Tümü</string>
+    <string name="subtitle_section_core">Temel</string>
+    <string name="subtitle_section_advanced">Gelişmiş</string>
+    <string name="subtitle_font_size">Yazı Tipi Boyutu</string>
+    <string name="subtitle_bold">Kalın</string>
+    <string name="subtitle_outline">Dış Çizgi</string>
+    <string name="subtitle_bottom_offset">Alt Konum</string>
+    <string name="subtitle_on">Açık</string>
+    <string name="subtitle_off">Kapalı</string>
     <string name="subtitle_style_title">Altyazı Stili</string>
     <string name="subtitle_style_color">Renk</string>
     <string name="subtitle_style_reset">Sıfırla</string>
@@ -560,6 +604,9 @@
     <!-- SearchScreen -->
     <string name="search_keyboard_hint">Aramak için klavyede Bitti\'ye basın</string>
     <string name="search_placeholder">Film ve dizi ara</string>
+    <string name="search_start_title">Aramaya Başlayın</string>
+    <string name="search_start_subtitle">En az 2 karakter girin</string>
+    <string name="search_start_subtitle_no_discover">Keşfet kapalı. En az 2 karakter girin</string>
 
     <!-- LibraryScreen -->
     <string name="library_syncing">Trakt kütüphanesi senkronize ediliyor\u2026</string>
