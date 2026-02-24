@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import com.nuvio.tv.data.local.PlayerSettings
+import com.nuvio.tv.data.local.VodCacheSizeMode
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -35,6 +36,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
     var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
+    var vodCacheSizeMode: VodCacheSizeMode = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
+    var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
 
     fun createMediaSource(
         url: String,
@@ -79,9 +82,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             okHttpFactory
         }
         val useVodCache = ENABLE_VOD_CACHE && !isHls && !isDash && shouldUseVodCache(url)
+        val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         val progressiveFactory = if (useVodCache && !isVodCacheDisabled) {
-            startVodCacheInitialization(context)
-            val cache = sharedSimpleCache
+            startVodCacheInitialization(context, vodCacheMaxBytes)
+            val cache = getReadySimpleCache(vodCacheMaxBytes)
             if (cache != null) {
                 runCatching {
                     Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
@@ -162,7 +166,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
     fun warmupVodCacheAsync() {
         if (!ENABLE_VOD_CACHE || isVodCacheDisabled) return
-        startVodCacheInitialization(context)
+        startVodCacheInitialization(context, resolveVodCacheMaxBytes(context))
     }
 
     private fun buildVodCacheDataSourceFactory(
@@ -184,12 +188,26 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         return scheme == "https" || scheme == "http"
     }
 
+    private fun resolveVodCacheMaxBytes(context: Context): Long {
+        val manualBytes = vodCacheSizeMb
+            .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB)
+            .toLong() * 1024L * 1024L
+        if (vodCacheSizeMode == VodCacheSizeMode.MANUAL) return manualBytes
+
+        val freeSpaceBytes = context.cacheDir.usableSpace
+        if (freeSpaceBytes <= 0L) return manualBytes
+        val autoBytes = freeSpaceBytes / 10L
+        val minBytes = PlayerSettings.MIN_VOD_CACHE_SIZE_MB.toLong() * 1024L * 1024L
+        val maxBytes = PlayerSettings.MAX_VOD_CACHE_SIZE_MB.toLong() * 1024L * 1024L
+        return autoBytes.coerceIn(minBytes, maxBytes)
+    }
+
     companion object {
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_DIR = "player_vod_cache"
-        private const val VOD_CACHE_MAX_BYTES = 500L * 1024L * 1024L
         @Volatile private var sharedSimpleCache: SimpleCache? = null
+        @Volatile private var configuredVodCacheMaxBytes: Long = -1L
         @Volatile private var isVodCacheDisabled: Boolean = false
         @Volatile private var hasLoggedVodCacheNotReady: Boolean = false
         private val cacheInitStarted = AtomicBoolean(false)
@@ -214,28 +232,52 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
         }
 
-        private fun getOrCreateSimpleCache(context: Context): SimpleCache {
-            sharedSimpleCache?.let { return it }
+        private fun getReadySimpleCache(expectedMaxBytes: Long): SimpleCache? {
+            val cache = sharedSimpleCache ?: return null
+            return if (configuredVodCacheMaxBytes == expectedMaxBytes) cache else null
+        }
+
+        private fun getOrCreateSimpleCache(context: Context, maxBytes: Long): SimpleCache {
+            sharedSimpleCache?.let {
+                if (configuredVodCacheMaxBytes == maxBytes) {
+                    return it
+                }
+            }
             synchronized(this) {
-                sharedSimpleCache?.let { return it }
+                sharedSimpleCache?.let { existing ->
+                    if (configuredVodCacheMaxBytes == maxBytes) {
+                        return existing
+                    }
+                    runCatching { existing.release() }
+                        .onFailure { error ->
+                            Log.w(TAG, "Failed to release previous VOD cache instance", error)
+                        }
+                    sharedSimpleCache = null
+                }
                 val cacheDir = File(context.cacheDir, VOD_CACHE_DIR).apply { mkdirs() }
                 return SimpleCache(
                     cacheDir,
-                    LeastRecentlyUsedCacheEvictor(VOD_CACHE_MAX_BYTES)
-                ).also { sharedSimpleCache = it }
+                    LeastRecentlyUsedCacheEvictor(maxBytes)
+                ).also {
+                    configuredVodCacheMaxBytes = maxBytes
+                    sharedSimpleCache = it
+                }
             }
         }
 
-        private fun startVodCacheInitialization(context: Context) {
-            if (sharedSimpleCache != null || isVodCacheDisabled) return
+        private fun startVodCacheInitialization(context: Context, maxBytes: Long) {
+            if (isVodCacheDisabled) return
+            if (getReadySimpleCache(maxBytes) != null) return
             if (!cacheInitStarted.compareAndSet(false, true)) return
             cacheInitExecutor.execute {
                 runCatching {
-                    getOrCreateSimpleCache(context)
-                    Log.i(TAG, "VOD cache initialized successfully")
+                    getOrCreateSimpleCache(context, maxBytes)
+                    Log.i(TAG, "VOD cache initialized successfully with cap=${maxBytes / 1024L / 1024L}MB")
                 }.onFailure { error ->
                     isVodCacheDisabled = true
                     Log.e(TAG, "Disabling VOD cache after initialization failure", error)
+                }.also {
+                    cacheInitStarted.set(false)
                 }
             }
         }

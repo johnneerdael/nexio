@@ -14,6 +14,7 @@ import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
+import com.nuvio.tv.data.local.VodCacheSizeMode
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -90,6 +91,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setPauseOverlayEnabled(enabled: Boolean) {
         playerSettingsDataStore.setPauseOverlayEnabled(enabled)
+    }
+
+    suspend fun setOsdClockEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setOsdClockEnabled(enabled)
     }
 
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
@@ -314,6 +319,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
     }
 
+    suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
+    }
+
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
         playerSettingsDataStore.setNextEpisodeThresholdMode(mode)
     }
@@ -332,5 +341,13 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamReuseLastLinkCacheHours(hours: Int) {
         playerSettingsDataStore.setStreamReuseLastLinkCacheHours(hours)
+    }
+
+    suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
+        playerSettingsDataStore.setVodCacheSizeMode(mode)
+    }
+
+    suspend fun setVodCacheSizeMb(mb: Int) {
+        playerSettingsDataStore.setVodCacheSizeMb(mb)
     }
 }

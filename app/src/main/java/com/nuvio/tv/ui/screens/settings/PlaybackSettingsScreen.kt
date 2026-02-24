@@ -221,6 +221,11 @@ fun PlaybackSettingsContent(
                 onSetStreamAutoPlayNextEpisodeEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStreamAutoPlayNextEpisodeEnabled(enabled) }
                 },
+                onSetStreamAutoPlayPreferBingeGroupForNextEpisode = { enabled ->
+                    coroutineScope.launch {
+                        viewModel.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
+                    }
+                },
                 onSetNextEpisodeThresholdPercent = { percent ->
                     coroutineScope.launch { viewModel.setNextEpisodeThresholdPercent(percent) }
                 },
@@ -230,6 +235,7 @@ fun PlaybackSettingsContent(
                 onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
                 onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
+                onSetOsdClockEnabled = { enabled -> coroutineScope.launch { viewModel.setOsdClockEnabled(enabled) } },
                 onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
                 onSetFrameRateMatchingMode = { mode -> coroutineScope.launch { viewModel.setFrameRateMatchingMode(mode) } },
                 onSetTrailerEnabled = { enabled -> coroutineScope.launch { viewModel.setTrailerEnabled(enabled) } },
@@ -273,6 +279,12 @@ fun PlaybackSettingsContent(
                 },
                 onSetBufferBackBufferDurationMs = { ms ->
                     coroutineScope.launch { viewModel.setBufferBackBufferDurationMs(ms) }
+                },
+                onSetVodCacheSizeMode = { mode ->
+                    coroutineScope.launch { viewModel.setVodCacheSizeMode(mode) }
+                },
+                onSetVodCacheSizeMb = { mb ->
+                    coroutineScope.launch { viewModel.setVodCacheSizeMb(mb) }
                 },
                 onResetBufferSettingsToDefaults = {
                     coroutineScope.launch { viewModel.resetBufferSettingsToDefaults() }

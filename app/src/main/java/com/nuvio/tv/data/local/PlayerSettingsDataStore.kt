@@ -136,6 +136,7 @@ data class PlayerSettings(
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
     val loadingOverlayEnabled: Boolean = true,
     val pauseOverlayEnabled: Boolean = true,
+    val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
     // Force Dolby Vision streams to HEVC/HDR10 fallback (uses Media3 codec remap path)
     val mapDV7ToHevc: Boolean = false,
@@ -148,6 +149,7 @@ data class PlayerSettings(
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
+    val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = false,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 98f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
@@ -155,11 +157,17 @@ data class PlayerSettings(
     val streamReuseLastLinkCacheHours: Int = 24,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
     // Networking
+    val vodCacheSizeMode: VodCacheSizeMode = DEFAULT_VOD_CACHE_SIZE_MODE,
+    val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
     val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
     val parallelChunkSizeMb: Int = DEFAULT_PARALLEL_CHUNK_SIZE_MB
 ) {
     companion object {
+        const val DEFAULT_VOD_CACHE_SIZE_MB = 500
+        const val MIN_VOD_CACHE_SIZE_MB = 100
+        const val MAX_VOD_CACHE_SIZE_MB = 8_192
+        val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.AUTO
         const val DEFAULT_USE_PARALLEL_CONNECTIONS = false
         const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
         const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
@@ -180,6 +188,11 @@ enum class StreamAutoPlaySource {
     ALL_SOURCES,
     INSTALLED_ADDONS_ONLY,
     ENABLED_PLUGINS_ONLY
+}
+
+enum class VodCacheSizeMode {
+    AUTO,
+    MANUAL
 }
 
 enum class FrameRateMatchingMode {
@@ -245,6 +258,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val loadingOverlayEnabledKey = booleanPreferencesKey("loading_overlay_enabled")
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
+    private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
@@ -255,6 +269,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
+    private val streamAutoPlayPreferBingeGroupForNextEpisodeKey =
+        booleanPreferencesKey("stream_auto_play_prefer_bingegroup_next_episode")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
     private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
     private val nextEpisodeThresholdMinutesBeforeEndLegacyKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
@@ -263,6 +279,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
+    private val vodCacheSizeModeKey = stringPreferencesKey("vod_cache_size_mode")
+    private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
     private val parallelConnectionCountKey = intPreferencesKey("parallel_connection_count")
     private val parallelChunkSizeMbKey = intPreferencesKey("parallel_chunk_size_mb")
@@ -313,6 +331,24 @@ class PlayerSettingsDataStore @Inject constructor(
                 val max = prefs[maxBufferMsKey]
                 if (min != null && max != null && max < min) {
                     prefs[maxBufferMsKey] = min
+                }
+
+                prefs[vodCacheSizeMbKey]?.let { current ->
+                    val normalized = current.coerceIn(
+                        PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
+                        PlayerSettings.MAX_VOD_CACHE_SIZE_MB
+                    )
+                    if (normalized != current) {
+                        prefs[vodCacheSizeMbKey] = normalized
+                    }
+                }
+                prefs[vodCacheSizeModeKey]?.let { raw ->
+                    val normalized = runCatching { VodCacheSizeMode.valueOf(raw) }
+                        .getOrDefault(PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE)
+                        .name
+                    if (normalized != raw) {
+                        prefs[vodCacheSizeModeKey] = normalized
+                    }
                 }
 
                 val preferredAudioLanguage = prefs[preferredAudioLanguageKey]
@@ -366,6 +402,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
                 pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
+                osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
                 mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
                 frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
@@ -385,6 +422,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
                 streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
+                streamAutoPlayPreferBingeGroupForNextEpisode =
+                    prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: false,
                 nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
                 } ?: NextEpisodeThresholdMode.PERCENTAGE,
@@ -405,6 +444,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
+                vodCacheSizeMode = prefs[vodCacheSizeModeKey]?.let {
+                    runCatching { VodCacheSizeMode.valueOf(it) }
+                        .getOrDefault(PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE)
+                } ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE,
+                vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
+                    .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
                 useParallelConnections = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
                 parallelConnectionCount = (prefs[parallelConnectionCountKey]
                     ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceIn(
@@ -522,6 +567,12 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setOsdClockEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[osdClockEnabledKey] = enabled
+        }
+    }
+
     suspend fun setFrameRateMatchingMode(mode: FrameRateMatchingMode) {
         store().edit { prefs ->
             prefs[frameRateMatchingModeKey] = mode.name
@@ -568,6 +619,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[streamAutoPlayNextEpisodeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] = enabled
         }
     }
 
@@ -798,9 +855,26 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun resetNetworkSettingsToDefaults() {
         store().edit { prefs ->
+            prefs[vodCacheSizeModeKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE.name
+            prefs[vodCacheSizeMbKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
             prefs[useParallelConnectionsKey] = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
             prefs[parallelConnectionCountKey] = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
             prefs[parallelChunkSizeMbKey] = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
+        }
+    }
+
+    suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
+        store().edit { prefs ->
+            prefs[vodCacheSizeModeKey] = mode.name
+        }
+    }
+
+    suspend fun setVodCacheSizeMb(mb: Int) {
+        store().edit { prefs ->
+            prefs[vodCacheSizeMbKey] = mb.coerceIn(
+                PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
+                PlayerSettings.MAX_VOD_CACHE_SIZE_MB
+            )
         }
     }
 
