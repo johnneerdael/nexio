@@ -204,8 +204,8 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.Tune,
-            title = "DV7 → HEVC Fallback",
-            subtitle = "Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support",
+            title = "Force HDR10 Fallback",
+            subtitle = "Force Dolby Vision streams to HEVC/HDR10 to bypass unstable DV decoders (may affect Profile 5 colors)",
             isChecked = playerSettings.mapDV7ToHevc,
             onCheckedChange = onSetMapDV7ToHevc,
             onFocused = onItemFocused,

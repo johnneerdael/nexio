@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import com.nuvio.tv.data.local.PlayerSettings
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -31,6 +32,9 @@ import java.util.concurrent.Executors
 internal class PlayerMediaSourceFactory(private val context: Context) {
     private var okHttpClient: OkHttpClient? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
+    var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
+    var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
+    var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
 
     fun createMediaSource(
         url: String,
@@ -65,6 +69,15 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         val mediaItem = mediaItemBuilder.build()
+        val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
+            ParallelRangeDataSource.Factory(
+                okHttpFactory,
+                parallelConnectionCount,
+                parallelChunkSizeMb.toLong() * 1024L * 1024L
+            )
+        } else {
+            okHttpFactory
+        }
         val useVodCache = ENABLE_VOD_CACHE && !isHls && !isDash && shouldUseVodCache(url)
         val progressiveFactory = if (useVodCache && !isVodCacheDisabled) {
             startVodCacheInitialization(context)
@@ -72,21 +85,26 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             if (cache != null) {
                 runCatching {
                     Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
-                    buildVodCacheDataSourceFactory(okHttpFactory, cache)
+                    buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
                 }.getOrElse { error ->
                     isVodCacheDisabled = true
                     Log.e(TAG, "Disabling VOD cache after datasource failure", error)
-                    okHttpFactory
+                    progressiveUpstreamFactory
                 }
             } else {
                 if (!hasLoggedVodCacheNotReady) {
                     hasLoggedVodCacheNotReady = true
                     Log.d(TAG, "VOD cache not ready yet, falling back to network datasource")
                 }
-                okHttpFactory
+                progressiveUpstreamFactory
             }
         } else {
-            okHttpFactory
+            progressiveUpstreamFactory
+        }
+        val defaultProgressiveFactory = DefaultMediaSourceFactory(progressiveFactory)
+            .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+        if (subtitleConfigurations.isNotEmpty()) {
+            return defaultProgressiveFactory.createMediaSource(mediaItem)
         }
         return when {
             isHls -> HlsMediaSource.Factory(okHttpFactory)
@@ -96,9 +114,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             isDash -> DashMediaSource.Factory(okHttpFactory)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
-            else -> DefaultMediaSourceFactory(progressiveFactory)
-                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
-                .createMediaSource(mediaItem)
+            else -> defaultProgressiveFactory.createMediaSource(mediaItem)
         }
     }
 
@@ -127,6 +143,19 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
+            .addInterceptor { chain ->
+                var request = chain.request()
+                val url = request.url
+                if (url.username.isNotEmpty() && url.password.isNotEmpty() &&
+                    request.header("Authorization") == null
+                ) {
+                    val credential = okhttp3.Credentials.basic(url.username, url.password)
+                    request = request.newBuilder()
+                        .header("Authorization", credential)
+                        .build()
+                }
+                chain.proceed(request)
+            }
             .build()
             .also { okHttpClient = it }
     }
@@ -159,7 +188,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_DIR = "player_vod_cache"
-        private const val VOD_CACHE_MAX_BYTES = 2L * 1024L * 1024L * 1024L
+        private const val VOD_CACHE_MAX_BYTES = 500L * 1024L * 1024L
         @Volatile private var sharedSimpleCache: SimpleCache? = null
         @Volatile private var isVodCacheDisabled: Boolean = false
         @Volatile private var hasLoggedVodCacheNotReady: Boolean = false
