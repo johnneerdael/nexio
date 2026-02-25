@@ -21,11 +21,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +57,7 @@ internal fun StreamItem(
     stream: Stream,
     focusRequester: FocusRequester,
     requestInitialFocus: Boolean,
+    isCurrentStream: Boolean = false,
     onClick: () -> Unit
 ) {
     Card(
@@ -64,6 +70,19 @@ internal fun StreamItem(
             focusedContainerColor = NuvioColors.BackgroundElevated
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        border = CardDefaults.border(
+            border = Border(
+                border = BorderStroke(
+                    1.dp,
+                    if (isCurrentStream) NuvioColors.Primary.copy(alpha = 0.65f) else Color.Transparent
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
         scale = CardDefaults.scale(focusedScale = 1.04f)
     ) {
         Row(
@@ -77,11 +96,31 @@ internal fun StreamItem(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = stream.getDisplayName(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stream.getDisplayName(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioColors.TextPrimary
+                    )
+
+                    if (isCurrentStream) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(NuvioColors.Primary.copy(alpha = 0.2f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.sources_playing),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NuvioColors.Primary
+                            )
+                        }
+                    }
+                }
 
                 stream.getDisplayDescription()?.let { description ->
                     if (description != stream.getDisplayName()) {
@@ -194,10 +233,12 @@ internal fun AddonChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+
     FilterChip(
         selected = isSelected,
         onClick = onClick,
-        modifier = Modifier,
+        modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
         colors = FilterChipDefaults.colors(
             containerColor = NuvioColors.BackgroundCard,
             focusedContainerColor = NuvioColors.Secondary,
@@ -228,9 +269,14 @@ internal fun AddonChip(
         ),
         shape = FilterChipDefaults.shape(shape = RoundedCornerShape(20.dp))
     ) {
+        val textColor = when {
+            isFocused || isSelected -> NuvioColors.OnSecondary
+            else -> NuvioColors.TextSecondary
+        }
         Text(
             text = name,
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelLarge,
+            color = textColor
         )
     }
 }

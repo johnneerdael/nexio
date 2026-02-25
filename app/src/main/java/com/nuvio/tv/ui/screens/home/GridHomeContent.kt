@@ -1,10 +1,8 @@
 package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
+import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.GridContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
@@ -55,7 +54,7 @@ import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun GridHomeContent(
     uiState: HomeUiState,
@@ -64,6 +63,8 @@ fun GridHomeContent(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
+    onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
     onItemFocus: (com.nuvio.tv.domain.model.MetaPreview) -> Unit = {},
     onSaveGridFocusState: (Int, Int) -> Unit
@@ -175,7 +176,6 @@ fun GridHomeContent(
                         ) {
                             HeroCarousel(
                                 items = gridItem.items,
-                                modifier = Modifier.animateItemPlacement(animationSpec = tween(260)),
                                 focusRequester = if (shouldRequestInitialFocus) heroFocusRequester else null,
                                 onItemClick = { item ->
                                     onNavigateToDetail(
@@ -199,7 +199,6 @@ fun GridHomeContent(
                             ) {
                                 GridContinueWatchingSection(
                                     items = continueWatchingItems,
-                                    modifier = Modifier.animateItemPlacement(animationSpec = tween(260)),
                                     focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                                     onItemClick = { item ->
                                         onContinueWatchingClick(item)
@@ -243,8 +242,7 @@ fun GridHomeContent(
                             contentType = "divider"
                         ) {
                             SectionDivider(
-                                catalogName = gridItem.catalogName,
-                                modifier = Modifier.animateItemPlacement(animationSpec = tween(260))
+                                catalogName = gridItem.catalogName
                             )
                         }
                     }
@@ -273,8 +271,8 @@ fun GridHomeContent(
                                 item = gridItem.item,
                                 focusRequester = focusRequester,
                                 posterCardStyle = posterCardStyle,
-                                modifier = Modifier.animateItemPlacement(animationSpec = tween(220)),
                                 showLabel = uiState.posterLabelsEnabled,
+                                isWatched = isCatalogItemWatched(gridItem.item),
                                 onFocused = { onItemFocus(gridItem.item) },
                                 onClick = {
                                     onNavigateToDetail(
@@ -282,6 +280,9 @@ fun GridHomeContent(
                                         gridItem.item.apiType,
                                         gridItem.addonBaseUrl
                                     )
+                                },
+                                onLongPress = {
+                                    onCatalogItemLongPress(gridItem.item, gridItem.addonBaseUrl)
                                 }
                             )
                         }
@@ -307,7 +308,6 @@ fun GridHomeContent(
                             SeeAllGridCard(
                                 posterCardStyle = posterCardStyle,
                                 focusRequester = focusRequester,
-                                modifier = Modifier.animateItemPlacement(animationSpec = tween(220)),
                                 onClick = {
                                     onNavigateToCatalogSeeAll(
                                         gridItem.catalogId,
@@ -329,7 +329,6 @@ fun GridHomeContent(
                 ) {
                     GridContinueWatchingSection(
                         items = continueWatchingItems,
-                        modifier = Modifier.animateItemPlacement(animationSpec = tween(260)),
                         focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                         onItemClick = { item ->
                             onContinueWatchingClick(item)

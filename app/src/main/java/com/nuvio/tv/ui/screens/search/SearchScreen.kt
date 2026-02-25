@@ -460,7 +460,6 @@ fun SearchScreen(
                                         focusResults = false
                                     }
                                 },
-                                upFocusRequester = if (index == 0 && isSearchFieldAttached) topInputFocusRequester else null,
                                 onItemClick = { id, type, addonBaseUrl ->
                                     onNavigateToDetail(id, type, addonBaseUrl)
                                 },

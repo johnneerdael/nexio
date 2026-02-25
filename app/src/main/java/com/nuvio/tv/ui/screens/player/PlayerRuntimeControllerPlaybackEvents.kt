@@ -207,7 +207,7 @@ internal fun PlayerRuntimeController.emitPauseScrobbleStop(progressPercent: Floa
     if (!hasSentScrobbleStartForCurrentItem) return
 
     scope.launch {
-        traktScrobbleService.scrobblePause(
+        traktScrobbleService.scrobbleStop(
             item = item,
             progressPercent = progressPercent
         )
