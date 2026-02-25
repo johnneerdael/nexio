@@ -77,11 +77,11 @@
     <string name="action_saving">Salvataggio…</string>
 
     <!-- AppLanguage -->
-    <string name="appearance_language">Lingua dell'app</string>
+    <string name="appearance_language">Lingua dell\'app</string>
     <string name="appearance_language_subtitle">Sostituisci la lingua di sistema</string>
     <string name="appearance_language_system">Predefinita di sistema</string>
     <string name="appearance_language_dialog_title">Scegli lingua</string>
-    <string name="appearance_language_restart_hint">Riavvia l'app per applicare il cambio di lingua.</string>
+    <string name="appearance_language_restart_hint">Riavvia l\'app per applicare il cambio di lingua.</string>
 
     <!-- ThemeSettingsScreen -->
     <string name="appearance_title">Aspetto</string>
@@ -90,17 +90,17 @@
 
     <!-- AboutScreen -->
     <string name="about_title">Informazioni</string>
-    <string name="about_subtitle">Informazioni sull'app, aggiornamenti e link legali</string>
+    <string name="about_subtitle">Informazioni sull\'app, aggiornamenti e link legali</string>
     <string name="about_made_with_love">Fatto con ❤️ da Tapframe e amici</string>
     <string name="about_version">Versione %1$s</string>
     <string name="about_check_updates">Controlla aggiornamenti</string>
-    <string name="about_check_updates_subtitle">Scarica l'ultima versione</string>
+    <string name="about_check_updates_subtitle">Scarica l\'ultima versione</string>
     <string name="about_privacy_policy">Informativa sulla privacy</string>
     <string name="about_privacy_policy_subtitle">Visualizza la nostra informativa sulla privacy</string>
 
     <!-- SettingsScreen categories -->
     <string name="settings_account">Account</string>
-    <string name="settings_account_subtitle">Stato dell'account e della sincronizzazione.</string>
+    <string name="settings_account_subtitle">Stato dell\'account e della sincronizzazione.</string>
     <string name="settings_profiles">Profili</string>
     <string name="settings_profiles_subtitle">Gestisci i profili utente.</string>
     <string name="settings_layout">Layout</string>
@@ -115,7 +115,7 @@
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_subtitle">Strumenti per sviluppatori e feature flags.</string>
     <string name="settings_plugins_section_subtitle">Gestisci repository, provider e stato dei plugin.</string>
-    <string name="settings_account_section_subtitle">Stato dell'account e della sincronizzazione.</string>
+    <string name="settings_account_section_subtitle">Stato dell\'account e della sincronizzazione.</string>
     <string name="account_stat_addons">addon</string>
     <string name="account_stat_plugins">plugin</string>
     <string name="account_stat_library">libreria</string>
@@ -123,7 +123,7 @@
     <string name="account_stat_watched">guardato</string>
     <string name="settings_integrations_section">Integrazioni</string>
     <string name="settings_integrations_section_subtitle">Scegli le impostazioni TMDB o MDBList</string>
-    <string name="settings_tmdb_subtitle">Controlli per l'arricchimento dei metadati</string>
+    <string name="settings_tmdb_subtitle">Controlli per l\'arricchimento dei metadati</string>
     <string name="settings_mdblist_subtitle">Provider esterni per le valutazioni</string>
 
     <!-- PlaybackSettingsScreen -->
@@ -228,9 +228,9 @@
     <string name="sub_org_by_addon_desc">Raggruppa i sottotitoli per sorgente addon.</string>
 
     <!-- PlaybackAutoPlaySettings -->
-   <string name="autoplay_reuse_last_link">Riutilizza l'ultimo link</string>
-    <string name="autoplay_reuse_last_link_sub">Riproduce automaticamente l'ultimo stream funzionante per questo film/episodio quando la cache è ancora valida</string>
-    <string name="autoplay_last_link_cache">Durata della cache dell'ultimo link</string>
+   <string name="autoplay_reuse_last_link">Riutilizza l\'ultimo link</string>
+    <string name="autoplay_reuse_last_link_sub">Riproduce automaticamente l\'ultimo stream funzionante per questo film/episodio quando la cache è ancora valida</string>
+    <string name="autoplay_last_link_cache">Durata della cache dell\'ultimo link</string>
     <string name="autoplay_mode_manual">Manuale (scegli stream)</string>
     <string name="autoplay_mode_first">Riproduci automaticamente la prima sorgente</string>
     <string name="autoplay_mode_regex">Riproduzione automatica tramite regex</string>
@@ -262,7 +262,7 @@
     <string name="autoplay_scope_addons_desc">La riproduzione automatica considera solo gli stream provenienti dai tuoi addon installati.</string>
     <string name="autoplay_scope_plugins_desc">La riproduzione automatica considera solo gli stream provenienti dai plugin abilitati.</string>
     <string name="autoplay_threshold_pct_desc">Mostra in base alla percentuale di riproduzione quando non è disponibile un timestamp di fine.</string>
-    <string name="autoplay_threshold_min_desc">Mostra questi minuti prima della fine dell'episodio quando non è disponibile un timestamp di fine.</string>
+    <string name="autoplay_threshold_min_desc">Mostra questi minuti prima della fine dell\'episodio quando non è disponibile un timestamp di fine.</string>
     <string name="autoplay_regex_matches">Verifica corrispondenze con nome/titolo/descrizione/addon/url dello stream. Esempio: 4K|2160p|Remux</string>
     <string name="autoplay_regex_presets">Preset</string>
     <string name="autoplay_invalid_regex">Pattern regex non valido</string>
@@ -281,7 +281,7 @@
     <string name="layout_landscape_posters">Locandine Orizzontali</string>
     <string name="layout_landscape_posters_sub">Passa tra schede verticali e orizzontali per la vista Moderna.</string>
     <string name="layout_preview_row">Mostra riga di anteprima</string>
-    <string name="layout_preview_row_sub">Mostra un'anteprima parziale della riga sottostante nel layout Home Moderno.</string>
+    <string name="layout_preview_row_sub">Mostra un\'anteprima parziale della riga sottostante nel layout Home Moderno.</string>
     <string name="layout_hero_catalogs">Cataloghi Hero</string>
     <string name="layout_hero_catalogs_sub">Seleziona uno o più cataloghi per i contenuti hero.</string>
     <string name="layout_section_content">Contenuto Home</string>
@@ -291,7 +291,7 @@
     <string name="layout_modern_sidebar">Barra laterale Moderna</string>
     <string name="layout_modern_sidebar_sub">Abilita la navigazione con barra laterale fluttuante.</string>
     <string name="layout_modern_sidebar_blur">Sfocatura barra laterale Moderna</string>
-    <string name="layout_modern_sidebar_blur_sub">Attiva/disattiva l'effetto sfocatura per le superfici della barra laterale moderna.</string>
+    <string name="layout_modern_sidebar_blur_sub">Attiva/disattiva l\'effetto sfocatura per le superfici della barra laterale moderna.</string>
     <string name="layout_show_hero">Mostra sezione Hero</string>
     <string name="layout_show_hero_sub">Visualizza il carosello hero nella parte superiore della home.</string>
     <string name="layout_show_discover">Mostra Scopri nella ricerca</string>
@@ -318,17 +318,17 @@
     <string name="layout_expand_delay_sub">Quanto tempo attendere prima di espandere le schede a fuoco.</string>
     <string name="layout_autoplay_trailer">Riproduzione automatica trailer</string>
     <string name="layout_autoplay_trailer_expanded">Riproduci trailer in scheda espansa</string>
-    <string name="layout_autoplay_trailer_sub">Riproduci l'anteprima del trailer per il contenuto a fuoco quando disponibile.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Riproduci il trailer all'interno dello sfondo espanso quando disponibile.</string>
+    <string name="layout_autoplay_trailer_sub">Riproduci l\'anteprima del trailer per il contenuto a fuoco quando disponibile.</string>
+    <string name="layout_autoplay_trailer_expanded_sub">Riproduci il trailer all\'interno dello sfondo espanso quando disponibile.</string>
     <string name="layout_trailer_muted">Riproduci trailer senza audio</string>
-    <string name="layout_trailer_muted_sub_preview">Disattiva l'audio del trailer durante l'anteprima automatica.</string>
-    <string name="layout_trailer_muted_sub_expanded">Disattiva l'audio del trailer nelle schede espanse.</string>
+    <string name="layout_trailer_muted_sub_preview">Disattiva l\'audio del trailer durante l\'anteprima automatica.</string>
+    <string name="layout_trailer_muted_sub_expanded">Disattiva l\'audio del trailer nelle schede espanse.</string>
     <string name="layout_section_card_style">Stile scheda locandina</string>
     <string name="layout_section_card_style_desc">Regola la larghezza della scheda e il raggio degli angoli.</string>
     <string name="layout_open">Aperto</string>
     <string name="layout_closed">Chiuso</string>
     <string name="layout_trailer_location">Posizione riproduzione trailer stile Modern</string>
-    <string name="layout_trailer_location_sub">Scegli dove viene riprodotta l'anteprima del trailer nella Home Modern.</string>
+    <string name="layout_trailer_location_sub">Scegli dove viene riprodotta l\'anteprima del trailer nella Home Modern.</string>
     <string name="layout_trailer_expanded_card">Scheda Espansa</string>
     <string name="layout_trailer_hero_media">Media Hero</string>
     <string name="layout_preset_compact">Compatto</string>
@@ -401,7 +401,7 @@
     <string name="tmdb_language_dialog_title">Lingua TMDB</string>
 
     <!-- TraktScreen -->
-    <string name="trakt_description">Sincronizza la tua watchlist, l'avanzamento della visione, il "continua a guardare", gli scrobble e le liste personali con Trakt.</string>
+    <string name="trakt_description">Sincronizza la tua watchlist, l\'avanzamento della visione, il "continua a guardare", gli scrobble e le liste personali con Trakt.</string>
     <string name="trakt_connected_as">Connesso come %1$s</string>
     <string name="trakt_account_login">Accesso Account</string>
     <string name="trakt_awaiting_instruction">Vai su trakt.tv/activate e inserisci questo codice:</string>
@@ -411,7 +411,7 @@
     <string name="qr_login_expired">Login Scaduto. Genera un nuovo QR Code.</string>
     <string name="trakt_code_expires">Il codice scade in %1$s</string>
     <string name="trakt_token_refreshes">Il token di accesso Trakt si rinnoverà tra %1$s</string>
-    <string name="trakt_login_instruction">Premi Accedi per avviare l'autenticazione del dispositivo Trakt. Un codice QR apparirà qui.</string>
+    <string name="trakt_login_instruction">Premi Accedi per avviare l\'autenticazione del dispositivo Trakt. Un codice QR apparirà qui.</string>
     <string name="trakt_missing_credentials">TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET mancanti in local.properties.</string>
     <string name="trakt_continue_watching_window">Finestra Continua a guardare</string>
     <string name="trakt_continue_watching_subtitle">Cronologia Trakt considerata per il \"continua a guardare\"</string>
@@ -433,7 +433,7 @@
     <string name="trakt_cw_window_title">Finestra Continua a guardare</string>
     <string name="trakt_cw_window_subtitle">Scegli quanta attività Trakt deve apparire nel \"continua a guardare\".</string>
     <string name="trakt_unaired_dialog_title">Prossimi episodi non trasmessi</string>
-    <string name="trakt_unaired_dialog_subtitle">Scegli se il \"Continua a guardare\" deve includere i prossimi episodi prima dell'uscita.</string>
+    <string name="trakt_unaired_dialog_subtitle">Scegli se il \"Continua a guardare\" deve includere i prossimi episodi prima dell\'uscita.</string>
     <string name="trakt_show_unaired">Mostra episodi non trasmessi</string>
     <string name="trakt_hide_unaired">Nascondi episodi non trasmessi</string>
     <string name="trakt_all_history">Tutta la cronologia</string>
@@ -642,9 +642,9 @@
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Caricamento\u2026</string>
-    <string name="account_sync_description">Sincronizza la tua libreria, l'avanzamento della visione, gli addon e i plugin su tutti i tuoi dispositivi.</string>
+    <string name="account_sync_description">Sincronizza la tua libreria, l\'avanzamento della visione, gli addon e i plugin su tutti i tuoi dispositivi.</string>
     <string name="account_signin_qr_title">Accedi con QR</string>
-    <string name="account_signin_qr_subtitle">Scansiona un codice QR e completa l'accesso via email sul tuo telefono</string>
+    <string name="account_signin_qr_subtitle">Scansiona un codice QR e completa l\'accesso via email sul tuo telefono</string>
     <string name="account_signed_in_label">Accesso effettuato</string>
     <string name="account_total_label">Totale</string>
     <string name="account_loading_sync">Caricamento dati di sincronizzazione\u2026</string>
