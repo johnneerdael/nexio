@@ -73,7 +73,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     bufferSettings.backBufferDurationMs,
                     bufferSettings.retainBackBufferFromKeyframe
                 )
-                .setPrioritizeTimeOverSizeThresholds(true)
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .build()
 
             mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections

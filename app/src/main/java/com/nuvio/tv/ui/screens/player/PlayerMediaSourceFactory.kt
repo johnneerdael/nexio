@@ -186,6 +186,19 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         startVodCacheInitialization(context, resolveVodCacheMaxBytes(context))
     }
 
+    fun getVodCacheLogState(): String {
+        if (!ENABLE_VOD_CACHE) return "vod=off"
+        if (isVodCacheDisabled) return "vod=disabled"
+
+        val usedBytes = runCatching { getAnySimpleCache()?.cacheSpace ?: 0L }.getOrDefault(0L)
+        val capBytes = when {
+            configuredVodCacheMaxBytes > 0L -> configuredVodCacheMaxBytes
+            else -> resolveVodCacheMaxBytes(context)
+        }
+        val mode = if (vodCacheSizeMode == VodCacheSizeMode.AUTO) "auto" else "manual"
+        return "vod=$mode ${bytesToMb(usedBytes)}/${bytesToMb(capBytes)}MB"
+    }
+
     private fun buildVodCacheDataSourceFactory(
         upstreamFactory: DataSource.Factory,
         cache: SimpleCache
@@ -272,6 +285,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         private fun getAnySimpleCache(): SimpleCache? = sharedSimpleCache
+
+        private fun bytesToMb(bytes: Long): Long = bytes / (1024L * 1024L)
 
         private fun getOrCreateSimpleCache(context: Context, maxBytes: Long): SimpleCache {
             sharedSimpleCache?.let {
