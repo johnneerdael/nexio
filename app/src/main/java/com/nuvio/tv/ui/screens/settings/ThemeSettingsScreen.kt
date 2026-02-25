@@ -90,6 +90,7 @@ fun ThemeSettingsContent(
         listOf(
             null to strLanguageSystem,
             "en" to "English",
+            "it" to "Italiano",
             "pl" to "Polski",
             "sk" to "Slovensky",
             "sl" to "Slovenščina",
