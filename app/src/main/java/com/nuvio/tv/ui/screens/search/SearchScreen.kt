@@ -328,8 +328,8 @@ fun SearchScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     EmptyScreenState(
-                        title = stringResource(R.string.search_start_title),
-                        subtitle = stringResource(R.string.search_start_subtitle),
+                        title = "Start Searching",
+                        subtitle = "Enter at least 2 characters",
                         icon = Icons.Default.Search
                     )
                 }
@@ -396,11 +396,11 @@ fun SearchScreen(
                     trimmedSubmittedQuery.length < 2 && !hasPendingUnsubmittedQuery -> {
                         item {
                             EmptyScreenState(
-                                title = stringResource(R.string.search_start_title),
+                                title = "Start Searching",
                                 subtitle = if (uiState.discoverEnabled) {
-                                    stringResource(R.string.search_start_subtitle)
+                                    "Enter at least 2 characters"
                                 } else {
-                                    stringResource(R.string.search_start_subtitle_no_discover)
+                                    "Discover is disabled. Enter at least 2 characters"
                                 },
                                 icon = Icons.Default.Search
                             )

@@ -1,9 +1,7 @@
 package com.nuvio.tv.ui.screens.settings
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nuvio.tv.R
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.TraktAuthState
 import com.nuvio.tv.data.local.TraktSettingsDataStore
@@ -52,8 +50,7 @@ class TraktViewModel @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
-    private val traktSettingsDataStore: TraktSettingsDataStore,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
+    private val traktSettingsDataStore: TraktSettingsDataStore
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TraktUiState())
     val uiState: StateFlow<TraktUiState> = _uiState.asStateFlow()
@@ -314,7 +311,7 @@ class TraktViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isPolling = true,
-                                statusMessage = context.getString(R.string.trakt_waiting_approval)
+                                statusMessage = "Waiting for approval..."
                             )
                         }
                     }

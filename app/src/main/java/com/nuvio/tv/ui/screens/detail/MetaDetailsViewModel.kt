@@ -39,16 +39,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import android.content.Context
-import com.nuvio.tv.R
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 
 @HiltViewModel
 class MetaDetailsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val metaRepository: MetaRepository,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
@@ -747,7 +743,7 @@ class MetaDetailsViewModel @Inject constructor(
                         nextVideoId = meta.id,
                         nextSeason = null,
                         nextEpisode = null,
-                        displayText = context.getString(R.string.detail_btn_resume)
+                        displayText = "Resume"
                     )
                 } else {
                     NextToWatch(
@@ -756,7 +752,7 @@ class MetaDetailsViewModel @Inject constructor(
                         nextVideoId = meta.id,
                         nextSeason = null,
                         nextEpisode = null,
-                        displayText = context.getString(R.string.detail_btn_play)
+                        displayText = "Play"
                     )
                 }
                 updateNextToWatch(nextToWatch)
@@ -775,7 +771,7 @@ class MetaDetailsViewModel @Inject constructor(
                         nextVideoId = meta.id,
                         nextSeason = null,
                         nextEpisode = null,
-                        displayText = context.getString(R.string.detail_btn_play)
+                        displayText = "Play"
                     )
                 )
                 return@launch
@@ -809,7 +805,7 @@ class MetaDetailsViewModel @Inject constructor(
                 nextVideoId = metaId,
                 nextSeason = null,
                 nextEpisode = null,
-                displayText = context.getString(R.string.detail_btn_play)
+                displayText = "Play"
             )
         }
 
@@ -826,7 +822,7 @@ class MetaDetailsViewModel @Inject constructor(
                     nextVideoId = matchedEpisode?.id ?: latestProgress.videoId,
                     nextSeason = season,
                     nextEpisode = episode,
-                    displayText = context.getString(R.string.detail_btn_resume_episode, season, episode)
+                    displayText = "Resume S${season}E${episode}"
                 )
             }
 
@@ -839,7 +835,7 @@ class MetaDetailsViewModel @Inject constructor(
                         nextVideoId = next.id,
                         nextSeason = next.season,
                         nextEpisode = next.episode,
-                        displayText = context.getString(R.string.detail_btn_next_episode, next.season, next.episode)
+                        displayText = "Next S${next.season}E${next.episode}"
                     )
                 }
             }
@@ -880,24 +876,19 @@ class MetaDetailsViewModel @Inject constructor(
                     nextVideoId = resumeEpisode.id,
                     nextSeason = resumeEpisode.season,
                     nextEpisode = resumeEpisode.episode,
-                    displayText = context.getString(R.string.detail_btn_resume_episode, resumeEpisode.season, resumeEpisode.episode)
+                    displayText = "Resume S${resumeEpisode.season}E${resumeEpisode.episode}"
                 )
             }
             nextUnwatchedEpisode != null -> {
                 val hasWatchedSomething = fallbackProgressMap.isNotEmpty()
-                val s = nextUnwatchedEpisode.season
-                val e = nextUnwatchedEpisode.episode
+                val displayPrefix = if (hasWatchedSomething) "Next" else "Play"
                 NextToWatch(
                     watchProgress = null,
                     isResume = false,
                     nextVideoId = nextUnwatchedEpisode.id,
-                    nextSeason = s,
-                    nextEpisode = e,
-                    displayText = if (hasWatchedSomething) {
-                        context.getString(R.string.detail_btn_next_episode, s, e)
-                    } else {
-                        context.getString(R.string.detail_btn_play_episode, s, e)
-                    }
+                    nextSeason = nextUnwatchedEpisode.season,
+                    nextEpisode = nextUnwatchedEpisode.episode,
+                    displayText = "$displayPrefix S${nextUnwatchedEpisode.season}E${nextUnwatchedEpisode.episode}"
                 )
             }
             else -> {
@@ -909,9 +900,9 @@ class MetaDetailsViewModel @Inject constructor(
                     nextSeason = firstEpisode?.season,
                     nextEpisode = firstEpisode?.episode,
                     displayText = if (firstEpisode != null) {
-                        context.getString(R.string.detail_btn_play_episode, firstEpisode.season, firstEpisode.episode)
+                        "Play S${firstEpisode.season}E${firstEpisode.episode}"
                     } else {
-                        context.getString(R.string.detail_btn_play)
+                        "Play"
                     }
                 )
             }
