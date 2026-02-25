@@ -916,7 +916,7 @@ private fun MetaDetailsContent(
     ) {
         ImageRequest.Builder(localContext)
             .data(meta.background ?: meta.poster)
-            .crossfade(false)
+            .crossfade(true)
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
     }

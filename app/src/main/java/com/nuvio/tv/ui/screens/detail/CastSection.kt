@@ -226,7 +226,7 @@ private fun CastMemberItem(
         photo?.takeIf { it.isNotBlank() }?.let { url ->
             ImageRequest.Builder(context)
                 .data(url)
-                .crossfade(false)
+                .crossfade(true)
                 .size(width = cardSizePx, height = cardSizePx)
                 .build()
         }
