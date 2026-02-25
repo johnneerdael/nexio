@@ -177,12 +177,7 @@ class HomeViewModel @Inject constructor(
             )
         }
 
-        val modernLayoutPrefsFlow = combine(
-            layoutPreferenceDataStore.modernLandscapePostersEnabled,
-            layoutPreferenceDataStore.modernNextRowPreviewEnabled
-        ) { modernLandscapePostersEnabled, modernNextRowPreviewEnabled ->
-            modernLandscapePostersEnabled to modernNextRowPreviewEnabled
-        }
+        val modernLayoutPrefsFlow = layoutPreferenceDataStore.modernLandscapePostersEnabled
 
         val baseLayoutUiPrefsFlow = combine(
             coreLayoutPrefsFlow,
@@ -199,7 +194,6 @@ class HomeViewModel @Inject constructor(
                 catalogAddonNameEnabled = corePrefs.catalogAddonNameEnabled,
                 catalogTypeSuffixEnabled = corePrefs.catalogTypeSuffixEnabled,
                 modernLandscapePostersEnabled = false,
-                modernNextRowPreviewEnabled = true,
                 focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
                 focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
                 focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
@@ -217,8 +211,7 @@ class HomeViewModel @Inject constructor(
                 modernLayoutPrefsFlow
             ) { basePrefs, modernPrefs ->
                 basePrefs.copy(
-                    modernLandscapePostersEnabled = modernPrefs.first,
-                    modernNextRowPreviewEnabled = modernPrefs.second
+                    modernLandscapePostersEnabled = modernPrefs
                 )
             }
                 .distinctUntilChanged()
@@ -243,7 +236,6 @@ class HomeViewModel @Inject constructor(
                         catalogAddonNameEnabled = prefs.catalogAddonNameEnabled,
                         catalogTypeSuffixEnabled = prefs.catalogTypeSuffixEnabled,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
-                        modernNextRowPreviewEnabled = prefs.modernNextRowPreviewEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
                         focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
@@ -301,7 +293,6 @@ class HomeViewModel @Inject constructor(
         val catalogAddonNameEnabled: Boolean,
         val catalogTypeSuffixEnabled: Boolean,
         val modernLandscapePostersEnabled: Boolean,
-        val modernNextRowPreviewEnabled: Boolean,
         val focusedBackdropExpandEnabled: Boolean,
         val focusedBackdropExpandDelaySeconds: Int,
         val focusedBackdropTrailerEnabled: Boolean,
@@ -524,16 +515,13 @@ class HomeViewModel @Inject constructor(
 
                 Log.d("HomeViewModel", "allProgress emitted=${items.size} recentWindow=${recentItems.size}")
 
-                val metaCache = mutableMapOf<String, Meta?>()
                 val inProgressOnly = buildList {
                     deduplicateInProgress(
                         recentItems.filter { shouldTreatAsInProgressForContinueWatching(it) }
                     ).forEach { progress ->
                         add(
                             ContinueWatchingItem.InProgress(
-                                progress = progress,
-                                episodeDescription = resolveCurrentEpisodeDescription(progress, metaCache),
-                                episodeThumbnail = resolveCurrentEpisodeThumbnail(progress, metaCache)
+                                progress = progress
                             )
                         )
                     }
@@ -550,13 +538,14 @@ class HomeViewModel @Inject constructor(
                     }
                 }
 
-                // Then enrich Next Up in background with bounded concurrency.
+                // Then enrich Next Up and item details in background.
                 enrichContinueWatchingProgressively(
                     allProgress = recentItems,
                     inProgressItems = inProgressOnly,
                     dismissedNextUp = dismissedNextUp,
                     showUnairedNextUp = showUnairedNextUp
                 )
+                enrichInProgressEpisodeDetailsProgressively(inProgressOnly)
             }
         }
     }
@@ -723,6 +712,69 @@ class HomeViewModel @Inject constructor(
                         it.copy(continueWatchingItems = mergedItems)
                     }
                 }
+            }
+        }
+    }
+
+    private suspend fun enrichInProgressEpisodeDetailsProgressively(
+        inProgressItems: List<ContinueWatchingItem.InProgress>
+    ) = coroutineScope {
+        if (inProgressItems.isEmpty()) return@coroutineScope
+
+        val seriesItems = inProgressItems.filter { isSeriesType(it.progress.contentType) }
+        if (seriesItems.isEmpty()) return@coroutineScope
+
+        val metaCache = mutableMapOf<String, Meta?>()
+        val enrichedByProgress = linkedMapOf<WatchProgress, ContinueWatchingItem.InProgress>()
+        var lastAppliedCount = 0
+
+        for (item in seriesItems) {
+            val description = resolveCurrentEpisodeDescription(item.progress, metaCache)
+            val thumbnail = resolveCurrentEpisodeThumbnail(item.progress, metaCache)
+            val enrichedItem = item.copy(
+                episodeDescription = description,
+                episodeThumbnail = thumbnail
+            )
+
+            if (enrichedItem != item) {
+                enrichedByProgress[item.progress] = enrichedItem
+                if (enrichedByProgress.size - lastAppliedCount >= 2) {
+                    applyInProgressEpisodeDetailEnrichment(enrichedByProgress)
+                    lastAppliedCount = enrichedByProgress.size
+                }
+            }
+        }
+
+        if (enrichedByProgress.isNotEmpty() && enrichedByProgress.size != lastAppliedCount) {
+            applyInProgressEpisodeDetailEnrichment(enrichedByProgress)
+        }
+    }
+
+    private fun applyInProgressEpisodeDetailEnrichment(
+        replacements: Map<WatchProgress, ContinueWatchingItem.InProgress>
+    ) {
+        if (replacements.isEmpty()) return
+
+        _uiState.update { state ->
+            var changed = false
+            val updatedItems = state.continueWatchingItems.map { item ->
+                if (item is ContinueWatchingItem.InProgress) {
+                    val replacement = replacements[item.progress]
+                    if (replacement != null && replacement != item) {
+                        changed = true
+                        replacement
+                    } else {
+                        item
+                    }
+                } else {
+                    item
+                }
+            }
+
+            if (changed) {
+                state.copy(continueWatchingItems = updatedItems)
+            } else {
+                state
             }
         }
     }
