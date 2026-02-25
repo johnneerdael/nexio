@@ -56,13 +56,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -633,41 +629,6 @@ fun ModernHomeContent(
             requestWidthPx = heroMediaWidthPx,
             requestHeightPx = heroMediaHeightPx
         )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    val dimColor = bgColor.copy(alpha = 0.08f)
-                    val leftGradient = Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.0f to bgColor.copy(alpha = 0.96f),
-                            0.18f to bgColor.copy(alpha = 0.86f),
-                            0.31f to bgColor.copy(alpha = 0.70f),
-                            0.40f to bgColor.copy(alpha = 0.55f),
-                            0.48f to bgColor.copy(alpha = 0.38f),
-                            0.56f to bgColor.copy(alpha = 0.22f),
-                            0.66f to Color.Transparent,
-                            1.0f to Color.Transparent
-                        )
-                    )
-                    val bottomGradient = Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color.Transparent,
-                            0.44f to Color.Transparent,
-                            0.62f to bgColor.copy(alpha = 0.38f),
-                            0.78f to bgColor.copy(alpha = 0.74f),
-                            0.92f to bgColor.copy(alpha = 0.94f),
-                            1.0f to bgColor.copy(alpha = 1.0f)
-                        )
-                    )
-                    onDrawBehind {
-                        drawRect(color = dimColor, size = size)
-                        drawRect(brush = leftGradient, size = size)
-                        drawRect(brush = bottomGradient, size = size)
-                    }
-                }
-        )
-
         HeroTitleBlock(
             preview = resolvedHero,
             portraitMode = !useLandscapePosters,
