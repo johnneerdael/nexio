@@ -93,6 +93,7 @@ fun ThemeSettingsContent(
             "fr" to "Français",
             "it" to "Italiano",
             "pl" to "Polski",
+            "pt-PT" to "Português (Portugal)",
             "sk" to "Slovensky",
             "sl" to "Slovenščina",
             "ro" to "Română"
