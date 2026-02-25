@@ -78,7 +78,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
-    onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
@@ -132,19 +131,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onCheckedChange = onSetStreamAutoPlayNextEpisodeEnabled,
                 onFocused = onItemFocused
             )
-        }
-
-        if (playerSettings.streamAutoPlayNextEpisodeEnabled) {
-            item {
-                ToggleSettingsItem(
-                    icon = Icons.Default.Tune,
-                    title = "Prefer Binge Group (Next Episode)",
-                    subtitle = "Try the same source profile first (same addon/quality group) before normal auto-play rules.",
-                    isChecked = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode,
-                    onCheckedChange = onSetStreamAutoPlayPreferBingeGroupForNextEpisode,
-                    onFocused = onItemFocused
-                )
-            }
         }
     }
 
