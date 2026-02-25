@@ -282,6 +282,11 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     currentStreamUrl = url
     currentHeaders = newHeaders
     currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
+    currentVideoHash = stream.behaviorHints?.videoHash
+    currentVideoSize = stream.behaviorHints?.videoSize
+    currentFilename = stream.behaviorHints?.filename
+        ?: url.substringBefore('?').substringAfterLast('/', "")
+            .takeIf { it.isNotBlank() && it.contains('.') }
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null
@@ -561,6 +566,11 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentStreamUrl = url
     currentHeaders = newHeaders
     currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
+    currentVideoHash = stream.behaviorHints?.videoHash
+    currentVideoSize = stream.behaviorHints?.videoSize
+    currentFilename = stream.behaviorHints?.filename
+        ?: url.substringBefore('?').substringAfterLast('/', "")
+            .takeIf { it.isNotBlank() && it.contains('.') }
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null

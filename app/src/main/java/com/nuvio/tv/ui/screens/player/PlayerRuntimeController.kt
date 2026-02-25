@@ -86,6 +86,11 @@ class PlayerRuntimeController(
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
     internal val mediaSourceFactory = PlayerMediaSourceFactory()
 
+    internal var currentVideoHash: String? = navigationArgs.videoHash
+    internal var currentVideoSize: Long? = navigationArgs.videoSize
+    internal var currentFilename: String? = navigationArgs.filename
+        ?: initialStreamUrl.substringBefore('?').substringAfterLast('/', "")
+            .takeIf { it.isNotBlank() && it.contains('.') }
     internal var currentStreamUrl: String = initialStreamUrl
     internal var currentHeaders: Map<String, String> = PlayerMediaSourceFactory.parseHeaders(headersJson)
 

@@ -618,7 +618,10 @@ class StreamScreenViewModel @Inject constructor(
             episodeTitle = episodeName,
             bingeGroup = stream.behaviorHints?.bingeGroup,
             rememberedAudioLanguage = null,
-            rememberedAudioName = null
+            rememberedAudioName = null,
+            filename = stream.behaviorHints?.filename,
+            videoHash = stream.behaviorHints?.videoHash,
+            videoSize = stream.behaviorHints?.videoSize
         )
 
         val url = playbackInfo.url
@@ -667,5 +670,8 @@ data class StreamPlaybackInfo(
     val episodeTitle: String?,
     val bingeGroup: String?,
     val rememberedAudioLanguage: String?,
-    val rememberedAudioName: String?
+    val rememberedAudioName: String?,
+    val filename: String? = null,
+    val videoHash: String? = null,
+    val videoSize: Long? = null
 )
