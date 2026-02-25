@@ -12,6 +12,7 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
+import com.nuvio.tv.ui.components.SourceChipItem
 
 data class PlayerUiState(
     val isPlaying: Boolean = false,
@@ -89,6 +90,7 @@ data class PlayerUiState(
     val sourceSelectedAddonFilter: String? = null, // null means "All"
     val sourceFilteredStreams: List<Stream> = emptyList(),
     val sourceAvailableAddons: List<String> = emptyList(),
+    val sourceChips: List<SourceChipItem> = emptyList(),
     val error: String? = null,
     val pendingSeekPosition: Long? = null,  // For resuming from saved progress
     // Parental guide overlay

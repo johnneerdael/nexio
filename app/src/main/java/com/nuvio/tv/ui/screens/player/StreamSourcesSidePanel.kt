@@ -119,12 +119,14 @@ internal fun StreamSourcesSidePanel(
             Spacer(modifier = Modifier.height(16.dp))
 
             AnimatedVisibility(
-                visible = !uiState.isLoadingSourceStreams && uiState.sourceAvailableAddons.isNotEmpty(),
+                visible = uiState.sourceChips.isNotEmpty() ||
+                    (!uiState.isLoadingSourceStreams && uiState.sourceAvailableAddons.isNotEmpty()),
                 enter = fadeIn(animationSpec = tween(200)),
                 exit = fadeOut(animationSpec = tween(120))
             ) {
                 AddonFilterChips(
                     addons = uiState.sourceAvailableAddons,
+                    sourceChips = uiState.sourceChips,
                     selectedAddon = uiState.sourceSelectedAddonFilter,
                     onAddonSelected = onAddonFilterSelected
                 )

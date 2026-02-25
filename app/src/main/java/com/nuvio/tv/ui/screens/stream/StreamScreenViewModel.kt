@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
+import com.nuvio.tv.core.plugin.PluginManager
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.data.local.PlayerPreference
@@ -18,9 +19,12 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
+import com.nuvio.tv.ui.components.SourceChipItem
+import com.nuvio.tv.ui.components.SourceChipStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +45,7 @@ class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
+    private val pluginManager: PluginManager,
     private val metaRepository: MetaRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
@@ -50,6 +55,7 @@ class StreamScreenViewModel @Inject constructor(
     private var directAutoPlayModeInitializedForSession = false
     private var directAutoPlayFlowEnabledForSession = false
     private var streamLoadJob: Job? = null
+    private var sourceChipErrorDismissJob: Job? = null
 
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
@@ -159,6 +165,7 @@ class StreamScreenViewModel @Inject constructor(
 
     private fun loadStreams() {
         streamLoadJob?.cancel()
+        sourceChipErrorDismissJob?.cancel()
         streamLoadJob = viewModelScope.launch {
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             if (manualSelection) {
@@ -274,6 +281,10 @@ class StreamScreenViewModel @Inject constructor(
                         allStreams = allStreams,
                         filteredStreams = filteredStreams,
                         availableAddons = availableAddons,
+                        sourceChips = mergeSourceChipStatuses(
+                            existing = _uiState.value.sourceChips,
+                            succeededNames = orderedAddonStreams.map { it.addonName }
+                        ),
                         autoPlayStream = selectedAutoPlayStream,
                         error = null,
                         showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
@@ -292,6 +303,7 @@ class StreamScreenViewModel @Inject constructor(
                         "Using embedded video streams for videoId=$videoId count=${embeddedAddonStreams.streams.size}"
                     )
                     applySuccess(listOf(embeddedAddonStreams))
+                    updateSourceChipsForEmbedded(embeddedAddonStreams.addonName)
                     if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
                         directAutoPlayFlowEnabledForSession = false
                         updateUiStateIfChanged {
@@ -305,6 +317,8 @@ class StreamScreenViewModel @Inject constructor(
                     return@launch
                 }
             }
+
+            updateSourceChipsForFetchStart(installedAddons)
 
             streamRepository.getStreamsFromAllAddons(
                 type = contentType,
@@ -345,6 +359,8 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
+            markRemainingSourceChipsAsError()
+
             if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
                 directAutoPlayFlowEnabledForSession = false
                 updateUiStateIfChanged {
@@ -365,6 +381,116 @@ class StreamScreenViewModel @Inject constructor(
 
         val canonicalVideoMetaId = videoId.substringBefore(":")
         return !metaId.equals(canonicalVideoMetaId, ignoreCase = true)
+    }
+
+    private suspend fun updateSourceChipsForFetchStart(installedAddons: List<com.nuvio.tv.domain.model.Addon>) {
+        val addonNames = installedAddons
+            .filter { it.supportsStreamResourceForChip(contentType) }
+            .map { it.displayName }
+
+        val pluginNames = try {
+            if (pluginManager.pluginsEnabled.first()) {
+                pluginManager.enabledScrapers.first()
+                    .filter { it.supportsType(contentType) }
+                    .map { it.name }
+                    .distinct()
+            } else {
+                emptyList()
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        val orderedNames = (addonNames + pluginNames).distinct()
+        if (orderedNames.isEmpty()) {
+            updateUiStateIfChanged { it.copy(sourceChips = emptyList()) }
+            return
+        }
+
+        updateUiStateIfChanged { state ->
+            state.copy(
+                sourceChips = orderedNames.map { name ->
+                    SourceChipItem(name = name, status = SourceChipStatus.LOADING)
+                }
+            )
+        }
+    }
+
+    private fun updateSourceChipsForEmbedded(name: String) {
+        updateUiStateIfChanged { state ->
+            val chips = if (state.sourceChips.any { it.name == name }) {
+                state.sourceChips.map { chip ->
+                    if (chip.name == name) chip.copy(status = SourceChipStatus.SUCCESS) else chip
+                }
+            } else {
+                listOf(SourceChipItem(name = name, status = SourceChipStatus.SUCCESS))
+            }
+            state.copy(sourceChips = chips)
+        }
+    }
+
+    private fun mergeSourceChipStatuses(
+        existing: List<SourceChipItem>,
+        succeededNames: List<String>
+    ): List<SourceChipItem> {
+        if (succeededNames.isEmpty()) return existing
+        if (existing.isEmpty()) {
+            return succeededNames.distinct().map { name ->
+                SourceChipItem(name = name, status = SourceChipStatus.SUCCESS)
+            }
+        }
+
+        val successSet = succeededNames.toSet()
+        val updated = existing.map { chip ->
+            if (chip.name in successSet) chip.copy(status = SourceChipStatus.SUCCESS) else chip
+        }.toMutableList()
+
+        val knownNames = updated.map { it.name }.toSet()
+        succeededNames.forEach { name ->
+            if (name !in knownNames) {
+                updated += SourceChipItem(name = name, status = SourceChipStatus.SUCCESS)
+            }
+        }
+        return updated
+    }
+
+    private fun markRemainingSourceChipsAsError() {
+        var markedAnyError = false
+        updateUiStateIfChanged { state ->
+            val hasPending = state.sourceChips.any { it.status == SourceChipStatus.LOADING }
+            if (!hasPending) return@updateUiStateIfChanged state
+            markedAnyError = true
+            state.copy(
+                sourceChips = state.sourceChips.map { chip ->
+                    if (chip.status == SourceChipStatus.LOADING) {
+                        chip.copy(status = SourceChipStatus.ERROR)
+                    } else {
+                        chip
+                    }
+                }
+            )
+        }
+        if (markedAnyError) {
+            scheduleErrorChipRemoval()
+        }
+    }
+
+    private fun scheduleErrorChipRemoval() {
+        sourceChipErrorDismissJob?.cancel()
+        sourceChipErrorDismissJob = viewModelScope.launch {
+            delay(1600L)
+            updateUiStateIfChanged { state ->
+                val remaining = state.sourceChips.filterNot { it.status == SourceChipStatus.ERROR }
+                if (remaining.size == state.sourceChips.size) state else state.copy(sourceChips = remaining)
+            }
+        }
+    }
+
+    private fun com.nuvio.tv.domain.model.Addon.supportsStreamResourceForChip(type: String): Boolean {
+        return resources.any { resource ->
+            resource.name == "stream" &&
+                (resource.types.isEmpty() || resource.types.any { it.equals(type, ignoreCase = true) })
+        }
     }
 
     private suspend fun getEmbeddedStreamsFromMeta(): AddonStreams? {
@@ -513,6 +639,7 @@ class StreamScreenViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         streamLoadJob?.cancel()
+        sourceChipErrorDismissJob?.cancel()
     }
 
 }
