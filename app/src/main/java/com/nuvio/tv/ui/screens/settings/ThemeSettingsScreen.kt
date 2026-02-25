@@ -91,6 +91,7 @@ fun ThemeSettingsContent(
             null to strLanguageSystem,
             "en" to "English",
             "pl" to "Polski"
+            "ar" to "Arabic"
         )
     }
     var selectedTag by remember {
