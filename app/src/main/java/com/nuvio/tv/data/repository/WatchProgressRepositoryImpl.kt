@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -66,6 +67,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private var syncJob: Job? = null
     private var watchedItemsSyncJob: Job? = null
     var isSyncingFromRemote = false
+    var hasCompletedInitialPull = false
+    var hasCompletedInitialWatchedItemsPull = false
 
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
     private val metadataMutex = Mutex()
@@ -74,6 +77,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun triggerRemoteSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialPull) return
         if (!authManager.isAuthenticated) return
         syncJob?.cancel()
         syncJob = syncScope.launch {
@@ -84,6 +88,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun triggerWatchedItemsSync() {
         if (isSyncingFromRemote) return
+        if (!hasCompletedInitialWatchedItemsPull) return
         if (!authManager.isAuthenticated) return
         watchedItemsSyncJob?.cancel()
         watchedItemsSyncJob = syncScope.launch {
@@ -209,12 +214,17 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override val allProgress: Flow<List<WatchProgress>>
-        get() = traktAuthDataStore.isAuthenticated
+        get() = traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
                     combine(
-                        traktProgressService.observeAllProgress(),
+                        traktProgressService.observeAllProgress()
+                            .onStart {
+                                // Emit local-cache-backed continue watching immediately on app start
+                                // while the first Trakt snapshot is still loading.
+                                emit(emptyList())
+                            },
                         watchProgressPreferences.allRawProgress,
                         metadataState
                     ) { remoteItems, localItems, metadataMap ->
@@ -237,7 +247,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         get() = allProgress.map { list -> list.filter { it.isInProgress() } }
 
     override fun getProgress(contentId: String): Flow<WatchProgress?> {
-        return traktAuthDataStore.isAuthenticated
+        return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
@@ -253,7 +263,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
-        return traktAuthDataStore.isAuthenticated
+        return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
@@ -269,7 +279,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
-        return traktAuthDataStore.isAuthenticated
+        return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
@@ -294,21 +304,30 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override fun isWatched(contentId: String, season: Int?, episode: Int?): Flow<Boolean> {
-        return traktAuthDataStore.isAuthenticated
+        return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (!isAuthenticated) {
                     val progressFlow = if (season != null && episode != null) {
                         watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
-                            .map { it?.isCompleted() == true }
                     } else {
                         watchProgressPreferences.getProgress(contentId)
-                            .map { it?.isCompleted() == true }
                     }
                     return@flatMapLatest combine(
                         progressFlow,
                         watchedItemsPreferences.isWatched(contentId, season, episode)
-                    ) { progressWatched, itemWatched -> progressWatched || itemWatched }
+                    ) { progressEntry, itemWatched ->
+                        val hasStartedReplay = progressEntry?.let { entry ->
+                            !entry.isCompleted() &&
+                                (entry.position > 0L || entry.progressPercent?.let { it > 0f } == true)
+                        } == true
+
+                        if (hasStartedReplay) {
+                            false
+                        } else {
+                            (progressEntry?.isCompleted() == true) || itemWatched
+                        }
+                    }
                 }
 
                 if (season != null && episode != null) {
@@ -323,14 +342,24 @@ class WatchProgressRepositoryImpl @Inject constructor(
             }
     }
 
-    override suspend fun saveProgress(progress: WatchProgress) {
-        if (traktAuthDataStore.isAuthenticated.first()) {
+    override suspend fun saveProgress(progress: WatchProgress, syncRemote: Boolean) {
+        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             traktProgressService.applyOptimisticProgress(progress)
             watchProgressPreferences.saveProgress(progress)
             return
         }
         watchProgressPreferences.saveProgress(progress)
-        triggerRemoteSync()
+        
+        
+        if (syncRemote && authManager.isAuthenticated) {
+            syncScope.launch {
+                watchProgressSyncService.pushSingleToRemote(progressKey(progress), progress)
+                    .onFailure { error ->
+                        Log.w(TAG, "Failed single progress push; falling back to full sync next cycle", error)
+                    }
+            }
+        }
+
         if (progress.isCompleted()) {
             watchedItemsPreferences.markAsWatched(
                 WatchedItem(
@@ -347,7 +376,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
-        val isAuthenticated = traktAuthDataStore.isAuthenticated.first()
+        val isAuthenticated = traktAuthDataStore.isEffectivelyAuthenticated.first()
         Log.d(
             TAG,
             "removeProgress called contentId=$contentId season=$season episode=$episode authenticated=$isAuthenticated"
@@ -370,7 +399,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
-        if (traktAuthDataStore.isAuthenticated.first()) {
+        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             traktProgressService.removeFromHistory(contentId, season, episode)
             watchProgressPreferences.removeProgress(contentId, season, episode)
             return
@@ -389,7 +418,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markAsCompleted(progress: WatchProgress) {
-        if (traktAuthDataStore.isAuthenticated.first()) {
+        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             val now = System.currentTimeMillis()
             val duration = progress.duration.takeIf { it > 0L } ?: 1L
             val completed = progress.copy(
@@ -431,7 +460,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override suspend fun clearAll() {
-        if (traktAuthDataStore.isAuthenticated.first()) {
+        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             traktProgressService.clearOptimistic()
             watchProgressPreferences.clearAll()
             return

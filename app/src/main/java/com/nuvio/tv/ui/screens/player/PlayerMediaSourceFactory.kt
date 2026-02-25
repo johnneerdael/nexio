@@ -166,9 +166,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             .addInterceptor { chain ->
                 var request = chain.request()
                 val url = request.url
-                if (url.username.isNotEmpty() && url.password.isNotEmpty() &&
-                    request.header("Authorization") == null
-                ) {
+                // Some addons (like nzbdav, real-debrid, WebDAV servers) provide stream URLs containing Basic Auth credentials.
+                // OkHttp does not automatically convert http://user:pass@host/ into an Authorization header,
+                // which leads to HTTP 401 errors. This interceptor fixes it natively.
+                if (url.username.isNotEmpty() && url.password.isNotEmpty() && request.header("Authorization") == null) {
                     val credential = okhttp3.Credentials.basic(url.username, url.password)
                     request = request.newBuilder()
                         .header("Authorization", credential)
