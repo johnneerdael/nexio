@@ -125,6 +125,7 @@ private fun ModernCatalogRowItem(
     expandedTrailerPreviewUrl: String?,
     isWatched: Boolean,
     onFocused: () -> Unit,
+    onItemFocus: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLongPress: () -> Unit,
@@ -165,6 +166,7 @@ private fun ModernCatalogRowItem(
         focusRequester = requester,
         onFocused = {
             onFocused()
+            item.metaPreview?.let { onItemFocus(it) }
             onCatalogSelectionFocused(
                 FocusedCatalogSelection(
                     focusKey = focusKey,
@@ -219,6 +221,7 @@ internal fun ModernRowSection(
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit,
+    onItemFocus: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
@@ -423,6 +426,7 @@ internal fun ModernRowSection(
                                 expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
                                 isWatched = item.metaPreview?.let(isCatalogItemWatched) == true,
                                 onFocused = onFocused,
+                                onItemFocus = onItemFocus,
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onLongPress = {

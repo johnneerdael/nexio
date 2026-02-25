@@ -108,6 +108,7 @@ internal class ModernCarouselRowBuildCache {
     var continueWatchingItems: List<ContinueWatchingItem> = emptyList()
     var continueWatchingTitle: String = ""
     var continueWatchingAirsDateTemplate: String = ""
+    var continueWatchingUpcomingLabel: String = ""
     var continueWatchingUseLandscapePosters: Boolean = false
     var continueWatchingRow: HeroCarouselRow? = null
     val catalogRows = mutableMapOf<String, ModernCatalogRowBuildCacheEntry>()
@@ -117,7 +118,8 @@ internal class ModernCarouselRowBuildCache {
 internal fun buildContinueWatchingItem(
     item: ContinueWatchingItem,
     useLandscapePosters: Boolean,
-    airsDateTemplate: String = "Airs %s"
+    airsDateTemplate: String,
+    upcomingLabel: String
 ): ModernCarouselItem {
     val heroPreview = when (item) {
         is ContinueWatchingItem.InProgress -> HeroPreview(
@@ -194,7 +196,7 @@ internal fun buildContinueWatchingItem(
                 if (item.info.hasAired) {
                     code
                 } else {
-                    item.info.airDateLabel?.let { "$code • Airs $it" } ?: "$code • Upcoming"
+                    item.info.airDateLabel?.let { "$code • ${airsDateTemplate.format(it)}" } ?: "$code • $upcomingLabel"
                 }
             }
         },

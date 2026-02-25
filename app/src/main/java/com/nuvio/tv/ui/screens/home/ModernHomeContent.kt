@@ -141,6 +141,7 @@ fun ModernHomeContent(
     }
     val strContinueWatching = stringResource(R.string.continue_watching)
     val strAirsDate = stringResource(R.string.cw_airs_date)
+    val strUpcoming = stringResource(R.string.cw_upcoming)
     val rowBuildCache = remember { ModernCarouselRowBuildCache() }
     val carouselRows = remember(
         uiState.continueWatchingItems,
@@ -156,6 +157,7 @@ fun ModernHomeContent(
                         rowBuildCache.continueWatchingItems == uiState.continueWatchingItems &&
                         rowBuildCache.continueWatchingTitle == strContinueWatching &&
                         rowBuildCache.continueWatchingAirsDateTemplate == strAirsDate &&
+                        rowBuildCache.continueWatchingUpcomingLabel == strUpcoming &&
                         rowBuildCache.continueWatchingUseLandscapePosters == useLandscapePosters
                 val continueWatchingRow = if (reuseContinueWatchingRow) {
                     checkNotNull(rowBuildCache.continueWatchingRow)
@@ -168,7 +170,8 @@ fun ModernHomeContent(
                             buildContinueWatchingItem(
                                 item = item,
                                 useLandscapePosters = useLandscapePosters,
-                                airsDateTemplate = strAirsDate
+                                airsDateTemplate = strAirsDate,
+                                upcomingLabel = strUpcoming
                             )
                         }
                     )
@@ -176,6 +179,7 @@ fun ModernHomeContent(
                 rowBuildCache.continueWatchingItems = uiState.continueWatchingItems
                 rowBuildCache.continueWatchingTitle = strContinueWatching
                 rowBuildCache.continueWatchingAirsDateTemplate = strAirsDate
+                rowBuildCache.continueWatchingUpcomingLabel = strUpcoming
                 rowBuildCache.continueWatchingUseLandscapePosters = useLandscapePosters
                 rowBuildCache.continueWatchingRow = continueWatchingRow
                 add(continueWatchingRow)
@@ -753,6 +757,7 @@ fun ModernHomeContent(
                         onContinueWatchingOptions = { optionsItem = it },
                         isCatalogItemWatched = isCatalogItemWatched,
                         onCatalogItemLongPress = onCatalogItemLongPress,
+                        onItemFocus = onItemFocus,
                         onCatalogSelectionFocused = { selection ->
                             if (focusedCatalogSelection != selection) {
                                 focusedCatalogSelection = selection
