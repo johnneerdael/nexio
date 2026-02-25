@@ -58,7 +58,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -305,13 +304,9 @@ fun ModernHomeContent(
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastFocusedContinueWatchingIndex by remember { mutableStateOf(-1) }
     var focusedCatalogSelection by remember { mutableStateOf<FocusedCatalogSelection?>(null) }
+    var lastRequestedTrailerFocusKey by remember { mutableStateOf<String?>(null) }
     var expandedCatalogFocusKey by remember { mutableStateOf<String?>(null) }
     var expansionInteractionNonce by remember { mutableIntStateOf(0) }
-
-    fun requesterFor(rowKey: String, itemKey: String): FocusRequester {
-        val byIndex = itemFocusRequesters.getOrPut(rowKey) { mutableMapOf() }
-        return byIndex.getOrPut(itemKey) { FocusRequester() }
-    }
 
     LaunchedEffect(
         focusedCatalogSelection?.focusKey,
@@ -340,18 +335,26 @@ fun ModernHomeContent(
         isVerticalRowsScrolling
     ) {
         if (!effectiveAutoplayEnabled) {
+            lastRequestedTrailerFocusKey = null
             return@LaunchedEffect
         }
         if (isVerticalRowsScrolling) {
             return@LaunchedEffect
         }
-        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        val selection = focusedCatalogSelection ?: run {
+            lastRequestedTrailerFocusKey = null
+            return@LaunchedEffect
+        }
+        if (selection.focusKey == lastRequestedTrailerFocusKey) {
+            return@LaunchedEffect
+        }
         onRequestTrailerPreview(
             selection.payload.itemId,
             selection.payload.trailerTitle,
             selection.payload.trailerReleaseInfo,
             selection.payload.trailerApiType
         )
+        lastRequestedTrailerFocusKey = selection.focusKey
     }
 
     LaunchedEffect(carouselRows, focusState.hasSavedFocus, focusState.focusedRowIndex, focusState.focusedItemIndex) {
@@ -630,48 +633,39 @@ fun ModernHomeContent(
             requestWidthPx = heroMediaWidthPx,
             requestHeightPx = heroMediaHeightPx
         )
-        val leftGradient = remember(bgColor) {
-            Brush.horizontalGradient(
-                colorStops = arrayOf(
-                    0.0f to bgColor.copy(alpha = 0.96f),
-                    0.18f to bgColor.copy(alpha = 0.86f),
-                    0.31f to bgColor.copy(alpha = 0.70f),
-                    0.40f to bgColor.copy(alpha = 0.55f),
-                    0.48f to bgColor.copy(alpha = 0.38f),
-                    0.56f to bgColor.copy(alpha = 0.22f),
-                    0.66f to Color.Transparent,
-                    1.0f to Color.Transparent
-                )
-            )
-        }
-        val bottomGradient = remember(bgColor) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.0f to Color.Transparent,
-                    0.44f to Color.Transparent,
-                    0.62f to bgColor.copy(alpha = 0.38f),
-                    0.78f to bgColor.copy(alpha = 0.74f),
-                    0.92f to bgColor.copy(alpha = 0.94f),
-                    1.0f to bgColor.copy(alpha = 1.0f)
-                )
-            )
-        }
-        val dimColor = remember(bgColor) { bgColor.copy(alpha = 0.08f) }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(dimColor)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(leftGradient)
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(bottomGradient)
+                .drawWithCache {
+                    val dimColor = bgColor.copy(alpha = 0.08f)
+                    val leftGradient = Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0.0f to bgColor.copy(alpha = 0.96f),
+                            0.18f to bgColor.copy(alpha = 0.86f),
+                            0.31f to bgColor.copy(alpha = 0.70f),
+                            0.40f to bgColor.copy(alpha = 0.55f),
+                            0.48f to bgColor.copy(alpha = 0.38f),
+                            0.56f to bgColor.copy(alpha = 0.22f),
+                            0.66f to Color.Transparent,
+                            1.0f to Color.Transparent
+                        )
+                    )
+                    val bottomGradient = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f to Color.Transparent,
+                            0.44f to Color.Transparent,
+                            0.62f to bgColor.copy(alpha = 0.38f),
+                            0.78f to bgColor.copy(alpha = 0.74f),
+                            0.92f to bgColor.copy(alpha = 0.94f),
+                            1.0f to bgColor.copy(alpha = 1.0f)
+                        )
+                    )
+                    onDrawBehind {
+                        drawRect(color = dimColor, size = size)
+                        drawRect(brush = leftGradient, size = size)
+                        drawRect(brush = bottomGradient, size = size)
+                    }
+                }
         )
 
         HeroTitleBlock(
@@ -708,11 +702,7 @@ fun ModernHomeContent(
                         rowTitleBottom = rowTitleBottom,
                         defaultBringIntoViewSpec = defaultBringIntoViewSpec,
                         focusStateCatalogRowScrollStates = focusState.catalogRowScrollStates,
-                        rowListStates = rowListStates,
-                        focusedItemByRow = focusedItemByRow,
-                        itemFocusRequesters = itemFocusRequesters,
-                        loadMoreRequestedTotals = loadMoreRequestedTotals,
-                        requesterFor = ::requesterFor,
+                        uiCaches = uiCaches,
                         pendingRowFocusKey = pendingRowFocusKey,
                         pendingRowFocusIndex = pendingRowFocusIndex,
                         pendingRowFocusNonce = pendingRowFocusNonce,

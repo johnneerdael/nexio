@@ -54,14 +54,6 @@ internal fun ModernHeroMediaLayer(
     requestHeightPx: Int
 ) {
     val localContext = LocalContext.current
-    val verticalOverlayGradient = remember(bgColor) {
-        Brush.verticalGradient(
-            0.78f to Color.Transparent,
-            0.90f to bgColor.copy(alpha = 0.72f),
-            0.96f to bgColor.copy(alpha = 0.98f),
-            1.0f to bgColor
-        )
-    }
     Box(modifier = modifier) {
         Crossfade(
             targetState = heroBackdrop,
@@ -121,16 +113,18 @@ internal fun ModernHeroMediaLayer(
                         center = Offset(0f, size.height / 2f),
                         radius = size.height
                     )
+                    val verticalGradient = Brush.verticalGradient(
+                        0.78f to Color.Transparent,
+                        0.90f to bgColor.copy(alpha = 0.72f),
+                        0.96f to bgColor.copy(alpha = 0.98f),
+                        1.0f to bgColor
+                    )
                     onDrawBehind {
                         drawRect(brush = horizontalGradient, size = size)
                         drawRect(brush = radialGradient, size = size)
+                        drawRect(brush = verticalGradient, size = size)
                     }
                 }
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(verticalOverlayGradient)
         )
     }
 }

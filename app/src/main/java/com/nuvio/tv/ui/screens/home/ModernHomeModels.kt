@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -97,11 +98,17 @@ internal data class ModernCatalogRowBuildCacheEntry(
     val mappedRow: HeroCarouselRow
 )
 
+@Stable
 internal class ModernHomeUiCaches {
     val focusedItemByRow = mutableMapOf<String, Int>()
     val itemFocusRequesters = mutableMapOf<String, MutableMap<String, FocusRequester>>()
     val rowListStates = mutableMapOf<String, LazyListState>()
     val loadMoreRequestedTotals = mutableMapOf<String, Int>()
+
+    fun requesterFor(rowKey: String, itemKey: String): FocusRequester {
+        val byIndex = itemFocusRequesters.getOrPut(rowKey) { mutableMapOf() }
+        return byIndex.getOrPut(itemKey) { FocusRequester() }
+    }
 }
 
 internal class ModernCarouselRowBuildCache {
