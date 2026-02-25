@@ -10,6 +10,7 @@ import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
+import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
@@ -17,6 +18,7 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
+import com.nuvio.tv.domain.model.LibraryEntryInput
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.TmdbSettings
@@ -24,6 +26,7 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.CatalogRepository
+import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -64,6 +67,7 @@ class HomeViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val libraryRepository: LibraryRepository,
     private val metaRepository: MetaRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
@@ -123,6 +127,8 @@ class HomeViewModel @Inject constructor(
     private val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     private var externalMetaPrefetchJob: Job? = null
     private var pendingExternalMetaPrefetchItemId: String? = null
+    private val posterLibraryObserverJobs = mutableMapOf<String, Job>()
+    private val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     @Volatile
     private var externalMetaPrefetchEnabled: Boolean = false
     val trailerPreviewUrls: Map<String, String>
@@ -487,6 +493,52 @@ class HomeViewModel @Inject constructor(
                 isNextUp = event.isNextUp
             )
             HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
+        }
+    }
+
+    fun togglePosterLibrary(item: MetaPreview, addonBaseUrl: String?) {
+        val statusKey = homeItemStatusKey(item.id, item.apiType)
+        if (statusKey in _uiState.value.posterLibraryPending) return
+
+        _uiState.update { state ->
+            state.copy(posterLibraryPending = state.posterLibraryPending + statusKey)
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                libraryRepository.toggleDefault(item.toLibraryEntryInput(addonBaseUrl))
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to toggle poster library for ${item.id}: ${error.message}")
+            }
+            _uiState.update { state ->
+                state.copy(posterLibraryPending = state.posterLibraryPending - statusKey)
+            }
+        }
+    }
+
+    fun togglePosterMovieWatched(item: MetaPreview) {
+        if (!item.apiType.equals("movie", ignoreCase = true)) return
+        val statusKey = homeItemStatusKey(item.id, item.apiType)
+        if (statusKey in _uiState.value.movieWatchedPending) return
+
+        _uiState.update { state ->
+            state.copy(movieWatchedPending = state.movieWatchedPending + statusKey)
+        }
+
+        viewModelScope.launch {
+            val currentlyWatched = _uiState.value.movieWatchedStatus[statusKey] == true
+            runCatching {
+                if (currentlyWatched) {
+                    watchProgressRepository.removeFromHistory(item.id)
+                } else {
+                    watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(item))
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to toggle poster watched status for ${item.id}: ${error.message}")
+            }
+            _uiState.update { state ->
+                state.copy(movieWatchedPending = state.movieWatchedPending - statusKey)
+            }
         }
     }
 
@@ -1074,6 +1126,7 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
+        reconcilePosterStatusObservers(emptyList())
         _fullCatalogRows.value = emptyList()
         truncatedRowCache.clear()
         hasRenderedFirstCatalog = false
@@ -1403,6 +1456,150 @@ class HomeViewModel @Inject constructor(
                 isLoading = false
             )
         }
+
+        reconcilePosterStatusObservers(displayRows)
+    }
+
+    private fun reconcilePosterStatusObservers(rows: List<CatalogRow>) {
+        val desiredItemsByKey = linkedMapOf<String, Pair<String, String>>()
+        rows.asSequence()
+            .flatMap { row -> row.items.asSequence() }
+            .forEach { item ->
+                val key = homeItemStatusKey(item.id, item.apiType)
+                if (key !in desiredItemsByKey) {
+                    desiredItemsByKey[key] = item.id to item.apiType
+                }
+            }
+        val desiredKeys = desiredItemsByKey.keys
+        val desiredMovieKeys = desiredItemsByKey
+            .filterValues { (_, itemType) -> itemType.equals("movie", ignoreCase = true) }
+            .keys
+
+        posterLibraryObserverJobs.keys
+            .filterNot { it in desiredKeys }
+            .forEach { staleKey ->
+                posterLibraryObserverJobs.remove(staleKey)?.cancel()
+            }
+        movieWatchedObserverJobs.keys
+            .filterNot { it in desiredMovieKeys }
+            .forEach { staleKey ->
+                movieWatchedObserverJobs.remove(staleKey)?.cancel()
+            }
+
+        desiredItemsByKey.forEach { (statusKey, itemRef) ->
+            val itemId = itemRef.first
+            val itemType = itemRef.second
+
+            if (statusKey !in posterLibraryObserverJobs) {
+                posterLibraryObserverJobs[statusKey] = viewModelScope.launch {
+                    libraryRepository.isInLibrary(itemId = itemId, itemType = itemType)
+                        .distinctUntilChanged()
+                        .collectLatest { isInLibrary ->
+                            _uiState.update { state ->
+                                if (state.posterLibraryMembership[statusKey] == isInLibrary) {
+                                    state
+                                } else {
+                                    state.copy(
+                                        posterLibraryMembership = state.posterLibraryMembership + (statusKey to isInLibrary)
+                                    )
+                                }
+                            }
+                        }
+                }
+            }
+
+            if (itemType.equals("movie", ignoreCase = true)) {
+                if (statusKey !in movieWatchedObserverJobs) {
+                    movieWatchedObserverJobs[statusKey] = viewModelScope.launch {
+                        watchProgressRepository.isWatched(contentId = itemId)
+                            .distinctUntilChanged()
+                            .collectLatest { watched ->
+                                _uiState.update { state ->
+                                    if (state.movieWatchedStatus[statusKey] == watched) {
+                                        state
+                                    } else {
+                                        state.copy(
+                                            movieWatchedStatus = state.movieWatchedStatus + (statusKey to watched)
+                                        )
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
+        }
+
+        _uiState.update { state ->
+            val trimmedLibraryMembership =
+                state.posterLibraryMembership.filterKeys { it in desiredKeys }
+            val trimmedMovieWatchedStatus =
+                state.movieWatchedStatus.filterKeys { it in desiredMovieKeys }
+            val trimmedLibraryPending =
+                state.posterLibraryPending.filterTo(linkedSetOf()) { it in desiredKeys }
+            val trimmedMovieWatchedPending =
+                state.movieWatchedPending.filterTo(linkedSetOf()) { it in desiredMovieKeys }
+
+            if (
+                trimmedLibraryMembership == state.posterLibraryMembership &&
+                trimmedMovieWatchedStatus == state.movieWatchedStatus &&
+                trimmedLibraryPending == state.posterLibraryPending &&
+                trimmedMovieWatchedPending == state.movieWatchedPending
+            ) {
+                state
+            } else {
+                state.copy(
+                    posterLibraryMembership = trimmedLibraryMembership,
+                    movieWatchedStatus = trimmedMovieWatchedStatus,
+                    posterLibraryPending = trimmedLibraryPending,
+                    movieWatchedPending = trimmedMovieWatchedPending
+                )
+            }
+        }
+    }
+
+    private fun buildCompletedMovieProgress(item: MetaPreview): WatchProgress {
+        return WatchProgress(
+            contentId = item.id,
+            contentType = item.apiType,
+            name = item.name,
+            poster = item.poster,
+            backdrop = item.background,
+            logo = item.logo,
+            videoId = item.id,
+            season = null,
+            episode = null,
+            episodeTitle = null,
+            position = 1L,
+            duration = 1L,
+            lastWatched = System.currentTimeMillis(),
+            progressPercent = 100f
+        )
+    }
+
+    private fun MetaPreview.toLibraryEntryInput(addonBaseUrl: String?): LibraryEntryInput {
+        val year = Regex("(\\d{4})").find(releaseInfo ?: "")
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+        val parsedIds = parseContentIds(id)
+        return LibraryEntryInput(
+            itemId = id,
+            itemType = apiType,
+            title = name,
+            year = year,
+            traktId = parsedIds.trakt,
+            imdbId = parsedIds.imdb,
+            tmdbId = parsedIds.tmdb,
+            poster = poster,
+            posterShape = posterShape,
+            background = background,
+            logo = logo,
+            description = description,
+            releaseInfo = releaseInfo,
+            imdbRating = imdbRating,
+            genres = genres,
+            addonBaseUrl = addonBaseUrl
+        )
     }
 
     private fun navigateToDetail(itemId: String, itemType: String) {
@@ -1623,5 +1820,13 @@ class HomeViewModel @Inject constructor(
             focusedRowIndex = focusedRowIndex,
             focusedItemIndex = focusedItemIndex
         )
+    }
+
+    override fun onCleared() {
+        posterLibraryObserverJobs.values.forEach { it.cancel() }
+        movieWatchedObserverJobs.values.forEach { it.cancel() }
+        posterLibraryObserverJobs.clear()
+        movieWatchedObserverJobs.clear()
+        super.onCleared()
     }
 }

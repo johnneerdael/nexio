@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
@@ -32,6 +33,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -72,11 +75,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.nuvio.tv.R
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -191,6 +196,8 @@ fun ModernHomeContent(
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
+    onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     onItemFocus: (MetaPreview) -> Unit = {},
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
@@ -615,6 +622,8 @@ fun ModernHomeContent(
             showNextRowPreview = showNextRowPreview,
             onContinueWatchingClick = onContinueWatchingClick,
             onContinueWatchingOptions = { optionsItem = it },
+            isCatalogItemWatched = isCatalogItemWatched,
+            onCatalogItemLongPress = onCatalogItemLongPress,
             onCatalogSelectionFocused = { selection ->
                 if (focusedCatalogSelection != selection) {
                     focusedCatalogSelection = selection
@@ -874,6 +883,7 @@ private fun ModernContinueWatchingRowItem(
 private fun ModernCatalogRowItem(
     item: ModernCarouselItem,
     payload: ModernPayload.Catalog,
+    isWatched: Boolean,
     requester: FocusRequester,
     useLandscapePosters: Boolean,
     showLabels: Boolean,
@@ -890,6 +900,7 @@ private fun ModernCatalogRowItem(
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onMoveToRow: (Int) -> Boolean,
+    onLongPress: () -> Unit,
     onBackdropInteraction: () -> Unit,
     onExpandedCatalogFocusKeyChange: (String?) -> Unit
 ) {
@@ -923,6 +934,7 @@ private fun ModernCatalogRowItem(
         playTrailerInExpandedCard = playTrailerInExpandedCard,
         focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
         trailerPreviewUrl = trailerPreviewUrl,
+        isWatched = isWatched,
         focusRequester = requester,
         onFocused = {
             onFocused()
@@ -942,6 +954,7 @@ private fun ModernCatalogRowItem(
         },
         onMoveUp = { onMoveToRow(-1) },
         onMoveDown = { onMoveToRow(1) },
+        onLongPress = onLongPress,
         onBackdropInteraction = onBackdropInteraction,
         onTrailerEnded = { onExpandedCatalogFocusKeyChange(null) }
     )
@@ -981,6 +994,8 @@ private fun ModernActiveRowContentSection(
     showNextRowPreview: Boolean,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
+    isCatalogItemWatched: (MetaPreview) -> Boolean,
+    onCatalogItemLongPress: (MetaPreview, String) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
@@ -1138,9 +1153,11 @@ private fun ModernActiveRowContentSection(
                         }
 
                         is ModernPayload.Catalog -> {
+                            val isWatched = item.metaPreview?.let(isCatalogItemWatched) == true
                             ModernCatalogRowItem(
                                 item = item,
                                 payload = payload,
+                                isWatched = isWatched,
                                 requester = requester,
                                 useLandscapePosters = useLandscapePosters,
                                 showLabels = showLabels,
@@ -1157,6 +1174,11 @@ private fun ModernActiveRowContentSection(
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onMoveToRow = onMoveToRow,
+                                onLongPress = {
+                                    item.metaPreview?.let { preview ->
+                                        onCatalogItemLongPress(preview, payload.addonBaseUrl)
+                                    }
+                                },
                                 onBackdropInteraction = onBackdropInteraction,
                                 onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange
                             )
@@ -1437,11 +1459,13 @@ private fun ModernCarouselCard(
     playTrailerInExpandedCard: Boolean,
     focusedPosterBackdropTrailerMuted: Boolean,
     trailerPreviewUrl: String?,
+    isWatched: Boolean,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onMoveUp: () -> Boolean,
     onMoveDown: () -> Boolean,
+    onLongPress: () -> Unit,
     onBackdropInteraction: () -> Unit,
     onTrailerEnded: () -> Unit
 ) {
@@ -1508,6 +1532,13 @@ private fun ModernCarouselCard(
     val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
     val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo = useLandscapePosters && !item.heroPreview.logo.isNullOrBlank()
+    var isFocused by remember { mutableStateOf(false) }
+    var longPressTriggered by remember { mutableStateOf(false) }
+    val watchedIconEndPadding by animateDpAsState(
+        targetValue = if (isFocused) 16.dp else 8.dp,
+        animationSpec = tween(durationMillis = 180),
+        label = "modernCardWatchedIconEndPadding"
+    )
     val backgroundCardColor = NuvioColors.BackgroundCard
     val focusRingColor = NuvioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
@@ -1526,26 +1557,55 @@ private fun ModernCarouselCard(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Card(
-            onClick = onClick,
+            onClick = {
+                if (longPressTriggered) {
+                    longPressTriggered = false
+                } else {
+                    onClick()
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
                 .focusRequester(focusRequester)
                 .onFocusChanged {
+                    isFocused = it.isFocused
                     if (it.isFocused) {
                         onFocused()
                     }
                 }
                 .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    if (focusedPosterBackdropExpandEnabled && shouldResetBackdropTimer(event.key)) {
-                        onBackdropInteraction()
+                    val native = event.nativeKeyEvent
+                    if (native.action == AndroidKeyEvent.ACTION_DOWN) {
+                        if (focusedPosterBackdropExpandEnabled && shouldResetBackdropTimer(event.key)) {
+                            onBackdropInteraction()
+                        }
+                        if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                            longPressTriggered = true
+                            onLongPress()
+                            return@onPreviewKeyEvent true
+                        }
+                        val isLongPress = native.isLongPress || native.repeatCount > 0
+                        if (isLongPress && isSelectKey(native.keyCode)) {
+                            longPressTriggered = true
+                            onLongPress()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (event.type == KeyEventType.KeyDown) {
+                            return@onPreviewKeyEvent when (event.key) {
+                                Key.DirectionUp -> onMoveUp()
+                                Key.DirectionDown -> onMoveDown()
+                                else -> false
+                            }
+                        }
                     }
-                    when (event.key) {
-                        Key.DirectionUp -> onMoveUp()
-                        Key.DirectionDown -> onMoveDown()
-                        else -> false
+                    if (native.action == AndroidKeyEvent.ACTION_UP &&
+                        longPressTriggered &&
+                        isSelectKey(native.keyCode)
+                    ) {
+                        return@onPreviewKeyEvent true
                     }
+                    false
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
@@ -1598,6 +1658,29 @@ private fun ModernCarouselCard(
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart
                     )
+                }
+
+                if (isWatched) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = watchedIconEndPadding, top = 8.dp)
+                            .zIndex(2f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = stringResource(R.string.episodes_cd_watched),
+                            tint = Color.White,
+                            modifier = Modifier.size(21.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1832,6 +1915,12 @@ private fun shouldResetBackdropTimer(key: Key): Boolean {
         Key.Back -> true
         else -> false
     }
+}
+
+private fun isSelectKey(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
 }
 
 @Composable

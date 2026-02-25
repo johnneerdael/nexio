@@ -52,6 +52,7 @@ internal fun StreamItem(
     stream: Stream,
     focusRequester: FocusRequester,
     requestInitialFocus: Boolean,
+    isCurrentStream: Boolean = false,
     onClick: () -> Unit
 ) {
     Card(
@@ -64,6 +65,19 @@ internal fun StreamItem(
             focusedContainerColor = NuvioColors.BackgroundElevated
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        border = CardDefaults.border(
+            border = Border(
+                border = BorderStroke(
+                    1.dp,
+                    if (isCurrentStream) NuvioColors.Primary.copy(alpha = 0.65f) else Color.Transparent
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                shape = RoundedCornerShape(12.dp)
+            )
+        ),
         scale = CardDefaults.scale(focusedScale = 1.04f)
     ) {
         Row(
@@ -77,11 +91,31 @@ internal fun StreamItem(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = stream.getDisplayName(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stream.getDisplayName(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NuvioColors.TextPrimary
+                    )
+
+                    if (isCurrentStream) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(NuvioColors.Primary.copy(alpha = 0.2f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.sources_playing),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NuvioColors.Primary
+                            )
+                        }
+                    }
+                }
 
                 stream.getDisplayDescription()?.let { description ->
                     if (description != stream.getDisplayName()) {
