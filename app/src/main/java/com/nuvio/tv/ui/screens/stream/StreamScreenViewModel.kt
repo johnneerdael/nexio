@@ -1,8 +1,10 @@
 package com.nuvio.tv.ui.screens.stream
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.R
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.PlayerPreference
@@ -15,9 +17,13 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.StreamRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -26,6 +32,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
     private val metaRepository: MetaRepository,
@@ -36,6 +43,7 @@ class StreamScreenViewModel @Inject constructor(
     private var autoPlayHandledForSession = false
     private var directAutoPlayModeInitializedForSession = false
     private var directAutoPlayFlowEnabledForSession = false
+    private var streamLoadJob: Job? = null
 
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
@@ -76,6 +84,16 @@ class StreamScreenViewModel @Inject constructor(
 
     val playerPreference = playerSettingsDataStore.playerSettings
         .map { it.playerPreference }
+        .distinctUntilChanged()
+
+    private inline fun updateUiStateIfChanged(
+        transform: (StreamScreenUiState) -> StreamScreenUiState
+    ) {
+        _uiState.update { state ->
+            val next = transform(state)
+            if (next == state) state else next
+        }
+    }
 
     init {
         if (manualSelection) {
@@ -106,8 +124,14 @@ class StreamScreenViewModel @Inject constructor(
             is StreamScreenEvent.OnAddonFilterSelected -> filterByAddon(event.addonName)
             is StreamScreenEvent.OnStreamSelected -> { /* Handle stream selection - will be handled in UI */ }
             StreamScreenEvent.OnAutoPlayConsumed -> {
+                if (autoPlayHandledForSession &&
+                    _uiState.value.autoPlayStream == null &&
+                    _uiState.value.autoPlayPlaybackInfo == null
+                ) {
+                    return
+                }
                 autoPlayHandledForSession = true
-                _uiState.update {
+                updateUiStateIfChanged {
                     it.copy(
                         autoPlayStream = null,
                         autoPlayPlaybackInfo = null
@@ -128,7 +152,8 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun loadStreams() {
-        viewModelScope.launch {
+        streamLoadJob?.cancel()
+        streamLoadJob = viewModelScope.launch {
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             if (manualSelection) {
                 directAutoPlayModeInitializedForSession = true
@@ -146,11 +171,11 @@ class StreamScreenViewModel @Inject constructor(
             var resolvedAutoPlayTarget = false
 
             if (directFlowActive) {
-                _uiState.update {
+                updateUiStateIfChanged {
                     it.copy(
                         isDirectAutoPlayFlow = true,
                         showDirectAutoPlayOverlay = true,
-                        directAutoPlayMessage = "FINDING STREAM SOURCE"
+                        directAutoPlayMessage = context.getString(R.string.stream_finding_source)
                     )
                 }
             }
@@ -163,7 +188,7 @@ class StreamScreenViewModel @Inject constructor(
                 if (cached != null) {
                     autoPlayHandledForSession = true
                     resolvedAutoPlayTarget = true
-                    _uiState.update {
+                    updateUiStateIfChanged {
                         it.copy(
                             autoPlayPlaybackInfo = StreamPlaybackInfo(
                                 url = cached.url,
@@ -185,6 +210,7 @@ class StreamScreenViewModel @Inject constructor(
                                 season = season,
                                 episode = episode,
                                 episodeTitle = episodeName,
+                                bingeGroup = null,
                                 rememberedAudioLanguage = cached.rememberedAudioLanguage,
                                 rememberedAudioName = cached.rememberedAudioName
                             )
@@ -193,7 +219,7 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
-            _uiState.update {
+            updateUiStateIfChanged {
                 it.copy(
                     isLoading = true,
                     error = null,
@@ -209,7 +235,7 @@ class StreamScreenViewModel @Inject constructor(
                 videoId = videoId,
                 season = season,
                 episode = episode
-            ).collect { result ->
+            ).collectLatest { result ->
                 when (result) {
                     is NetworkResult.Success -> {
                         val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
@@ -240,7 +266,7 @@ class StreamScreenViewModel @Inject constructor(
                             allStreams.filter { it.addonName == currentFilter }
                         }
 
-                        _uiState.update {
+                        updateUiStateIfChanged {
                             it.copy(
                                 isLoading = false,
                                 addonStreams = addonStreams,
@@ -261,7 +287,7 @@ class StreamScreenViewModel @Inject constructor(
                         if (directAutoPlayFlowEnabledForSession) {
                             directAutoPlayFlowEnabledForSession = false
                         }
-                        _uiState.update {
+                        updateUiStateIfChanged {
                             it.copy(
                                 isLoading = false,
                                 error = result.message,
@@ -272,7 +298,7 @@ class StreamScreenViewModel @Inject constructor(
                         }
                     }
                     NetworkResult.Loading -> {
-                        _uiState.update {
+                        updateUiStateIfChanged {
                             it.copy(
                                 isLoading = true,
                                 showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
@@ -288,7 +314,7 @@ class StreamScreenViewModel @Inject constructor(
 
             if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
                 directAutoPlayFlowEnabledForSession = false
-                _uiState.update {
+                updateUiStateIfChanged {
                     it.copy(
                         isDirectAutoPlayFlow = false,
                         showDirectAutoPlayOverlay = false,
@@ -320,14 +346,30 @@ class StreamScreenViewModel @Inject constructor(
             val metaRuntime = extractRuntimeMinutes(meta)
 
             _uiState.update { state ->
-                state.copy(
-                    poster = state.poster ?: meta.poster,
-                    backdrop = state.backdrop ?: meta.background,
-                    logo = state.logo ?: meta.logo,
-                    genres = state.genres?.takeIf { it.isNotBlank() } ?: metaGenres,
-                    year = state.year?.takeIf { it.isNotBlank() } ?: metaYear,
-                    runtime = state.runtime ?: metaRuntime
-                )
+                val posterValue = state.poster ?: meta.poster
+                val backdropValue = state.backdrop ?: meta.background
+                val logoValue = state.logo ?: meta.logo
+                val genresValue = state.genres?.takeIf { it.isNotBlank() } ?: metaGenres
+                val yearValue = state.year?.takeIf { it.isNotBlank() } ?: metaYear
+                val runtimeValue = state.runtime ?: metaRuntime
+                if (state.poster == posterValue &&
+                    state.backdrop == backdropValue &&
+                    state.logo == logoValue &&
+                    state.genres == genresValue &&
+                    state.year == yearValue &&
+                    state.runtime == runtimeValue
+                ) {
+                    state
+                } else {
+                    state.copy(
+                        poster = posterValue,
+                        backdrop = backdropValue,
+                        logo = logoValue,
+                        genres = genresValue,
+                        year = yearValue,
+                        runtime = runtimeValue
+                    )
+                }
             }
         }
     }
@@ -342,18 +384,20 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun filterByAddon(addonName: String?) {
-        val allStreams = _uiState.value.allStreams
-        val filteredStreams = if (addonName == null) {
-            allStreams
-        } else {
-            allStreams.filter { it.addonName == addonName }
-        }
-
-        _uiState.update {
-            it.copy(
-                selectedAddonFilter = addonName,
-                filteredStreams = filteredStreams
-            )
+        updateUiStateIfChanged { state ->
+            if (state.selectedAddonFilter == addonName) {
+                state
+            } else {
+                val filteredStreams = if (addonName == null) {
+                    state.allStreams
+                } else {
+                    state.allStreams.filter { it.addonName == addonName }
+                }
+                state.copy(
+                    selectedAddonFilter = addonName,
+                    filteredStreams = filteredStreams
+                )
+            }
         }
     }
 
@@ -381,6 +425,7 @@ class StreamScreenViewModel @Inject constructor(
             season = season,
             episode = episode,
             episodeTitle = episodeName,
+            bingeGroup = stream.behaviorHints?.bingeGroup,
             rememberedAudioLanguage = null,
             rememberedAudioName = null
         )
@@ -398,6 +443,11 @@ class StreamScreenViewModel @Inject constructor(
         }
 
         return playbackInfo
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        streamLoadJob?.cancel()
     }
 
 }
@@ -423,6 +473,7 @@ data class StreamPlaybackInfo(
     val season: Int?,
     val episode: Int?,
     val episodeTitle: String?,
+    val bingeGroup: String?,
     val rememberedAudioLanguage: String?,
     val rememberedAudioName: String?
 )

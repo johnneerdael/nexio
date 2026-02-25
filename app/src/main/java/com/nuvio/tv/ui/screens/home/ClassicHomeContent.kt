@@ -46,13 +46,23 @@ fun ClassicHomeContent(
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
-    val columnListState = rememberLazyListState()
+    val columnListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = focusState.verticalScrollIndex,
+        initialFirstVisibleItemScrollOffset = focusState.verticalScrollOffset
+    )
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
-        if (focusState.verticalScrollIndex > 0 || focusState.verticalScrollOffset > 0) {
+        val targetIndex = focusState.verticalScrollIndex
+        val targetOffset = focusState.verticalScrollOffset
+        if (columnListState.firstVisibleItemIndex == targetIndex &&
+            columnListState.firstVisibleItemScrollOffset == targetOffset
+        ) {
+            return@LaunchedEffect
+        }
+        if (targetIndex > 0 || targetOffset > 0) {
             columnListState.scrollToItem(
-                focusState.verticalScrollIndex,
-                focusState.verticalScrollOffset
+                targetIndex,
+                targetOffset
             )
         }
     }
@@ -84,6 +94,7 @@ fun ClassicHomeContent(
 
     LaunchedEffect(visibleCatalogKeys) {
         rowStates.keys.retainAll(visibleCatalogKeys)
+        rowFocusRequesters.keys.retainAll(visibleCatalogKeys)
     }
 
     DisposableEffect(Unit) {
@@ -120,6 +131,7 @@ fun ClassicHomeContent(
                 HeroCarousel(
                     items = uiState.heroItems,
                     focusRequester = if (shouldRequestInitialFocus) heroFocusRequester else null,
+                    onItemFocus = onItemFocus,
                     onItemClick = { item ->
                         onNavigateToDetail(
                             item.id,
@@ -182,7 +194,7 @@ fun ClassicHomeContent(
 
         itemsIndexed(
             items = visibleCatalogRows,
-            key = { _, item -> "${item.addonId}_${item.type}_${item.catalogId}" },
+            key = { _, item -> "${item.addonId}_${item.apiType}_${item.catalogId}" },
             contentType = { _, _ -> "catalog_row" }
         ) { index, catalogRow ->
             val catalogKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"

@@ -126,11 +126,11 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val modernLandscapePostersEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernLandscapePostersEnabledKey] ?: true
+        prefs[modernLandscapePostersEnabledKey] ?: false
     }
 
     val modernNextRowPreviewEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernNextRowPreviewEnabledKey] ?: false
+        prefs[modernNextRowPreviewEnabledKey] ?: true
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -174,9 +174,9 @@ class LayoutPreferenceDataStore @Inject constructor(
     val focusedPosterBackdropTrailerPlaybackTarget: Flow<FocusedPosterTrailerPlaybackTarget> =
         profileFlow { prefs ->
             val stored = prefs[focusedPosterBackdropTrailerPlaybackTargetKey]
-                ?: FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD.name
+                ?: FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
             runCatching { FocusedPosterTrailerPlaybackTarget.valueOf(stored) }
-                .getOrDefault(FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD)
+                .getOrDefault(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
         }
 
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->

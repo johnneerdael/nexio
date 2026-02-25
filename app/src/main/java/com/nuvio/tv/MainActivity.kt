@@ -1,10 +1,13 @@
 package com.nuvio.tv
 
 import android.os.Bundle
+import android.content.Context
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
+import java.util.Locale
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDp
@@ -38,6 +41,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -77,6 +81,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -85,14 +90,19 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nuvio.tv.core.profile.ProfileManager
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.data.local.AppOnboardingDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppTheme
+import com.nuvio.tv.domain.model.AuthState
+import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
+import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
@@ -105,10 +115,13 @@ import dev.chrisbanes.haze.hazeChild
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import androidx.compose.ui.res.stringResource
+import com.nuvio.tv.R
 
 data class DrawerItem(
     val route: String,
@@ -118,7 +131,7 @@ data class DrawerItem(
 )
 
 private data class MainUiPrefs(
-    val theme: AppTheme = AppTheme.OCEAN,
+    val theme: AppTheme = AppTheme.WHITE,
     val hasChosenLayout: Boolean? = null,
     val sidebarCollapsed: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
@@ -141,13 +154,51 @@ class MainActivity : ComponentActivity() {
     lateinit var startupSyncService: StartupSyncService
 
     @Inject
+    lateinit var profileSyncService: ProfileSyncService
+
+    @Inject
     lateinit var profileManager: ProfileManager
 
+    @Inject
+    lateinit var authManager: AuthManager
+
+    @Inject
+    lateinit var appOnboardingDataStore: AppOnboardingDataStore
+
     @OptIn(ExperimentalTvMaterial3Api::class)
+    override fun attachBaseContext(newBase: Context) {
+        val tag = newBase.getSharedPreferences("app_locale", Context.MODE_PRIVATE)
+            .getString("locale_tag", null)
+        if (!tag.isNullOrEmpty()) {
+            val locale = Locale.forLanguageTag(tag)
+            Locale.setDefault(locale)
+            val config = Configuration(newBase.resources.configuration)
+            config.setLocale(locale)
+            super.attachBaseContext(newBase.createConfigurationContext(config))
+        } else {
+            super.attachBaseContext(newBase)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         setContent {
             var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
+            var onboardingCompletedThisSession by remember { mutableStateOf(false) }
+            var onboardingProfileSyncInProgress by remember { mutableStateOf(false) }
+            val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
+                .hasSeenAuthQrOnFirstLaunch
+                .map<Boolean, Boolean?> { it }
+                .collectAsState(initial = null)
+            val authState by authManager.authState.collectAsState()
+
+            LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
+                if (hasSeenAuthQrOnFirstLaunch == false && authState is AuthState.FullAccount) {
+                    appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
+                    onboardingCompletedThisSession = true
+                }
+            }
 
             val activeProfileId by profileManager.activeProfileId.collectAsState()
             val profiles by profileManager.profiles.collectAsState()
@@ -179,11 +230,71 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
                 ) {
-                    if (!hasSelectedProfileThisSession) {
+                    if (hasSeenAuthQrOnFirstLaunch == null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(NuvioColors.Background)
+                        )
+                        return@Surface
+                    }
+
+                    if (
+                        hasSeenAuthQrOnFirstLaunch == false &&
+                        authState !is AuthState.FullAccount &&
+                        !onboardingCompletedThisSession
+                    ) {
+                        AuthQrSignInScreen(
+                            onBackPress = {},
+                            onContinue = {
+                                lifecycleScope.launch {
+                                    val shouldRunRemoteOnboardingSync =
+                                        authManager.authState.value is AuthState.FullAccount
+
+                                    if (shouldRunRemoteOnboardingSync) {
+                                        if (onboardingProfileSyncInProgress) return@launch
+                                        onboardingProfileSyncInProgress = true
+                                        val maxAttempts = 3
+                                        var synced = false
+                                        for (attempt in 0 until maxAttempts) {
+                                            val result = profileSyncService.pullFromRemote()
+                                            if (result.isSuccess) {
+                                                synced = true
+                                                break
+                                            }
+                                            if (attempt < maxAttempts - 1) {
+                                                delay(1_000)
+                                            }
+                                        }
+                                        if (!synced) {
+                                            android.util.Log.w(
+                                                "MainActivity",
+                                                "Onboarding profile sync failed after retries; continuing"
+                                            )
+                                        }
+                                    }
+                                    appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
+                                    onboardingCompletedThisSession = true
+                                    onboardingProfileSyncInProgress = false
+                                }
+                                if (authManager.authState.value is AuthState.FullAccount) {
+                                    startupSyncService.requestSyncNow()
+                                }
+                            }
+                        )
+                        return@Surface
+                    }
+
+                    val shouldShowProfileSelection =
+                        !hasSelectedProfileThisSession && profiles.size > 1
+
+                    if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
                             onProfileSelected = {
                                 hasSelectedProfileThisSession = true
-                                startupSyncService.requestSyncNow()
+                                if (authManager.authState.value is AuthState.FullAccount) {
+                                    startupSyncService.requestSyncNow()
+                                }
                             }
                         )
                         return@Surface
@@ -222,31 +333,42 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    val drawerItems = remember {
+                    val strNavHome = stringResource(R.string.nav_home)
+                    val strNavSearch = stringResource(R.string.nav_search)
+                    val strNavLibrary = stringResource(R.string.nav_library)
+                    val strNavAddons = stringResource(R.string.nav_addons)
+                    val strNavSettings = stringResource(R.string.nav_settings)
+                    val drawerItems = remember(
+                        strNavHome,
+                        strNavSearch,
+                        strNavLibrary,
+                        strNavAddons,
+                        strNavSettings
+                    ) {
                         listOf(
                             DrawerItem(
                                 route = Screen.Home.route,
-                                label = "Home",
+                                label = strNavHome,
                                 icon = Icons.Default.Home
                             ),
                             DrawerItem(
                                 route = Screen.Search.route,
-                                label = "Search",
+                                label = strNavSearch,
                                 iconRes = R.raw.sidebar_search
                             ),
                             DrawerItem(
                                 route = Screen.Library.route,
-                                label = "Library",
+                                label = strNavLibrary,
                                 iconRes = R.raw.sidebar_library
                             ),
                             DrawerItem(
                                 route = Screen.AddonManager.route,
-                                label = "Addons",
+                                label = strNavAddons,
                                 iconRes = R.raw.sidebar_plugin
                             ),
                             DrawerItem(
                                 route = Screen.Settings.route,
-                                label = "Settings",
+                                label = strNavSettings,
                                 iconRes = R.raw.sidebar_settings
                             )
                         )
@@ -270,7 +392,11 @@ class MainActivity : ComponentActivity() {
                             hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
                             activeProfileName = activeProfile?.name ?: "",
                             activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                            onSwitchProfile = { hasSelectedProfileThisSession = false }
+                            onSwitchProfile = { hasSelectedProfileThisSession = false },
+                            onExitApp = {
+                                finishAffinity()
+                                finishAndRemoveTask()
+                            }
                         )
                     } else {
                         LegacySidebarScaffold(
@@ -284,7 +410,11 @@ class MainActivity : ComponentActivity() {
                             hideBuiltInHeaders = false,
                             activeProfileName = activeProfile?.name ?: "",
                             activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                            onSwitchProfile = { hasSelectedProfileThisSession = false }
+                            onSwitchProfile = { hasSelectedProfileThisSession = false },
+                            onExitApp = {
+                                finishAffinity()
+                                finishAndRemoveTask()
+                            }
                         )
                     }
 
@@ -323,7 +453,8 @@ private fun LegacySidebarScaffold(
     hideBuiltInHeaders: Boolean,
     activeProfileName: String,
     activeProfileColorHex: String,
-    onSwitchProfile: () -> Unit
+    onSwitchProfile: () -> Unit,
+    onExitApp: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val drawerItemFocusRequesters = remember(drawerItems) {
@@ -345,6 +476,10 @@ private fun LegacySidebarScaffold(
     BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Closed) {
         pendingSidebarFocusRequest = true
         drawerState.setValue(DrawerValue.Open)
+    }
+
+    BackHandler(enabled = currentRoute in rootRoutes && drawerState.currentValue == DrawerValue.Open) {
+        onExitApp()
     }
 
     LaunchedEffect(drawerState.currentValue, pendingContentFocusTransfer) {
@@ -576,6 +711,7 @@ private fun LegacySidebarButton(
                 text = label,
                 color = contentColor,
                 maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 textAlign = TextAlign.Start,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
@@ -600,7 +736,8 @@ private fun ModernSidebarScaffold(
     hideBuiltInHeaders: Boolean,
     activeProfileName: String,
     activeProfileColorHex: String,
-    onSwitchProfile: () -> Unit
+    onSwitchProfile: () -> Unit,
+    onExitApp: () -> Unit
 ) {
     val showSidebar = currentRoute in rootRoutes
     val collapsedSidebarWidth = if (sidebarCollapsed) 0.dp else 184.dp
@@ -641,6 +778,10 @@ private fun ModernSidebarScaffold(
         isSidebarExpanded = true
         sidebarCollapsePending = false
         pendingSidebarFocusRequest = true
+    }
+
+    BackHandler(enabled = currentRoute in rootRoutes && isSidebarExpanded && !sidebarCollapsePending) {
+        onExitApp()
     }
 
     LaunchedEffect(sidebarCollapsePending, isSidebarExpanded, showSidebar) {
@@ -979,7 +1120,7 @@ private fun CollapsedSidebarPill(
         if (!iconOnly) {
             Image(
                 painter = painterResource(id = R.drawable.ic_chevron_compact_left),
-                contentDescription = "Expand sidebar",
+                contentDescription = stringResource(R.string.cd_expand_sidebar),
                 modifier = Modifier
                     .width(8.5.dp)
                     .height(16.dp)

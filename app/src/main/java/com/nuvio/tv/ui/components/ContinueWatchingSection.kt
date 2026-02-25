@@ -18,9 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -33,7 +35,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.nuvio.tv.R
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
@@ -78,21 +82,28 @@ fun ContinueWatchingSection(
 
     val itemFocusRequester = remember { FocusRequester() }
     val focusRequesters = remember(items.size) { List(items.size) { FocusRequester() } }
-    var lastFocusedIndex by remember { mutableStateOf(-1) }
+    var lastFocusedIndex by remember { mutableIntStateOf(-1) }
+    var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     
     val listState = rememberLazyListState()
 
     // Restore focus to specific item if requested
-    LaunchedEffect(focusedItemIndex) {
+    LaunchedEffect(focusedItemIndex, items) {
         if (focusedItemIndex >= 0 && focusedItemIndex < items.size) {
-            kotlinx.coroutines.delay(100)
-            try {
-                itemFocusRequester.requestFocus()
-            } catch (e: IllegalStateException) {
-                // Item not yet composed, ignore
+            if (lastRequestedFocusIndex == focusedItemIndex) return@LaunchedEffect
+            var focused = false
+            for (attempt in 0 until 3) {
+                withFrameNanos { }
+                focused = runCatching { itemFocusRequester.requestFocus() }.isSuccess
+                if (focused) break
             }
+            if (focused) {
+                lastRequestedFocusIndex = focusedItemIndex
+            }
+        } else {
+            lastRequestedFocusIndex = -1
         }
     }
 
@@ -105,7 +116,7 @@ fun ContinueWatchingSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Continue Watching",
+                text = stringResource(R.string.continue_watching),
                 style = MaterialTheme.typography.headlineMedium,
                 color = NuvioColors.TextPrimary
             )
@@ -121,10 +132,12 @@ fun ContinueWatchingSection(
         ) {
             itemsIndexed(
                 items = items,
-                key = { index, progress ->
+                key = { _, progress ->
                     when (progress) {
-                        is ContinueWatchingItem.InProgress -> "cw_${progress.progress.videoId}_$index"
-                        is ContinueWatchingItem.NextUp -> "nextup_${progress.info.videoId}_$index"
+                        is ContinueWatchingItem.InProgress ->
+                            "cw_${progress.progress.contentId}_${progress.progress.videoId}_${progress.progress.season ?: -1}_${progress.progress.episode ?: -1}"
+                        is ContinueWatchingItem.NextUp ->
+                            "nextup_${progress.info.contentId}_${progress.info.videoId}_${progress.info.season}_${progress.info.episode}"
                     }
                 }
             ) { index, progress ->
@@ -140,7 +153,7 @@ fun ContinueWatchingSection(
                     onLongPress = { optionsItem = progress },
                     modifier = Modifier
                         .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
+                            if (focusState.isFocused && lastFocusedIndex != index) {
                                 lastFocusedIndex = index
                                 onItemFocused(index)
                             }
@@ -172,10 +185,14 @@ fun ContinueWatchingSection(
     LaunchedEffect(items.size, pendingFocusIndex) {
         val target = pendingFocusIndex
         if (target != null && target >= 0 && target < focusRequesters.size) {
-            kotlinx.coroutines.delay(100)
-            try {
-                focusRequesters[target].requestFocus()
-            } catch (_: IllegalStateException) {
+            var focused = false
+            for (attempt in 0 until 3) {
+                withFrameNanos { }
+                focused = runCatching { focusRequesters[target].requestFocus() }.isSuccess
+                if (focused) break
+            }
+            if (focused) {
+                lastRequestedFocusIndex = target
             }
             pendingFocusIndex = null
         }
@@ -198,12 +215,23 @@ fun ContinueWatchingCard(
     val progress = (item as? ContinueWatchingItem.InProgress)?.progress
     val nextUp = (item as? ContinueWatchingItem.NextUp)?.info
     val episodeStr = progress?.episodeDisplayString ?: nextUp?.let { "S${it.season}E${it.episode}" }
+    val strAirsDate = stringResource(R.string.cw_airs_date, nextUp?.airDateLabel ?: "")
+    val strUpcoming = stringResource(R.string.cw_upcoming)
+    val strNextUp = stringResource(R.string.cw_next_up)
+    val strResume = stringResource(R.string.cw_resume)
+    val nextUpBadgeText = nextUp?.let { info ->
+        if (!info.hasAired) {
+            info.airDateLabel?.let { strAirsDate } ?: strUpcoming
+        } else {
+            strNextUp
+        }
+    }
     val remainingText = progress?.let {
         remember(it.position, it.duration, it.progressPercent) {
             when {
                 it.duration > 0L -> formatRemainingTime(it.remainingTime)
                 it.progressPercent != null -> "${it.progressPercent.toInt().coerceIn(0, 100)}% watched"
-                else -> "Resume"
+                else -> strResume
             }
         }
     }
@@ -214,12 +242,31 @@ fun ContinueWatchingCard(
     val badgeText = if (BuildConfig.IS_DEBUG_BUILD && watchedPercentText != null) {
         remainingText?.let { "$it · $watchedPercentText" } ?: watchedPercentText
     } else {
-        remainingText ?: "Next Up"
+        remainingText ?: nextUpBadgeText ?: strNextUp
     }
     val progressFraction = progress?.progressPercentage ?: 0f
-    val imageModel = nextUp?.thumbnail ?: progress?.backdrop ?: progress?.poster ?: nextUp?.backdrop ?: nextUp?.poster
+    val imageModel = when {
+        nextUp != null && !nextUp.hasAired -> firstNonBlank(
+            nextUp.backdrop,
+            nextUp.poster,
+            nextUp.thumbnail,
+            progress?.backdrop,
+            progress?.poster
+        )
+        else -> firstNonBlank(
+            nextUp?.thumbnail,
+            progress?.backdrop,
+            progress?.poster,
+            nextUp?.backdrop,
+            nextUp?.poster
+        )
+    }
     val titleText = progress?.name ?: nextUp?.name.orEmpty()
-    val episodeTitle = progress?.episodeTitle ?: nextUp?.episodeTitle
+    val episodeTitle = when {
+        progress != null -> progress.episodeTitle
+        nextUp != null && !nextUp.hasAired -> nextUp.episodeTitle ?: nextUp.airDateLabel?.let { stringResource(R.string.cw_airs_date, it) }
+        else -> nextUp?.episodeTitle
+    }
     val context = LocalContext.current
     val density = LocalDensity.current
     val requestWidthPx = remember(cardWidth, density) {
@@ -302,12 +349,16 @@ fun ContinueWatchingCard(
                     .clip(CwClipShape)
             ) {
                 // Background image with size hints for efficient decoding
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = titleText,
-                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (imageModel.isNullOrBlank()) {
+                    MonochromePosterPlaceholder()
+                } else {
+                    AsyncImage(
+                        model = imageRequest,
+                        contentDescription = titleText,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
                 // Gradient overlay for text readability
                 Box(
@@ -409,7 +460,7 @@ fun ContinueWatchingOptionsDialog(
     NuvioDialog(
         onDismiss = onDismiss,
         title = title,
-        subtitle = "Choose what you want to do with this item."
+        subtitle = stringResource(R.string.cw_dialog_subtitle)
     ) {
         Button(
             onClick = onDetails,
@@ -421,7 +472,7 @@ fun ContinueWatchingOptionsDialog(
                 contentColor = NuvioColors.TextPrimary
             )
         ) {
-            Text("Go to details")
+            Text(stringResource(R.string.cw_action_go_to_details))
         }
 
         Button(
@@ -432,7 +483,7 @@ fun ContinueWatchingOptionsDialog(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Remove")
+            Text(stringResource(R.string.cw_action_remove))
         }
     }
 }
@@ -441,6 +492,10 @@ private fun isSelectKey(keyCode: Int): Boolean {
     return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
         keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
         keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+}
+
+private fun firstNonBlank(vararg candidates: String?): String? {
+    return candidates.firstOrNull { !it.isNullOrBlank() }?.trim()
 }
 
 internal fun formatRemainingTime(remainingMs: Long): String {
