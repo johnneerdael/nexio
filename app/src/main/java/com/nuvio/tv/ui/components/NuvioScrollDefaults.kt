@@ -19,9 +19,10 @@ object NuvioScrollDefaults {
             size: Float,
             containerSize: Float
         ): Float {
+            if (containerSize <= 0f || size <= 0f) return 0f
             val itemCenter = offset + size / 2f
-            val viewportCenter = containerSize / 2f
-            return itemCenter - viewportCenter
+            val viewportTarget = containerSize * 0.42f
+            return itemCenter - viewportTarget
         }
     }
 }
