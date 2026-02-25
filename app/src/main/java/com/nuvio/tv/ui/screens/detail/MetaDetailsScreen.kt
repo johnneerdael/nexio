@@ -916,7 +916,7 @@ private fun MetaDetailsContent(
     ) {
         ImageRequest.Builder(localContext)
             .data(meta.background ?: meta.poster)
-            .crossfade(false)
+            .crossfade(true)
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
     }
@@ -1040,6 +1040,7 @@ private fun MetaDetailsContent(
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
+                        episodeRatings = episodeImdbRatings,
                         watchedEpisodes = watchedEpisodes,
                         episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,

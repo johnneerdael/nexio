@@ -80,7 +80,7 @@ private fun CompanyLogoCard(company: MetaCompany) {
         company.logo?.let { logo ->
             ImageRequest.Builder(context)
                 .data(logo)
-                .crossfade(false)
+                .crossfade(true)
                 .size(width = logoWidthPx, height = logoHeightPx)
                 .build()
         }
