@@ -193,6 +193,7 @@
     <!-- PlaybackSubtitleSettings -->
     <string name="sub_section">Napisy</string>
     <string name="sub_not_set">Nie ustawiono</string>
+    <string name="sub_forced_lang">Wymuszone</string>
     <string name="sub_preferred_lang">Preferowany język</string>
     <string name="sub_secondary_lang">Drugi preferowany język</string>
     <string name="sub_organization">Organizacja napisów</string>

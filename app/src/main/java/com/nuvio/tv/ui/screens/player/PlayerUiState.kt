@@ -130,6 +130,7 @@ data class TrackInfo(
     val trackId: String? = null,
     val codec: String? = null,
     val channelCount: Int? = null,
+    val isForced: Boolean = false,
     val isSelected: Boolean = false
 )
 

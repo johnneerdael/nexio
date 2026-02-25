@@ -195,6 +195,7 @@
     <!-- PlaybackSubtitleSettings -->
     <string name="sub_section">Subtitles</string>
     <string name="sub_not_set">Not set</string>
+    <string name="sub_forced_lang">Forced</string>
     <string name="sub_preferred_lang">Preferred Language</string>
     <string name="sub_secondary_lang">Secondary Preferred Language</string>
     <string name="sub_organization">Subtitle Organization</string>

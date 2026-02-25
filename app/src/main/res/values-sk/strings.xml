@@ -177,6 +177,7 @@
     <!-- PlaybackSubtitleSettings -->
     <string name="sub_section">Titulky</string>
     <string name="sub_not_set">Nenastavené</string>
+    <string name="sub_forced_lang">Vynútené</string>
     <string name="sub_preferred_lang">Preferovaný jazyk</string>
     <string name="sub_secondary_lang">Sekundárny preferovaný jazyk</string>
     <string name="sub_organization">Usporiadanie titulkov</string>

@@ -177,6 +177,7 @@
     <!-- PlaybackSubtitleSettings -->
     <string name="sub_section">Podnapisi</string>
     <string name="sub_not_set">Ni nastavljeno</string>
+    <string name="sub_forced_lang">Prisiljeni</string>
     <string name="sub_preferred_lang">Prednostni jezik</string>
     <string name="sub_secondary_lang">Sekundarni prednostni jezik</string>
     <string name="sub_organization">Organizacija podnapisov</string>
