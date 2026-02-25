@@ -90,11 +90,27 @@ internal data class CarouselRowLookups(
     val activeCatalogItemIds: Set<String>
 )
 
+internal data class ModernCatalogRowBuildCacheEntry(
+    val source: CatalogRow,
+    val useLandscapePosters: Boolean,
+    val showCatalogTypeSuffix: Boolean,
+    val mappedRow: HeroCarouselRow
+)
+
 internal class ModernHomeUiCaches {
     val focusedItemByRow = mutableMapOf<String, Int>()
     val itemFocusRequesters = mutableMapOf<String, MutableMap<String, FocusRequester>>()
     val rowListStates = mutableMapOf<String, LazyListState>()
     val loadMoreRequestedTotals = mutableMapOf<String, Int>()
+}
+
+internal class ModernCarouselRowBuildCache {
+    var continueWatchingItems: List<ContinueWatchingItem> = emptyList()
+    var continueWatchingTitle: String = ""
+    var continueWatchingAirsDateTemplate: String = ""
+    var continueWatchingUseLandscapePosters: Boolean = false
+    var continueWatchingRow: HeroCarouselRow? = null
+    val catalogRows = mutableMapOf<String, ModernCatalogRowBuildCacheEntry>()
 }
 
 
@@ -303,4 +319,3 @@ internal fun ContinueWatchingItem.episode(): Int? {
         is ContinueWatchingItem.NextUp -> info.episode
     }
 }
-

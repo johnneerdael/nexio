@@ -135,6 +135,7 @@ fun ModernHomeContent(
     }
     val strContinueWatching = stringResource(R.string.continue_watching)
     val strAirsDate = stringResource(R.string.cw_airs_date)
+    val rowBuildCache = remember { ModernCarouselRowBuildCache() }
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
@@ -142,8 +143,17 @@ fun ModernHomeContent(
         showCatalogTypeSuffixInModern
     ) {
         buildList {
+            val activeCatalogKeys = LinkedHashSet<String>(visibleCatalogRows.size)
             if (uiState.continueWatchingItems.isNotEmpty()) {
-                add(
+                val reuseContinueWatchingRow =
+                    rowBuildCache.continueWatchingRow != null &&
+                        rowBuildCache.continueWatchingItems == uiState.continueWatchingItems &&
+                        rowBuildCache.continueWatchingTitle == strContinueWatching &&
+                        rowBuildCache.continueWatchingAirsDateTemplate == strAirsDate &&
+                        rowBuildCache.continueWatchingUseLandscapePosters == useLandscapePosters
+                val continueWatchingRow = if (reuseContinueWatchingRow) {
+                    checkNotNull(rowBuildCache.continueWatchingRow)
+                } else {
                     HeroCarouselRow(
                         key = "continue_watching",
                         title = strContinueWatching,
@@ -156,14 +166,39 @@ fun ModernHomeContent(
                             )
                         }
                     )
-                )
+                }
+                rowBuildCache.continueWatchingItems = uiState.continueWatchingItems
+                rowBuildCache.continueWatchingTitle = strContinueWatching
+                rowBuildCache.continueWatchingAirsDateTemplate = strAirsDate
+                rowBuildCache.continueWatchingUseLandscapePosters = useLandscapePosters
+                rowBuildCache.continueWatchingRow = continueWatchingRow
+                add(continueWatchingRow)
+            } else {
+                rowBuildCache.continueWatchingItems = emptyList()
+                rowBuildCache.continueWatchingRow = null
             }
 
             visibleCatalogRows.forEachIndexed { index, row ->
-                val rowItemOccurrenceCounts = mutableMapOf<String, Int>()
-                add(
+                val rowKey = catalogRowKey(row)
+                activeCatalogKeys += rowKey
+                val cached = rowBuildCache.catalogRows[rowKey]
+                val canReuseMappedRow =
+                    cached != null &&
+                        cached.source == row &&
+                        cached.useLandscapePosters == useLandscapePosters &&
+                        cached.showCatalogTypeSuffix == showCatalogTypeSuffixInModern
+
+                val mappedRow = if (canReuseMappedRow) {
+                    val cachedMappedRow = checkNotNull(cached).mappedRow
+                    if (cachedMappedRow.globalRowIndex == index) {
+                        cachedMappedRow
+                    } else {
+                        cachedMappedRow.copy(globalRowIndex = index)
+                    }
+                } else {
+                    val rowItemOccurrenceCounts = mutableMapOf<String, Int>()
                     HeroCarouselRow(
-                        key = catalogRowKey(row),
+                        key = rowKey,
                         title = catalogRowTitle(
                             row = row,
                             showCatalogTypeSuffix = showCatalogTypeSuffixInModern
@@ -186,8 +221,17 @@ fun ModernHomeContent(
                             )
                         }
                     )
+                }
+
+                rowBuildCache.catalogRows[rowKey] = ModernCatalogRowBuildCacheEntry(
+                    source = row,
+                    useLandscapePosters = useLandscapePosters,
+                    showCatalogTypeSuffix = showCatalogTypeSuffixInModern,
+                    mappedRow = mappedRow
                 )
+                add(mappedRow)
             }
+            rowBuildCache.catalogRows.keys.retainAll(activeCatalogKeys)
         }
     }
 
@@ -501,6 +545,7 @@ fun ModernHomeContent(
                 expandedFocusedSelection?.payload?.itemId?.let { trailerPreviewUrls[it] }
             }
         }
+        val expandedCatalogTrailerUrl = heroTrailerUrl
         val shouldPlayHeroTrailer by remember(
             effectiveAutoplayEnabled,
             trailerPlaybackTarget,
@@ -655,6 +700,7 @@ fun ModernHomeContent(
                         focusStateCatalogRowScrollStates = focusState.catalogRowScrollStates,
                         rowListStates = rowListStates,
                         focusedItemByRow = focusedItemByRow,
+                        itemFocusRequesters = itemFocusRequesters,
                         loadMoreRequestedTotals = loadMoreRequestedTotals,
                         requesterFor = ::requesterFor,
                         pendingRowFocusKey = pendingRowFocusKey,
@@ -692,7 +738,7 @@ fun ModernHomeContent(
                         effectiveAutoplayEnabled = effectiveAutoplayEnabled,
                         trailerPlaybackTarget = trailerPlaybackTarget,
                         expandedCatalogFocusKey = expandedCatalogFocusKey,
-                        trailerPreviewUrls = trailerPreviewUrls,
+                        expandedTrailerPreviewUrl = expandedCatalogTrailerUrl,
                         modernCatalogCardWidth = modernCatalogCardWidth,
                         modernCatalogCardHeight = modernCatalogCardHeight,
                         continueWatchingCardWidth = continueWatchingCardWidth,

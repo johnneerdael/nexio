@@ -106,7 +106,7 @@ private fun ModernCatalogRowItem(
     effectiveAutoplayEnabled: Boolean,
     trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     expandedCatalogFocusKey: String?,
-    trailerPreviewUrls: Map<String, String>,
+    expandedTrailerPreviewUrl: String?,
     onFocused: () -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -126,7 +126,7 @@ private fun ModernCatalogRowItem(
             trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
             isBackdropExpanded
     val trailerPreviewUrl = if (playTrailerInExpandedCard) {
-        trailerPreviewUrls[payload.itemId]
+        expandedTrailerPreviewUrl
     } else {
         null
     }
@@ -174,6 +174,7 @@ internal fun ModernRowSection(
     focusStateCatalogRowScrollStates: Map<String, Int>,
     rowListStates: MutableMap<String, LazyListState>,
     focusedItemByRow: MutableMap<String, Int>,
+    itemFocusRequesters: MutableMap<String, MutableMap<String, FocusRequester>>,
     loadMoreRequestedTotals: MutableMap<String, Int>,
     requesterFor: (String, String) -> FocusRequester,
     pendingRowFocusKey: String?,
@@ -189,7 +190,7 @@ internal fun ModernRowSection(
     effectiveAutoplayEnabled: Boolean,
     trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     expandedCatalogFocusKey: String?,
-    trailerPreviewUrls: Map<String, String>,
+    expandedTrailerPreviewUrl: String?,
     modernCatalogCardWidth: Dp,
     modernCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
@@ -314,7 +315,7 @@ internal fun ModernRowSection(
                         fallbackIndex
                     }
                     val itemKey = row.items.getOrNull(restoreIndex)?.key ?: row.items.first().key
-                    requesterFor(row.key, itemKey)
+                    itemFocusRequesters[row.key]?.get(itemKey) ?: FocusRequester.Default
                 },
                 contentPadding = PaddingValues(horizontal = 52.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -363,7 +364,7 @@ internal fun ModernRowSection(
                                 effectiveAutoplayEnabled = effectiveAutoplayEnabled,
                                 trailerPlaybackTarget = trailerPlaybackTarget,
                                 expandedCatalogFocusKey = expandedCatalogFocusKey,
-                                trailerPreviewUrls = trailerPreviewUrls,
+                                expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
                                 onFocused = onFocused,
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
@@ -594,4 +595,3 @@ private fun shouldResetBackdropTimer(key: Key): Boolean {
         else -> false
     }
 }
-
