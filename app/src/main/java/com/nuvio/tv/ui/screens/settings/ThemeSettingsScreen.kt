@@ -92,7 +92,8 @@ fun ThemeSettingsContent(
             "en" to "English",
             "pl" to "Polski",
             "sk" to "Slovensky",
-            "sl" to "Slovenščina"
+            "sl" to "Slovenščina",
+            "ro" to "Română"
         )
     }
     var selectedTag by remember {
