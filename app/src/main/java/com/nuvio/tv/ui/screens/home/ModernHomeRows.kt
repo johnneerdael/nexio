@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -216,6 +217,9 @@ internal fun ModernRowSection(
                 firstVisibleItemIndex = focusStateCatalogRowScrollStates[row.key] ?: 0
             )
         }
+        val isRowScrolling by remember(rowListState) {
+            derivedStateOf { rowListState.isScrollInProgress }
+        }
         val currentRowState = rememberUpdatedState(row)
         val loadMoreCatalogId = row.catalogId
         val loadMoreAddonId = row.addonId
@@ -360,8 +364,8 @@ internal fun ModernRowSection(
                                 modernCatalogCardWidth = modernCatalogCardWidth,
                                 modernCatalogCardHeight = modernCatalogCardHeight,
                                 focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-                                effectiveExpandEnabled = effectiveExpandEnabled,
-                                effectiveAutoplayEnabled = effectiveAutoplayEnabled,
+                                effectiveExpandEnabled = effectiveExpandEnabled && !isRowScrolling,
+                                effectiveAutoplayEnabled = effectiveAutoplayEnabled && !isRowScrolling,
                                 trailerPlaybackTarget = trailerPlaybackTarget,
                                 expandedCatalogFocusKey = expandedCatalogFocusKey,
                                 expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
