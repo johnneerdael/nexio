@@ -23,7 +23,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -107,6 +110,7 @@ import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.ui.navigation.NuvioNavHost
 import com.nuvio.tv.ui.navigation.Screen
+import com.nuvio.tv.ui.components.NuvioScrollDefaults
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
@@ -172,7 +176,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var jankStats: JankStats
 
-    @OptIn(ExperimentalTvMaterial3Api::class)
+    @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
     override fun attachBaseContext(newBase: Context) {
         val tag = newBase.getSharedPreferences("app_locale", Context.MODE_PRIVATE)
             .getString("locale_tag", null)
@@ -187,6 +191,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -233,6 +238,9 @@ class MainActivity : ComponentActivity() {
             val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs(hasChosenLayout = null))
 
             NuvioTheme(appTheme = mainUiPrefs.theme) {
+                CompositionLocalProvider(
+                    LocalBringIntoViewSpec provides NuvioScrollDefaults.smoothScrollSpec
+                ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape
@@ -442,6 +450,7 @@ class MainActivity : ComponentActivity() {
                         onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
                     )
                 }
+            }
             }
         }
 

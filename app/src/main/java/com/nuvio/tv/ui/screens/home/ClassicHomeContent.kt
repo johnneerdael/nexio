@@ -1,11 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
 import android.view.KeyEvent as AndroidKeyEvent
-import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -141,29 +136,6 @@ fun ClassicHomeContent(
     // Throttle D-pad key repeats to prevent HWUI overload when a key is held down.
     var lastKeyRepeatTime by remember { mutableStateOf(0L) }
 
-    // Smooth, slightly bouncy scroll that centers the focused row on screen.
-    val smoothScrollSpec = remember {
-        object : BringIntoViewSpec {
-            @Suppress("DEPRECATION")
-            override val scrollAnimationSpec: AnimationSpec<Float> = spring(
-                dampingRatio = 0.83f,
-                stiffness = 35f
-            )
-
-            override fun calculateScrollDistance(
-                offset: Float,
-                size: Float,
-                containerSize: Float
-            ): Float {
-                // Center the focused item in the viewport
-                val itemCenter = offset + size / 2f
-                val viewportCenter = containerSize / 2f
-                return itemCenter - viewportCenter
-            }
-        }
-    }
-
-    CompositionLocalProvider(LocalBringIntoViewSpec provides smoothScrollSpec) {
     LazyColumn(
         state = columnListState,
         modifier = Modifier
@@ -308,5 +280,4 @@ fun ClassicHomeContent(
             )
         }
     }
-    } // CompositionLocalProvider
 }
