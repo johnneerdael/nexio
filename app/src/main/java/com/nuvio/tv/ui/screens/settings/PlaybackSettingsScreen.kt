@@ -223,11 +223,6 @@ fun PlaybackSettingsContent(
                 onSetStreamAutoPlayNextEpisodeEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStreamAutoPlayNextEpisodeEnabled(enabled) }
                 },
-                onSetStreamAutoPlayPreferBingeGroupForNextEpisode = { enabled ->
-                    coroutineScope.launch {
-                        viewModel.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
-                    }
-                },
                 onSetNextEpisodeThresholdPercent = { percent ->
                     coroutineScope.launch { viewModel.setNextEpisodeThresholdPercent(percent) }
                 },
