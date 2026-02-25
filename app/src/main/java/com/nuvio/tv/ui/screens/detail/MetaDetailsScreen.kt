@@ -65,6 +65,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -960,27 +961,29 @@ private fun MetaDetailsContent(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Light global dim so text remains readable
+            
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(dimColor)
-            )
-
-            // Left side gradient fade for text readability (fades out during trailer)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = gradientAlpha }
-                    .background(leftGradient)
-            )
-
-            // Bottom gradient — always composed, alpha-controlled to avoid layout churn
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = bottomGradientAlpha }
-                    .background(bottomGradient)
+                    .drawWithCache {
+                        onDrawBehind {
+                            drawRect(color = dimColor, size = size)
+                            if (gradientAlpha > 0f) {
+                                drawRect(
+                                    brush = leftGradient,
+                                    size = size,
+                                    alpha = gradientAlpha
+                                )
+                            }
+                            if (bottomGradientAlpha > 0f) {
+                                drawRect(
+                                    brush = bottomGradient,
+                                    size = size,
+                                    alpha = bottomGradientAlpha
+                                )
+                            }
+                        }
+                    }
             )
         }
 
