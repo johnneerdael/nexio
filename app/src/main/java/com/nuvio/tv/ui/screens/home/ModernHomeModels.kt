@@ -242,7 +242,7 @@ internal fun buildCatalogItem(
         payload = ModernPayload.Catalog(
             focusKey = "${row.key()}::${item.id}",
             itemId = item.id,
-            itemType = item.type.toApiString(),
+            itemType = item.apiType,
             addonBaseUrl = row.addonBaseUrl,
             trailerTitle = item.name,
             trailerReleaseInfo = item.releaseInfo,

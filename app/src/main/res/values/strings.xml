@@ -531,7 +531,7 @@
     <string name="stream_player_external">External</string>
 
     <!-- PlayerScreen -->
-    <string name="player_ends_at">Ends at: %1$s</string>
+    <string name="player_ends_at">Ends at %1$s</string>
     <string name="player_via">via %1$s</string>
     <string name="player_subtitle_delay">Subtitles Delay</string>
     <string name="player_error_title">Playback Error</string>
