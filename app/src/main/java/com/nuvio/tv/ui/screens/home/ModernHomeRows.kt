@@ -7,7 +7,6 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -194,11 +194,7 @@ internal fun ModernRowSection(
     rowTitleBottom: Dp,
     defaultBringIntoViewSpec: BringIntoViewSpec,
     focusStateCatalogRowScrollStates: Map<String, Int>,
-    rowListStates: MutableMap<String, LazyListState>,
-    focusedItemByRow: MutableMap<String, Int>,
-    itemFocusRequesters: MutableMap<String, MutableMap<String, FocusRequester>>,
-    loadMoreRequestedTotals: MutableMap<String, Int>,
-    requesterFor: (String, String) -> FocusRequester,
+    uiCaches: ModernHomeUiCaches,
     pendingRowFocusKey: String?,
     pendingRowFocusIndex: Int?,
     pendingRowFocusNonce: Int,
@@ -228,6 +224,11 @@ internal fun ModernRowSection(
     onBackdropInteraction: () -> Unit,
     onExpandedCatalogFocusKeyChange: (String?) -> Unit
 ) {
+    val focusedItemByRow = uiCaches.focusedItemByRow
+    val itemFocusRequesters = uiCaches.itemFocusRequesters
+    val rowListStates = uiCaches.rowListStates
+    val loadMoreRequestedTotals = uiCaches.loadMoreRequestedTotals
+
     Column {
         Text(
             text = row.title,
@@ -259,7 +260,7 @@ internal fun ModernRowSection(
             val targetIndex = (pendingRowFocusIndex ?: 0)
                 .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
             val targetItemKey = row.items.getOrNull(targetIndex)?.key ?: return@LaunchedEffect
-            val requester = requesterFor(row.key, targetItemKey)
+            val requester = uiCaches.requesterFor(row.key, targetItemKey)
             var didFocus = false
             var didScrollToTarget = false
             repeat(20) {
@@ -282,7 +283,7 @@ internal fun ModernRowSection(
                 val fallbackItemKey = row.items.getOrNull(fallbackIndex)?.key
                 didFocus = runCatching {
                     if (fallbackItemKey != null) {
-                        requesterFor(row.key, fallbackItemKey).requestFocus()
+                        uiCaches.requesterFor(row.key, fallbackItemKey).requestFocus()
                     }
                     true
                 }.getOrDefault(false)
@@ -389,7 +390,7 @@ internal fun ModernRowSection(
                         }
                     }
                 ) { index, item ->
-                    val requester = requesterFor(row.key, item.key)
+                    val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
                     val onFocused = {
                         onRowItemFocused(row.key, index, isContinueWatchingRow)
@@ -610,35 +611,45 @@ private fun ModernCarouselCard(
             scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                if (hasImage) {
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = item.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                val mediaLayerModifier = if (hasLandscapeLogo) {
+                    Modifier
+                        .fillMaxSize()
+                        .drawWithCache {
+                            onDrawWithContent {
+                                drawContent()
+                                drawRect(brush = MODERN_LANDSCAPE_LOGO_GRADIENT, size = size)
+                            }
+                        }
                 } else {
-                    MonochromePosterPlaceholder()
+                    Modifier.fillMaxSize()
                 }
 
-                if (shouldPlayTrailerInCard) {
-                    TrailerPlayer(
-                        trailerUrl = trailerPreviewUrl,
-                        isPlaying = true,
-                        onEnded = onTrailerEnded,
-                        muted = focusedPosterBackdropTrailerMuted,
-                        cropToFill = true,
-                        overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                Box(modifier = mediaLayerModifier) {
+                    if (hasImage) {
+                        AsyncImage(
+                            model = imageModel,
+                            contentDescription = item.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        MonochromePosterPlaceholder()
+                    }
+
+                    if (shouldPlayTrailerInCard) {
+                        TrailerPlayer(
+                            trailerUrl = trailerPreviewUrl,
+                            isPlaying = true,
+                            onEnded = onTrailerEnded,
+                            muted = focusedPosterBackdropTrailerMuted,
+                            cropToFill = true,
+                            overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 if (hasLandscapeLogo) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MODERN_LANDSCAPE_LOGO_GRADIENT)
-                    )
                     AsyncImage(
                         model = logoModel,
                         contentDescription = item.title,
