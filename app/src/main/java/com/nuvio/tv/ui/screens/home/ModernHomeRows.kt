@@ -219,7 +219,6 @@ internal fun ModernRowSection(
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit,
-    onItemFocus: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
@@ -391,7 +390,6 @@ internal fun ModernRowSection(
                     val isContinueWatchingRow = row.key == "continue_watching"
                     val onFocused = {
                         onRowItemFocused(row.key, index, isContinueWatchingRow)
-                        item.metaPreview?.let { onItemFocus(it) }
                     }
 
                     when (val payload = item.payload) {

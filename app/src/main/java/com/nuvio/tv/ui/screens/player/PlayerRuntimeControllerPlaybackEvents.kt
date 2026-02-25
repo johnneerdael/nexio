@@ -711,7 +711,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnToggleAspectRatio -> {
             val currentMode = _uiState.value.resizeMode
             val newMode = PlayerDisplayModeUtils.nextResizeMode(currentMode)
-            val modeText = PlayerDisplayModeUtils.resizeModeLabel(newMode, context)
+            val modeText = PlayerDisplayModeUtils.resizeModeLabel(newMode)
             Log.d("PlayerViewModel", "Aspect ratio toggled: $currentMode -> $newMode")
             _uiState.update { 
                 it.copy(

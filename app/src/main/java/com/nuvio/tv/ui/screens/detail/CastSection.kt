@@ -1,8 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
 import androidx.compose.foundation.background
-import androidx.compose.ui.res.stringResource
-import com.nuvio.tv.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -293,15 +291,9 @@ private fun CastMemberItem(
 
         val character = member.character
         if (!character.isNullOrBlank()) {
-            val displayCharacter = when {
-                character.equals("Creator", ignoreCase = true) -> stringResource(R.string.cast_role_creator)
-                character.equals("Director", ignoreCase = true) -> stringResource(R.string.cast_role_director)
-                character.equals("Writer", ignoreCase = true) -> stringResource(R.string.cast_role_writer)
-                else -> character
-            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = displayCharacter,
+                text = character,
                 style = MaterialTheme.typography.labelSmall,
                 color = NuvioColors.TextTertiary,
                 maxLines = 1,
