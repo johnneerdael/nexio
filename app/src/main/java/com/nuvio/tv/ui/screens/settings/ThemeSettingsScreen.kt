@@ -91,7 +91,8 @@ fun ThemeSettingsContent(
             null to strLanguageSystem,
             "en" to "English",
             "pl" to "Polski",
-            "sk" to "Slovensky"
+            "sk" to "Slovensky",
+            "sl" to "Slovenščina"
         )
     }
     var selectedTag by remember {
