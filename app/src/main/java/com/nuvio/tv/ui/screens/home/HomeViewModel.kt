@@ -1164,9 +1164,7 @@ class HomeViewModel @Inject constructor(
     private fun observeInstalledAddons() {
         viewModelScope.launch {
             addonRepository.getInstalledAddons()
-                .distinctUntilChanged { old, new ->
-                    old.map { it.id } == new.map { it.id }
-                }
+                .distinctUntilChanged()
                 .collectLatest { addons ->
                     addonsCache = addons
                     loadAllCatalogs(addons)
