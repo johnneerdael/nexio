@@ -90,6 +90,7 @@ fun ThemeSettingsContent(
         listOf(
             null to strLanguageSystem,
             "en" to "English",
+            "es" to "Español",
             "pl" to "Polski"
         )
     }
