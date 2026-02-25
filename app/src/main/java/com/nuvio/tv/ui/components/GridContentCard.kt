@@ -12,23 +12,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +45,7 @@ fun GridContentCard(
     upFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {}
 ) {
-    val cardShape = RoundedCornerShape(posterCardStyle.cornerRadius)
+    val cardShape = remember(posterCardStyle.cornerRadius) { RoundedCornerShape(posterCardStyle.cornerRadius) }
     val density = LocalDensity.current
     val requestWidthPx = remember(density, posterCardStyle.width) { with(density) { posterCardStyle.width.roundToPx() } }
     val requestHeightPx = remember(density, posterCardStyle.height) { with(density) { posterCardStyle.height.roundToPx() } }
@@ -94,7 +91,7 @@ fun GridContentCard(
                     .clip(cardShape)
             ) {
                 val context = LocalContext.current
-                val imageModel = remember(context, item.poster, requestWidthPx, requestHeightPx) {
+                val imageModel = remember(item.poster, requestWidthPx, requestHeightPx) {
                     ImageRequest.Builder(context)
                         .data(item.poster)
                         .crossfade(imageCrossfade)
@@ -116,24 +113,15 @@ fun GridContentCard(
         }
 
         if (showLabel) {
-            val textMeasurer = rememberTextMeasurer()
-            val titleStyle = MaterialTheme.typography.titleMedium.copy(color = NuvioColors.TextPrimary)
-            val itemName = item.name
-            Box(
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = NuvioColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .width(posterCardStyle.width)
                     .padding(top = 8.dp, start = 2.dp, end = 2.dp)
-                    .height(24.dp)
-                    .drawWithCache {
-                        val layout = textMeasurer.measure(
-                            text = itemName,
-                            style = titleStyle,
-                            overflow = TextOverflow.Ellipsis,
-                            maxLines = 1,
-                            constraints = Constraints(maxWidth = size.width.toInt())
-                        )
-                        onDrawBehind { drawText(layout) }
-                    }
             )
         }
     }

@@ -138,9 +138,9 @@ configurations.all {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2025.02.00")
+    val composeBom = platform("androidx.compose:compose-bom:2025.12.00")
 
-    baselineProfile(project(":benchmark"))
+    // baselineProfile(project(":benchmark"))  // TODO: create benchmark module later
     implementation(libs.androidx.core.ktx)
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.appcompat)
@@ -241,6 +241,10 @@ dependencies {
 
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
+
+    // Performance profiling
+    implementation("androidx.metrics:metrics-performance:1.0.0-beta01")  // JankStats
+    implementation("androidx.compose.runtime:runtime-tracing")           // Compose function names in Perfetto
 
     // Bundle real crypto-js (JS) for QuickJS plugins
     implementation("org.webjars.npm:crypto-js:4.2.0")

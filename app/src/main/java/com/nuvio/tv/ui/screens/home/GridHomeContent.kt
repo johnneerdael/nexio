@@ -1,10 +1,16 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -31,6 +38,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.R
@@ -53,7 +61,10 @@ import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+/** Minimum interval between processed key repeat events to prevent HWUI overload. */
+private const val KEY_REPEAT_THROTTLE_MS = 80L
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun GridHomeContent(
     uiState: HomeUiState,
@@ -145,11 +156,48 @@ fun GridHomeContent(
         }
     }
 
+    // Throttle D-pad key repeats to prevent HWUI overload when a key is held down.
+    val lastKeyRepeatTime = remember { longArrayOf(0L) }
+
+    // Smooth, slightly bouncy scroll that centers the focused item on screen.
+    val smoothScrollSpec = remember {
+        object : BringIntoViewSpec {
+            @Suppress("DEPRECATION")
+            override val scrollAnimationSpec: AnimationSpec<Float> = spring(
+                dampingRatio = 0.83f,
+                stiffness = 35f
+            )
+
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float
+            ): Float {
+                val itemCenter = offset + size / 2f
+                val viewportCenter = containerSize / 2f
+                return itemCenter - viewportCenter
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalBringIntoViewSpec provides smoothScrollSpec) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             state = gridState,
             columns = GridCells.Adaptive(minSize = posterCardStyle.width),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastKeyRepeatTime[0] < KEY_REPEAT_THROTTLE_MS) {
+                            return@onPreviewKeyEvent true
+                        }
+                        lastKeyRepeatTime[0] = now
+                    }
+                    false
+                },
             contentPadding = PaddingValues(
                 start = 24.dp,
                 end = 24.dp,
@@ -371,6 +419,7 @@ fun GridHomeContent(
             )
         }
     }
+    } // CompositionLocalProvider
 }
 
 @Composable

@@ -1,13 +1,21 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.domain.model.MetaPreview
@@ -25,12 +34,15 @@ import com.nuvio.tv.ui.components.ContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.PosterCardStyle
 
+/** Minimum interval between processed key repeat events to prevent HWUI overload. */
+private const val KEY_REPEAT_THROTTLE_MS = 80L
+
 private class FocusSnapshot(
     var rowIndex: Int,
     var itemIndex: Int
 )
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ClassicHomeContent(
     uiState: HomeUiState,
@@ -46,9 +58,15 @@ fun ClassicHomeContent(
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
 
+    // Nested prefetch: when LazyColumn prefetches a row ahead of scrolling,
+    // pre-compose up to 2 ContentCards in its nested LazyRow across multiple frames.
+    // This spreads the composition work and prevents frame spikes when a new row scrolls in.
+    val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
+
     val columnListState = rememberLazyListState(
         initialFirstVisibleItemIndex = focusState.verticalScrollIndex,
-        initialFirstVisibleItemScrollOffset = focusState.verticalScrollOffset
+        initialFirstVisibleItemScrollOffset = focusState.verticalScrollOffset,
+        prefetchStrategy = nestedPrefetchStrategy
     )
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
@@ -120,9 +138,47 @@ fun ClassicHomeContent(
         }
     }
 
+    // Throttle D-pad key repeats to prevent HWUI overload when a key is held down.
+    var lastKeyRepeatTime by remember { mutableStateOf(0L) }
+
+    // Smooth, slightly bouncy scroll that centers the focused row on screen.
+    val smoothScrollSpec = remember {
+        object : BringIntoViewSpec {
+            @Suppress("DEPRECATION")
+            override val scrollAnimationSpec: AnimationSpec<Float> = spring(
+                dampingRatio = 0.83f,
+                stiffness = 35f
+            )
+
+            override fun calculateScrollDistance(
+                offset: Float,
+                size: Float,
+                containerSize: Float
+            ): Float {
+                // Center the focused item in the viewport
+                val itemCenter = offset + size / 2f
+                val viewportCenter = containerSize / 2f
+                return itemCenter - viewportCenter
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalBringIntoViewSpec provides smoothScrollSpec) {
     LazyColumn(
         state = columnListState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastKeyRepeatTime < KEY_REPEAT_THROTTLE_MS) {
+                        return@onPreviewKeyEvent true // consume — too fast
+                    }
+                    lastKeyRepeatTime = now
+                }
+                false
+            },
         contentPadding = PaddingValues(top = if (heroVisible) 0.dp else 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
@@ -248,10 +304,9 @@ fun ClassicHomeContent(
                     if (restoringFocus) restoringFocus = false
                     currentFocusSnapshot.rowIndex = index
                     currentFocusSnapshot.itemIndex = itemIndex
-                    // Update the state as well, though getOrPut handles creation
-                    // rowStates[catalogKey] already holds the live state object
                 }
             )
         }
     }
+    } // CompositionLocalProvider
 }

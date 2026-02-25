@@ -52,7 +52,7 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 
-private const val AUTO_ADVANCE_INTERVAL_MS = 5000L
+private const val AUTO_ADVANCE_INTERVAL_MS = 10000L
 private val YEAR_REGEX = Regex("""\b\d{4}\b""")
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -74,9 +74,10 @@ fun HeroCarousel(
         items.getOrNull(activeIndex)?.let { onItemFocus(it) }
     }
 
-    // Auto-advance when not focused
+    // Auto-advance when not focused — delay first advance to 20s so initial GPU load settles
     LaunchedEffect(isFocused, items.size) {
         if (items.size <= 1) return@LaunchedEffect
+        delay(AUTO_ADVANCE_INTERVAL_MS * 2) // 20s before first advance
         while (true) {
             delay(AUTO_ADVANCE_INTERVAL_MS)
             if (!isFocused) {
@@ -122,14 +123,18 @@ fun HeroCarousel(
         // Crossfade between slides
         Crossfade(
             targetState = activeIndex,
-            animationSpec = tween(500),
+            animationSpec = tween(300),
             label = "heroSlide"
         ) { index ->
             val item = items.getOrNull(index) ?: return@Crossfade
             HeroCarouselSlide(item = item)
         }
 
-        // Indicator dots
+        // Indicator dots — pre-compute colors + shape to avoid reallocation per dot
+        val focusRing = NuvioColors.FocusRing
+        val dotColorFocusedInactive = remember(focusRing) { focusRing.copy(alpha = 0.4f) }
+        val dotColorUnfocusedInactive = remember { Color.White.copy(alpha = 0.3f) }
+        val dotShape = remember { RoundedCornerShape(3.dp) }
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -148,13 +153,13 @@ fun HeroCarousel(
                     modifier = Modifier
                         .width(dotWidth)
                         .height(dotHeight)
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(dotShape)
                         .background(
                             when {
-                                isFocused && isActive -> NuvioColors.FocusRing
-                                isFocused -> NuvioColors.FocusRing.copy(alpha = 0.4f)
-                                isActive -> NuvioColors.FocusRing
-                                else -> Color.White.copy(alpha = 0.3f)
+                                isFocused && isActive -> focusRing
+                                isFocused -> dotColorFocusedInactive
+                                isActive -> focusRing
+                                else -> dotColorUnfocusedInactive
                             }
                         )
                 )
@@ -204,13 +209,17 @@ private fun HeroCarouselSlide(
         modifier = Modifier.fillMaxSize()
     ) {
         // Background image
-        // Background image
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
+        val context = LocalContext.current
+        val bgModel = remember(item.background, requestWidthPx, requestHeightPx) {
+            ImageRequest.Builder(context)
                 .data(item.background)
                 .crossfade(false)
+                .memoryCacheKey("hero_bg_${item.background}_${requestWidthPx}x${requestHeightPx}")
                 .size(width = requestWidthPx, height = requestHeightPx)
-                .build(),
+                .build()
+        }
+        AsyncImage(
+            model = bgModel,
             contentDescription = item.name,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
@@ -240,12 +249,17 @@ private fun HeroCarouselSlide(
         ) {
             // Title logo or text title
             if (!item.logo.isNullOrBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                val logoHeightPx = remember(density) { with(density) { 80.dp.roundToPx() } }
+                val logoModel = remember(item.logo, requestWidthPx, logoHeightPx) {
+                    ImageRequest.Builder(context)
                         .data(item.logo)
                         .crossfade(false)
-                        .size(width = requestWidthPx, height = with(density) { 80.dp.roundToPx() })
-                        .build(),
+                        .memoryCacheKey("hero_logo_${item.logo}_${requestWidthPx}x${logoHeightPx}")
+                        .size(width = requestWidthPx, height = logoHeightPx)
+                        .build()
+                }
+                AsyncImage(
+                    model = logoModel,
                     contentDescription = item.name,
                     modifier = Modifier
                         .height(80.dp)

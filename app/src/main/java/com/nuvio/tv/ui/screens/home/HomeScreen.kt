@@ -1,19 +1,11 @@
 package com.nuvio.tv.ui.screens.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -53,15 +45,6 @@ fun HomeScreen(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
-    var hasEnteredCatalogContent by rememberSaveable { mutableStateOf(false) }
-    var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(hasCatalogContent) {
-        if (hasCatalogContent) {
-            hasEnteredCatalogContent = true
-        }
-    }
 
     val posterCardStyle = remember(
         uiState.posterCardWidthDp,
@@ -82,8 +65,12 @@ fun HomeScreen(
             .fillMaxSize()
             .background(NuvioColors.Background)
     ) {
+        val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
+            uiState.continueWatchingItems.isNotEmpty() ||
+            uiState.heroItems.isNotEmpty()
+
         when {
-            uiState.isLoading && uiState.catalogRows.isEmpty() -> {
+            uiState.isLoading && !hasAnyContent -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -126,59 +113,31 @@ fun HomeScreen(
             }
 
             else -> {
-                val shouldShowLoadingGate = !hasEnteredCatalogContent && !hasCatalogContent
-                LaunchedEffect(shouldShowLoadingGate) {
-                    if (shouldShowLoadingGate) {
-                        showHomeContentWithAnimation = false
-                    } else {
-                        // Flip on the next frame so AnimatedVisibility can run enter transition.
-                        kotlinx.coroutines.yield()
-                        showHomeContentWithAnimation = true
-                    }
-                }
-                if (shouldShowLoadingGate) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator()
-                    }
-                } else {
-                    AnimatedVisibility(
-                        visible = showHomeContentWithAnimation,
-                        enter = fadeIn(animationSpec = tween(320)) +
-                            slideInVertically(
-                                initialOffsetY = { it / 24 },
-                                animationSpec = tween(320)
-                            )
-                    ) {
-                        when (uiState.homeLayout) {
-                            HomeLayout.CLASSIC -> ClassicHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                posterCardStyle = posterCardStyle,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
-                            )
+                when (uiState.homeLayout) {
+                    HomeLayout.CLASSIC -> ClassicHomeRoute(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        posterCardStyle = posterCardStyle,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onContinueWatchingClick = onContinueWatchingClick,
+                        onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
+                    )
 
-                            HomeLayout.GRID -> GridHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                posterCardStyle = posterCardStyle,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onContinueWatchingClick = onContinueWatchingClick,
-                                onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
-                            )
+                    HomeLayout.GRID -> GridHomeRoute(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        posterCardStyle = posterCardStyle,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onContinueWatchingClick = onContinueWatchingClick,
+                        onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll
+                    )
 
-                            HomeLayout.MODERN -> ModernHomeRoute(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                onNavigateToDetail = onNavigateToDetail,
-                                onContinueWatchingClick = onContinueWatchingClick
-                            )
-                        }
-                    }
+                    HomeLayout.MODERN -> ModernHomeRoute(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onContinueWatchingClick = onContinueWatchingClick
+                    )
                 }
             }
         }
