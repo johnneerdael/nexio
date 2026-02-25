@@ -5,6 +5,7 @@ package com.nuvio.tv.ui.screens.home
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +63,7 @@ import com.nuvio.tv.ui.components.ContinueWatchingCard
 import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
+import kotlin.math.abs
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -305,7 +307,38 @@ internal fun ModernRowSection(
             }
         }
 
-        CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+        val density = LocalDensity.current
+        val rowStartPadding = 52.dp
+        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec) {
+            val parentStartOffsetPx = with(density) { 28.dp.roundToPx() }
+            object : BringIntoViewSpec {
+                @Suppress("DEPRECATION")
+                override val scrollAnimationSpec: AnimationSpec<Float> =
+                    defaultBringIntoViewSpec.scrollAnimationSpec
+
+                override fun calculateScrollDistance(
+                    offset: Float,
+                    size: Float,
+                    containerSize: Float
+                ): Float {
+                    val childSize = abs(size)
+                    val childSmallerThanParent = childSize <= containerSize
+                    val initialTarget = parentStartOffsetPx.toFloat()
+                    val spaceAvailable = containerSize - initialTarget
+
+                    val targetForLeadingEdge =
+                        if (childSmallerThanParent && spaceAvailable < childSize) {
+                            containerSize - childSize
+                        } else {
+                            initialTarget
+                        }
+
+                    return offset - targetForLeadingEdge
+                }
+            }
+        }
+
+        CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
             LazyRow(
                 state = rowListState,
                 modifier = Modifier.focusRestorer {
@@ -321,7 +354,7 @@ internal fun ModernRowSection(
                     val itemKey = row.items.getOrNull(restoreIndex)?.key ?: row.items.first().key
                     itemFocusRequesters[row.key]?.get(itemKey) ?: FocusRequester.Default
                 },
-                contentPadding = PaddingValues(horizontal = 52.dp),
+                contentPadding = PaddingValues(horizontal = rowStartPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 itemsIndexed(
