@@ -975,6 +975,7 @@ private fun StreamRegexDialog(
             "Dolby Atmos / DTS" to "(atmos|truehd|dts[-\\s]?hd|dtsx?)",
             "English" to "(\\beng\\b|english)",
             "No CAM/TS" to "^(?!.*\\b(cam|hdcam|ts|telesync)\\b).*$"
+            "No REMUX/HDR" to "(?is)^(?!.*\\b(hdr|hdr10|dv|dolby|vision|hevc|remux|2160p)\\b).+$"
         )
     }
 
