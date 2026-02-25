@@ -421,15 +421,22 @@
     <string name="debug_subtitle">Nástroje pre vývojárov a testovacie funkcie (iba debug buildy)</string>
     <string name="debug_section_popup">Testovanie popupov / dialógov</string>
     <string name="debug_playback_error_title">Obrazovka chyby prehrávania</string>
-    <string name="debug_playback_error_sub">Zobraziť testovaciu obrazovku chyby prehrávania</string>
-    <string name="debug_section_flags">Funkčné prepínače</string>
-    <string name="debug_section_flags_sub">Experimentálne funkcie a interné prepínače</string>
-    <string name="debug_logs">Logy</string>
-    <string name="debug_logs_sub">Zobraziť alebo exportovať logy aplikácie</string>
-    <string name="debug_clear_cache">Vymazať cache</string>
-    <string name="debug_clear_cache_sub">Vymazať lokálnu cache aplikácie</string>
-    <string name="debug_force_crash">Vynútiť pád aplikácie</string>
-    <string name="debug_force_crash_sub">Testovať crash reporting</string>
+    <string name="debug_playback_error_subtitle">Zobraziť simulovaný popup chyby prehrávania</string>
+    <string name="debug_section_features">Funkčné prepínače</string>
+    <string name="debug_account_tab_title">Karta Účet</string>
+    <string name="debug_account_tab_subtitle">Zobraziť kartu Účet v navigácii Nastavenia</string>
+    <string name="debug_sync_code_title">Funkcie Sync kódu</string>
+    <string name="debug_sync_code_subtitle">Zobraziť tlačidlá Generovať/Zadať Sync kód v nastaveniach účtu</string>
+    <string name="debug_section_account">Účet</string>
+    <string name="debug_manual_signin_title">Manuálne prihlásenie</string>
+    <string name="debug_manual_signin_subtitle">Prihlásiť sa e-mailom a heslom (Supabase auth)</string>
+    <string name="debug_email_placeholder">E-mail</string>
+    <string name="debug_password_placeholder">Heslo</string>
+    <string name="debug_signing_in">Prihlasovanie…</string>
+    <string name="debug_sign_in">Prihlásiť sa</string>
+    <string name="debug_error_dialog_title">Chyba prehrávania</string>
+    <string name="debug_error_dialog_subtitle">Počas prehrávania sa vyskytla chyba.\n\nChyba: Testovaná simulovaná chyba – nejde o reálne zlyhanie. Zdroj vrátil HTTP 503 (Service Unavailable).</string>
+    <string name="debug_dismiss">Zavrieť</string>
 
     <!-- ProfileSettingsContent -->
     <string name="profile_title">Profily</string>
