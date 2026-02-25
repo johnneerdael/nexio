@@ -175,7 +175,7 @@ fun CatalogRowSection(
                         Modifier
                     }
                 ),
-            contentPadding = PaddingValues(horizontal = 48.dp),
+            contentPadding = PaddingValues(start = 48.dp, end = 200.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             itemsIndexed(
