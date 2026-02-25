@@ -93,6 +93,8 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             C.TRACK_TYPE_TEXT -> {
                 for (i in 0 until trackGroup.length) {
                     val format = trackGroup.getTrackFormat(i)
+                    // Skip addon subtitle tracks — they are managed separately
+                    if (format.id?.contains(PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX) == true) continue
                     val isSelected = trackGroup.isTrackSelected(i)
                     if (isSelected) selectedSubtitleIndex = subtitleTracks.size
                     
@@ -120,33 +122,11 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     )
 
     val pendingAddonTrackId = pendingAddonSubtitleTrackId
-    if (!pendingAddonTrackId.isNullOrBlank() && subtitleTracks.isNotEmpty()) {
-        val addonTrackIndex = subtitleTracks.indexOfFirst { it.trackId == pendingAddonTrackId }
-        if (addonTrackIndex >= 0) {
-            Log.d(
-                PlayerRuntimeController.TAG,
-                "Selecting pending addon subtitle track id=$pendingAddonTrackId index=$addonTrackIndex"
-            )
-            selectSubtitleTrack(addonTrackIndex)
-            selectedSubtitleIndex = if (_uiState.value.selectedAddonSubtitle != null) -1 else addonTrackIndex
+    if (!pendingAddonTrackId.isNullOrBlank()) {
+        if (applyAddonSubtitleOverride(pendingAddonTrackId)) {
+            Log.d(PlayerRuntimeController.TAG, "Selecting pending addon subtitle track id=$pendingAddonTrackId")
             pendingAddonSubtitleTrackId = null
             pendingAddonSubtitleLanguage = null
-        } else {
-            val pendingLang = pendingAddonSubtitleLanguage
-            val hasManualAddonSelection = _uiState.value.selectedAddonSubtitle != null
-            if (hasManualAddonSelection) {
-                if (!pendingLang.isNullOrBlank()) {
-                    val addonFallbackIndex = subtitleTracks.indexOfLast {
-                        PlayerSubtitleUtils.matchesLanguageCode(it.language, pendingLang)
-                    }
-                    if (addonFallbackIndex >= 0) {
-                        selectSubtitleTrack(addonFallbackIndex)
-                        selectedSubtitleIndex = -1
-                        pendingAddonSubtitleTrackId = null
-                        pendingAddonSubtitleLanguage = null
-                    }
-                }
-            }
         }
     }
 
