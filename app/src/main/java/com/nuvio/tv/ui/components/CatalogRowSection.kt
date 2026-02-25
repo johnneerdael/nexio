@@ -118,10 +118,15 @@ fun CatalogRowSection(
         Modifier
     }
 
-    val typeLabel = remember(catalogRow.rawType, catalogRow.apiType) {
-        formatAddonTypeLabel(
-            catalogRow.rawType.takeIf { it.isNotBlank() } ?: catalogRow.apiType
-        )
+    val strTypeMovie = stringResource(R.string.type_movie)
+    val strTypeSeries = stringResource(R.string.type_series)
+    val typeLabel = remember(catalogRow.rawType, catalogRow.apiType, strTypeMovie, strTypeSeries) {
+        val raw = catalogRow.rawType.takeIf { it.isNotBlank() } ?: catalogRow.apiType
+        when (raw.lowercase()) {
+            "movie" -> strTypeMovie
+            "series" -> strTypeSeries
+            else -> formatAddonTypeLabel(raw)
+        }
     }
     val catalogTitle = remember(catalogRow.catalogName, typeLabel, showCatalogTypeSuffix) {
         val formattedName = catalogRow.catalogName.replaceFirstChar { it.uppercase() }
