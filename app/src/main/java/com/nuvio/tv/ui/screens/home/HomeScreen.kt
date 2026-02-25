@@ -95,8 +95,12 @@ fun HomeScreen(
             .fillMaxSize()
             .background(NuvioColors.Background)
     ) {
+        val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
+            uiState.continueWatchingItems.isNotEmpty() ||
+            uiState.heroItems.isNotEmpty()
+
         when {
-            uiState.isLoading && uiState.catalogRows.isEmpty() -> {
+            uiState.isLoading && !hasAnyContent -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
