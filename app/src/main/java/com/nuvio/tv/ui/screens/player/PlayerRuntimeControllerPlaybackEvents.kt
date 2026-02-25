@@ -46,7 +46,11 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         val runtime = Runtime.getRuntime()
                         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
                         val maxMb = runtime.maxMemory() / (1024 * 1024)
-                        Log.d(PlayerRuntimeController.TAG, "BUFFER: ahead=${bufAhead}s, loading=$loading, heap=${usedMb}/${maxMb}MB, pos=${pos / 1000}s")
+                        val vodCache = mediaSourceFactory.getVodCacheLogState()
+                        Log.d(
+                            PlayerRuntimeController.TAG,
+                            "BUFFER: ahead=${bufAhead}s, loading=$loading, heap=${usedMb}/${maxMb}MB, pos=${pos / 1000}s, $vodCache"
+                        )
                     }
                 }
             }

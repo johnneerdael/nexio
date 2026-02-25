@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Wifi
@@ -218,8 +219,19 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     }
 
     item {
+        val context = LocalContext.current
+        val freeDiskBytes = context.cacheDir.usableSpace.coerceAtLeast(0L)
+        val freeDiskLabel = formatStorageSize(freeDiskBytes)
+        val manualMode = playerSettings.vodCacheSizeMode == VodCacheSizeMode.MANUAL
+        val infoText = buildString {
+            append("Range: ${PlayerSettings.MIN_VOD_CACHE_SIZE_MB}-${PlayerSettings.MAX_VOD_CACHE_SIZE_MB} MB. ")
+            append("Auto mode targets about 10% of free space.")
+            if (manualMode) {
+                append(" Free disk available: $freeDiskLabel.")
+            }
+        }
         Text(
-            text = "Range: ${PlayerSettings.MIN_VOD_CACHE_SIZE_MB}-${PlayerSettings.MAX_VOD_CACHE_SIZE_MB} MB. Auto mode targets about 10% of free space.",
+            text = infoText,
             style = MaterialTheme.typography.bodySmall,
             color = NuvioColors.TextSecondary,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -301,4 +313,12 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         }
     }
 
+}
+
+private fun formatStorageSize(bytes: Long): String {
+    val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+    if (gb >= 10.0) return String.format("%.0f GB", gb)
+    if (gb >= 1.0) return String.format("%.1f GB", gb)
+    val mb = bytes / (1024.0 * 1024.0)
+    return String.format("%.0f MB", mb)
 }
