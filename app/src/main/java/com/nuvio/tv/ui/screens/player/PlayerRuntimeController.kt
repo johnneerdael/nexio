@@ -194,6 +194,13 @@ class PlayerRuntimeController(
     internal var timeoutRecoveryAttempts: Int = 0
     internal val dv7ToHevcForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false
+    internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
+    internal var hasAttemptedDv7ToDv81ForCurrentPlayback: Boolean = false
+    internal var dv7ToDv81BridgeVersionForCurrentPlayback: String? = null
+    internal var dv7ToDv81LastProbeReasonForCurrentPlayback: String? = null
+    internal var playerInitializationStartedAtMs: Long = 0L
+    internal var pendingSeekTelemetryRequestedAtMs: Long = 0L
+    internal var pendingSeekTelemetryTargetMs: Long = -1L
     internal var currentScrobbleItem: TraktScrobbleItem? = null
     internal var hasSentScrobbleStartForCurrentItem: Boolean = false
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false

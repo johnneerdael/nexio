@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.screens.player
 
 import android.util.Log
 import androidx.media3.common.Player
+import com.nuvio.tv.core.player.DoviBridge
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.TraktScrobbleItem
 import com.nuvio.tv.data.repository.extractYear
@@ -47,9 +48,27 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
                         val maxMb = runtime.maxMemory() / (1024 * 1024)
                         val vodCache = mediaSourceFactory.getVodCacheLogState()
+                        val conversionCalls = DoviBridge.getConversionCallCount()
+                        val conversionSuccess = DoviBridge.getConversionSuccessCount()
+                        val conversionAttempted =
+                            hasAttemptedDv7ToDv81ForCurrentPlayback || conversionCalls > 0
+                        val dv7doviState = buildString {
+                            append("dv7dovi=")
+                            append(if (isExperimentalDv7ToDv81ActiveForCurrentPlayback) "on" else "off")
+                            append(",attempted=")
+                            append(if (conversionAttempted) "yes" else "no")
+                            append(",calls=")
+                            append(conversionCalls)
+                            append(",success=")
+                            append(conversionSuccess)
+                            append(",hook=")
+                            append(if (DoviBridge.isExtractorHookReadyInBuild) "ready" else "missing")
+                            append(",reason=")
+                            append(dv7ToDv81LastProbeReasonForCurrentPlayback ?: "n/a")
+                        }
                         Log.d(
                             PlayerRuntimeController.TAG,
-                            "BUFFER: ahead=${bufAhead}s, loading=$loading, heap=${usedMb}/${maxMb}MB, pos=${pos / 1000}s, $vodCache"
+                            "BUFFER: ahead=${bufAhead}s, loading=$loading, heap=${usedMb}/${maxMb}MB, pos=${pos / 1000}s, $vodCache, $dv7doviState"
                         )
                     }
                 }
@@ -377,6 +396,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 val target = (player.currentPosition + event.deltaMs)
                     .coerceAtLeast(0L)
                     .coerceAtMost(maxDuration)
+                pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
+                pendingSeekTelemetryTargetMs = target
                 player.seekTo(target)
                 _uiState.update { it.copy(currentPosition = target) }
                 scheduleProgressSyncAfterSeek()
@@ -406,6 +427,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnCommitPreviewSeek -> {
             val target = pendingPreviewSeekPosition
             if (target != null) {
+                pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
+                pendingSeekTelemetryTargetMs = target
                 _exoPlayer?.seekTo(target)
                 _uiState.update { it.copy(currentPosition = target) }
                 pendingPreviewSeekPosition = null
@@ -419,6 +442,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         is PlayerEvent.OnSeekTo -> {
             pendingPreviewSeekPosition = null
+            pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
+            pendingSeekTelemetryTargetMs = event.position
             _exoPlayer?.seekTo(event.position)
             _uiState.update { it.copy(currentPosition = event.position) }
             scheduleProgressSyncAfterSeek()
@@ -658,7 +683,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         PlayerEvent.OnSkipIntro -> {
             _uiState.value.activeSkipInterval?.let { interval ->
-                _exoPlayer?.seekTo((interval.endTime * 1000).toLong())
+                val target = (interval.endTime * 1000).toLong()
+                pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
+                pendingSeekTelemetryTargetMs = target
+                _exoPlayer?.seekTo(target)
                 scheduleProgressSyncAfterSeek()
                 _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
             }
