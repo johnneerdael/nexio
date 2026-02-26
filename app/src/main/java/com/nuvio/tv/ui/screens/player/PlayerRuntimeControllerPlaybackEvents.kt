@@ -47,7 +47,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         val runtime = Runtime.getRuntime()
                         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
                         val maxMb = runtime.maxMemory() / (1024 * 1024)
-                        val vodCache = mediaSourceFactory.getVodCacheLogState()
+                        val vodCache = mediaSourceFactory.getVodCacheLogState(currentStreamUrl)
                         val conversionCalls = DoviBridge.getConversionCallCount()
                         val conversionSuccess = DoviBridge.getConversionSuccessCount()
                         val conversionAttempted =

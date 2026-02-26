@@ -4,6 +4,7 @@ package com.nuvio.tv.ui.screens.settings
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -488,8 +489,13 @@ internal fun ToggleSettingsItem(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
+                    modifier = if (isFocused) {
+                        Modifier.basicMarquee()
+                    } else {
+                        Modifier
+                    },
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Clip
                 )
             }
 
