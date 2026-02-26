@@ -34,6 +34,8 @@ import kotlin.math.abs
 internal class PlayerMediaSourceFactory(private val context: Context) {
     private var okHttpClient: OkHttpClient? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
+    @Volatile private var currentVodCacheUrl: String? = null
+    @Volatile private var currentVodCacheActive: Boolean = false
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
     var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
@@ -83,6 +85,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             okHttpFactory
         }
         val useVodCache = ENABLE_VOD_CACHE && !isHls && !isDash && shouldUseVodCache(url)
+        currentVodCacheUrl = url
+        currentVodCacheActive = false
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         val progressiveFactory = if (useVodCache && !isVodCacheDisabled) {
             val cache = getReadySimpleCache(vodCacheMaxBytes)
@@ -108,13 +112,16 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             if (cache != null) {
                 runCatching {
                     Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
+                    currentVodCacheActive = true
                     buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
                 }.getOrElse { error ->
+                    currentVodCacheActive = false
                     isVodCacheDisabled = true
                     Log.e(TAG, "Disabling VOD cache after datasource failure", error)
                     progressiveUpstreamFactory
                 }
             } else {
+                currentVodCacheActive = false
                 if (!hasLoggedVodCacheNotReady) {
                     hasLoggedVodCacheNotReady = true
                     Log.d(TAG, "VOD cache not ready yet, falling back to network datasource")
@@ -122,6 +129,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 progressiveUpstreamFactory
             }
         } else {
+            currentVodCacheActive = false
             progressiveUpstreamFactory
         }
         val defaultProgressiveFactory = DefaultMediaSourceFactory(progressiveFactory)
@@ -175,17 +183,26 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         startVodCacheInitialization(context, resolveVodCacheMaxBytes(context))
     }
 
-    fun getVodCacheLogState(): String {
+    fun getVodCacheLogState(currentStreamUrl: String? = null): String {
         if (!ENABLE_VOD_CACHE) return "vod=off"
         if (isVodCacheDisabled) return "vod=disabled"
 
         val usedBytes = runCatching { getAnySimpleCache()?.cacheSpace ?: 0L }.getOrDefault(0L)
+        val streamUrl = currentStreamUrl ?: currentVodCacheUrl
+        val streamBytes = runCatching {
+            val cache = getAnySimpleCache() ?: return@runCatching 0L
+            val key = streamUrl ?: return@runCatching 0L
+            cache.getCachedSpans(key).sumOf { span -> span.length.coerceAtLeast(0L) }
+        }.getOrDefault(0L)
         val capBytes = when {
             configuredVodCacheMaxBytes > 0L -> configuredVodCacheMaxBytes
             else -> resolveVodCacheMaxBytes(context)
         }
         val mode = if (vodCacheSizeMode == VodCacheSizeMode.AUTO) "auto" else "manual"
-        return "vod=$mode ${bytesToMb(usedBytes)}/${bytesToMb(capBytes)}MB"
+        val isActiveForCurrentStream =
+            streamUrl != null && streamUrl == currentVodCacheUrl && currentVodCacheActive
+        return "vod=$mode total=${bytesToMb(usedBytes)}/${bytesToMb(capBytes)}MB " +
+            "stream=${bytesToMb(streamBytes)}MB active=$isActiveForCurrentStream"
     }
 
     private fun buildVodCacheDataSourceFactory(
