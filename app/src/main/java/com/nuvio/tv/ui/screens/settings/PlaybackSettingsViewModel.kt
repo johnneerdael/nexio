@@ -109,6 +109,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setMapDV7ToHevc(enabled)
     }
 
+    suspend fun setExperimentalDv7ToDv81Enabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDv7ToDv81Enabled(enabled)
+    }
+
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
      */

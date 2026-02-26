@@ -142,6 +142,8 @@ data class PlayerSettings(
     val skipIntroEnabled: Boolean = true,
     // Force Dolby Vision streams to HEVC/HDR10 fallback (uses Media3 codec remap path)
     val mapDV7ToHevc: Boolean = false,
+    // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
+    val experimentalDv7ToDv81Enabled: Boolean = false,
     // Display settings
     val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
     // Stream selection settings
@@ -262,6 +264,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
+    private val experimentalDv7ToDv81EnabledKey =
+        booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
     private val frameRateMatchingModeKey = stringPreferencesKey("frame_rate_matching_mode")
     private val streamAutoPlayModeKey = stringPreferencesKey("stream_auto_play_mode")
@@ -404,6 +408,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
                 mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
+                experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: false,
                 frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
                     runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
                 } ?: if (prefs[frameRateMatchingKey] == true) {
@@ -690,6 +695,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setMapDV7ToHevc(enabled: Boolean) {
         store().edit { prefs ->
             prefs[mapDV7ToHevcKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDv7ToDv81Enabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv7ToDv81EnabledKey] = enabled
         }
     }
 

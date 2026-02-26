@@ -13,6 +13,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.util.DolbyVisionCompatibility
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -27,6 +28,8 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
+import com.nuvio.tv.core.player.DoviBridge
+import com.nuvio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.FrameRateMatchingMode
 import io.github.peerless2012.ass.media.kt.buildWithAssSupport
@@ -49,9 +52,44 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             autoSubtitleSelected = false
             hasScannedTextTracksOnce = false
             resetLoadingOverlayForNewStream()
+            playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val useLibass = false // Temporarily disabled for maintenance
             val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
+            DoviBridge.resetRuntimeCounters()
+            val dv7ToDv81Probe = if (playerSettings.experimentalDv7ToDv81Enabled) {
+                DoviBridge.probeRealtimeConversionSupport(url)
+            } else {
+                DoviBridge.RealtimeConversionProbe(
+                    supported = false,
+                    reason = "setting-disabled",
+                    bridgeVersion = DoviBridge.getBridgeVersionOrNull(),
+                    extractorHookReady = DoviBridge.isExtractorHookReadyInBuild,
+                    selfTest = DoviBridge.SelfTestResult(
+                        passed = false,
+                        reason = "not-run",
+                        inputBytes = 0,
+                        outputBytes = 0
+                    )
+                )
+            }
+            isExperimentalDv7ToDv81ActiveForCurrentPlayback =
+                playerSettings.experimentalDv7ToDv81Enabled && dv7ToDv81Probe.supported
+            hasAttemptedDv7ToDv81ForCurrentPlayback = false
+            dv7ToDv81BridgeVersionForCurrentPlayback = dv7ToDv81Probe.bridgeVersion
+            dv7ToDv81LastProbeReasonForCurrentPlayback = dv7ToDv81Probe.reason
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "DV7_DOVI: setting=${playerSettings.experimentalDv7ToDv81Enabled} " +
+                    "buildNative=${DoviBridge.isNativeEnabledInBuild} " +
+                    "libraryLoaded=${DoviBridge.isLibraryLoaded} " +
+                    "extractorHookReady=${dv7ToDv81Probe.extractorHookReady} " +
+                    "active=${isExperimentalDv7ToDv81ActiveForCurrentPlayback} " +
+                    "reason=${dv7ToDv81Probe.reason} " +
+                    "selfTest=${dv7ToDv81Probe.selfTest.reason} " +
+                    "bridge=${dv7ToDv81Probe.bridgeVersion ?: "n/a"} " +
+                    "host=${url.safeHost()}"
+            )
             val bufferSettings = playerSettings.bufferSettings
             val targetBufferBytes = if (bufferSettings.targetBufferSizeMb <= 0) {
                 C.LENGTH_UNSET
@@ -138,11 +176,36 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val extractorsFactory = DefaultExtractorsFactory()
                 .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
                 .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+            val dolbyVisionHookInstalled = MatroskaDolbyVisionHookInstaller.maybeInstall(
+                extractorsFactory = extractorsFactory,
+                enabled = playerSettings.experimentalDv7ToDv81Enabled,
+                streamUrl = url
+            )
+            if (dolbyVisionHookInstalled) {
+                isExperimentalDv7ToDv81ActiveForCurrentPlayback = true
+                if (dv7ToDv81LastProbeReasonForCurrentPlayback != "ready") {
+                    dv7ToDv81LastProbeReasonForCurrentPlayback = "extractor-hook-enabled"
+                }
+            }
+            if (isExperimentalDv7ToDv81ActiveForCurrentPlayback && !dolbyVisionHookInstalled) {
+                isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
+                dv7ToDv81LastProbeReasonForCurrentPlayback =
+                    "extractor-hook-install-failed"
+            }
+            if (playerSettings.experimentalDv7ToDv81Enabled) {
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "DV7_DOVI: extractorHookInstalled=$dolbyVisionHookInstalled " +
+                        "active=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
+                        "host=${url.safeHost()}"
+                )
+            }
 
             
             subtitleDelayUs.set(_uiState.value.subtitleDelayMs.toLong() * 1000L)
             val mapDv7ToHevcEnabled =
                 playerSettings.mapDV7ToHevc || dv7ToHevcForcedStreamUrls.contains(url)
+            DolbyVisionCompatibility.setMapDv7ToHevcEnabled(mapDv7ToHevcEnabled)
             isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
             val codecSelector = createDolbyVisionFallbackCodecSelector(mapDv7ToHevcEnabled)
             val renderersFactory = SubtitleOffsetRenderersFactory(
@@ -151,8 +214,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
                 .setExtensionRendererMode(playerSettings.decoderPriority)
                 .setEnableDecoderFallback(true)
-                .setMapDV7ToHevc(mapDv7ToHevcEnabled)
                 .setMediaCodecSelector(codecSelector)
+                .applyMapDv7ToHevcIfSupported(mapDv7ToHevcEnabled)
 
             _exoPlayer = if (useLibass) {
                 
@@ -255,6 +318,19 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     
                         
                         if (playbackState == Player.STATE_READY) {
+                            if (pendingSeekTelemetryRequestedAtMs > 0L) {
+                                val latencyMs =
+                                    (System.currentTimeMillis() - pendingSeekTelemetryRequestedAtMs)
+                                        .coerceAtLeast(0L)
+                                Log.i(
+                                    PlayerRuntimeController.TAG,
+                                    "SEEK_READY: latencyMs=$latencyMs " +
+                                        "targetMs=$pendingSeekTelemetryTargetMs " +
+                                        "host=${currentStreamUrl.safeHost()}"
+                                )
+                                pendingSeekTelemetryRequestedAtMs = 0L
+                                pendingSeekTelemetryTargetMs = -1L
+                            }
                             if (!hasRenderedFirstFrame) {
                                 _uiState.update { state ->
                                     state.copy(
@@ -320,6 +396,24 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onRenderedFirstFrame() {
+                        val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
+                            .coerceAtLeast(0L)
+                        val conversionCalls = DoviBridge.getConversionCallCount()
+                        val conversionSucceeded = DoviBridge.getConversionSuccessCount()
+                        val conversionAttempted =
+                            hasAttemptedDv7ToDv81ForCurrentPlayback || conversionCalls > 0
+                        Log.i(
+                            PlayerRuntimeController.TAG,
+                            "PLAYBACK_STARTUP: firstFrameMs=$startupMs " +
+                                "dv7doviActive=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
+                                "dv7doviAttempted=$conversionAttempted " +
+                                "dv7doviCalls=$conversionCalls " +
+                                "dv7doviSuccess=$conversionSucceeded " +
+                                "dv7doviReason=${dv7ToDv81LastProbeReasonForCurrentPlayback ?: "n/a"} " +
+                                "dv7doviBridge=${dv7ToDv81BridgeVersionForCurrentPlayback ?: "n/a"} " +
+                                "dv7hevcActive=$isMapDv7ToHevcActiveForCurrentPlayback " +
+                                "host=${currentStreamUrl.safeHost()}"
+                        )
                         hasRenderedFirstFrame = true
                         _uiState.update { it.copy(showLoadingOverlay = false) }
                     }
@@ -328,11 +422,32 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         if (error.isDolbyVisionDecoderFailure() &&
                             !isMapDv7ToHevcActiveForCurrentPlayback
                         ) {
+                            if (isExperimentalDv7ToDv81ActiveForCurrentPlayback &&
+                                !hasAttemptedDv7ToDv81ForCurrentPlayback
+                            ) {
+                                hasAttemptedDv7ToDv81ForCurrentPlayback = true
+                                val probe = DoviBridge.probeRealtimeConversionSupport(currentStreamUrl)
+                                dv7ToDv81LastProbeReasonForCurrentPlayback = probe.reason
+                                dv7ToDv81BridgeVersionForCurrentPlayback = probe.bridgeVersion
+                                Log.w(
+                                    PlayerRuntimeController.TAG,
+                                    "DV7_DOVI: conversion path not applied " +
+                                        "reason=${probe.reason} " +
+                                        "selfTest=${probe.selfTest.reason} " +
+                                        "extractorHookReady=${probe.extractorHookReady} " +
+                                        "bridge=${probe.bridgeVersion ?: "n/a"} " +
+                                        "host=${currentStreamUrl.safeHost()}"
+                                )
+                            }
+
                             Log.w(
                                 PlayerRuntimeController.TAG,
                                 "Dolby Vision decoder failure detected, retrying with DV7->HEVC " +
                                     "fallback host=${Uri.parse(currentStreamUrl).host ?: "unknown"} " +
-                                    "positionMs=$currentPosition"
+                                    "positionMs=$currentPosition " +
+                                    "dv7doviActive=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
+                                    "dv7doviAttempted=$hasAttemptedDv7ToDv81ForCurrentPlayback " +
+                                    "dv7doviReason=${dv7ToDv81LastProbeReasonForCurrentPlayback ?: "n/a"}"
                             )
                             dv7ToHevcForcedStreamUrls.add(currentStreamUrl)
                             retryCurrentStreamWithDolbyVisionFallback(currentPosition)
@@ -412,6 +527,13 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     userPausedManually = false
     timeoutRecoveryAttempts = 0
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
+    hasAttemptedDv7ToDv81ForCurrentPlayback = false
+    isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
+    dv7ToDv81BridgeVersionForCurrentPlayback = null
+    dv7ToDv81LastProbeReasonForCurrentPlayback = null
+    playerInitializationStartedAtMs = 0L
+    pendingSeekTelemetryRequestedAtMs = 0L
+    pendingSeekTelemetryTargetMs = -1L
     lastKnownDuration = 0L
     _uiState.update { state ->
         state.copy(
@@ -488,6 +610,10 @@ private fun PlaybackException.isUnexpectedLoaderNullPointer(): Boolean {
             details.contains("matroskaextractor", ignoreCase = true))
 }
 
+private fun String.safeHost(): String {
+    return runCatching { Uri.parse(this).host ?: "unknown" }.getOrDefault("unknown")
+}
+
 private fun createDolbyVisionFallbackCodecSelector(
     forceHdr10Fallback: Boolean
 ): MediaCodecSelector {
@@ -508,4 +634,14 @@ private fun createDolbyVisionFallbackCodecSelector(
             )
         }
     }
+}
+
+private fun DefaultRenderersFactory.applyMapDv7ToHevcIfSupported(
+    enabled: Boolean
+): DefaultRenderersFactory {
+    return runCatching {
+        val method = javaClass.getMethod("setMapDV7ToHevc", Boolean::class.javaPrimitiveType)
+        method.invoke(this, enabled)
+        this
+    }.getOrElse { this }
 }
