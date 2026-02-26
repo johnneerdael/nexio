@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -388,15 +389,23 @@ private fun LazyListScope.playbackCollapsibleSection(
     }
 
     if (expanded) {
-        content()
-        item(key = "${keyPrefix}_end_divider") {
-            Box(
+        item(key = "${keyPrefix}_content_card") {
+            SettingsGroupCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
-                    .height(1.dp)
-                    .background(NuvioColors.Border)
-            )
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 1400.dp),
+                    userScrollEnabled = false,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    content()
+                }
+            }
         }
     }
 }

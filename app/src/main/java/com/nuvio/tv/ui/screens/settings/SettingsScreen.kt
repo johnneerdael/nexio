@@ -268,7 +268,7 @@ fun SettingsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .focusRequester(railContainerFocusRequester)
-                        .width(282.dp)
+                        .width(248.dp)
                         .fillMaxHeight()
                         .onFocusChanged { state ->
                             val justGainedFocus = !railHadFocus && state.hasFocus
@@ -335,6 +335,10 @@ fun SettingsScreen(
                         .onKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
                                 allowDetailAutofocus = false
+                                val movedInsideDetail = focusManager.moveFocus(FocusDirection.Left)
+                                if (movedInsideDetail) {
+                                    return@onKeyEvent true
+                                }
                                 val requested = railFocusRequesters[selectedCategory]?.let { requester ->
                                     runCatching { requester.requestFocus() }.isSuccess
                                 } ?: false
