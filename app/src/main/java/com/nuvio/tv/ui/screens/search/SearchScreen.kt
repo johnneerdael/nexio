@@ -1,12 +1,15 @@
 package com.nuvio.tv.ui.screens.search
 
-import android.app.Activity
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
 import android.view.KeyEvent
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,9 +49,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -56,8 +63,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -72,7 +81,6 @@ import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Locale
 import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
@@ -96,7 +104,7 @@ fun SearchScreen(
     var pendingFocusMoveToResultsQuery by remember { mutableStateOf<String?>(null) }
     var pendingFocusMoveSawSearching by remember { mutableStateOf(false) }
     var pendingFocusMoveHadExistingSearchRows by remember { mutableStateOf(false) }
-    var pendingVoiceSearchResume by remember { mutableStateOf(false) }
+    var isVoiceListening by remember { mutableStateOf(false) }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
@@ -115,48 +123,103 @@ fun SearchScreen(
             Toast.makeText(context, "No speech detected. Try again.", Toast.LENGTH_SHORT).show()
         }
     }
-    val voiceLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        pendingVoiceSearchResume = false
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val recognized = result.data
-            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            ?.firstOrNull()
-            .orEmpty()
-            .trim()
-        onVoiceQueryResultState.value(recognized)
-    }
-    val voiceIntentAction = remember(context) {
-        listOf(
-            RecognizerIntent.ACTION_RECOGNIZE_SPEECH,
-            RecognizerIntent.ACTION_VOICE_SEARCH_HANDS_FREE
-        ).firstOrNull { action ->
-            Intent(action).resolveActivity(context.packageManager) != null
+    val isVoiceSearchAvailable = remember(context) { SpeechRecognizer.isRecognitionAvailable(context) }
+    val speechRecognizer = remember(context, isVoiceSearchAvailable) {
+        if (isVoiceSearchAvailable) {
+            runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
+        } else {
+            null
         }
     }
-    val isVoiceSearchAvailable = voiceIntentAction != null
+    val hasRecordAudioPermission by remember(context) {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var recordAudioPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val requestAudioPermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        recordAudioPermissionGranted = granted
+        if (granted) {
+            isVoiceListening = true
+            speechRecognizer?.startListening(
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+                }
+            )
+        } else {
+            Toast.makeText(context, "Microphone permission is required for voice search.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    LaunchedEffect(hasRecordAudioPermission) {
+        recordAudioPermissionGranted = hasRecordAudioPermission
+    }
+    DisposableEffect(speechRecognizer) {
+        val listener = object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = Unit
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() = Unit
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+
+            override fun onError(error: Int) {
+                isVoiceListening = false
+                if (error != SpeechRecognizer.ERROR_CLIENT) {
+                    Toast.makeText(context, "Voice recognition failed. Try again.", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onResults(results: Bundle?) {
+                isVoiceListening = false
+                val recognized = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    .orEmpty()
+                    .trim()
+                onVoiceQueryResultState.value(recognized)
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) = Unit
+        }
+
+        speechRecognizer?.setRecognitionListener(listener)
+        onDispose {
+            speechRecognizer?.setRecognitionListener(null)
+            speechRecognizer?.destroy()
+        }
+    }
     val topInputFocusRequester = remember(isVoiceSearchAvailable) {
         if (isVoiceSearchAvailable) voiceFocusRequester else searchFocusRequester
     }
     val launchVoiceSearch: () -> Unit = {
-        val action = voiceIntentAction
-        if (action == null) {
+        if (!isVoiceSearchAvailable || speechRecognizer == null) {
             Toast.makeText(context, "Voice search is unavailable on this device.", Toast.LENGTH_SHORT).show()
+        } else if (!recordAudioPermissionGranted) {
+            requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
-            val intent = Intent(action).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            isVoiceListening = true
+            runCatching {
+                speechRecognizer.startListening(
+                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
+                    }
                 )
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to search")
-            }
-            pendingVoiceSearchResume = true
-            runCatching { voiceLauncher.launch(intent) }.onFailure {
-                pendingVoiceSearchResume = false
+            }.onFailure {
+                isVoiceListening = false
                 Toast.makeText(context, "Voice search is unavailable on this device.", Toast.LENGTH_SHORT).show()
             }
         }
@@ -243,7 +306,7 @@ fun SearchScreen(
 
     val latestPendingDiscoverRestore by rememberUpdatedState(pendingDiscoverRestoreOnResume)
     val latestShouldKeepSearchFocus by rememberUpdatedState(
-        focusResults || uiState.isSearching || pendingVoiceSearchResume
+        focusResults || uiState.isSearching || isVoiceListening
     )
     val latestVoiceSearchAvailable by rememberUpdatedState(isVoiceSearchAvailable)
     DisposableEffect(lifecycleOwner) {
@@ -328,8 +391,8 @@ fun SearchScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     EmptyScreenState(
-                        title = "Start Searching",
-                        subtitle = "Enter at least 2 characters",
+                        title = stringResource(R.string.search_start_title),
+                        subtitle = stringResource(R.string.search_start_subtitle),
                         icon = Icons.Default.Search
                     )
                 }
@@ -396,11 +459,11 @@ fun SearchScreen(
                     trimmedSubmittedQuery.length < 2 && !hasPendingUnsubmittedQuery -> {
                         item {
                             EmptyScreenState(
-                                title = "Start Searching",
+                                title = stringResource(R.string.search_start_title),
                                 subtitle = if (uiState.discoverEnabled) {
-                                    "Enter at least 2 characters"
+                                    stringResource(R.string.search_start_subtitle)
                                 } else {
-                                    "Discover is disabled. Enter at least 2 characters"
+                                    stringResource(R.string.search_start_subtitle_no_discover)
                                 },
                                 icon = Icons.Default.Search
                             )
@@ -460,7 +523,6 @@ fun SearchScreen(
                                         focusResults = false
                                     }
                                 },
-                                upFocusRequester = if (index == 0 && isSearchFieldAttached) topInputFocusRequester else null,
                                 onItemClick = { id, type, addonBaseUrl ->
                                     onNavigateToDetail(id, type, addonBaseUrl)
                                 },
@@ -510,14 +572,11 @@ private fun SearchInputField(
             modifier = Modifier
                 .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
                 .size(56.dp)
-                .border(
-                    width = if (isDiscoverButtonFocused) 2.dp else 1.dp,
-                    color = if (isDiscoverButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .background(
-                    color = NuvioColors.BackgroundCard,
-                    shape = RoundedCornerShape(12.dp)
+                .searchInputButtonChrome(
+                    isFocused = isDiscoverButtonFocused,
+                    fillColor = NuvioColors.BackgroundCard,
+                    focusedBorderColor = NuvioColors.FocusRing,
+                    unfocusedBorderColor = NuvioColors.Border
                 )
         ) {
             Icon(
@@ -542,14 +601,11 @@ private fun SearchInputField(
                     )
                     .onFocusChanged { isVoiceButtonFocused = it.isFocused }
                     .size(56.dp)
-                    .border(
-                        width = if (isVoiceButtonFocused) 2.dp else 1.dp,
-                        color = if (isVoiceButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .background(
-                        color = NuvioColors.BackgroundCard,
-                        shape = RoundedCornerShape(12.dp)
+                    .searchInputButtonChrome(
+                        isFocused = isVoiceButtonFocused,
+                        fillColor = NuvioColors.BackgroundCard,
+                        focusedBorderColor = NuvioColors.FocusRing,
+                        unfocusedBorderColor = NuvioColors.Border
                     )
             ) {
                 Icon(
@@ -613,6 +669,30 @@ private fun SearchInputField(
                 unfocusedTextColor = NuvioColors.TextPrimary,
                 cursorColor = NuvioColors.FocusRing
             )
+        )
+    }
+}
+
+private fun Modifier.searchInputButtonChrome(
+    isFocused: Boolean,
+    fillColor: Color,
+    focusedBorderColor: Color,
+    unfocusedBorderColor: Color,
+    cornerRadius: Dp = 12.dp
+): Modifier = this.drawWithCache {
+    val radius = cornerRadius.toPx()
+    val borderWidthPx = if (isFocused) 2.dp.toPx() else 1.dp.toPx()
+    val borderColor = if (isFocused) focusedBorderColor else unfocusedBorderColor
+    val stroke = Stroke(width = borderWidthPx)
+    onDrawBehind {
+        drawRoundRect(
+            color = fillColor,
+            cornerRadius = CornerRadius(radius, radius)
+        )
+        drawRoundRect(
+            color = borderColor,
+            cornerRadius = CornerRadius(radius, radius),
+            style = stroke
         )
     }
 }
