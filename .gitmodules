@@ -1,0 +1,4 @@
+[submodule "media"]
+	path = media
+	url = https://github.com/johnneerdael/media.git
+	branch = nuvio-dv7-libdovi-poc
