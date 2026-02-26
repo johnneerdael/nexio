@@ -33,13 +33,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -450,23 +449,19 @@ private fun EpisodeCard(
                     shape = shape
                 )
         ) {
+            AsyncImage(
+                model = thumbnailRequest,
+                contentDescription = episode.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .drawWithCache {
-                        onDrawWithContent {
-                            drawContent()
-                            drawRect(brush = overlayBrush, size = size, alpha = overlayAlpha)
-                        }
-                    }
-            ) {
-                AsyncImage(
-                    model = thumbnailRequest,
-                    contentDescription = episode.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+                    .alpha(overlayAlpha)
+                    .background(overlayBrush)
+            )
 
             Column(
                 modifier = Modifier
@@ -596,22 +591,15 @@ private fun EpisodeCard(
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
                         .height(cardMetrics.progressBarHeight)
-                        .drawWithCache {
-                            val trackColor = Color.White.copy(alpha = 0.2f)
-                            val fillColor = NuvioColors.Primary
-                            val clamped = progressPercent.coerceIn(0f, 1f)
-                            onDrawBehind {
-                                drawRect(color = trackColor, size = size)
-                                if (clamped > 0f) {
-                                    drawRect(
-                                        color = fillColor,
-                                        topLeft = androidx.compose.ui.geometry.Offset.Zero,
-                                        size = Size(size.width * clamped, size.height)
-                                    )
-                                }
-                            }
-                        }
-                )
+                        .background(Color.White.copy(alpha = 0.2f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progressPercent)
+                            .height(cardMetrics.progressBarHeight)
+                            .background(NuvioColors.Primary)
+                    )
+                }
             }
 
             if (showCompletedBadge) {
@@ -634,7 +622,7 @@ private fun EpisodeCard(
                     )
                 }
             } else if (showNotStartedBadge) {
-                Box(
+                Canvas(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(
@@ -642,22 +630,15 @@ private fun EpisodeCard(
                             top = cardMetrics.statusBadgeInset
                         )
                         .size(cardMetrics.statusBadgeSize)
-                        .drawWithCache {
-                            val strokeWidth = 2.dp.toPx()
-                            val dashPathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
-                            val stroke = Stroke(
-                                width = strokeWidth,
-                                pathEffect = dashPathEffect
-                            )
-                            val ringColor = NuvioColors.TextSecondary.copy(alpha = 0.9f)
-                            onDrawBehind {
-                                drawCircle(
-                                    color = ringColor,
-                                    style = stroke
-                                )
-                            }
-                        }
-                )
+                ) {
+                    drawCircle(
+                        color = NuvioColors.TextSecondary.copy(alpha = 0.9f),
+                        style = Stroke(
+                            width = 2.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
+                        )
+                    )
+                }
             }
         }
     }
