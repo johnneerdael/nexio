@@ -80,7 +80,6 @@ fun ContinueWatchingSection(
 ) {
     if (items.isEmpty()) return
 
-    val itemFocusRequester = remember { FocusRequester() }
     val focusRequesters = remember(items.size) { List(items.size) { FocusRequester() } }
     var lastFocusedIndex by remember { mutableIntStateOf(-1) }
     var lastRequestedFocusIndex by remember { mutableIntStateOf(-1) }
@@ -90,13 +89,13 @@ fun ContinueWatchingSection(
     val listState = rememberLazyListState()
 
     // Restore focus to specific item if requested
-    LaunchedEffect(focusedItemIndex, items) {
+    LaunchedEffect(focusedItemIndex) {
         if (focusedItemIndex >= 0 && focusedItemIndex < items.size) {
             if (lastRequestedFocusIndex == focusedItemIndex) return@LaunchedEffect
             var focused = false
             for (attempt in 0 until 3) {
                 withFrameNanos { }
-                focused = runCatching { itemFocusRequester.requestFocus() }.isSuccess
+                focused = runCatching { focusRequesters[focusedItemIndex].requestFocus() }.isSuccess
                 if (focused) break
             }
             if (focused) {
@@ -125,7 +124,11 @@ fun ContinueWatchingSection(
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRestorer(),
+                .focusRestorer {
+                        val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size)
+                            lastFocusedIndex else 0
+                        focusRequesters.getOrNull(idx) ?: FocusRequester.Default
+                    },
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             state = listState
@@ -142,8 +145,7 @@ fun ContinueWatchingSection(
                 }
             ) { index, progress ->
                 val focusModifier = when {
-                    pendingFocusIndex == index && index < focusRequesters.size -> Modifier.focusRequester(focusRequesters[index])
-                    index == focusedItemIndex -> Modifier.focusRequester(itemFocusRequester)
+                    index < focusRequesters.size -> Modifier.focusRequester(focusRequesters[index])
                     else -> Modifier
                 }
 

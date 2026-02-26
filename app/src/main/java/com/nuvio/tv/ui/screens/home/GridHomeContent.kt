@@ -262,8 +262,20 @@ fun GridHomeContent(
                             span = { GridItemSpan(maxLineSpan) },
                             contentType = "divider"
                         ) {
+                            val strTypeMovie = stringResource(R.string.type_movie)
+                            val strTypeSeries = stringResource(R.string.type_series)
+                            val typeLabel = when (gridItem.type.lowercase()) {
+                                "movie" -> strTypeMovie
+                                "series" -> strTypeSeries
+                                else -> gridItem.type.replaceFirstChar { it.uppercase() }
+                            }
+                            val displayName = if (uiState.catalogTypeSuffixEnabled && typeLabel.isNotBlank()) {
+                                "${gridItem.catalogName.replaceFirstChar { it.uppercase() }} - $typeLabel"
+                            } else {
+                                gridItem.catalogName.replaceFirstChar { it.uppercase() }
+                            }
                             SectionDivider(
-                                catalogName = gridItem.catalogName
+                                catalogName = displayName
                             )
                         }
                     }
