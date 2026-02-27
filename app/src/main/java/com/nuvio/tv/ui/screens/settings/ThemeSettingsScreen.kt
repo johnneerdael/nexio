@@ -92,6 +92,7 @@ fun ThemeSettingsContent(
             null to strLanguageSystem,
             "en" to "English",
             "es" to "Español",
+            "hu" to "Magyar",
             "fr" to "Français",
             "it" to "Italiano",
             "pl" to "Polski",
