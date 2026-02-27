@@ -591,13 +591,20 @@ private fun EpisodeCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
+                        .padding(
+                            start = cardMetrics.contentPadding,
+                            end = cardMetrics.contentPadding,
+                            bottom = cardMetrics.contentPadding * 0.5f
+                        )
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
                         .height(cardMetrics.progressBarHeight)
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(Color.Black.copy(alpha = 0.45f))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(progressPercent)
+                            .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
                             .height(cardMetrics.progressBarHeight)
                             .background(NuvioColors.Primary)
                     )
@@ -807,7 +814,7 @@ private fun rememberEpisodeCardMetrics(): EpisodeCardMetrics {
                 metadataIconSize = 16.dp,
                 imdbLogoWidth = 28.dp,
                 imdbLogoHeight = 14.dp,
-                progressBarHeight = 3.dp,
+                progressBarHeight = 4.dp,
                 statusBadgeSize = 32.dp,
                 statusIconSize = 20.dp,
                 statusBadgeInset = 16.dp
@@ -832,7 +839,7 @@ private fun rememberEpisodeCardMetrics(): EpisodeCardMetrics {
                 metadataIconSize = 15.dp,
                 imdbLogoWidth = 26.dp,
                 imdbLogoHeight = 13.dp,
-                progressBarHeight = 3.dp,
+                progressBarHeight = 4.dp,
                 statusBadgeSize = 28.dp,
                 statusIconSize = 18.dp,
                 statusBadgeInset = 14.dp
@@ -857,7 +864,7 @@ private fun rememberEpisodeCardMetrics(): EpisodeCardMetrics {
                 metadataIconSize = 14.dp,
                 imdbLogoWidth = 24.dp,
                 imdbLogoHeight = 12.dp,
-                progressBarHeight = 3.dp,
+                progressBarHeight = 4.dp,
                 statusBadgeSize = 24.dp,
                 statusIconSize = 16.dp,
                 statusBadgeInset = 12.dp
@@ -882,7 +889,7 @@ private fun rememberEpisodeCardMetrics(): EpisodeCardMetrics {
                 metadataIconSize = 13.dp,
                 imdbLogoWidth = 22.dp,
                 imdbLogoHeight = 11.dp,
-                progressBarHeight = 3.dp,
+                progressBarHeight = 4.dp,
                 statusBadgeSize = 22.dp,
                 statusIconSize = 14.dp,
                 statusBadgeInset = 10.dp
