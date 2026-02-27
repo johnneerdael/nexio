@@ -609,6 +609,16 @@
     <string name="subtitle_style_title">Subtitle Style</string>
     <string name="subtitle_style_color">Color</string>
     <string name="subtitle_style_reset">Reset</string>
+    <string name="subtitle_style_font_size">Font Size</string>
+    <string name="subtitle_style_bold">Bold</string>
+    <string name="subtitle_style_text_color">Text Color</string>
+    <string name="subtitle_style_outline">Outline</string>
+    <string name="subtitle_style_bottom_offset">Bottom Offset</string>
+    <string name="subtitle_style_defaults">Defaults</string>
+    <string name="subtitle_style_on">On</string>
+    <string name="subtitle_style_off">Off</string>
+    <string name="panel_failed_load_streams">Failed to load streams</string>
+    <string name="panel_failed_load_episodes">Failed to load episodes</string>
 
     <!-- PauseOverlay -->
     <string name="pause_you_are_watching">You\'re watching</string>

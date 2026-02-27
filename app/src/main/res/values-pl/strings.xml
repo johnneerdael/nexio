@@ -606,6 +606,16 @@
     <string name="subtitle_style_title">Styl napisów</string>
     <string name="subtitle_style_color">Kolor</string>
     <string name="subtitle_style_reset">Resetuj</string>
+    <string name="subtitle_style_font_size">Rozmiar czcionki</string>
+    <string name="subtitle_style_bold">Pogrubienie</string>
+    <string name="subtitle_style_text_color">Kolor tekstu</string>
+    <string name="subtitle_style_outline">Obramowanie</string>
+    <string name="subtitle_style_bottom_offset">Przesunięcie od dołu</string>
+    <string name="subtitle_style_defaults">Domyślne</string>
+    <string name="subtitle_style_on">Wł.</string>
+    <string name="subtitle_style_off">Wył.</string>
+    <string name="panel_failed_load_streams">Nie udało się załadować strumieni</string>
+    <string name="panel_failed_load_episodes">Nie udało się załadować odcinków</string>
 
     <!-- PauseOverlay -->
     <string name="pause_you_are_watching">Oglądasz</string>
