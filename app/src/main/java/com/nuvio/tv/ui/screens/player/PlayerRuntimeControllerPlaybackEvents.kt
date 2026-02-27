@@ -332,9 +332,10 @@ internal fun PlayerRuntimeController.cancelPauseOverlay() {
 }
 
 fun PlayerRuntimeController.onUserInteraction() {
-    
-    if (_uiState.value.showPauseOverlay || pauseOverlayJob != null) {
+    if (_uiState.value.showPauseOverlay) {
         cancelPauseOverlay()
+    } else if (pauseOverlayJob != null && !_uiState.value.isPlaying && userPausedManually) {
+        schedulePauseOverlay()
     }
 }
 
