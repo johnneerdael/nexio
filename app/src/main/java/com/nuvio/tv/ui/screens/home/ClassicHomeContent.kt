@@ -274,7 +274,8 @@ fun ClassicHomeContent(
                 },
                 rowFocusRequester = rowFocusRequester,
                 listState = listState,
-                // We don't need initialScrollIndex anymore as listState handles it
+                enableRowFocusRestorer = true,
+                
                 focusedItemIndex = focusedItemIndex,
                 onItemFocused = { itemIndex ->
                     if (restoringFocus) restoringFocus = false

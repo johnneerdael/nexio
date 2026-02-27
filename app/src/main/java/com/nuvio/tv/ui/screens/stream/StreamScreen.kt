@@ -39,7 +39,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -336,18 +335,25 @@ private fun StreamBackdrop(
             )
         }
 
-        // Single overlay draw pass keeps the same visual layering with less overdraw nodes.
+        // Dark overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .drawWithCache {
-                    val dimColor = backgroundColor.copy(alpha = alpha)
-                    onDrawBehind {
-                        drawRect(color = dimColor, size = size)
-                        drawRect(brush = leftGradient, size = size)
-                        drawRect(brush = rightGradient, size = size)
-                    }
-                }
+                .background(NuvioColors.Background.copy(alpha = alpha))
+        )
+
+        // Left gradient for text readability
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(leftGradient)
+        )
+
+        // Right gradient for streams panel
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(rightGradient)
         )
     }
 }
