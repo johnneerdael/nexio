@@ -86,6 +86,8 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
         private const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
+        // Limit poster status observers to avoid spawning hundreds of coroutines at startup
+        private const val MAX_POSTER_STATUS_OBSERVERS = 60
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -230,7 +232,7 @@ class HomeViewModel @Inject constructor(
                 )
             }
                 .distinctUntilChanged()
-                .debounce(100)
+                .debounce(300)
                 .collectLatest { prefs ->
                 val effectivePosterLabelsEnabled = if (prefs.layout == HomeLayout.MODERN) {
                     false
@@ -463,7 +465,9 @@ class HomeViewModel @Inject constructor(
     private fun loadDisabledHomeCatalogPreference() {
         viewModelScope.launch {
             layoutPreferenceDataStore.disabledHomeCatalogKeys.collectLatest { keys ->
-                disabledHomeCatalogKeys = keys.toSet()
+                val newKeys = keys.toSet()
+                if (newKeys == disabledHomeCatalogKeys) return@collectLatest
+                disabledHomeCatalogKeys = newKeys
                 rebuildCatalogOrder(addonsCache)
                 if (addonsCache.isNotEmpty()) {
                     loadAllCatalogs(addonsCache)
@@ -1188,6 +1192,7 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
+        posterStatusReconcileJob?.cancel()
         reconcilePosterStatusObservers(emptyList())
         _fullCatalogRows.value = emptyList()
         truncatedRowCache.clear()
@@ -1529,13 +1534,28 @@ class HomeViewModel @Inject constructor(
             lastHeroEnrichedItems = emptyList()
         }
 
-        reconcilePosterStatusObservers(displayRows)
+        schedulePosterStatusReconcile(displayRows)
+    }
+
+    private var posterStatusReconcileJob: Job? = null
+
+    private fun schedulePosterStatusReconcile(rows: List<CatalogRow>) {
+        posterStatusReconcileJob?.cancel()
+        if (rows.isEmpty()) {
+            reconcilePosterStatusObservers(rows)
+            return
+        }
+        posterStatusReconcileJob = viewModelScope.launch {
+            delay(500)
+            reconcilePosterStatusObservers(rows)
+        }
     }
 
     private fun reconcilePosterStatusObservers(rows: List<CatalogRow>) {
         val desiredItemsByKey = linkedMapOf<String, Pair<String, String>>()
         rows.asSequence()
             .flatMap { row -> row.items.asSequence() }
+            .take(MAX_POSTER_STATUS_OBSERVERS)
             .forEach { item ->
                 val key = homeItemStatusKey(item.id, item.apiType)
                 if (key !in desiredItemsByKey) {
@@ -1895,6 +1915,7 @@ class HomeViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        posterStatusReconcileJob?.cancel()
         posterLibraryObserverJobs.values.forEach { it.cancel() }
         movieWatchedObserverJobs.values.forEach { it.cancel() }
         posterLibraryObserverJobs.clear()
