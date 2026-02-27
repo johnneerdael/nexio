@@ -19,6 +19,9 @@ import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.LibraryEntryInput
+import com.nuvio.tv.domain.model.LibraryListTab
+import com.nuvio.tv.domain.model.LibrarySourceMode
+import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.TmdbSettings
@@ -114,6 +117,10 @@ class HomeViewModel @Inject constructor(
     private var hasRenderedFirstCatalog = false
     private val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
     private var pendingCatalogLoads = 0
+    private val activeCatalogLoadJobs = mutableSetOf<Job>()
+    private var activeCatalogLoadSignature: String? = null
+    private var catalogLoadGeneration: Long = 0L
+    private var catalogsLoadInProgress: Boolean = false
     private data class TruncatedRowCacheEntry(
         val sourceRow: CatalogRow,
         val truncatedRow: CatalogRow
@@ -134,6 +141,7 @@ class HomeViewModel @Inject constructor(
     private var pendingExternalMetaPrefetchItemId: String? = null
     private val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     private val movieWatchedObserverJobs = mutableMapOf<String, Job>()
+    private var activePosterListPickerInput: LibraryEntryInput? = null
     @Volatile
     private var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
@@ -146,6 +154,7 @@ class HomeViewModel @Inject constructor(
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
+        observeLibraryState()
         observeTmdbSettings()
         loadContinueWatching()
         observeInstalledAddons()
@@ -489,6 +498,62 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun observeLibraryState() {
+        viewModelScope.launch {
+            libraryRepository.sourceMode
+                .distinctUntilChanged()
+                .collectLatest { sourceMode ->
+                    if (sourceMode != LibrarySourceMode.TRAKT) {
+                        activePosterListPickerInput = null
+                    }
+                    _uiState.update { state ->
+                        val resetPickerState = sourceMode != LibrarySourceMode.TRAKT
+                        val updatedState = state.copy(
+                            librarySourceMode = sourceMode,
+                            showPosterListPicker = if (resetPickerState) false else state.showPosterListPicker,
+                            posterListPickerPending = if (resetPickerState) false else state.posterListPickerPending,
+                            posterListPickerError = if (resetPickerState) null else state.posterListPickerError,
+                            posterListPickerTitle = if (resetPickerState) null else state.posterListPickerTitle,
+                            posterListPickerMembership = if (resetPickerState) {
+                                emptyMap()
+                            } else {
+                                state.posterListPickerMembership
+                            }
+                        )
+                        if (updatedState == state) {
+                            state
+                        } else {
+                            updatedState
+                        }
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            libraryRepository.listTabs
+                .distinctUntilChanged()
+                .collectLatest { tabs ->
+                    _uiState.update { state ->
+                        val filteredMembership = mergeMembershipWithTabs(
+                            tabs = tabs,
+                            membership = state.posterListPickerMembership
+                        )
+                        if (
+                            state.libraryListTabs == tabs &&
+                            state.posterListPickerMembership == filteredMembership
+                        ) {
+                            state
+                        } else {
+                            state.copy(
+                                libraryListTabs = tabs,
+                                posterListPickerMembership = filteredMembership
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
     fun onEvent(event: HomeEvent) {
         when (event) {
             is HomeEvent.OnItemClick -> navigateToDetail(event.itemId, event.itemType)
@@ -499,7 +564,7 @@ class HomeViewModel @Inject constructor(
                 episode = event.episode,
                 isNextUp = event.isNextUp
             )
-            HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache) }
+            HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache, forceReload = true) }
         }
     }
 
@@ -520,6 +585,121 @@ class HomeViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(posterLibraryPending = state.posterLibraryPending - statusKey)
             }
+        }
+    }
+
+    fun openPosterListPicker(item: MetaPreview, addonBaseUrl: String?) {
+        if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) {
+            togglePosterLibrary(item, addonBaseUrl)
+            return
+        }
+        val input = item.toLibraryEntryInput(addonBaseUrl)
+        activePosterListPickerInput = input
+
+        _uiState.update { state ->
+            state.copy(
+                showPosterListPicker = true,
+                posterListPickerTitle = item.name,
+                posterListPickerPending = true,
+                posterListPickerError = null,
+                posterListPickerMembership = mergeMembershipWithTabs(
+                    tabs = state.libraryListTabs,
+                    membership = emptyMap()
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                libraryRepository.getMembershipSnapshot(input)
+            }.onSuccess { snapshot ->
+                _uiState.update { state ->
+                    state.copy(
+                        showPosterListPicker = true,
+                        posterListPickerPending = false,
+                        posterListPickerError = null,
+                        posterListPickerMembership = mergeMembershipWithTabs(
+                            tabs = state.libraryListTabs,
+                            membership = snapshot.listMembership
+                        )
+                    )
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to load poster list picker for ${item.id}: ${error.message}")
+                _uiState.update { state ->
+                    state.copy(
+                        showPosterListPicker = true,
+                        posterListPickerPending = false,
+                        posterListPickerError = error.message ?: "Failed to load lists"
+                    )
+                }
+            }
+        }
+    }
+
+    fun togglePosterListPickerMembership(listKey: String) {
+        val currentValue = _uiState.value.posterListPickerMembership[listKey] == true
+        _uiState.update { state ->
+            state.copy(
+                posterListPickerMembership = state.posterListPickerMembership.toMutableMap().apply {
+                    this[listKey] = !currentValue
+                },
+                posterListPickerError = null
+            )
+        }
+    }
+
+    fun savePosterListPickerMembership() {
+        if (_uiState.value.posterListPickerPending) return
+        if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+        val input = activePosterListPickerInput ?: return
+
+        viewModelScope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    posterListPickerPending = true,
+                    posterListPickerError = null
+                )
+            }
+
+            runCatching {
+                libraryRepository.applyMembershipChanges(
+                    item = input,
+                    changes = ListMembershipChanges(
+                        desiredMembership = _uiState.value.posterListPickerMembership
+                    )
+                )
+            }.onSuccess {
+                _uiState.update { state ->
+                    state.copy(
+                        showPosterListPicker = false,
+                        posterListPickerPending = false,
+                        posterListPickerError = null,
+                        posterListPickerTitle = null
+                    )
+                }
+                activePosterListPickerInput = null
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to save poster list picker: ${error.message}")
+                _uiState.update { state ->
+                    state.copy(
+                        posterListPickerPending = false,
+                        posterListPickerError = error.message ?: "Failed to update lists"
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissPosterListPicker() {
+        activePosterListPickerInput = null
+        _uiState.update { state ->
+            state.copy(
+                showPosterListPicker = false,
+                posterListPickerPending = false,
+                posterListPickerError = null,
+                posterListPickerTitle = null
+            )
         }
     }
 
@@ -1254,7 +1434,21 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadAllCatalogs(addons: List<Addon>) {
+    private suspend fun loadAllCatalogs(addons: List<Addon>, forceReload: Boolean = false) {
+        val signature = buildHomeCatalogLoadSignature(addons)
+        if (!forceReload &&
+            signature == activeCatalogLoadSignature &&
+            (catalogsLoadInProgress || catalogsMap.isNotEmpty())
+        ) {
+            return
+        }
+
+        activeCatalogLoadSignature = signature
+        catalogsLoadInProgress = true
+        catalogLoadGeneration += 1
+        val generation = catalogLoadGeneration
+        cancelInFlightCatalogLoads()
+
         _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
         catalogOrder.clear()
         catalogsMap.clear()
@@ -1277,6 +1471,7 @@ class HomeViewModel @Inject constructor(
 
         try {
             if (addons.isEmpty()) {
+                catalogsLoadInProgress = false
                 _uiState.update { it.copy(isLoading = false, error = "No addons installed") }
                 return
             }
@@ -1284,6 +1479,7 @@ class HomeViewModel @Inject constructor(
             rebuildCatalogOrder(addons)
 
             if (catalogOrder.isEmpty()) {
+                catalogsLoadInProgress = false
                 _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
                 return
             }
@@ -1304,16 +1500,19 @@ class HomeViewModel @Inject constructor(
             }
             pendingCatalogLoads = catalogsToLoad.size
             catalogsToLoad.forEach { (addon, catalog) ->
-                loadCatalog(addon, catalog)
+                loadCatalog(addon, catalog, generation)
             }
         } catch (e: Exception) {
+            catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = e.message) }
         }
     }
 
-    private fun loadCatalog(addon: Addon, catalog: CatalogDescriptor) {
-        viewModelScope.launch {
+    private fun loadCatalog(addon: Addon, catalog: CatalogDescriptor, generation: Long) {
+        val loadJob = viewModelScope.launch {
+            var hasCountedCompletion = false
             catalogLoadSemaphore.withPermit {
+                if (generation != catalogLoadGeneration) return@withPermit
                 val supportsSkip = catalog.extra.any { it.name == "skip" }
                 Log.d(
                     TAG,
@@ -1329,6 +1528,7 @@ class HomeViewModel @Inject constructor(
                     skip = 0,
                     supportsSkip = supportsSkip
                 ).collect { result ->
+                    if (generation != catalogLoadGeneration) return@collect
                     when (result) {
                         is NetworkResult.Success -> {
                             val key = catalogKey(
@@ -1337,19 +1537,31 @@ class HomeViewModel @Inject constructor(
                                 catalogId = catalog.id
                             )
                             catalogsMap[key] = result.data
-                            pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                            if (!hasCountedCompletion) {
+                                pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                                hasCountedCompletion = true
+                            }
                             Log.d(
                                 TAG,
                                 "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size} pending=$pendingCatalogLoads"
                             )
+                            if (pendingCatalogLoads == 0) {
+                                catalogsLoadInProgress = false
+                            }
                             scheduleUpdateCatalogRows()
                         }
                         is NetworkResult.Error -> {
-                            pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                            if (!hasCountedCompletion) {
+                                pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                                hasCountedCompletion = true
+                            }
                             Log.w(
                                 TAG,
                                 "Home catalog failed addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} code=${result.code} message=${result.message}"
                             )
+                            if (pendingCatalogLoads == 0) {
+                                catalogsLoadInProgress = false
+                            }
                             scheduleUpdateCatalogRows()
                         }
                         NetworkResult.Loading -> { /* Handled by individual row */ }
@@ -1357,6 +1569,7 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
+        registerCatalogLoadJob(loadJob)
     }
 
     private fun loadMoreCatalogItems(catalogId: String, addonId: String, type: String) {
@@ -1760,6 +1973,17 @@ class HomeViewModel @Inject constructor(
         )
     }
 
+    private fun mergeMembershipWithTabs(
+        tabs: List<LibraryListTab>,
+        membership: Map<String, Boolean>
+    ): Map<String, Boolean> {
+        return if (tabs.isEmpty()) {
+            membership
+        } else {
+            tabs.associate { tab -> tab.key to (membership[tab.key] == true) }
+        }
+    }
+
     private fun navigateToDetail(itemId: String, itemType: String) {
         _uiState.update { it.copy(selectedItemId = itemId) }
     }
@@ -1852,6 +2076,40 @@ class HomeViewModel @Inject constructor(
 
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {
         return "${addonId}_${type}_${catalogId}"
+    }
+
+    private fun buildHomeCatalogLoadSignature(addons: List<Addon>): String {
+        val addonCatalogSignature = addons
+            .flatMap { addon ->
+                addon.catalogs.map { catalog ->
+                    "${addon.id}|${addon.baseUrl}|${catalog.apiType}|${catalog.id}|${catalog.name}"
+                }
+            }
+            .sorted()
+            .joinToString(separator = ",")
+        val disabledSignature = disabledHomeCatalogKeys
+            .asSequence()
+            .sorted()
+            .joinToString(separator = ",")
+        return "$addonCatalogSignature::$disabledSignature"
+    }
+
+    private fun registerCatalogLoadJob(job: Job) {
+        synchronized(activeCatalogLoadJobs) {
+            activeCatalogLoadJobs.add(job)
+        }
+        job.invokeOnCompletion {
+            synchronized(activeCatalogLoadJobs) {
+                activeCatalogLoadJobs.remove(job)
+            }
+        }
+    }
+
+    private fun cancelInFlightCatalogLoads() {
+        val jobsToCancel = synchronized(activeCatalogLoadJobs) {
+            activeCatalogLoadJobs.toList().also { activeCatalogLoadJobs.clear() }
+        }
+        jobsToCancel.forEach { it.cancel() }
     }
 
     private fun rebuildCatalogOrder(addons: List<Addon>) {
@@ -1982,6 +2240,7 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         posterStatusReconcileJob?.cancel()
+        cancelInFlightCatalogLoads()
         posterLibraryObserverJobs.values.forEach { it.cancel() }
         movieWatchedObserverJobs.values.forEach { it.cancel() }
         posterLibraryObserverJobs.clear()
