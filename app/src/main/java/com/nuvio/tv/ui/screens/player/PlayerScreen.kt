@@ -764,7 +764,7 @@ fun PlayerScreen(
                         headers = headers
                     )
                 },
-                onResetHideTimer = { viewModel.scheduleHideControls() },
+                onResetHideTimer = { viewModel.scheduleHideControls(); viewModel.onUserInteraction() },
                 onBack = onBackPress
             )
         }
