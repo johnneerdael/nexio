@@ -1,4 +1,5 @@
 <resources>
+    <string name="app_name">Nuvio</string>
     <string name="type_movie">Movie</string>
     <string name="type_series">Series</string>
     <string name="type_unknown">Unknown</string>

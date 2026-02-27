@@ -125,6 +125,12 @@ android {
     }
 }
 
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.applicationId.set("com.nuviodebug.com")
+    }
+}
+
 composeCompiler {
     // Enable Compose compiler metrics for performance analysis
     metricsDestination = layout.buildDirectory.dir("compose_metrics")
