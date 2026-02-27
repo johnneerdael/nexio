@@ -618,6 +618,10 @@
 
     <!-- NextEpisodeCardOverlay -->
     <string name="next_episode_label">Next Episode</string>
+    <string name="next_episode_finding_source">Finding source…</string>
+    <string name="next_episode_playing_via">Playing via %1$s in %2$ds</string>
+    <string name="next_episode_play">Play</string>
+    <string name="next_episode_unaired">Unaired</string>
 
 
     <!-- SearchScreen -->

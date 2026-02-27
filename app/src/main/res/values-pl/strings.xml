@@ -615,6 +615,10 @@
 
     <!-- NextEpisodeCardOverlay -->
     <string name="next_episode_label">Następny odcinek</string>
+    <string name="next_episode_finding_source">Szukanie źródła…</string>
+    <string name="next_episode_playing_via">Odtwarzanie przez %1$s za %2$ds</string>
+    <string name="next_episode_play">Odtwórz</string>
+    <string name="next_episode_unaired">Niewyemitowany</string>
 
 
     <!-- SearchScreen -->
