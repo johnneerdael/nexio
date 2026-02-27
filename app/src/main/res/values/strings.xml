@@ -62,6 +62,15 @@
     <string name="detail_removed_from_library">Removed from library</string>
     <string name="detail_episode_marked_watched">Episode marked as watched</string>
     <string name="detail_episode_marked_unwatched">Episode marked as unwatched</string>
+    <string name="detail_lists_updated">Lists updated</string>
+    <string name="detail_movie_marked_watched">Marked as watched</string>
+    <string name="detail_movie_marked_unwatched">Marked as unwatched</string>
+    <string name="detail_all_episodes_watched">All episodes already watched</string>
+    <string name="detail_no_watched_episodes">No watched episodes in this season</string>
+    <string name="detail_all_previous_watched">All previous episodes already watched</string>
+    <string name="detail_marked_episodes_watched">Episodes marked as watched: %1$d</string>
+    <string name="detail_marked_episodes_unwatched">Episodes marked as unwatched: %1$d</string>
+    <string name="detail_marked_previous_watched">Previous episodes marked as watched: %1$d</string>
 
     <!-- MetaDetailsScreen -->
     <string name="detail_btn_play">Play</string>

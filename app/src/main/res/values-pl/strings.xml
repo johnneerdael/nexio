@@ -60,6 +60,15 @@
     <string name="detail_removed_from_library">Usunięto z biblioteki</string>
     <string name="detail_episode_marked_watched">Odcinek oznaczony jako obejrzany</string>
     <string name="detail_episode_marked_unwatched">Odcinek oznaczony jako nieobejrzany</string>
+    <string name="detail_lists_updated">Listy zaktualizowane</string>
+    <string name="detail_movie_marked_watched">Oznaczono jako obejrzane</string>
+    <string name="detail_movie_marked_unwatched">Oznaczono jako nieobejrzane</string>
+    <string name="detail_all_episodes_watched">Wszystkie odcinki już obejrzane</string>
+    <string name="detail_no_watched_episodes">Brak obejrzanych odcinków w tym sezonie</string>
+    <string name="detail_all_previous_watched">Wszystkie poprzednie odcinki już obejrzane</string>
+    <string name="detail_marked_episodes_watched">Odcinki oznaczone jako obejrzane: %1$d</string>
+    <string name="detail_marked_episodes_unwatched">Odcinki oznaczone jako nieobejrzane: %1$d</string>
+    <string name="detail_marked_previous_watched">Poprzednie odcinki oznaczone jako obejrzane: %1$d</string>
 
     <!-- MetaDetailsScreen -->
     <string name="detail_btn_play">Odtwórz</string>
