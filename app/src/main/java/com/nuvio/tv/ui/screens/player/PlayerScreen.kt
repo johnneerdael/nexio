@@ -1376,7 +1376,8 @@ private fun PlayerClockOverlay(
     duration: Long
 ) {
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
-    val timeFormatter = remember { DateFormat.getTimeFormat(LocalContext.current) }
+    val context = LocalContext.current
+    val timeFormatter = remember(context) { DateFormat.getTimeFormat(context) }
 
     LaunchedEffect(Unit) {
         while (true) {

@@ -150,7 +150,8 @@ fun PauseOverlay(
 @Composable
 private fun PauseOverlayClock(modifier: Modifier = Modifier) {
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    val formatter = remember { DateFormat.getTimeFormat(LocalContext.current) }
+    val context = LocalContext.current
+    val formatter = remember(context) { DateFormat.getTimeFormat(context) }
 
     LaunchedEffect(Unit) {
         while (true) {
