@@ -57,6 +57,12 @@
     <string name="episodes_play">Play</string>
     <string name="episodes_season_actions">Season actions</string>
 
+    <!-- MetaDetailsViewModel -->
+    <string name="detail_added_to_library">Added to library</string>
+    <string name="detail_removed_from_library">Removed from library</string>
+    <string name="detail_episode_marked_watched">Episode marked as watched</string>
+    <string name="detail_episode_marked_unwatched">Episode marked as unwatched</string>
+
     <!-- MetaDetailsScreen -->
     <string name="detail_btn_play">Play</string>
     <string name="detail_btn_resume">Resume</string>
@@ -662,6 +668,18 @@
     <string name="auth_qr_finishing">Finishing sign in\u2026</string>
     <string name="auth_qr_code_label">Code: %1$s</string>
     <string name="auth_qr_expires">Expires in %1$s</string>
+    <string name="auth_qr_phone_hint">Use your phone to sign in with email/password. TV stays QR-only for faster login.</string>
+    <string name="auth_qr_scan_instruction">Scan QR, approve in browser, then return here.</string>
+    <string name="auth_qr_code_display">Code: %1$s</string>
+    <string name="auth_qr_refresh">Refresh QR</string>
+    <string name="auth_qr_continue_without_account">Continue without account</string>
+    <string name="auth_qr_connected">Your account is connected on this TV.</string>
+    <string name="auth_qr_synced_data">Your synced data</string>
+    <string name="auth_qr_generating">Generating QR\u2026</string>
+    <string name="auth_qr_unavailable">QR unavailable. Refresh to retry.</string>
+    <string name="auth_qr_please_wait">Please wait\u2026</string>
+    <string name="auth_qr_continue">Continue</string>
+    <string name="auth_qr_back">Back</string>
 
     <!-- SyncCodeGenerateScreen -->
     <string name="sync_generate_title">Generate Sync Code</string>

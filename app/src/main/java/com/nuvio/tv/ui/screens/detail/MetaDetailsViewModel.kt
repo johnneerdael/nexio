@@ -933,7 +933,7 @@ class MetaDetailsViewModel @Inject constructor(
                 val message = if (_uiState.value.librarySourceMode == LibrarySourceMode.TRAKT) {
                     if (wasInWatchlist) "Removed from watchlist" else "Added to watchlist"
                 } else {
-                    if (wasInLibrary) "Removed from library" else "Added to library"
+                    if (wasInLibrary) context.getString(R.string.detail_removed_from_library) else context.getString(R.string.detail_added_to_library)
                 }
                 showMessage(message)
             }.onFailure { error ->
@@ -1072,10 +1072,10 @@ class MetaDetailsViewModel @Inject constructor(
             runCatching {
                 if (isWatched) {
                     watchProgressRepository.removeFromHistory(itemId, season, episode)
-                    showMessage("Episode marked as unwatched")
+                    showMessage(context.getString(R.string.detail_episode_marked_unwatched))
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
-                    showMessage("Episode marked as watched")
+                    showMessage(context.getString(R.string.detail_episode_marked_watched))
                 }
             }.onFailure { error ->
                 showMessage(

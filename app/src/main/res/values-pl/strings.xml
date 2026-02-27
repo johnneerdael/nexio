@@ -55,6 +55,12 @@
     <string name="episodes_play">Odtwórz</string>
     <string name="episodes_season_actions">Akcje sezonu</string>
 
+    <!-- MetaDetailsViewModel -->
+    <string name="detail_added_to_library">Dodano do biblioteki</string>
+    <string name="detail_removed_from_library">Usunięto z biblioteki</string>
+    <string name="detail_episode_marked_watched">Odcinek oznaczony jako obejrzany</string>
+    <string name="detail_episode_marked_unwatched">Odcinek oznaczony jako nieobejrzany</string>
+
     <!-- MetaDetailsScreen -->
     <string name="detail_btn_play">Odtwórz</string>
     <string name="detail_btn_resume">Wznów</string>
@@ -659,6 +665,18 @@
     <string name="auth_qr_finishing">Kończenie logowania\u2026</string>
     <string name="auth_qr_code_label">Kod: %1$s</string>
     <string name="auth_qr_expires">Wygasa za %1$s</string>
+    <string name="auth_qr_phone_hint">Użyj telefonu, aby zalogować się e-mailem i hasłem. TV obsługuje tylko QR dla szybszego logowania.</string>
+    <string name="auth_qr_scan_instruction">Zeskanuj QR, zatwierdź w przeglądarce, a następnie wróć tutaj.</string>
+    <string name="auth_qr_code_display">Kod: %1$s</string>
+    <string name="auth_qr_refresh">Odśwież QR</string>
+    <string name="auth_qr_continue_without_account">Kontynuuj bez konta</string>
+    <string name="auth_qr_connected">Twoje konto jest połączone z tym TV.</string>
+    <string name="auth_qr_synced_data">Zsynchronizowane dane</string>
+    <string name="auth_qr_generating">Generowanie QR\u2026</string>
+    <string name="auth_qr_unavailable">QR niedostępny. Odśwież, aby spróbować ponownie.</string>
+    <string name="auth_qr_please_wait">Proszę czekać\u2026</string>
+    <string name="auth_qr_continue">Kontynuuj</string>
+    <string name="auth_qr_back">Wstecz</string>
 
     <!-- SyncCodeGenerateScreen -->
     <string name="sync_generate_title">Generuj kod synchronizacji</string>

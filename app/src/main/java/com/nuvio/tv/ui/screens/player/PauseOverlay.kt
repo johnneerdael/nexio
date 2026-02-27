@@ -48,7 +48,7 @@ import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.ui.theme.NuvioColors
-import java.text.SimpleDateFormat
+import android.text.format.DateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -150,7 +150,7 @@ fun PauseOverlay(
 @Composable
 private fun PauseOverlayClock(modifier: Modifier = Modifier) {
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    val formatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val formatter = remember { DateFormat.getTimeFormat(LocalContext.current) }
 
     LaunchedEffect(Unit) {
         while (true) {
