@@ -238,8 +238,15 @@ internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addon
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
-                    val mergedItems = currentRow.items + result.data.items
-                    catalogsMap[key] = result.data.copy(items = mergedItems)
+                    val existingIds = currentRow.items.asSequence()
+                        .map { "${it.apiType}:${it.id}" }
+                        .toHashSet()
+                    val newUniqueItems = result.data.items.filter { item ->
+                        "${item.apiType}:${item.id}" !in existingIds
+                    }
+                    val mergedItems = currentRow.items + newUniqueItems
+                    val hasMore = if (newUniqueItems.isEmpty()) false else result.data.hasMore
+                    catalogsMap[key] = result.data.copy(items = mergedItems, hasMore = hasMore)
                     _loadingCatalogs.update { it - key }
                     scheduleUpdateCatalogRows()
                 }
