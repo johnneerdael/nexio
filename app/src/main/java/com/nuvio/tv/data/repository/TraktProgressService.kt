@@ -158,7 +158,7 @@ class TraktProgressService @Inject constructor(
     private val episodeProgressActivityVersion = AtomicLong(0L)
 
     private val playbackCacheTtlMs = 30_000L
-    private val userStatsCacheTtlMs = 60_000L
+    private val userStatsCacheTtlMs = Long.MAX_VALUE
     private val watchedMoviesCacheTtlMs = 10 * 60_000L
     private val watchedMoviesFetchThrottleMs = 15_000L
     private val episodeProgressCacheTtlMs = 5 * 60_000L

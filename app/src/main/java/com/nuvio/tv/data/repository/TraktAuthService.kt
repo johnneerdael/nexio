@@ -122,18 +122,31 @@ class TraktAuthService @Inject constructor(
             return Result.failure(IllegalStateException("Missing TRAKT credentials"))
         }
 
-        val response = traktApi.requestDeviceCode(
-            TraktDeviceCodeRequestDto(clientId = BuildConfig.TRAKT_CLIENT_ID)
-        )
+        val response = try {
+            traktApi.requestDeviceCode(
+                TraktDeviceCodeRequestDto(clientId = BuildConfig.TRAKT_CLIENT_ID)
+            )
+        } catch (e: IOException) {
+            return Result.failure(IllegalStateException("Network error, please try again"))
+        }
+
         val body = response.body()
-        if (!response.isSuccessful || body == null) {
+        if (response.isSuccessful && body != null) {
+            traktAuthDataStore.saveDeviceFlow(body)
+            return Result.success(body)
+        }
+
+        if (response.code() == 429) {
+            val retryAfter = response.headers()["Retry-After"]?.toLongOrNull()
+            val minutes = ((retryAfter ?: 300L) + 59L) / 60L
             return Result.failure(
-                IllegalStateException("Failed to start Trakt auth (${response.code()})")
+                IllegalStateException("Trakt is rate limiting requests. Try again in ~${minutes} min")
             )
         }
 
-        traktAuthDataStore.saveDeviceFlow(body)
-        return Result.success(body)
+        return Result.failure(
+            IllegalStateException("Failed to start Trakt auth (${response.code()})")
+        )
     }
 
     suspend fun pollDeviceToken(): TraktTokenPollResult {
@@ -147,13 +160,17 @@ class TraktAuthService @Inject constructor(
             return TraktTokenPollResult.Failed("No active Trakt device code")
         }
 
-        val response = traktApi.requestDeviceToken(
-            TraktDeviceTokenRequestDto(
-                code = deviceCode,
-                clientId = BuildConfig.TRAKT_CLIENT_ID,
-                clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
+        val response = try {
+            traktApi.requestDeviceToken(
+                TraktDeviceTokenRequestDto(
+                    code = deviceCode,
+                    clientId = BuildConfig.TRAKT_CLIENT_ID,
+                    clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
+                )
             )
-        )
+        } catch (e: IOException) {
+            return TraktTokenPollResult.Failed("Network error, will retry")
+        }
 
         val tokenBody = response.body()
         if (response.isSuccessful && tokenBody != null) {
