@@ -148,7 +148,7 @@ internal fun StreamSourcesSidePanel(
 
                 uiState.sourceStreamsError != null -> {
                     Text(
-                        text = uiState.sourceStreamsError ?: "Failed to load streams",
+                        text = uiState.sourceStreamsError ?: stringResource(R.string.panel_failed_load_streams),
                         style = MaterialTheme.typography.bodyLarge,
                         color = Color.White.copy(alpha = 0.85f)
                     )
