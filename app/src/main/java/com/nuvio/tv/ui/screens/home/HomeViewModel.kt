@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -631,6 +632,11 @@ class HomeViewModel @Inject constructor(
         val airDate: String?
     )
 
+    private data class NextUpResolution(
+        val episode: Video,
+        val lastWatched: Long
+    )
+
     private fun deduplicateInProgress(items: List<WatchProgress>): List<WatchProgress> {
         val (series, nonSeries) = items.partition { isSeriesType(it.contentType) }
         val latestPerShow = series
@@ -876,24 +882,19 @@ class HomeViewModel @Inject constructor(
         metaCache: MutableMap<String, Meta?>,
         showUnairedNextUp: Boolean
     ): ContinueWatchingItem.NextUp? {
-        val nextEpisode = findNextEpisode(
+        val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+        val nextUp = findNextUpEpisodeFromProgressMap(
+            contentId = progress.contentId,
+            meta = meta,
+            showUnairedNextUp = showUnairedNextUp
+        ) ?: findNextUpEpisodeFromLatestProgress(
             progress = progress,
-            metaCache = metaCache,
+            meta = meta,
             showUnairedNextUp = showUnairedNextUp
         ) ?: return null
-        val meta = nextEpisode.first
-        val video = nextEpisode.second
+        val video = nextUp.episode
         val nextSeason = requireNotNull(video.season)
         val nextEpisodeNumber = requireNotNull(video.episode)
-
-        val isNextEpisodeAlreadyWatched = runCatching {
-            watchProgressRepository.isWatched(
-                contentId = progress.contentId,
-                season = nextSeason,
-                episode = nextEpisodeNumber
-            ).first()
-        }.getOrDefault(false)
-        if (isNextEpisodeAlreadyWatched) return null
 
         val existingPoster = meta.poster.normalizeImageUrl()
         val existingBackdrop = meta.background.normalizeImageUrl()
@@ -938,23 +939,86 @@ class HomeViewModel @Inject constructor(
             } else {
                 formatEpisodeAirDateLabel(releaseDate)
             },
-            lastWatched = progress.lastWatched
+            lastWatched = nextUp.lastWatched
         )
         return ContinueWatchingItem.NextUp(info)
     }
 
-    private suspend fun findNextEpisode(
-        progress: WatchProgress,
-        metaCache: MutableMap<String, Meta?>,
+    private suspend fun findNextUpEpisodeFromProgressMap(
+        contentId: String,
+        meta: Meta,
         showUnairedNextUp: Boolean
-    ): Pair<Meta, Video>? {
-        if (!isSeriesType(progress.contentType)) return null
-
-        val meta = resolveMetaForProgress(progress, metaCache) ?: return null
-
+    ): NextUpResolution? {
         val episodes = meta.videos
             .filter { it.season != null && it.episode != null && it.season != 0 }
             .sortedWith(compareBy<Video> { it.season }.thenBy { it.episode })
+        if (episodes.isEmpty()) return null
+
+        val progressMap = runCatching {
+            withTimeoutOrNull(2_500L) {
+                watchProgressRepository.getAllEpisodeProgress(contentId)
+                    .first { it.isNotEmpty() }
+            } ?: watchProgressRepository.getAllEpisodeProgress(contentId).firstOrNull().orEmpty()
+        }.getOrElse {
+            Log.w(TAG, "findNextUpEpisodeFromProgressMap failed for $contentId: ${it.message}")
+            emptyMap()
+        }
+        if (progressMap.isEmpty()) return null
+
+        val completedProgress = progressMap.values
+            .filter {
+                val season = it.season
+                val episode = it.episode
+                season != null &&
+                    episode != null &&
+                    season != 0 &&
+                    it.isCompleted()
+            }
+        if (completedProgress.isEmpty()) return null
+
+        val furthestCompleted = completedProgress.maxWithOrNull(
+            compareBy<WatchProgress>({ it.season ?: -1 }, { it.episode ?: -1 }, { it.lastWatched })
+        ) ?: return null
+
+        val furthestIndex = episodes.indexOfFirst {
+            it.season == furthestCompleted.season && it.episode == furthestCompleted.episode
+        }
+        if (furthestIndex < 0) return null
+
+        val nextEpisode = episodes
+            .drop(furthestIndex + 1)
+            .firstOrNull { candidate ->
+                val season = candidate.season ?: return@firstOrNull false
+                val episode = candidate.episode ?: return@firstOrNull false
+                val candidateProgress = progressMap[season to episode]
+                candidateProgress?.isCompleted() != true
+            }
+            ?: return null
+
+        val nextSeason = nextEpisode.season ?: return null
+        val nextEpisodeNumber = nextEpisode.episode ?: return null
+        val nextEpisodeProgress = progressMap[nextSeason to nextEpisodeNumber]
+        if (nextEpisodeProgress != null && shouldTreatAsInProgressForContinueWatching(nextEpisodeProgress)) {
+            return null
+        }
+        if (!shouldIncludeNextUpEpisode(nextEpisode, showUnairedNextUp)) return null
+
+        val lastWatched = completedProgress.maxOfOrNull { it.lastWatched } ?: 0L
+        return NextUpResolution(
+            episode = nextEpisode,
+            lastWatched = lastWatched
+        )
+    }
+
+    private fun findNextUpEpisodeFromLatestProgress(
+        progress: WatchProgress,
+        meta: Meta,
+        showUnairedNextUp: Boolean
+    ): NextUpResolution? {
+        val episodes = meta.videos
+            .filter { it.season != null && it.episode != null && it.season != 0 }
+            .sortedWith(compareBy<Video> { it.season }.thenBy { it.episode })
+        if (episodes.isEmpty()) return null
 
         val currentSeason = progress.season ?: return null
         val currentEpisode = progress.episode ?: return null
@@ -973,7 +1037,10 @@ class HomeViewModel @Inject constructor(
 
         if (!shouldIncludeNextUpEpisode(nextEpisode, showUnairedNextUp)) return null
 
-        return meta to nextEpisode
+        return NextUpResolution(
+            episode = nextEpisode,
+            lastWatched = progress.lastWatched
+        )
     }
 
     private suspend fun resolveMetaForProgress(

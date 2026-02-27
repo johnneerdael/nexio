@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.repository
 
 import android.util.Log
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.remote.api.TraktApi
@@ -37,7 +38,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
@@ -49,6 +50,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -65,6 +67,12 @@ class TraktProgressService @Inject constructor(
         private const val TAG = "TraktProgressSvc"
     }
 
+    private fun trace(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, message)
+        }
+    }
+
     data class TraktCachedStats(
         val moviesWatched: Int = 0,
         val showsWatched: Int = 0,
@@ -75,6 +83,18 @@ class TraktProgressService @Inject constructor(
     private data class TimedCache<T>(
         val value: T,
         val updatedAtMs: Long
+    )
+
+    private data class EpisodeProgressCacheEntry(
+        val progress: Map<Pair<Int, Int>, WatchProgress>,
+        val updatedAtMs: Long,
+        val activityVersion: Long,
+        val hasCompletedSnapshot: Boolean
+    )
+
+    private data class EpisodeProgressFetchResult(
+        val progress: Map<Pair<Int, Int>, WatchProgress>,
+        val hasCompletedSnapshot: Boolean
     )
 
     private data class OptimisticProgressEntry(
@@ -105,11 +125,15 @@ class TraktProgressService @Inject constructor(
     private val optimisticProgress = MutableStateFlow<Map<String, OptimisticProgressEntry>>(emptyMap())
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
     private val watchedMoviesState = MutableStateFlow<Set<String>>(emptySet())
+    private val episodeProgressState = MutableStateFlow<Map<String, EpisodeProgressCacheEntry>>(emptyMap())
     private val hasLoadedRemoteProgress = MutableStateFlow(false)
     private val cacheMutex = Mutex()
     private val metadataMutex = Mutex()
     private val watchedMoviesMutex = Mutex()
+    private val episodeProgressMutex = Mutex()
     private val inFlightMetadataKeys = mutableSetOf<String>()
+    private val inFlightEpisodeProgressKeys = mutableSetOf<String>()
+    private val episodeProgressLastAttemptAtMs = mutableMapOf<String, Long>()
     private var cachedMoviesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null
     private var cachedEpisodesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null
     private var cachedUserStats: TimedCache<TraktCachedStats>? = null
@@ -125,12 +149,17 @@ class TraktProgressService @Inject constructor(
     @Volatile
     private var lastKnownMoviesWatchedAt: String? = null
     @Volatile
+    private var lastKnownEpisodeActivityFingerprint: String? = null
+    @Volatile
     private var lastManualRefreshSignalMs: Long = 0L
+    private val episodeProgressActivityVersion = AtomicLong(0L)
 
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = 60_000L
     private val watchedMoviesCacheTtlMs = 10 * 60_000L
     private val watchedMoviesFetchThrottleMs = 15_000L
+    private val episodeProgressCacheTtlMs = 5 * 60_000L
+    private val episodeProgressFetchThrottleMs = 15_000L
     private val optimisticTtlMs = 3 * 60_000L
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 30
@@ -177,8 +206,12 @@ class TraktProgressService @Inject constructor(
     suspend fun refreshNow() {
         val now = System.currentTimeMillis()
         forceRefreshUntilMs = now + 30_000L
-        if (now - lastManualRefreshSignalMs < manualRefreshSignalThrottleMs) return
+        if (now - lastManualRefreshSignalMs < manualRefreshSignalThrottleMs) {
+            trace("refreshNow: suppressed duplicate signal (${now - lastManualRefreshSignalMs}ms since last)")
+            return
+        }
         lastManualRefreshSignalMs = now
+        trace("refreshNow: emitting signal, force window active for 30s")
         refreshSignals.emit(Unit)
     }
 
@@ -284,8 +317,14 @@ class TraktProgressService @Inject constructor(
     }
 
     fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
-        return refreshEvents()
-            .mapLatest { fetchEpisodeProgressSnapshot(contentId) }
+        val cacheKey = canonicalLookupKey(contentId)
+        return episodeProgressState
+            .map { state -> state[cacheKey]?.progress ?: emptyMap() }
+            .onStart {
+                scope.launch {
+                    ensureEpisodeProgressSnapshot(contentId = cacheKey, forceRefresh = false)
+                }
+            }
             .distinctUntilChanged()
     }
 
@@ -323,6 +362,11 @@ class TraktProgressService @Inject constructor(
 
         if (progress.contentType.equals("movie", ignoreCase = true)) {
             setMovieWatchedInCache(progress.contentId, watched = true)
+        } else if (
+            progress.contentType.equals("series", ignoreCase = true) ||
+            progress.contentType.equals("tv", ignoreCase = true)
+        ) {
+            invalidateEpisodeProgressCache(progress.contentId)
         }
         refreshNow()
     }
@@ -427,6 +471,8 @@ class TraktProgressService @Inject constructor(
                 contentId = normalizeContentId(ids = ids, fallback = contentId.trim()),
                 watched = false
             )
+        } else {
+            invalidateEpisodeProgressCache(contentId)
         }
         refreshNow()
     }
@@ -491,6 +537,16 @@ class TraktProgressService @Inject constructor(
         if (moviesWatchedAt != lastKnownMoviesWatchedAt) {
             watchedMoviesStale = true
             lastKnownMoviesWatchedAt = moviesWatchedAt
+            trace("last_activities: movies.watched_at changed -> mark watched-movies cache stale")
+        }
+        val episodeFingerprint = listOfNotNull(
+            activities.episodes?.pausedAt,
+            activities.episodes?.watchedAt
+        ).joinToString("|")
+        if (episodeFingerprint != lastKnownEpisodeActivityFingerprint) {
+            lastKnownEpisodeActivityFingerprint = episodeFingerprint
+            val version = episodeProgressActivityVersion.incrementAndGet()
+            trace("last_activities: episodes changed -> show-progress cache version=$version")
         }
         val fingerprint = listOfNotNull(
             activities.movies?.pausedAt,
@@ -501,7 +557,107 @@ class TraktProgressService @Inject constructor(
 
         val changed = fingerprint != lastKnownActivityFingerprint
         lastKnownActivityFingerprint = fingerprint
+        if (changed) {
+            trace("last_activities: fingerprint changed")
+        }
         return changed
+    }
+
+    private suspend fun invalidateEpisodeProgressCache(contentId: String) {
+        val rawKey = contentId.trim()
+        if (rawKey.isBlank()) return
+        val canonicalKey = canonicalLookupKey(rawKey)
+        val keys = setOf(rawKey, canonicalKey).filter { it.isNotBlank() }
+        if (keys.isEmpty()) return
+
+        episodeProgressState.update { current ->
+            current.toMutableMap().apply {
+                keys.forEach { remove(it) }
+            }
+        }
+        episodeProgressMutex.withLock {
+            keys.forEach { key ->
+                episodeProgressLastAttemptAtMs.remove(key)
+                inFlightEpisodeProgressKeys.remove(key)
+            }
+        }
+        trace("episode-progress cache invalidated: keys=${keys.joinToString()}")
+    }
+
+    private suspend fun ensureEpisodeProgressSnapshot(
+        contentId: String,
+        forceRefresh: Boolean
+    ): Map<Pair<Int, Int>, WatchProgress> {
+        val cacheKey = canonicalLookupKey(contentId)
+        val now = System.currentTimeMillis()
+
+        var cachedEntry: EpisodeProgressCacheEntry? = null
+        var shouldFetch = false
+
+        episodeProgressMutex.withLock {
+            val existing = episodeProgressState.value[cacheKey]
+            cachedEntry = existing
+            if (!forceRefresh && isEpisodeProgressCacheFresh(existing, now)) {
+                trace("episode-progress cache hit: show=$cacheKey episodes=${existing?.progress?.size ?: 0}")
+                return@withLock
+            }
+
+            val lastAttempt = episodeProgressLastAttemptAtMs[cacheKey] ?: 0L
+            if (!forceRefresh && now - lastAttempt < episodeProgressFetchThrottleMs) {
+                trace("episode-progress fetch throttled: show=$cacheKey delta=${now - lastAttempt}ms")
+                return@withLock
+            }
+
+            if (!inFlightEpisodeProgressKeys.add(cacheKey)) {
+                trace("episode-progress fetch already in-flight: show=$cacheKey")
+                return@withLock
+            }
+
+            episodeProgressLastAttemptAtMs[cacheKey] = now
+            shouldFetch = true
+        }
+
+        if (!shouldFetch) {
+            return cachedEntry?.progress ?: episodeProgressState.value[cacheKey]?.progress.orEmpty()
+        }
+
+        return try {
+            trace("episode-progress fetch: show=$cacheKey force=$forceRefresh")
+            val result = fetchEpisodeProgressSnapshot(contentId = cacheKey)
+            val fetchedAt = System.currentTimeMillis()
+            val activityVersion = episodeProgressActivityVersion.get()
+            episodeProgressState.update { current ->
+                current + (
+                    cacheKey to EpisodeProgressCacheEntry(
+                        progress = result.progress,
+                        updatedAtMs = fetchedAt,
+                        activityVersion = activityVersion,
+                        hasCompletedSnapshot = result.hasCompletedSnapshot
+                    )
+                )
+            }
+            trace(
+                "episode-progress cache refreshed: show=$cacheKey episodes=${result.progress.size} full=${result.hasCompletedSnapshot}"
+            )
+            result.progress
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch episode progress for show=$cacheKey", e)
+            episodeProgressState.value[cacheKey]?.progress ?: cachedEntry?.progress.orEmpty()
+        } finally {
+            episodeProgressMutex.withLock {
+                inFlightEpisodeProgressKeys.remove(cacheKey)
+            }
+        }
+    }
+
+    private fun isEpisodeProgressCacheFresh(
+        entry: EpisodeProgressCacheEntry?,
+        now: Long
+    ): Boolean {
+        if (entry == null) return false
+        if (!entry.hasCompletedSnapshot) return false
+        if (entry.activityVersion != episodeProgressActivityVersion.get()) return false
+        return now - entry.updatedAtMs <= episodeProgressCacheTtlMs
     }
 
     private suspend fun getWatchedMoviesSnapshot(forceRefresh: Boolean): Set<String> {
@@ -511,21 +667,28 @@ class TraktProgressService @Inject constructor(
                 !watchedMoviesStale &&
                 now - watchedMoviesUpdatedAtMs <= watchedMoviesCacheTtlMs
             if (!forceRefresh && hasFreshCache) {
+                trace("watched-movies cache hit: size=${watchedMoviesState.value.size}")
                 return@withLock watchedMoviesState.value
             }
             if (!forceRefresh && now - watchedMoviesLastAttemptAtMs < watchedMoviesFetchThrottleMs) {
+                trace("watched-movies fetch throttled: ${now - watchedMoviesLastAttemptAtMs}ms since last attempt")
                 return@withLock watchedMoviesState.value
             }
 
             watchedMoviesLastAttemptAtMs = now
+            trace("watched-movies fetch: requesting /sync/watched/movies")
             val response = traktAuthService.executeAuthorizedRequest { authHeader ->
                 traktApi.getWatched(
                     authorization = authHeader,
                     type = "movies"
                 )
-            } ?: return@withLock watchedMoviesState.value
+            } ?: run {
+                trace("watched-movies fetch: request returned null (network/auth failure)")
+                return@withLock watchedMoviesState.value
+            }
 
             if (!response.isSuccessful) {
+                trace("watched-movies fetch: non-success code=${response.code()}")
                 return@withLock watchedMoviesState.value
             }
 
@@ -539,6 +702,7 @@ class TraktProgressService @Inject constructor(
             watchedMoviesUpdatedAtMs = System.currentTimeMillis()
             hasLoadedWatchedMovies = true
             watchedMoviesStale = false
+            trace("watched-movies cache refreshed: size=${watchedMovies.size}")
             watchedMovies
         }
     }
@@ -559,6 +723,7 @@ class TraktProgressService @Inject constructor(
             watchedMoviesUpdatedAtMs = System.currentTimeMillis()
             hasLoadedWatchedMovies = true
             watchedMoviesStale = false
+            trace("watched-movies cache optimistic update: watched=$watched keys=${keys.joinToString()}")
         }
     }
 
@@ -684,9 +849,10 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun fetchEpisodeProgressSnapshot(
         contentId: String
-    ): Map<Pair<Int, Int>, WatchProgress> {
+    ): EpisodeProgressFetchResult {
         val pathId = toTraktPathId(contentId)
         val completed = mutableMapOf<Pair<Int, Int>, WatchProgress>()
+        var hasCompletedSnapshot = false
 
         val response = traktAuthService.executeAuthorizedRequest { authHeader ->
             traktApi.getShowProgressWatched(
@@ -696,6 +862,7 @@ class TraktProgressService @Inject constructor(
         }
 
         if (response?.isSuccessful == true) {
+            hasCompletedSnapshot = true
             val seasons = response.body()?.seasons.orEmpty()
             seasons.forEach { season ->
                 mapSeasonProgress(contentId, season).forEach { progress ->
@@ -718,7 +885,10 @@ class TraktProgressService @Inject constructor(
             completed[seasonNum to episodeNum] = progress
         }
 
-        return completed
+        return EpisodeProgressFetchResult(
+            progress = completed,
+            hasCompletedSnapshot = hasCompletedSnapshot
+        )
     }
 
     private suspend fun getPlayback(

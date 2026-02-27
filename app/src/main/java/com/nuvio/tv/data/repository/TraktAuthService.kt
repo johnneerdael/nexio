@@ -40,6 +40,12 @@ class TraktAuthService @Inject constructor(
     private val minWriteIntervalMs = 1_000L
     private val transientRetryStatusCodes = setOf(502, 503, 504, 520, 521, 522)
 
+    private fun trace(message: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d("TraktAuthService", message)
+        }
+    }
+
     fun hasRequiredCredentials(): Boolean {
         return BuildConfig.TRAKT_CLIENT_ID.isNotBlank() && BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
     }
@@ -122,9 +128,11 @@ class TraktAuthService @Inject constructor(
             val state = getCurrentAuthState()
             val refreshToken = state.refreshToken ?: return@withLock false
             if (!force && !isTokenExpiredOrExpiring(state)) {
+                trace("refreshTokenIfNeeded: token still valid, skip refresh")
                 return@withLock true
             }
 
+            trace("refreshTokenIfNeeded: refreshing token (force=$force)")
             val response = try {
                 traktApi.refreshToken(
                     TraktRefreshTokenRequestDto(
@@ -140,6 +148,7 @@ class TraktAuthService @Inject constructor(
 
             val tokenBody = response.body()
             if (!response.isSuccessful || tokenBody == null) {
+                trace("refreshTokenIfNeeded: failed code=${response.code()}")
                 if (response.code() == 401 || response.code() == 403) {
                     traktAuthDataStore.clearAuth()
                 }
@@ -147,6 +156,7 @@ class TraktAuthService @Inject constructor(
             }
 
             traktAuthDataStore.saveToken(tokenBody)
+            trace("refreshTokenIfNeeded: success")
             true
         }
     }
@@ -196,6 +206,7 @@ class TraktAuthService @Inject constructor(
                 call("Bearer $token")
             } catch (e: IOException) {
                 if (!retriedNetwork) {
+                    trace("authorized request: network error, retrying once")
                     delay(1_000L)
                     retriedNetwork = true
                     continue
@@ -205,19 +216,22 @@ class TraktAuthService @Inject constructor(
             }
 
             if (response.code() == 401 && !retriedAuth && refreshTokenIfNeeded(force = true)) {
+                trace("authorized request: 401 for ${responseTarget(response)}, retrying after token refresh")
                 token = getCurrentAuthState().accessToken ?: return response
                 retriedAuth = true
                 continue
             }
 
             if (response.code() == 429 && !retriedRateLimit) {
-                delayForRetryAfter(response = response, fallbackSeconds = 2L, maxSeconds = 60L)
+                val waitSeconds = delayForRetryAfter(response = response, fallbackSeconds = 2L, maxSeconds = 60L)
+                trace("authorized request: 429 for ${responseTarget(response)}, retrying in ${waitSeconds}s")
                 retriedRateLimit = true
                 continue
             }
 
             if (response.code() in transientRetryStatusCodes && !retriedTransient) {
-                delayForRetryAfter(response = response, fallbackSeconds = 30L, maxSeconds = 30L)
+                val waitSeconds = delayForRetryAfter(response = response, fallbackSeconds = 30L, maxSeconds = 30L)
+                trace("authorized request: transient ${response.code()} for ${responseTarget(response)}, retrying in ${waitSeconds}s")
                 retriedTransient = true
                 continue
             }
@@ -259,11 +273,23 @@ class TraktAuthService @Inject constructor(
         response: Response<*>,
         fallbackSeconds: Long,
         maxSeconds: Long
-    ) {
+    ): Long {
         val retryAfterSeconds = response.headers()["Retry-After"]
             ?.toLongOrNull()
             ?.coerceIn(1L, maxSeconds)
             ?: fallbackSeconds
         delay(retryAfterSeconds * 1000L)
+        return retryAfterSeconds
+    }
+
+    private fun responseTarget(response: Response<*>): String {
+        val requestUrl = response.raw().request.url
+        return buildString {
+            append(requestUrl.encodedPath)
+            requestUrl.encodedQuery?.let {
+                append('?')
+                append(it)
+            }
+        }
     }
 }
