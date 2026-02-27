@@ -21,6 +21,7 @@
     <string name="cw_almost_done">Nästan färdig</string>
     <string name="cw_airs_date">Sänds %1$s</string>
     <string name="cw_action_go_to_details">Gå till detaljer</string>
+    <string name="cw_action_start_from_beginning">Börja om från början</string>
     <string name="cw_action_remove">Ta bort</string>
     <string name="cw_dialog_subtitle">Välj vad du vill göra med detta objekt.</string>
     <string name="home_poster_dialog_subtitle">Titel händelse</string>

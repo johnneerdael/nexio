@@ -22,6 +22,7 @@
     <string name="cw_almost_done">Almost done</string>
     <string name="cw_airs_date">Airs %1$s</string>
     <string name="cw_action_go_to_details">Go to details</string>
+    <string name="cw_action_start_from_beginning">Start from beginning</string>
     <string name="cw_action_remove">Remove</string>
     <string name="cw_dialog_subtitle">Choose what you want to do with this item.</string>
     <string name="home_poster_dialog_subtitle">Title actions</string>

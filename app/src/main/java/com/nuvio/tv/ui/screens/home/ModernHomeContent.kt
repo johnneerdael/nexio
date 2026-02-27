@@ -106,6 +106,7 @@ fun ModernHomeContent(
     trailerPreviewUrls: Map<String, String>,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
@@ -776,6 +777,10 @@ fun ModernHomeContent(
                     selectedOptionsItem.contentType(),
                     ""
                 )
+                optionsItem = null
+            },
+            onStartFromBeginning = {
+                onContinueWatchingStartFromBeginning(selectedOptionsItem)
                 optionsItem = null
             }
         )
