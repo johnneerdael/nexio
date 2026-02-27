@@ -35,8 +35,10 @@ class TraktAuthService @Inject constructor(
 ) {
     private val refreshLeewaySeconds = 60L
     private val writeRequestMutex = Mutex()
+    private val tokenRefreshMutex = Mutex()
     private var lastWriteRequestAtMs = 0L
     private val minWriteIntervalMs = 1_000L
+    private val transientRetryStatusCodes = setOf(502, 503, 504, 520, 521, 522)
 
     fun hasRequiredCredentials(): Boolean {
         return BuildConfig.TRAKT_CLIENT_ID.isNotBlank() && BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
@@ -116,35 +118,37 @@ class TraktAuthService @Inject constructor(
     suspend fun refreshTokenIfNeeded(force: Boolean = false): Boolean {
         if (!hasRequiredCredentials()) return false
 
-        val state = getCurrentAuthState()
-        val refreshToken = state.refreshToken ?: return false
-        if (!force && !isTokenExpiredOrExpiring(state)) {
-            return true
-        }
-
-        val response = try {
-            traktApi.refreshToken(
-                TraktRefreshTokenRequestDto(
-                    refreshToken = refreshToken,
-                    clientId = BuildConfig.TRAKT_CLIENT_ID,
-                    clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
-                )
-            )
-        } catch (e: IOException) {
-            Log.w("TraktAuthService", "Network error while refreshing token", e)
-            return false
-        }
-
-        val tokenBody = response.body()
-        if (!response.isSuccessful || tokenBody == null) {
-            if (response.code() == 401 || response.code() == 403) {
-                traktAuthDataStore.clearAuth()
+        return tokenRefreshMutex.withLock {
+            val state = getCurrentAuthState()
+            val refreshToken = state.refreshToken ?: return@withLock false
+            if (!force && !isTokenExpiredOrExpiring(state)) {
+                return@withLock true
             }
-            return false
-        }
 
-        traktAuthDataStore.saveToken(tokenBody)
-        return true
+            val response = try {
+                traktApi.refreshToken(
+                    TraktRefreshTokenRequestDto(
+                        refreshToken = refreshToken,
+                        clientId = BuildConfig.TRAKT_CLIENT_ID,
+                        clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
+                    )
+                )
+            } catch (e: IOException) {
+                Log.w("TraktAuthService", "Network error while refreshing token", e)
+                return@withLock false
+            }
+
+            val tokenBody = response.body()
+            if (!response.isSuccessful || tokenBody == null) {
+                if (response.code() == 401 || response.code() == 403) {
+                    traktAuthDataStore.clearAuth()
+                }
+                return@withLock false
+            }
+
+            traktAuthDataStore.saveToken(tokenBody)
+            true
+        }
     }
 
     suspend fun revokeAndLogout() {
@@ -184,11 +188,18 @@ class TraktAuthService @Inject constructor(
         var token = getValidAccessToken() ?: return null
         var retriedAuth = false
         var retriedRateLimit = false
+        var retriedTransient = false
+        var retriedNetwork = false
 
         while (true) {
             val response = try {
                 call("Bearer $token")
             } catch (e: IOException) {
+                if (!retriedNetwork) {
+                    delay(1_000L)
+                    retriedNetwork = true
+                    continue
+                }
                 Log.w("TraktAuthService", "Network error during authorized request", e)
                 return null
             }
@@ -200,12 +211,14 @@ class TraktAuthService @Inject constructor(
             }
 
             if (response.code() == 429 && !retriedRateLimit) {
-                val retryAfterSeconds = response.headers()["Retry-After"]
-                    ?.toLongOrNull()
-                    ?.coerceIn(1L, 60L)
-                    ?: 2L
-                delay(retryAfterSeconds * 1000L)
+                delayForRetryAfter(response = response, fallbackSeconds = 2L, maxSeconds = 60L)
                 retriedRateLimit = true
+                continue
+            }
+
+            if (response.code() in transientRetryStatusCodes && !retriedTransient) {
+                delayForRetryAfter(response = response, fallbackSeconds = 30L, maxSeconds = 30L)
+                retriedTransient = true
                 continue
             }
 
@@ -240,5 +253,17 @@ class TraktAuthService @Inject constructor(
         val expiresAt = createdAt + expiresIn
         val nowSeconds = System.currentTimeMillis() / 1000L
         return nowSeconds >= (expiresAt - refreshLeewaySeconds)
+    }
+
+    private suspend fun delayForRetryAfter(
+        response: Response<*>,
+        fallbackSeconds: Long,
+        maxSeconds: Long
+    ) {
+        val retryAfterSeconds = response.headers()["Retry-After"]
+            ?.toLongOrNull()
+            ?.coerceIn(1L, maxSeconds)
+            ?: fallbackSeconds
+        delay(retryAfterSeconds * 1000L)
     }
 }

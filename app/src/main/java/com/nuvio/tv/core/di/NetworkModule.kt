@@ -64,7 +64,7 @@ object NetworkModule {
             val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
             val newRequest = request.newBuilder()
                 .header("Content-Type", "application/json")
-                .header("User-Agent", "NuvioTV/$version")
+                .header("User-Agent", "Nuvio/$version")
                 .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
                 .header("trakt-api-version", "2")
                 .build()

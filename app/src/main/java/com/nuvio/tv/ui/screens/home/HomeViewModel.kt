@@ -86,8 +86,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
         private const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
-        // Limit poster status observers to avoid spawning hundreds of coroutines at startup
-        private const val MAX_POSTER_STATUS_OBSERVERS = 60
+        private const val MAX_POSTER_STATUS_OBSERVERS = 24
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
