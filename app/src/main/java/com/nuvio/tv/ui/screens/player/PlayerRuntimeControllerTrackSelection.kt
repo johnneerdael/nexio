@@ -148,6 +148,10 @@ internal fun PlayerRuntimeController.buildAddonSubtitleTrackId(subtitle: Subtitl
     return "${PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX}${subtitle.id}:$urlHashSuffix"
 }
 
+internal fun PlayerRuntimeController.addonSubtitleKey(subtitle: Subtitle): String {
+    return "${subtitle.id}|${subtitle.url}"
+}
+
 internal fun PlayerRuntimeController.toSubtitleConfiguration(subtitle: Subtitle): MediaItem.SubtitleConfiguration {
     val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
     val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
@@ -176,17 +180,31 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
         val alreadyAttachedTrackIndex = _uiState.value.subtitleTracks.indexOfFirst {
             it.trackId == addonTrackId
         }
+        val preAttachedByStartup = attachedAddonSubtitleKeys.contains(addonSubtitleKey(subtitle))
+        val fallbackAttachedTrackIndex = if (alreadyAttachedTrackIndex < 0 && preAttachedByStartup) {
+            _uiState.value.subtitleTracks.indexOfFirst { track ->
+                PlayerSubtitleUtils.matchesLanguageCode(track.language, normalizedLang)
+            }
+        } else {
+            -1
+        }
 
-        if (alreadyAttachedTrackIndex >= 0) {
+        val trackIndexWithoutReload = when {
+            alreadyAttachedTrackIndex >= 0 -> alreadyAttachedTrackIndex
+            fallbackAttachedTrackIndex >= 0 -> fallbackAttachedTrackIndex
+            else -> -1
+        }
+
+        if (trackIndexWithoutReload >= 0) {
             Log.d(
                 PlayerRuntimeController.TAG,
-                "Switching ADDON subtitle without media reload id=${subtitle.id} index=$alreadyAttachedTrackIndex"
+                "Switching ADDON subtitle without media reload id=${subtitle.id} index=$trackIndexWithoutReload"
             )
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
 
-            selectSubtitleTrack(alreadyAttachedTrackIndex)
+            selectSubtitleTrack(trackIndexWithoutReload)
             _uiState.update {
                 it.copy(
                     selectedAddonSubtitle = subtitle,
@@ -203,6 +221,10 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
         val subtitleConfigurations = (_uiState.value.addonSubtitles + subtitle)
             .distinctBy { "${it.id}|${it.url}" }
             .map(::toSubtitleConfiguration)
+        attachedAddonSubtitleKeys = (_uiState.value.addonSubtitles + subtitle)
+            .distinctBy { addonSubtitleKey(it) }
+            .map(::addonSubtitleKey)
+            .toSet()
 
         val currentPosition = player.currentPosition
         val playWhenReady = player.playWhenReady

@@ -4,36 +4,69 @@ import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.nuvio.tv.data.local.FrameRateMatchingMode
+import com.nuvio.tv.domain.model.Subtitle
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-internal fun PlayerRuntimeController.fetchAddonSubtitles() {
-    val id = contentId ?: return
-    val type = contentType ?: return
+internal data class SubtitleFetchRequest(
+    val type: String,
+    val id: String,
+    val videoId: String?
+)
 
+internal fun PlayerRuntimeController.buildSubtitleFetchRequest(): SubtitleFetchRequest? {
+    val id = contentId ?: return null
+    val type = contentType ?: return null
+    val baseId = id.split(":").firstOrNull() ?: id
+    val normalizedType = type.lowercase()
+    val videoId = if (
+        (normalizedType == "series" || normalizedType == "tv") &&
+        currentSeason != null &&
+        currentEpisode != null
+    ) {
+        "$baseId:$currentSeason:$currentEpisode"
+    } else {
+        null
+    }
+    return SubtitleFetchRequest(
+        type = type.lowercase(),
+        id = baseId,
+        videoId = videoId
+    )
+}
+
+internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(): List<Subtitle> {
+    val request = buildSubtitleFetchRequest() ?: return emptyList()
+
+    // Compute hash lazily for providers that support OpenSubtitles-style matching.
+    if (currentVideoHash == null && currentStreamUrl.isNotBlank()) {
+        val result = OpenSubtitlesHasher.compute(currentStreamUrl, currentHeaders)
+        if (result != null) {
+            currentVideoHash = result.hash
+            if (currentVideoSize == null) currentVideoSize = result.fileSize
+        }
+    }
+
+    return subtitleRepository.getSubtitles(
+        type = request.type,
+        id = request.id,
+        videoId = request.videoId,
+        videoHash = currentVideoHash,
+        videoSize = currentVideoSize,
+        filename = currentFilename
+    )
+}
+
+internal fun PlayerRuntimeController.fetchAddonSubtitles() {
+    if (buildSubtitleFetchRequest() == null) return
+    
     scope.launch {
         _uiState.update { it.copy(isLoadingAddonSubtitles = true, addonSubtitlesError = null) }
-
-        // Compute hash if not already available from stream behaviorHints
-        if (currentVideoHash == null && currentStreamUrl.isNotBlank()) {
-            val result = OpenSubtitlesHasher.compute(currentStreamUrl, currentHeaders)
-            if (result != null) {
-                currentVideoHash = result.hash
-                if (currentVideoSize == null) currentVideoSize = result.fileSize
-            }
-        }
-
+        
         try {
-            val subtitles = subtitleRepository.getSubtitles(
-                type = type,
-                id = id,
-                videoId = currentVideoId,
-                videoHash = currentVideoHash,
-                videoSize = currentVideoSize,
-                filename = currentFilename
-            )
+            val subtitles = fetchAddonSubtitlesNow()
             
             _uiState.update { 
                 it.copy(
@@ -59,6 +92,7 @@ internal fun PlayerRuntimeController.refreshSubtitlesForCurrentEpisode() {
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null
+    attachedAddonSubtitleKeys = emptySet()
     _uiState.update {
         it.copy(
             addonSubtitles = emptyList(),
