@@ -622,6 +622,12 @@
     <string name="next_episode_playing_via">Playing via %1$s in %2$ds</string>
     <string name="next_episode_play">Play</string>
     <string name="next_episode_unaired">Unaired</string>
+    <string name="skip_intro">Skip Intro</string>
+    <string name="skip_ending">Skip Ending</string>
+    <string name="skip_recap">Skip Recap</string>
+    <string name="skip_generic">Skip</string>
+    <string name="display_mode_refresh">Refresh</string>
+    <string name="display_mode_resolution">Resolution</string>
 
 
     <!-- SearchScreen -->
