@@ -21,6 +21,7 @@ import javax.inject.Singleton
 
 sealed interface TraktTokenPollResult {
     data object Pending : TraktTokenPollResult
+    data object AlreadyUsed : TraktTokenPollResult
     data object Expired : TraktTokenPollResult
     data object Denied : TraktTokenPollResult
     data class SlowDown(val pollIntervalSeconds: Int) : TraktTokenPollResult
@@ -44,6 +45,10 @@ class TraktAuthService @Inject constructor(
         if (BuildConfig.DEBUG) {
             Log.d("TraktAuthService", message)
         }
+    }
+
+    private fun traktRedirectUri(): String {
+        return BuildConfig.TRAKT_REDIRECT_URI.ifBlank { "urn:ietf:wg:oauth:2.0:oob" }
     }
 
     fun hasRequiredCredentials(): Boolean {
@@ -99,7 +104,11 @@ class TraktAuthService @Inject constructor(
         }
 
         return when (response.code()) {
-            400, 409 -> TraktTokenPollResult.Pending
+            400 -> TraktTokenPollResult.Pending
+            409 -> {
+                traktAuthDataStore.clearDeviceFlow()
+                TraktTokenPollResult.AlreadyUsed
+            }
             404 -> {
                 traktAuthDataStore.clearDeviceFlow()
                 TraktTokenPollResult.Failed("Invalid device code")
@@ -138,7 +147,8 @@ class TraktAuthService @Inject constructor(
                     TraktRefreshTokenRequestDto(
                         refreshToken = refreshToken,
                         clientId = BuildConfig.TRAKT_CLIENT_ID,
-                        clientSecret = BuildConfig.TRAKT_CLIENT_SECRET
+                        clientSecret = BuildConfig.TRAKT_CLIENT_SECRET,
+                        redirectUri = traktRedirectUri()
                     )
                 )
             } catch (e: IOException) {
