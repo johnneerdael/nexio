@@ -378,7 +378,7 @@ private fun LibrarySelectorsRow(
             }
         )
 
-        if (sourceMode == LibrarySourceMode.TRAKT) {
+        if (sortOptions.isNotEmpty()) {
             LibraryDropdownPicker(
                 modifier = Modifier
                     .weight(1f)
