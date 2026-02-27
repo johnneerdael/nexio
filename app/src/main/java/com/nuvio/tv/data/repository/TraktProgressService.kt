@@ -44,8 +44,11 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -163,6 +166,7 @@ class TraktProgressService @Inject constructor(
     private val optimisticTtlMs = 3 * 60_000L
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 30
+    private val metadataFetchSemaphore = Semaphore(5)
     private val fastSyncThrottleMs = 3_000L
     private val manualRefreshSignalThrottleMs = 2_000L
     private val baseRefreshIntervalMs = 60_000L
@@ -511,6 +515,11 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun refreshRemoteSnapshot() {
+        if (!traktAuthService.isCircuitClosed()) {
+            trace("refreshRemoteSnapshot: circuit breaker open, skipping")
+            throw IOException("Trakt circuit breaker is open")
+        }
+
         val force = System.currentTimeMillis() < forceRefreshUntilMs
 
         if (!force && !hasActivityChanged()) return
@@ -1209,12 +1218,14 @@ class TraktProgressService @Inject constructor(
                 if (!shouldFetch) return@launch
 
                 try {
-                    val metadata = fetchContentMetadata(
-                        contentId = contentId,
-                        contentType = progress.contentType
-                    ) ?: return@launch
-                    metadataState.update { current ->
-                        current + (contentId to metadata)
+                    metadataFetchSemaphore.withPermit {
+                        val metadata = fetchContentMetadata(
+                            contentId = contentId,
+                            contentType = progress.contentType
+                        ) ?: return@launch
+                        metadataState.update { current ->
+                            current + (contentId to metadata)
+                        }
                     }
                 } finally {
                     metadataMutex.withLock {

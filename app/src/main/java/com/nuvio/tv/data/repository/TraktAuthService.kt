@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import retrofit2.Response
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +41,65 @@ class TraktAuthService @Inject constructor(
     private var lastWriteRequestAtMs = 0L
     private val minWriteIntervalMs = 1_000L
     private val transientRetryStatusCodes = setOf(502, 503, 504, 520, 521, 522)
+    private val nonRetryableStatusCodes = setOf(400, 403, 404, 405, 409, 412, 420, 422, 423, 426)
+
+    @Volatile private var circuitOpenUntilMs = 0L
+    private val circuitFailures = AtomicInteger(0)
+    private val circuitBaseCooldownMs = 5 * 60_000L
+    private val circuitMaxCooldownMs = 60 * 60_000L
+
+    private val rateLimitWindowMs = 5 * 60_000L
+    private val rateLimitMaxCalls = 900
+    private val getRequestTimestamps = ArrayDeque<Long>()
+    private val rateLimitMutex = Mutex()
+
+    private fun isCircuitOpen(): Boolean {
+        return System.currentTimeMillis() < circuitOpenUntilMs
+    }
+
+    fun isCircuitClosed(): Boolean = !isCircuitOpen()
+
+    private fun tripCircuit(reason: String) {
+        val failures = circuitFailures.incrementAndGet()
+        val cooldownMs = (circuitBaseCooldownMs shl (failures - 1).coerceAtMost(4))
+            .coerceAtMost(circuitMaxCooldownMs)
+        circuitOpenUntilMs = System.currentTimeMillis() + cooldownMs
+        Log.w("TraktAuthService",
+            "Circuit breaker OPEN: $reason (failures=$failures, cooldown=${cooldownMs / 1000}s)")
+    }
+
+    private fun resetCircuit() {
+        if (circuitFailures.get() > 0) {
+            trace("Circuit breaker reset after successful request")
+        }
+        circuitFailures.set(0)
+        circuitOpenUntilMs = 0L
+    }
+
+    private suspend fun acquireGetRateSlot() {
+        rateLimitMutex.withLock {
+            val now = System.currentTimeMillis()
+            val windowStart = now - rateLimitWindowMs
+            while (getRequestTimestamps.isNotEmpty() && getRequestTimestamps.first() < windowStart) {
+                getRequestTimestamps.removeFirst()
+            }
+            if (getRequestTimestamps.size >= rateLimitMaxCalls) {
+                val oldestInWindow = getRequestTimestamps.first()
+                val waitMs = oldestInWindow + rateLimitWindowMs - now + 100L
+                if (waitMs > 0) {
+                    Log.w("TraktAuthService",
+                        "GET rate limit approaching (${getRequestTimestamps.size}/$rateLimitMaxCalls in window), delaying ${waitMs}ms")
+                    delay(waitMs)
+                }
+                val afterDelay = System.currentTimeMillis()
+                val newWindowStart = afterDelay - rateLimitWindowMs
+                while (getRequestTimestamps.isNotEmpty() && getRequestTimestamps.first() < newWindowStart) {
+                    getRequestTimestamps.removeFirst()
+                }
+            }
+            getRequestTimestamps.addLast(System.currentTimeMillis())
+        }
+    }
 
     private fun trace(message: String) {
         if (BuildConfig.DEBUG) {
@@ -161,6 +221,7 @@ class TraktAuthService @Inject constructor(
                 trace("refreshTokenIfNeeded: failed code=${response.code()}")
                 if (response.code() == 401 || response.code() == 403) {
                     traktAuthDataStore.clearAuth()
+                    tripCircuit("Token refresh returned ${response.code()}")
                 }
                 return@withLock false
             }
@@ -205,6 +266,11 @@ class TraktAuthService @Inject constructor(
     suspend fun <T> executeAuthorizedRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
+        if (isCircuitOpen()) {
+            trace("authorized request: circuit breaker is OPEN, skipping request")
+            return null
+        }
+
         var token = getValidAccessToken() ?: return null
         var retriedAuth = false
         var retriedRateLimit = false
@@ -212,6 +278,8 @@ class TraktAuthService @Inject constructor(
         var retriedNetwork = false
 
         while (true) {
+            acquireGetRateSlot()
+
             val response = try {
                 call("Bearer $token")
             } catch (e: IOException) {
@@ -225,23 +293,50 @@ class TraktAuthService @Inject constructor(
                 return null
             }
 
-            if (response.code() == 401 && !retriedAuth && refreshTokenIfNeeded(force = true)) {
-                trace("authorized request: 401 for ${responseTarget(response)}, retrying after token refresh")
-                token = getCurrentAuthState().accessToken ?: return response
-                retriedAuth = true
-                continue
+            val code = response.code()
+
+            if (response.isSuccessful) {
+                resetCircuit()
+                return response
             }
 
-            if (response.code() == 429 && !retriedRateLimit) {
+            if (code == 403) {
+                tripCircuit("403 Forbidden (invalid API key or unapproved app) for ${responseTarget(response)}")
+                return response
+            }
+
+            if (code == 423) {
+                tripCircuit("423 Locked User Account for ${responseTarget(response)}")
+                return response
+            }
+
+            if (code in nonRetryableStatusCodes) {
+                trace("authorized request: non-retryable $code for ${responseTarget(response)}")
+                return response
+            }
+
+            if (code == 401 && !retriedAuth) {
+                val refreshed = refreshTokenIfNeeded(force = true)
+                if (refreshed) {
+                    trace("authorized request: 401 for ${responseTarget(response)}, retrying after token refresh")
+                    token = getCurrentAuthState().accessToken ?: return response
+                    retriedAuth = true
+                    continue
+                }
+                tripCircuit("401 Unauthorized and token refresh failed for ${responseTarget(response)}")
+                return response
+            }
+
+            if (code == 429 && !retriedRateLimit) {
                 val waitSeconds = delayForRetryAfter(response = response, fallbackSeconds = 2L, maxSeconds = 60L)
                 trace("authorized request: 429 for ${responseTarget(response)}, retrying in ${waitSeconds}s")
                 retriedRateLimit = true
                 continue
             }
 
-            if (response.code() in transientRetryStatusCodes && !retriedTransient) {
+            if (code in transientRetryStatusCodes && !retriedTransient) {
                 val waitSeconds = delayForRetryAfter(response = response, fallbackSeconds = 30L, maxSeconds = 30L)
-                trace("authorized request: transient ${response.code()} for ${responseTarget(response)}, retrying in ${waitSeconds}s")
+                trace("authorized request: transient $code for ${responseTarget(response)}, retrying in ${waitSeconds}s")
                 retriedTransient = true
                 continue
             }
