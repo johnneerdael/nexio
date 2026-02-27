@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
+import com.nuvio.tv.core.util.filterReleasedItems
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
     viewModelScope.launch {
@@ -259,9 +261,16 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val currentLayout = _uiState.value.homeLayout
     val currentGridItems = _uiState.value.gridItems
     val heroSectionEnabled = _uiState.value.heroSectionEnabled
+    val hideUnreleased = _uiState.value.hideUnreleasedContent
 
     val (displayRows, baseHeroItems, baseGridItems) = withContext(Dispatchers.Default) {
-        val orderedRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+        val rawRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+        val orderedRows = if (hideUnreleased) {
+            val today = LocalDate.now()
+            rawRows.map { it.filterReleasedItems(today) }
+        } else {
+            rawRows
+        }
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
             orderedRows.filter { row ->
@@ -364,7 +373,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         Triple(computedDisplayRows, computedHeroItems, computedGridItems)
     }
 
-    val fullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+    val rawFullRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+    val fullRows = if (hideUnreleased) {
+        val today = LocalDate.now()
+        rawFullRows.map { it.filterReleasedItems(today) }
+    } else {
+        rawFullRows
+    }
     _fullCatalogRows.update { rows ->
         if (rows == fullRows) rows else fullRows
     }
