@@ -146,6 +146,10 @@ fun PlayerScreen(
             } else {
                 viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
             }
+        } else if (uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed) {
+            viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
+        } else if (uiState.showNextEpisodeCard && uiState.nextEpisode != null) {
+            viewModel.onEvent(PlayerEvent.OnDismissNextEpisodeCard)
         } else if (uiState.showControls) {
             // If controls are visible, hide them instead of going back
             viewModel.hideControls()
