@@ -91,14 +91,19 @@ fun ThemeSettingsContent(
         listOf(
             null to strLanguageSystem,
             "en" to "English",
+            "es" to "Español",
+            "hu" to "Magyar",
             "fr" to "Français",
             "it" to "Italiano",
             "pl" to "Polski",
             "pt-PT" to "Português (Portugal)",
+            "pt-BR" to "Português (Brasil)",
             "tr" to "Türkçe",
+            "se" to "Svenska",
             "sk" to "Slovensky",
             "sl" to "Slovenščina",
-            "ro" to "Română"
+            "ro" to "Română",
+            "ja" to "日本語"
         )
     }
     var selectedTag by remember {

@@ -77,6 +77,7 @@ class TraktLibraryService @Inject constructor(
     private val cacheTtlMs = 60_000L
     private val metadataHydrationLimit = 30
     private val listFetchConcurrency = 3
+    private val metadataFetchSemaphore = Semaphore(5)
 
     fun observeListTabs(): Flow<List<LibraryListTab>> {
         return snapshotState
@@ -839,9 +840,11 @@ class TraktLibraryService @Inject constructor(
                 if (!shouldFetch) return@launch
 
                 try {
-                    val metadata = fetchMetadata(entry) ?: return@launch
-                    metadataState.update { current ->
-                        current + (key to metadata)
+                    metadataFetchSemaphore.withPermit {
+                        val metadata = fetchMetadata(entry) ?: return@launch
+                        metadataState.update { current ->
+                            current + (key to metadata)
+                        }
                     }
                 } finally {
                     metadataMutex.withLock { inFlightMetadataKeys.remove(key) }
