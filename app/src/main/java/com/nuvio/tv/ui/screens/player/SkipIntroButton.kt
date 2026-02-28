@@ -61,10 +61,14 @@ fun SkipIntroButton(
     onSkip: () -> Unit,
     onDismiss: () -> Unit,
     onVisibilityChanged: (Boolean) -> Unit = {},
+    onFocused: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
+    var lastType by remember { mutableStateOf(interval?.type) }
+    if (interval != null) lastType = interval.type
     val shouldShow = interval != null && (!dismissed || controlsVisible)
+
     var autoHidden by remember { mutableStateOf(false) }
     val internalFocusRequester = remember { FocusRequester() }
     val activeFocusRequester = focusRequester ?: internalFocusRequester
@@ -98,6 +102,14 @@ fun SkipIntroButton(
 
     val isVisible = shouldShow && (!autoHidden || controlsVisible)
 
+    // Set exitInstant synchronously during composition so AnimatedVisibility reads correct value
+    var exitInstant by remember { mutableStateOf(false) }
+    var prevIsVisible by remember { mutableStateOf(isVisible) }
+    if (prevIsVisible && !isVisible) {
+        exitInstant = controlsVisible
+    }
+    prevIsVisible = isVisible
+
     LaunchedEffect(isVisible) { onVisibilityChanged(isVisible) }
 
     // Request focus when becoming visible and controls aren't shown
@@ -113,53 +125,55 @@ fun SkipIntroButton(
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.8f),
-        exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.8f),
+        exit = if (exitInstant) fadeOut(tween(0)) else fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.8f),
         modifier = modifier
     ) {
         Card(
             onClick = onSkip,
             modifier = Modifier
                 .focusRequester(activeFocusRequester)
-                .onFocusChanged { isFocused = it.isFocused }
-                .width(IntrinsicSize.Min),            colors = CardDefaults.colors(
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onFocused?.invoke()
+                },
+            colors = CardDefaults.colors(
                 containerColor = Color(0xFF1E1E1E).copy(alpha = 0.85f),
                 focusedContainerColor = NuvioColors.Secondary
             ),
             shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp))
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.width(IntrinsicSize.Max)
             ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = null,
-                    tint = if (isFocused) NuvioColors.OnSecondary else Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = getSkipLabel(interval?.type),
-                    color = if (isFocused) NuvioColors.OnSecondary else Color.White,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-            // Progress bar at bottom — hidden when controls are visible
-            if (!controlsVisible) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = null,
+                        tint = if (isFocused) NuvioColors.OnSecondary else Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = getSkipLabel(lastType),
+                        color = if (isFocused) NuvioColors.OnSecondary else Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(4.dp)
                         .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(Color.White.copy(alpha = if (controlsVisible) 0f else 0.15f))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(progress.value)
                             .height(4.dp)
-                            .background(Color(0xFF1E1E1E).copy(alpha = 0.85f))
+                            .background(Color(0xFF1E1E1E).copy(alpha = if (controlsVisible) 0f else 0.85f))
                     )
                 }
             }
