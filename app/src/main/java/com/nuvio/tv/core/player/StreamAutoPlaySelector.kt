@@ -106,7 +106,9 @@ object StreamAutoPlaySelector {
             StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { it.getStreamUrl() != null }
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
-                if (pattern.isBlank()) return null
+                if (pattern.isBlank()) {
+                    return null
+                }
 
                 // Try to compile user regex
                 val userRegex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }
