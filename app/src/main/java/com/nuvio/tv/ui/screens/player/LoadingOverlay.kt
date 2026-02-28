@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,12 +13,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -103,43 +103,48 @@ fun LoadingOverlay(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (!logoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(logoUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "Loading logo",
-                            modifier = Modifier
-                                .width(320.dp)
-                                .height(180.dp)
-                                .graphicsLayer {
-                                    alpha = logoAlpha
-                                    scaleX = logoScale
-                                    scaleY = logoScale
-                                },
-                            contentScale = ContentScale.Fit
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.size(180.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingIndicator()
-                        }
+                if (!logoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(logoUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Loading logo",
+                        modifier = Modifier
+                            .width(320.dp)
+                            .height(180.dp)
+                            .graphicsLayer {
+                                alpha = logoAlpha
+                                scaleX = logoScale
+                                scaleY = logoScale
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.size(180.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator()
                     }
+                }
 
-                    if (!message.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(20.dp))
+                val messageOffset = if (!logoUrl.isNullOrBlank()) 94.dp else 86.dp
+                Crossfade(
+                    targetState = message.orEmpty(),
+                    animationSpec = tween(durationMillis = 220),
+                    label = "loadingMessageCrossfade"
+                ) { targetMessage ->
+                    if (targetMessage.isNotBlank()) {
                         Text(
-                            text = message,
+                            text = targetMessage,
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White.copy(alpha = 0.72f),
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 24.dp)
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .offset(y = messageOffset)
+                                .padding(horizontal = 24.dp)
                         )
                     }
                 }
