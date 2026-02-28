@@ -800,6 +800,7 @@ private fun MetaDetailsContent(
     }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
+    var lastFocusedEpisodeRequester by remember(meta.id, selectedSeason) { mutableStateOf<FocusRequester?>(null) }
 
     val activePeopleTabFocusRequester = peopleTabItems
         .firstOrNull { it.tab == activePeopleTab }
@@ -1045,7 +1046,8 @@ private fun MetaDetailsContent(
                         selectedSeason = selectedSeason,
                         onSeasonSelected = onSeasonSelected,
                         onSeasonLongPress = { seasonOptionsDialogSeason = it },
-                        selectedTabFocusRequester = selectedSeasonFocusRequester
+                        selectedTabFocusRequester = selectedSeasonFocusRequester,
+                        downFocusRequester = lastFocusedEpisodeRequester
                     )
                 }
                 item(key = "episodes_$selectedSeason", contentType = "episodes") {
@@ -1069,6 +1071,9 @@ private fun MetaDetailsContent(
                         restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
                         onRestoreFocusHandled = {
                             clearPendingRestore()
+                        },
+                        onEpisodeFocused = { _, focusRequester ->
+                            lastFocusedEpisodeRequester = focusRequester
                         }
                     )
                 }

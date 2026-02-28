@@ -84,7 +84,8 @@ fun SeasonTabs(
     selectedSeason: Int,
     onSeasonSelected: (Int) -> Unit,
     onSeasonLongPress: (Int) -> Unit = {},
-    selectedTabFocusRequester: FocusRequester
+    selectedTabFocusRequester: FocusRequester,
+    downFocusRequester: FocusRequester? = null
 ) {
     // Move season 0 (specials) to the end
     val sortedSeasons = remember(seasons) {
@@ -113,6 +114,11 @@ fun SeasonTabs(
                 },
                 modifier = Modifier
                     .then(if (isSelected) Modifier.focusRequester(selectedTabFocusRequester) else Modifier)
+                    .focusProperties {
+                        if (isSelected && downFocusRequester != null) {
+                            down = downFocusRequester
+                        }
+                    }
                     .onFocusChanged {
                     val nowFocused = it.isFocused
                     isFocused = nowFocused
@@ -194,16 +200,25 @@ fun EpisodesRow(
     downFocusRequester: FocusRequester? = null,
     restoreEpisodeId: String? = null,
     restoreFocusToken: Int = 0,
-    onRestoreFocusHandled: () -> Unit = {}
+    onRestoreFocusHandled: () -> Unit = {},
+    onEpisodeFocused: (episodeId: String, focusRequester: FocusRequester) -> Unit = { _, _ -> }
 ) {
-    val restoreFocusRequester = remember { FocusRequester() }
+    val episodeFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    episodes.forEach { episode ->
+        if (!episodeFocusRequesters.containsKey(episode.id)) {
+            episodeFocusRequesters[episode.id] = FocusRequester()
+        }
+    }
+    episodeFocusRequesters.keys.retainAll(episodes.map { it.id }.toSet())
+
+    val restoreTargetRequester = restoreEpisodeId?.let { episodeFocusRequesters[it] }
     var optionsEpisode by remember { mutableStateOf<Video?>(null) }
     val cardMetrics = rememberEpisodeCardMetrics()
 
-    LaunchedEffect(restoreFocusToken, restoreEpisodeId, episodes) {
+    LaunchedEffect(restoreFocusToken, restoreEpisodeId, restoreTargetRequester, episodes) {
         if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
         if (episodes.none { it.id == restoreEpisodeId }) return@LaunchedEffect
-        restoreFocusRequester.requestFocusAfterFrames()
+        restoreTargetRequester?.requestFocusAfterFrames()
     }
 
     LazyRow(
@@ -235,6 +250,7 @@ fun EpisodesRow(
                     watchedEpisodes.contains(s to e)
                 }
             } ?: false
+            val episodeFocusRequester = episodeFocusRequesters.getValue(episode.id)
             EpisodeCard(
                 episode = episode,
                 watchProgress = progress,
@@ -246,7 +262,10 @@ fun EpisodesRow(
                 onLongPress = { optionsEpisode = episode },
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
-                focusRequester = if (episode.id == restoreEpisodeId) restoreFocusRequester else null,
+                focusRequester = episodeFocusRequester,
+                onFocused = {
+                    onEpisodeFocused(episode.id, episodeFocusRequester)
+                },
                 onFocusRestored = if (episode.id == restoreEpisodeId) onRestoreFocusHandled else null
             )
         }
@@ -309,7 +328,8 @@ private fun EpisodeCard(
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
-    focusRequester: FocusRequester? = null,
+    focusRequester: FocusRequester,
+    onFocused: (() -> Unit)? = null,
     onFocusRestored: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -389,10 +409,11 @@ private fun EpisodeCard(
         },
         modifier = Modifier
             .width(cardMetrics.cardWidth)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusRequester(focusRequester)
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) {
+                    onFocused?.invoke()
                     onFocusRestored?.invoke()
                 }
             }
