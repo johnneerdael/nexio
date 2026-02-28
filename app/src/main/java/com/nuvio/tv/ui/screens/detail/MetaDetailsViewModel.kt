@@ -27,6 +27,8 @@ import com.nuvio.tv.domain.repository.WatchProgressRepository
 import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
 import com.nuvio.tv.data.trailer.TrailerService
+import com.nuvio.tv.core.util.isUnreleased
+import java.time.LocalDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -80,6 +82,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerAutoplayEnabled = false
 
     private var isPlayButtonFocused = false
+    private var hideUnreleasedContent = false
 
     init {
         observeMetaViewSettings()
@@ -89,7 +92,18 @@ class MetaDetailsViewModel @Inject constructor(
         observeWatchedEpisodes()
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
+        observeHideUnreleasedContent()
         loadMeta()
+    }
+
+    private fun observeHideUnreleasedContent() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.hideUnreleasedContent
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    hideUnreleasedContent = enabled
+                }
+        }
     }
 
     private fun observeMetaViewSettings() {
@@ -444,7 +458,7 @@ class MetaDetailsViewModel @Inject constructor(
                 return@launch
             }
 
-            val recommendations = runCatching {
+            val rawRecommendations = runCatching {
                 tmdbMetadataService.fetchMoreLikeThis(
                     tmdbId = tmdbId,
                     contentType = tmdbContentType,
@@ -453,6 +467,13 @@ class MetaDetailsViewModel @Inject constructor(
             }.getOrElse {
                 Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
                 emptyList()
+            }
+
+            val recommendations = if (hideUnreleasedContent) {
+                val today = LocalDate.now()
+                rawRecommendations.filterNot { it.isUnreleased(today) }
+            } else {
+                rawRecommendations
             }
 
             _uiState.update { state ->

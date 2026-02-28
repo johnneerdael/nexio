@@ -74,6 +74,7 @@ fun ContinueWatchingSection(
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
+    onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {}
@@ -179,6 +180,10 @@ fun ContinueWatchingSection(
             },
             onDetails = {
                 onDetailsClick(menuItem)
+                optionsItem = null
+            },
+            onStartFromBeginning = {
+                onStartFromBeginning(menuItem)
                 optionsItem = null
             }
         )
@@ -451,7 +456,8 @@ fun ContinueWatchingOptionsDialog(
     item: ContinueWatchingItem,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
-    onDetails: () -> Unit
+    onDetails: () -> Unit,
+    onStartFromBeginning: () -> Unit = {}
 ) {
     val title = when (item) {
         is ContinueWatchingItem.InProgress -> item.progress.name
@@ -480,6 +486,19 @@ fun ContinueWatchingOptionsDialog(
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
+        }
+
+        if (item is ContinueWatchingItem.InProgress) {
+            Button(
+                onClick = onStartFromBeginning,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.BackgroundCard,
+                    contentColor = NuvioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.cw_action_start_from_beginning))
+            }
         }
 
         Button(
