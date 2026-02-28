@@ -80,7 +80,7 @@
     <string name="detail_btn_play_episode">Oynat S%1$dB%2$d</string>
     <string name="detail_btn_resume_episode">Devam Et S%1$dB%2$d</string>
     <string name="detail_btn_next_episode">Sıradaki S%1$dB%2$d</string>
-    <string name="detail_tab_cast">Yaratıcı ve Oyuncular</string>
+    <string name="detail_tab_cast">Oyuncular</string>
     <string name="cast_role_creator">Yapımcı</string>
     <string name="cast_role_director">Yönetmen</string>
     <string name="cast_role_writer">Yazar</string>
@@ -108,7 +108,7 @@
     <!-- AboutScreen -->
     <string name="about_title">Hakkında</string>
     <string name="about_subtitle">Uygulama bilgileri, güncellemeler ve yasal bağlantılar</string>
-    <string name="about_made_with_love">Tapframe ve ekibi tarafından ❤️ ile yapıldı</string>
+    <string name="about_made_with_love">Tapframe ve arkadaşları tarafından ❤️ ile yapıldı</string>
     <string name="about_version">Sürüm %1$s</string>
     <string name="about_check_updates">Güncellemeleri kontrol et</string>
     <string name="about_check_updates_subtitle">En son sürümü indir</string>
@@ -780,8 +780,8 @@
     <string name="layout_selection_continue">Uygulamaya Devam Et</string>
 
     <!-- UpdatePromptDialog -->
-    <string name="update_title">Yeni Uygulama Sürümü Mevcut</string>
-    <string name="update_downloading">Güncelleme İnternetten İndiriliyor</string>
+    <string name="update_title">Uygulama Güncellemesi</string>
+    <string name="update_downloading">Güncelleme İndiriliyor</string>
     <string name="update_unknown_sources">Nuvio\'nun indirdiği eklentileri yüklayabilmek adına `Bilinmeyen kaynaklar` veya `Dışarıdan yükleme` iznine ihtiyaç var.</string>
     <!-- AccountScreen -->
     <string name="account_title">Ana Bilgi Modülleri</string>
@@ -795,7 +795,7 @@
     <!-- EpisodeRatingsSection -->
     <string name="ratings_loading">Kullanıcı geri dönüşü verisi sunucu merkezine ulaşıyor.</string>
     <string name="ratings_unavailable">Bu bölüm tablosu için harici Puan formatı bulunmamaktadır.</string>
-    <string name="ratings_season_summary">Sezon %1$d | Toplam %2$d İzlem Tablosu Uzunluğu</string>
+    <string name="ratings_season_summary">Sezon %1$d | %2$d Bölüm</string>
 
     <!-- SearchDiscoverSection -->
     <string name="discover_title">Keşfet</string>
