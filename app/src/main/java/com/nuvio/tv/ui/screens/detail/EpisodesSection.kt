@@ -198,19 +198,12 @@ fun EpisodesRow(
     onMarkPreviousEpisodesWatched: (Video) -> Unit = {},
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
+    episodeFocusRequesters: MutableMap<String, FocusRequester> = mutableMapOf(),
     restoreEpisodeId: String? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {},
-    onEpisodeFocused: (episodeId: String, focusRequester: FocusRequester) -> Unit = { _, _ -> }
+    onEpisodeFocused: (episodeId: String) -> Unit = {}
 ) {
-    val episodeFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
-    episodes.forEach { episode ->
-        if (!episodeFocusRequesters.containsKey(episode.id)) {
-            episodeFocusRequesters[episode.id] = FocusRequester()
-        }
-    }
-    episodeFocusRequesters.keys.retainAll(episodes.map { it.id }.toSet())
-
     val restoreTargetRequester = restoreEpisodeId?.let { episodeFocusRequesters[it] }
     var optionsEpisode by remember { mutableStateOf<Video?>(null) }
     val cardMetrics = rememberEpisodeCardMetrics()
@@ -250,7 +243,7 @@ fun EpisodesRow(
                     watchedEpisodes.contains(s to e)
                 }
             } ?: false
-            val episodeFocusRequester = episodeFocusRequesters.getValue(episode.id)
+            val episodeFocusRequester = episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() }
             EpisodeCard(
                 episode = episode,
                 watchProgress = progress,
@@ -264,7 +257,7 @@ fun EpisodesRow(
                 downFocusRequester = downFocusRequester,
                 focusRequester = episodeFocusRequester,
                 onFocused = {
-                    onEpisodeFocused(episode.id, episodeFocusRequester)
+                    onEpisodeFocused(episode.id)
                 },
                 onFocusRestored = if (episode.id == restoreEpisodeId) onRestoreFocusHandled else null
             )
