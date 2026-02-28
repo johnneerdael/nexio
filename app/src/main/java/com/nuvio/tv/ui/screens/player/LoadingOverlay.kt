@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -41,9 +44,12 @@ fun LoadingOverlay(
     visible: Boolean,
     backdropUrl: String?,
     logoUrl: String?,
+    title: String? = null,
     message: String? = null,
     modifier: Modifier = Modifier
 ) {
+    var logoLoadFailed by remember(logoUrl) { mutableStateOf(false) }
+    val showLogo = !logoUrl.isNullOrBlank() && !logoLoadFailed
     val logoAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(durationMillis = 700, delayMillis = 400, easing = LinearEasing),
@@ -106,13 +112,14 @@ fun LoadingOverlay(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (!logoUrl.isNullOrBlank()) {
+                    if (showLogo) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(logoUrl)
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "Loading logo",
+                            onError = { logoLoadFailed = true },
                             modifier = Modifier
                                 .width(320.dp)
                                 .height(180.dp)
@@ -122,6 +129,21 @@ fun LoadingOverlay(
                                     scaleY = logoScale
                                 },
                             contentScale = ContentScale.Fit
+                        )
+                    } else if (!title.isNullOrBlank()) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            modifier = Modifier
+                                .padding(horizontal = 24.dp)
+                                .graphicsLayer {
+                                    alpha = logoAlpha
+                                    scaleX = logoScale
+                                    scaleY = logoScale
+                                }
                         )
                     } else {
                         Box(

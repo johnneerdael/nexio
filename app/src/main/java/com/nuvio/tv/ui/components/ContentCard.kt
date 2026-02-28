@@ -217,6 +217,8 @@ fun ContentCard(
                     .build()
             }
         }
+        var logoLoadFailed by remember(item.logo) { mutableStateOf(false) }
+        val showExpandedLogo = !item.logo.isNullOrBlank() && !logoLoadFailed
 
         Card(
             onClick = {
@@ -385,10 +387,11 @@ fun ContentCard(
                             .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                             .fillMaxWidth(0.75f)
                     ) {
-                        if (item.logo != null) {
+                        if (showExpandedLogo) {
                             AsyncImage(
                                 model = logoModel,
                                 contentDescription = item.name,
+                                onError = { logoLoadFailed = true },
                                 modifier = Modifier
                                     .height(48.dp)
                                     .fillMaxWidth(),

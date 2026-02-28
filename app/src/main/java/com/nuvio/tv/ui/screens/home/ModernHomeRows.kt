@@ -533,9 +533,13 @@ private fun ModernCarouselCard(
                 .build()
         }
     }
+    var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
     val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
     val hasImage = !imageUrl.isNullOrBlank()
-    val hasLandscapeLogo = useLandscapePosters && !item.heroPreview.logo.isNullOrBlank()
+    val hasLandscapeLogo =
+        useLandscapePosters &&
+            !item.heroPreview.logo.isNullOrBlank() &&
+            !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val watchedIconEndPadding by animateDpAsState(
@@ -658,6 +662,7 @@ private fun ModernCarouselCard(
                     AsyncImage(
                         model = logoModel,
                         contentDescription = item.title,
+                        onError = { landscapeLogoLoadFailed = true },
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth(0.62f)
@@ -665,6 +670,18 @@ private fun ModernCarouselCard(
                             .padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
                         contentScale = ContentScale.Fit,
                         alignment = Alignment.CenterStart
+                    )
+                } else if (useLandscapePosters) {
+                    Text(
+                        text = item.title,
+                        style = titleStyle,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth(0.62f)
+                            .padding(start = 10.dp, end = 10.dp, bottom = 12.dp)
                     )
                 }
 

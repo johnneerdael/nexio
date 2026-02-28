@@ -583,6 +583,7 @@ fun PlayerScreen(
             visible = uiState.showLoadingOverlay && uiState.error == null,
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
+            title = uiState.title,
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(2f)
