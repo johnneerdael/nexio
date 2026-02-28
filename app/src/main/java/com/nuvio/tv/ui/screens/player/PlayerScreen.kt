@@ -582,11 +582,8 @@ fun PlayerScreen(
             focusRequester = skipIntroFocusRequester,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 32.dp, bottom = when {
-                    uiState.showControls -> 120.dp
-                    uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed -> 100.dp
-                    else -> 32.dp
-                })
+                .padding(start = 32.dp, bottom = 120.dp)
+                
         )
         NextEpisodeCardOverlay(
             nextEpisode = uiState.nextEpisode,
@@ -1010,7 +1007,7 @@ private fun PlayerControlsOverlay(
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 32.dp, vertical = 24.dp)
         ) {
-            val skipIntroVisible = skipButtonVisible
+            val skipIntroVisible = uiState.activeSkipInterval != null
 
             AnimatedVisibility(
                 visible = !skipIntroVisible,

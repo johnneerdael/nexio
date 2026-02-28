@@ -70,6 +70,7 @@ fun SkipIntroButton(
     val shouldShow = interval != null && (!dismissed || controlsVisible)
 
     var autoHidden by remember { mutableStateOf(false) }
+    var manuallyDismissed by remember { mutableStateOf(false) }
     val internalFocusRequester = remember { FocusRequester() }
     val activeFocusRequester = focusRequester ?: internalFocusRequester
     var isFocused by remember { mutableStateOf(false) }
@@ -78,7 +79,19 @@ fun SkipIntroButton(
     // Reset auto-hide and progress when interval changes
     LaunchedEffect(interval?.startTime, interval?.type) {
         autoHidden = false
+        manuallyDismissed = false
         progress.snapTo(0f)
+    }
+
+    LaunchedEffect(dismissed) {
+        if (!dismissed) {
+            if (!manuallyDismissed) {
+                autoHidden = false
+                progress.snapTo(0f)
+            }
+        } else {
+            manuallyDismissed = true
+        }
     }
 
     // Auto-hide after 10 seconds — pause countdown while controls are visible
@@ -102,30 +115,19 @@ fun SkipIntroButton(
 
     val isVisible = shouldShow && (!autoHidden || controlsVisible)
 
-    // Set exitInstant synchronously during composition so AnimatedVisibility reads correct value
-    var exitInstant by remember { mutableStateOf(false) }
-    var prevIsVisible by remember { mutableStateOf(isVisible) }
-    if (prevIsVisible && !isVisible) {
-        exitInstant = controlsVisible
-    }
-    prevIsVisible = isVisible
-
     LaunchedEffect(isVisible) { onVisibilityChanged(isVisible) }
 
-    // Request focus when becoming visible and controls aren't shown
-    LaunchedEffect(isVisible) {
+    // Request focus when becoming visible or when controls hide
+    LaunchedEffect(isVisible, controlsVisible) {
         if (isVisible && !controlsVisible) {
-            delay(350) // Wait for animation
-            try {
-                activeFocusRequester.requestFocus()
-            } catch (_: Exception) {}
+            try { activeFocusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.8f),
-        exit = if (exitInstant) fadeOut(tween(0)) else fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.8f),
+        exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.8f),
         modifier = modifier
     ) {
         Card(
@@ -167,13 +169,13 @@ fun SkipIntroButton(
                         .fillMaxWidth()
                         .height(4.dp)
                         .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                        .background(Color.White.copy(alpha = if (controlsVisible) 0f else 0.15f))
+                        .background(Color.White.copy(alpha = if (controlsVisible || autoHidden || dismissed) 0f else 0.15f))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(progress.value)
                             .height(4.dp)
-                            .background(Color(0xFF1E1E1E).copy(alpha = if (controlsVisible) 0f else 0.85f))
+                            .background(Color(0xFF1E1E1E).copy(alpha = if (controlsVisible || autoHidden || dismissed) 0f else 0.85f))
                     )
                 }
             }
