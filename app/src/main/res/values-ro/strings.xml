@@ -1,4 +1,4 @@
-< <resources>
+<resources>
     <string name="app_name">Nuvio</string>
     <string name="type_movie">Film</string>
     <string name="type_series">Serial</string>
@@ -844,4 +844,3 @@
     <string name="update_install">Instalează</string>
     <string name="update_ignore">Ignoră</string>
   </resources>
->
