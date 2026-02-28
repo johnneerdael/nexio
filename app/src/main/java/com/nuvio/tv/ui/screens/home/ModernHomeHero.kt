@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -98,10 +99,23 @@ internal fun ModernHeroMediaLayer(
             modifier = Modifier
                 .fillMaxSize()
                 .drawWithCache {
+                    val leftBlendSolidWidth = size.width * 0.018f
+                    val horizontalGradientStartX = leftBlendSolidWidth
+                    val horizontalFadeEndX = horizontalGradientStartX + (size.width * 0.36f)
                     val horizontalGradient = Brush.horizontalGradient(
-                        0.0f to bgColor.copy(alpha = 0.96f),
-                        0.10f to bgColor.copy(alpha = 0.72f),
-                        0.30f to Color.Transparent
+                        colorStops = arrayOf(
+                            0.0f to bgColor,
+                            0.08f to bgColor.copy(alpha = 0.95f),
+                            0.16f to bgColor.copy(alpha = 0.86f),
+                            0.24f to bgColor.copy(alpha = 0.74f),
+                            0.34f to bgColor.copy(alpha = 0.58f),
+                            0.46f to bgColor.copy(alpha = 0.40f),
+                            0.62f to bgColor.copy(alpha = 0.24f),
+                            0.80f to bgColor.copy(alpha = 0.10f),
+                            1.0f to Color.Transparent
+                        ),
+                        startX = horizontalGradientStartX,
+                        endX = horizontalFadeEndX
                     )
                     val radialGradient = Brush.radialGradient(
                         colorStops = arrayOf(
@@ -119,7 +133,13 @@ internal fun ModernHeroMediaLayer(
                         0.96f to bgColor.copy(alpha = 0.98f),
                         1.0f to bgColor
                     )
-                    onDrawBehind {
+                    onDrawWithContent {
+                        drawContent()
+                        // Blend strip to avoid visible seam at media start edge.
+                        drawRect(
+                            color = bgColor,
+                            size = Size(leftBlendSolidWidth, size.height)
+                        )
                         drawRect(brush = horizontalGradient, size = size)
                         drawRect(brush = radialGradient, size = size)
                         drawRect(brush = verticalGradient, size = size)
