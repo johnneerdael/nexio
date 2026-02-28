@@ -87,9 +87,8 @@ class SkipIntroRepository @Inject constructor(
         } catch (e: Exception) { null }
 
         if (imdbId != null) {
-            val firstAnilistId = resolveAllAnilistIdsFromImdb(imdbId).firstOrNull()
-            if (firstAnilistId != null) {
-                val result = fetchFromAnimeSkip(firstAnilistId, episode, season = null)
+            for (anilistId in resolveAllAnilistIdsFromImdb(imdbId)) {
+                val result = fetchFromAnimeSkip(anilistId, episode, season = null)
                 if (result.isNotEmpty()) return result.also { cache[cacheKey] = it }
             }
         }
@@ -129,9 +128,8 @@ class SkipIntroRepository @Inject constructor(
         } catch (e: Exception) { null }
 
         if (imdbId != null) {
-            val firstAnilistId = resolveAllAnilistIdsFromImdb(imdbId).firstOrNull()
-            if (firstAnilistId != null) {
-                val result = fetchFromAnimeSkip(firstAnilistId, episode, season = null)
+            for (anilistId in resolveAllAnilistIdsFromImdb(imdbId)) {
+                val result = fetchFromAnimeSkip(anilistId, episode, season = null)
                 if (result.isNotEmpty()) return result.also { cache[cacheKey] = it }
             }
         }

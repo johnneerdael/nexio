@@ -3,6 +3,8 @@
 package com.nuvio.tv.ui.screens.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,10 +12,14 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SkipNext
@@ -54,36 +60,45 @@ fun SkipIntroButton(
     controlsVisible: Boolean,
     onSkip: () -> Unit,
     onDismiss: () -> Unit,
+    onVisibilityChanged: (Boolean) -> Unit = {},
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
-    val shouldShow = interval != null && !dismissed
+    val shouldShow = interval != null && (!dismissed || controlsVisible)
     var autoHidden by remember { mutableStateOf(false) }
     val internalFocusRequester = remember { FocusRequester() }
     val activeFocusRequester = focusRequester ?: internalFocusRequester
     var isFocused by remember { mutableStateOf(false) }
+    val progress = remember { Animatable(1f) }
 
-    // Reset auto-hide when interval changes
+    // Reset auto-hide and progress when interval changes
     LaunchedEffect(interval?.startTime, interval?.type) {
         autoHidden = false
+        progress.snapTo(0f)
     }
 
-    // Auto-hide after 15 seconds
-    LaunchedEffect(shouldShow, autoHidden) {
-        if (shouldShow && !autoHidden) {
-            delay(15000)
+    // Auto-hide after 10 seconds — pause countdown while controls are visible
+    LaunchedEffect(shouldShow, autoHidden, controlsVisible) {
+        if (shouldShow && !autoHidden && !controlsVisible) {
+            progress.animateTo(1f, animationSpec = tween(
+                durationMillis = ((1f - progress.value) * 10000).toInt().coerceAtLeast(1),
+                easing = LinearEasing
+            ))
             autoHidden = true
         }
     }
 
-    // Re-show when controls become visible while auto-hidden
+    // Re-show when controls become visible while auto-hidden — but don't restart countdown
+    // When controls hide again and we were auto-hidden, stay hidden
     LaunchedEffect(controlsVisible) {
-        if (controlsVisible && autoHidden && interval != null && !dismissed) {
-            autoHidden = false
+        if (!controlsVisible && autoHidden) {
+            // controls closed, stay hidden — nothing to do
         }
     }
 
     val isVisible = shouldShow && (!autoHidden || controlsVisible)
+
+    LaunchedEffect(isVisible) { onVisibilityChanged(isVisible) }
 
     // Request focus when becoming visible and controls aren't shown
     LaunchedEffect(isVisible) {
@@ -105,8 +120,8 @@ fun SkipIntroButton(
             onClick = onSkip,
             modifier = Modifier
                 .focusRequester(activeFocusRequester)
-                .onFocusChanged { isFocused = it.isFocused },
-            colors = CardDefaults.colors(
+                .onFocusChanged { isFocused = it.isFocused }
+                .width(IntrinsicSize.Min),            colors = CardDefaults.colors(
                 containerColor = Color(0xFF1E1E1E).copy(alpha = 0.85f),
                 focusedContainerColor = NuvioColors.Secondary
             ),
@@ -126,17 +141,28 @@ fun SkipIntroButton(
                     text = getSkipLabel(interval?.type),
                     color = if (isFocused) NuvioColors.OnSecondary else Color.White,
                     fontSize = 14.sp,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
-            // Accent bar at bottom
-            Box(
-                modifier = Modifier
-                    .height(2.dp)
-                    .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                    .background(if (isFocused) NuvioColors.OnSecondary else NuvioColors.Secondary)
-                    .align(Alignment.CenterHorizontally)
-            )
+            // Progress bar at bottom — hidden when controls are visible
+            if (!controlsVisible) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                        .background(Color.White.copy(alpha = 0.15f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress.value)
+                            .height(4.dp)
+                            .background(Color(0xFF1E1E1E).copy(alpha = 0.85f))
+                    )
+                }
+            }
         }
     }
 }
