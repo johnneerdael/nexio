@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.util.Log
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
