@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.trailer
 
 import android.util.Log
+import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TrailerApi
@@ -38,8 +39,10 @@ class TrailerServiceYouTubeSessionCacheTest {
         val tmdbApi = mockk<TmdbApi>()
         val extractor = mockk<InAppYouTubeExtractor>()
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>()
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(language = "en"))
-        val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore)
+        every { tmdbService.apiKey() } returns "tmdb-key"
+        val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore, tmdbService)
 
         val cached = TrailerPlaybackSource(
             videoUrl = "https://cdn.example/video.mp4",
@@ -66,8 +69,10 @@ class TrailerServiceYouTubeSessionCacheTest {
         val tmdbApi = mockk<TmdbApi>()
         val extractor = mockk<InAppYouTubeExtractor>()
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val tmdbService = mockk<TmdbService>()
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(language = "en"))
-        val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore)
+        every { tmdbService.apiKey() } returns "tmdb-key"
+        val service = TrailerService(trailerApi, tmdbApi, extractor, tmdbSettingsDataStore, tmdbService)
 
         coEvery { extractor.extractPlaybackSource("https://www.youtube.com/watch?v=dQw4w9WgXcQ") } returnsMany listOf(
             null,

@@ -1,6 +1,7 @@
 package com.nuvio.tv.data.trailer
 
 import android.util.Log
+import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TmdbVideoResult
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TrailerService"
-private const val TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 
@@ -24,7 +24,8 @@ class TrailerService @Inject constructor(
     private val trailerApi: TrailerApi,
     private val tmdbApi: TmdbApi,
     private val inAppYouTubeExtractor: InAppYouTubeExtractor,
-    private val tmdbSettingsDataStore: TmdbSettingsDataStore
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val tmdbService: TmdbService
 ) {
     // Cache: "title|year|tmdbId|type" -> trailer playback source (null for negative cache)
     private val cache = ConcurrentHashMap<String, TrailerPlaybackSource?>()
@@ -233,7 +234,7 @@ class TrailerService @Inject constructor(
         return try {
             val response = tmdbApi.getMovieVideos(
                 movieId = tmdbId,
-                apiKey = TMDB_API_KEY,
+                apiKey = tmdbService.apiKey(),
                 language = language
             )
             if (!response.isSuccessful) {
@@ -252,7 +253,7 @@ class TrailerService @Inject constructor(
         return try {
             val response = tmdbApi.getTvVideos(
                 tvId = tmdbId,
-                apiKey = TMDB_API_KEY,
+                apiKey = tmdbService.apiKey(),
                 language = language
             )
             if (!response.isSuccessful) {
