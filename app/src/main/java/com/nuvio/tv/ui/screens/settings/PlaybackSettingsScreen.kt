@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.AppTheme
 import androidx.compose.ui.text.input.KeyboardType
 import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
@@ -85,8 +86,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Switch
-import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.AudioLanguageOption
@@ -98,6 +97,7 @@ import com.nuvio.tv.data.local.StreamAutoPlaySource
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NuvioTheme
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PauseCircle
@@ -404,15 +404,9 @@ internal fun ToggleSettingsItem(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Switch(
+            SettingsTogglePill(
                 checked = isChecked,
-                onCheckedChange = null, // Handled by Card onClick
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = NuvioColors.Secondary.copy(alpha = contentAlpha),
-                    checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.35f * contentAlpha),
-                    uncheckedThumbColor = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
-                    uncheckedTrackColor = NuvioColors.Border
-                )
+                enabled = enabled
             )
         }
     }
@@ -428,6 +422,7 @@ internal fun RenderTypeSettingsItem(
     enabled: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
     val contentAlpha = if (enabled) 1f else 0.4f
     
     Card(
@@ -443,12 +438,12 @@ internal fun RenderTypeSettingsItem(
             },
         colors = CardDefaults.colors(
             containerColor = if (isSelected) {
-                NuvioColors.Primary.copy(alpha = 0.15f * contentAlpha)
+                selectedAccent.copy(alpha = 0.22f * contentAlpha)
             } else {
                 NuvioColors.BackgroundCard
             },
             focusedContainerColor = if (isSelected) {
-                NuvioColors.Primary.copy(alpha = 0.15f * contentAlpha)
+                selectedAccent.copy(alpha = 0.28f * contentAlpha)
             } else {
                 NuvioColors.BackgroundCard
             }
@@ -459,7 +454,7 @@ internal fun RenderTypeSettingsItem(
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ),
             border = if (isSelected) Border(
-                border = BorderStroke(2.dp, NuvioColors.Primary.copy(alpha = contentAlpha)),
+                border = BorderStroke(2.dp, selectedAccent.copy(alpha = contentAlpha)),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ) else Border.None
         ),
@@ -476,7 +471,7 @@ internal fun RenderTypeSettingsItem(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = (if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary).copy(alpha = contentAlpha),
+                    color = NuvioColors.TextPrimary.copy(alpha = contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -495,7 +490,7 @@ internal fun RenderTypeSettingsItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = stringResource(R.string.cd_selected),
-                    tint = NuvioColors.Primary.copy(alpha = contentAlpha),
+                    tint = selectedAccent.copy(alpha = contentAlpha),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -989,6 +984,7 @@ private fun LanguageOptionItem(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
     
     Card(
         onClick = onClick,
@@ -997,8 +993,8 @@ private fun LanguageOptionItem(
             .then(modifier)
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = if (isSelected) selectedAccent.copy(alpha = 0.22f) else NuvioColors.BackgroundCard,
+            focusedContainerColor = if (isSelected) selectedAccent.copy(alpha = 0.28f) else NuvioColors.FocusBackground
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
         scale = CardDefaults.scale(focusedScale = 1f)
@@ -1012,7 +1008,7 @@ private fun LanguageOptionItem(
             Text(
                 text = name,
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                color = NuvioColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
             
@@ -1029,7 +1025,7 @@ private fun LanguageOptionItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = stringResource(R.string.cd_selected),
-                    tint = NuvioColors.Primary,
+                    tint = selectedAccent,
                     modifier = Modifier.size(20.dp)
                 )
             }

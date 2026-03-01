@@ -351,50 +351,50 @@ class MainActivity : ComponentActivity() {
                             Screen.Home.route,
                             Screen.Search.route,
                             Screen.Library.route,
-                            Screen.Settings.route,
-                            Screen.AddonManager.route
+                            Screen.Settings.route
                         )
                     }
 
                     val strNavHome = stringResource(R.string.nav_home)
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
-                    val strNavAddons = stringResource(R.string.nav_addons)
                     val strNavSettings = stringResource(R.string.nav_settings)
                     val drawerItems = remember(
                         strNavHome,
                         strNavSearch,
                         strNavLibrary,
-                        strNavAddons,
                         strNavSettings
                     ) {
-                        listOf(
-                            DrawerItem(
-                                route = Screen.Home.route,
-                                label = strNavHome,
-                                icon = Icons.Default.Home
-                            ),
-                            DrawerItem(
-                                route = Screen.Search.route,
-                                label = strNavSearch,
-                                iconRes = R.raw.sidebar_search
-                            ),
-                            DrawerItem(
-                                route = Screen.Library.route,
-                                label = strNavLibrary,
-                                iconRes = R.raw.sidebar_library
-                            ),
-                            DrawerItem(
-                                route = Screen.AddonManager.route,
-                                label = strNavAddons,
-                                iconRes = R.raw.sidebar_plugin
-                            ),
-                            DrawerItem(
-                                route = Screen.Settings.route,
-                                label = strNavSettings,
-                                iconRes = R.raw.sidebar_settings
+                        buildList {
+                            add(
+                                DrawerItem(
+                                    route = Screen.Home.route,
+                                    label = strNavHome,
+                                    icon = Icons.Default.Home
+                                )
                             )
-                        )
+                            add(
+                                DrawerItem(
+                                    route = Screen.Search.route,
+                                    label = strNavSearch,
+                                    iconRes = R.raw.sidebar_search
+                                )
+                            )
+                            add(
+                                DrawerItem(
+                                    route = Screen.Library.route,
+                                    label = strNavLibrary,
+                                    iconRes = R.raw.sidebar_library
+                                )
+                            )
+                            add(
+                                DrawerItem(
+                                    route = Screen.Settings.route,
+                                    label = strNavSettings,
+                                    iconRes = R.raw.sidebar_settings
+                                )
+                            )
+                        }
                     }
                     val selectedDrawerRoute = drawerItems.firstOrNull { item ->
                         currentRoute == item.route || currentRoute?.startsWith("${item.route}/") == true
@@ -413,6 +413,8 @@ class MainActivity : ComponentActivity() {
                             sidebarCollapsed = sidebarCollapsed,
                             modernSidebarBlurEnabled = modernSidebarBlurEnabled,
                             hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
+                            activeProfileUsesPrimaryAddons = activeProfile?.usesPrimaryAddons == true,
+                            activeProfileUsesPrimaryPlugins = activeProfile?.usesPrimaryPlugins == true,
                             activeProfileName = activeProfile?.name ?: "",
                             activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
                             showProfileSelector = profiles.size > 1,
@@ -432,6 +434,8 @@ class MainActivity : ComponentActivity() {
                             selectedDrawerRoute = selectedDrawerRoute,
                             sidebarCollapsed = sidebarCollapsed,
                             hideBuiltInHeaders = false,
+                            activeProfileUsesPrimaryAddons = activeProfile?.usesPrimaryAddons == true,
+                            activeProfileUsesPrimaryPlugins = activeProfile?.usesPrimaryPlugins == true,
                             activeProfileName = activeProfile?.name ?: "",
                             activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
                             showProfileSelector = profiles.size > 1,
@@ -496,6 +500,8 @@ private fun LegacySidebarScaffold(
     selectedDrawerRoute: String?,
     sidebarCollapsed: Boolean,
     hideBuiltInHeaders: Boolean,
+    activeProfileUsesPrimaryAddons: Boolean,
+    activeProfileUsesPrimaryPlugins: Boolean,
     activeProfileName: String,
     activeProfileColorHex: String,
     showProfileSelector: Boolean,
@@ -693,7 +699,9 @@ private fun LegacySidebarScaffold(
             NuvioNavHost(
                 navController = navController,
                 startDestination = startDestination,
-                hideBuiltInHeaders = hideBuiltInHeaders
+                hideBuiltInHeaders = hideBuiltInHeaders,
+                activeProfileUsesPrimaryAddons = activeProfileUsesPrimaryAddons,
+                activeProfileUsesPrimaryPlugins = activeProfileUsesPrimaryPlugins
             )
         }
     }
@@ -780,6 +788,8 @@ private fun ModernSidebarScaffold(
     sidebarCollapsed: Boolean,
     modernSidebarBlurEnabled: Boolean,
     hideBuiltInHeaders: Boolean,
+    activeProfileUsesPrimaryAddons: Boolean,
+    activeProfileUsesPrimaryPlugins: Boolean,
     activeProfileName: String,
     activeProfileColorHex: String,
     showProfileSelector: Boolean,
@@ -1032,7 +1042,9 @@ private fun ModernSidebarScaffold(
             NuvioNavHost(
                 navController = navController,
                 startDestination = startDestination,
-                hideBuiltInHeaders = hideBuiltInHeaders
+                hideBuiltInHeaders = hideBuiltInHeaders,
+                activeProfileUsesPrimaryAddons = activeProfileUsesPrimaryAddons,
+                activeProfileUsesPrimaryPlugins = activeProfileUsesPrimaryPlugins
             )
         }
 

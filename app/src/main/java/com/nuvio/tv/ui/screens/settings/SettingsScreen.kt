@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
+import com.nuvio.tv.ui.screens.addon.AddonManagerScreen
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
@@ -63,6 +64,7 @@ internal enum class SettingsCategory {
     PROFILES,
     APPEARANCE,
     LAYOUT,
+    ADDONS,
     PLUGINS,
     INTEGRATION,
     PLAYBACK,
@@ -126,6 +128,13 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
+        category = SettingsCategory.ADDONS,
+        title = stringResource(R.string.addon_title),
+        rawIconRes = R.raw.sidebar_plugin,
+        subtitle = stringResource(R.string.settings_addons_subtitle),
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
         category = SettingsCategory.PLUGINS,
         title = stringResource(R.string.settings_plugins),
         icon = Icons.Default.Build,
@@ -174,18 +183,29 @@ fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTrakt: () -> Unit = {},
     onNavigateToAuthQrSignIn: () -> Unit = {},
+    onNavigateToCatalogOrder: () -> Unit = {},
     profileViewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
     val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
+    val activeProfile by profileViewModel.activeProfile.collectAsStateWithLifecycle()
+    val usesPrimaryProfileAddons = activeProfile?.let { !it.isPrimary && it.usesPrimaryAddons } == true
+    val usesPrimaryProfilePlugins = activeProfile?.let { !it.isPrimary && it.usesPrimaryPlugins } == true
 
     val allSectionSpecs = rememberSettingsSectionSpecs()
-    val visibleSections = remember(isPrimaryProfileActive, allSectionSpecs) {
+    val visibleSections = remember(
+        isPrimaryProfileActive,
+        usesPrimaryProfileAddons,
+        usesPrimaryProfilePlugins,
+        allSectionSpecs
+    ) {
         allSectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
                 SettingsCategory.PROFILES -> isPrimaryProfileActive
                 SettingsCategory.ACCOUNT -> isPrimaryProfileActive
                 SettingsCategory.TRAKT -> isPrimaryProfileActive
+                SettingsCategory.ADDONS -> !usesPrimaryProfileAddons
+                SettingsCategory.PLUGINS -> !usesPrimaryProfilePlugins
                 else -> true
             }
         }
@@ -373,6 +393,9 @@ fun SettingsScreen(
                                 null
                             }
                         )
+                        SettingsCategory.ADDONS -> AddonsSettingsContent(
+                            onNavigateToCatalogOrder = onNavigateToCatalogOrder
+                        )
                         SettingsCategory.PLAYBACK -> PlaybackSettingsContent(
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.PLAYBACK]
@@ -437,6 +460,35 @@ private fun PluginsSettingsContent() {
                     uiState = pluginUiState,
                     viewModel = pluginViewModel,
                     showHeader = false
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddonsSettingsContent(
+    onNavigateToCatalogOrder: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SettingsDetailHeader(
+            title = stringResource(R.string.addon_title),
+            subtitle = stringResource(R.string.settings_addons_section_subtitle)
+        )
+        SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.TopStart
+            ) {
+                AddonManagerScreen(
+                    showBuiltInHeader = false,
+                    embeddedInSettings = true,
+                    onNavigateToCatalogOrder = onNavigateToCatalogOrder
                 )
             }
         }

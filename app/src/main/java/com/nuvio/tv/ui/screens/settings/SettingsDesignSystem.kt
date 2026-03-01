@@ -58,8 +58,10 @@ import androidx.tv.material3.Text
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NuvioTheme
 
 internal val SettingsContainerRadius = 28.dp
 internal val SettingsPillRadius = 999.dp
@@ -538,6 +540,7 @@ internal fun SettingsChoiceChip(
     onFocused: () -> Unit = {}
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
 
     Card(
         onClick = onClick,
@@ -549,12 +552,12 @@ internal fun SettingsChoiceChip(
             }
         },
         colors = CardDefaults.colors(
-            containerColor = if (selected) NuvioColors.FocusRing.copy(alpha = 0.2f) else NuvioColors.Background,
-            focusedContainerColor = if (selected) NuvioColors.FocusRing.copy(alpha = 0.2f) else NuvioColors.Background
+            containerColor = if (selected) selectedAccent.copy(alpha = 0.22f) else NuvioColors.Background,
+            focusedContainerColor = if (selected) selectedAccent.copy(alpha = 0.28f) else NuvioColors.Background
         ),
         border = CardDefaults.border(
             border = if (selected) Border(
-                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                border = BorderStroke(1.dp, selectedAccent),
                 shape = RoundedCornerShape(SettingsPillRadius)
             ) else Border.None,
             focusedBorder = Border(
@@ -568,17 +571,18 @@ internal fun SettingsChoiceChip(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (selected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+            color = if (selected) selectedAccent else if (isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         )
     }
 }
 
 @Composable
-private fun SettingsTogglePill(
+internal fun SettingsTogglePill(
     checked: Boolean,
     enabled: Boolean
 ) {
+    val checkedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
     val alpha = if (enabled) 1f else 0.35f
     Box(
         modifier = Modifier
@@ -587,7 +591,7 @@ private fun SettingsTogglePill(
             .clip(RoundedCornerShape(SettingsPillRadius))
             .background(
                 if (checked) {
-                    NuvioColors.Secondary.copy(alpha = 0.35f * alpha)
+                    checkedAccent.copy(alpha = 0.42f * alpha)
                 } else {
                     NuvioColors.Border.copy(alpha = alpha)
                 }

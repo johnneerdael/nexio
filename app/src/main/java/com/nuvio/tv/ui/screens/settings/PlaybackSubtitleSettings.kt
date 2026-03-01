@@ -30,6 +30,7 @@ import com.nuvio.tv.R
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.LibassRenderType
 import com.nuvio.tv.data.local.PlayerSettings
@@ -37,6 +38,7 @@ import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NuvioTheme
 
 private val subtitleColors = listOf(
     Color.White,
@@ -431,6 +433,7 @@ private fun SubtitleOrganizationModeDialog(
     onModeSelected: (SubtitleOrganizationMode) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
     val options = listOf(
         Triple(SubtitleOrganizationMode.NONE, stringResource(R.string.sub_org_none), stringResource(R.string.sub_org_none_desc)),
         Triple(SubtitleOrganizationMode.BY_LANGUAGE, stringResource(R.string.sub_org_by_lang), stringResource(R.string.sub_org_by_lang_desc)),
@@ -462,8 +465,8 @@ private fun SubtitleOrganizationModeDialog(
                         onClick = { onModeSelected(mode) },
                         modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                         colors = androidx.tv.material3.CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) selectedAccent.copy(alpha = 0.22f) else NuvioColors.BackgroundCard,
+                            focusedContainerColor = if (isSelected) selectedAccent.copy(alpha = 0.28f) else NuvioColors.FocusBackground
                         ),
                         shape = androidx.tv.material3.CardDefaults.shape(
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
@@ -482,7 +485,7 @@ private fun SubtitleOrganizationModeDialog(
                                 Text(
                                     text = title,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary
+                                    color = NuvioColors.TextPrimary
                                 )
                                 Spacer(modifier = androidx.compose.ui.Modifier.height(4.dp))
                                 Text(
@@ -495,7 +498,7 @@ private fun SubtitleOrganizationModeDialog(
                                 androidx.tv.material3.Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary
+                                    tint = selectedAccent
                                 )
                             }
                         }
