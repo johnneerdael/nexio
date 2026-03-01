@@ -17,14 +17,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "InAppYouTubeExtractor"
-private const val EXTRACTOR_TIMEOUT_MS = 45_000L
+private const val EXTRACTOR_TIMEOUT_MS = 30_000L
 private const val DEFAULT_USER_AGENT =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/537.36 " +
+    "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+private const val PREFERRED_SEPARATE_CLIENT = "android_vr"
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 private val API_KEY_REGEX = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"")
 private val VISITOR_DATA_REGEX = Regex("\"VISITOR_DATA\":\"([^\"]+)\"")
+private val QUALITY_LABEL_REGEX = Regex("(\\d{2,4})p")
 
 private data class YouTubeClient(
     val key: String,
@@ -75,23 +77,6 @@ private val DEFAULT_HEADERS = mapOf(
 
 private val CLIENTS = listOf(
     YouTubeClient(
-        key = "ios",
-        id = "5",
-        version = "20.10.1",
-        userAgent = "com.google.ios.youtube/20.10.1 (iPhone16,2; U; CPU iOS 17_4 like Mac OS X)",
-        context = mapOf(
-            "clientName" to "IOS",
-            "clientVersion" to "20.10.1",
-            "deviceModel" to "iPhone16,2",
-            "osName" to "iPhone",
-            "osVersion" to "17.4.0.21E219",
-            "platform" to "MOBILE",
-            "hl" to "en",
-            "gl" to "US"
-        ),
-        priority = 0
-    ),
-    YouTubeClient(
         key = "android_vr",
         id = "28",
         version = "1.56.21",
@@ -109,7 +94,7 @@ private val CLIENTS = listOf(
             "hl" to "en",
             "gl" to "US"
         ),
-        priority = 1
+        priority = 0
     ),
     YouTubeClient(
         key = "android",
@@ -123,6 +108,23 @@ private val CLIENTS = listOf(
             "osVersion" to "14",
             "platform" to "MOBILE",
             "androidSdkVersion" to 34,
+            "hl" to "en",
+            "gl" to "US"
+        ),
+        priority = 1
+    ),
+    YouTubeClient(
+        key = "ios",
+        id = "5",
+        version = "20.10.1",
+        userAgent = "com.google.ios.youtube/20.10.1 (iPhone16,2; U; CPU iOS 17_4 like Mac OS X)",
+        context = mapOf(
+            "clientName" to "IOS",
+            "clientVersion" to "20.10.1",
+            "deviceModel" to "iPhone16,2",
+            "osName" to "iPhone",
+            "osVersion" to "17.4.0.21E219",
+            "platform" to "MOBILE",
             "hl" to "en",
             "gl" to "US"
         ),
@@ -315,8 +317,8 @@ class InAppYouTubeExtractor @Inject constructor() {
         }
 
         val bestProgressive = sortCandidates(progressive).firstOrNull()
-        val bestVideo = pickBestForClient(adaptiveVideo, "android_vr")
-        val bestAudio = pickBestForClient(adaptiveAudio, "android_vr")
+        val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
+        val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
 
         val bestCombinedIsManifest = bestManifest != null &&
             (bestProgressive == null || bestManifest.height > bestProgressive.height)
@@ -547,7 +549,7 @@ class InAppYouTubeExtractor @Inject constructor() {
 
     private fun parseQualityLabel(label: String?): Int? {
         if (label.isNullOrBlank()) return null
-        val match = Regex("(\\d{2,4})p").find(label) ?: return null
+        val match = QUALITY_LABEL_REGEX.find(label) ?: return null
         return match.groupValues.getOrNull(1)?.toIntOrNull()
     }
 
@@ -569,8 +571,17 @@ class InAppYouTubeExtractor @Inject constructor() {
         return items.sortedWith(
             compareByDescending<StreamCandidate> { it.score }
                 .thenBy { if (it.hasN) 1 else 0 }
+                .thenBy { containerPreference(it.ext) }
                 .thenBy { it.priority }
         )
+    }
+
+    private fun containerPreference(ext: String): Int {
+        return when (ext.lowercase()) {
+            "mp4", "m4a" -> 0
+            "webm" -> 1
+            else -> 2
+        }
     }
 
     private fun pickBestForClient(items: List<StreamCandidate>, clientKey: String): StreamCandidate? {
