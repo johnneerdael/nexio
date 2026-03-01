@@ -9,7 +9,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
-private const val AFR_PREFLIGHT_PROBE_TIMEOUT_MS = 5500L
+private const val AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS = 35000L
+private const val AFR_PREFLIGHT_FALLBACK_TIMEOUT_MS = 5500L
 
 internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     url: String,
@@ -46,7 +47,7 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     val probeHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }
 
     try {
-        val nextLibDetection = withTimeoutOrNull(AFR_PREFLIGHT_PROBE_TIMEOUT_MS) {
+        val nextLibDetection = withTimeoutOrNull(AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS) {
             withContext(Dispatchers.IO) {
                 FrameRateUtils.detectFrameRateFromNextLib(
                     context = context,
@@ -60,9 +61,9 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
         } else {
             Log.w(
                 PlayerRuntimeController.TAG,
-                "AFR preflight NextLib probe failed/timed out after ${AFR_PREFLIGHT_PROBE_TIMEOUT_MS}ms; trying extractor fallback"
+                "AFR preflight NextLib probe failed/timed out after ${AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS}ms; trying extractor fallback"
             )
-            withTimeoutOrNull(AFR_PREFLIGHT_PROBE_TIMEOUT_MS) {
+            withTimeoutOrNull(AFR_PREFLIGHT_FALLBACK_TIMEOUT_MS) {
                 withContext(Dispatchers.IO) {
                     FrameRateUtils.detectFrameRateFromExtractor(
                         context = context,
