@@ -75,7 +75,7 @@ class TraktLibraryService @Inject constructor(
     private var lastRefreshMs: Long = 0L
 
     private val cacheTtlMs = 60_000L
-    private val metadataHydrationLimit = 250
+    private val metadataHydrationLimit = 30
     private val listFetchConcurrency = 3
     private val metadataFetchSemaphore = Semaphore(5)
 
