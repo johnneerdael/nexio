@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +48,7 @@ internal fun ModernHeroMediaLayer(
     heroBackdropAlpha: Float,
     shouldPlayHeroTrailer: Boolean,
     heroTrailerUrl: String?,
+    heroTrailerAudioUrl: String?,
     heroTrailerAlpha: Float,
     muted: Boolean,
     bgColor: Color,
@@ -83,6 +87,7 @@ internal fun ModernHeroMediaLayer(
         if (shouldPlayHeroTrailer) {
             TrailerPlayer(
                 trailerUrl = heroTrailerUrl,
+                trailerAudioUrl = heroTrailerAudioUrl,
                 isPlaying = true,
                 onEnded = onTrailerEnded,
                 onFirstFrameRendered = onFirstFrameRendered,
@@ -105,13 +110,9 @@ internal fun ModernHeroMediaLayer(
                     val horizontalGradient = Brush.horizontalGradient(
                         colorStops = arrayOf(
                             0.0f to bgColor,
-                            0.08f to bgColor.copy(alpha = 0.95f),
-                            0.16f to bgColor.copy(alpha = 0.86f),
-                            0.24f to bgColor.copy(alpha = 0.74f),
-                            0.34f to bgColor.copy(alpha = 0.58f),
-                            0.46f to bgColor.copy(alpha = 0.40f),
-                            0.62f to bgColor.copy(alpha = 0.24f),
-                            0.80f to bgColor.copy(alpha = 0.10f),
+                            0.18f to bgColor.copy(alpha = 0.82f),
+                            0.40f to bgColor.copy(alpha = 0.48f),
+                            0.70f to bgColor.copy(alpha = 0.14f),
                             1.0f to Color.Transparent
                         ),
                         startX = horizontalGradientStartX,
@@ -133,9 +134,7 @@ internal fun ModernHeroMediaLayer(
                         0.96f to bgColor.copy(alpha = 0.98f),
                         1.0f to bgColor
                     )
-                    onDrawWithContent {
-                        drawContent()
-                        // Blend strip to avoid visible seam at media start edge.
+                    onDrawBehind {
                         drawRect(
                             color = bgColor,
                             size = Size(leftBlendSolidWidth, size.height)
@@ -203,10 +202,13 @@ internal fun HeroTitleBlock(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(titleSpacing)
     ) {
-        if (!preview.logo.isNullOrBlank()) {
+        var logoLoadFailed by remember(preview.logo) { mutableStateOf(false) }
+        val showLogo = !preview.logo.isNullOrBlank() && !logoLoadFailed
+        if (showLogo) {
             AsyncImage(
                 model = logoModel,
                 contentDescription = preview.title,
+                onError = { logoLoadFailed = true },
                 modifier = Modifier
                     .height(100.dp)
                     .widthIn(min = 100.dp, max = 220.dp)
