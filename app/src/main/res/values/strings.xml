@@ -139,9 +139,29 @@
     <string name="account_stat_progress">progress</string>
     <string name="account_stat_watched">watched</string>
     <string name="settings_integrations_section">Integrations</string>
-    <string name="settings_integrations_section_subtitle">Choose TMDB or MDBList settings</string>
+    <string name="settings_integrations_section_subtitle">Choose TMDB, MDBList, or YouTube extractor test</string>
     <string name="settings_tmdb_subtitle">Metadata enrichment controls</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
+    <string name="settings_youtube_extractor_test_title">YouTube Extractor Test</string>
+    <string name="settings_youtube_extractor_test_subtitle">Paste a YouTube URL, extract playback links, and preview in-app</string>
+    <string name="settings_youtube_extractor_test_hub_subtitle">Validate in-app trailer extraction and playback links</string>
+    <string name="settings_youtube_extractor_input_placeholder">https://www.youtube.com/watch?v=...</string>
+    <string name="settings_youtube_extractor_running">Extracting\u2026</string>
+    <string name="settings_youtube_extractor_extract_action">Extract and Preview</string>
+    <string name="settings_youtube_extractor_extract_action_subtitle">Run JS extractor and load video/audio streams</string>
+    <string name="settings_youtube_extractor_pause_preview">Pause Preview</string>
+    <string name="settings_youtube_extractor_play_preview">Play Preview</string>
+    <string name="settings_youtube_extractor_play_preview_subtitle">Toggle trailer playback in the embedded player</string>
+    <string name="settings_youtube_extractor_stream_single">Single stream</string>
+    <string name="settings_youtube_extractor_stream_split">Split A/V</string>
+    <string name="settings_youtube_extractor_video_url">Video URL</string>
+    <string name="settings_youtube_extractor_audio_url">Audio URL</string>
+    <string name="settings_youtube_extractor_audio_url_missing">No separate audio URL returned.</string>
+    <string name="settings_youtube_extractor_preview_idle">Preview paused. Use Play Preview to start playback.</string>
+    <string name="settings_youtube_extractor_error_enter_url">Enter a YouTube URL first.</string>
+    <string name="settings_youtube_extractor_error_failed">Extraction failed or no playable source found.</string>
+    <string name="settings_youtube_extractor_show_less">Show less</string>
+    <string name="settings_youtube_extractor_show_full_url">Show full URL</string>
 
     <!-- PlaybackSettingsScreen -->
     <string name="playback_title">Playback Settings</string>
