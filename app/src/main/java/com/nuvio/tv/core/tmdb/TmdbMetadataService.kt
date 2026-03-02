@@ -411,7 +411,20 @@ class TmdbMetadataService @Inject constructor(
 
                         val backdrop = buildImageUrl(localizedBackdropPath ?: rec.backdropPath, size = "w1280")
                         val fallbackPoster = buildImageUrl(rec.posterPath, size = "w780")
-                        val releaseInfo = (rec.releaseDate ?: rec.firstAirDate)?.take(4)
+
+                        val releaseInfo = if (recTmdbType == "tv") {
+                            val startYear = rec.firstAirDate?.take(4)
+                            if (startYear != null) {
+                                val tvDetails = runCatching {
+                                    tmdbApi.getTvDetails(rec.id, TMDB_API_KEY, normalizedLanguage).body()
+                                }.getOrNull()
+                                val status = tvDetails?.status
+                                val endYear = tvDetails?.lastAirDate?.take(4)
+                                buildShowYearRange(startYear, endYear, status)
+                            } else null
+                        } else {
+                            rec.releaseDate?.take(4)
+                        }
 
                         MetaPreview(
                             id = "tmdb:${rec.id}",
@@ -501,6 +514,15 @@ class TmdbMetadataService @Inject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch collection for $collectionId: ${e.message}")
             emptyList()
+        }
+    }
+
+    private fun buildShowYearRange(startYear: String, endYear: String?, status: String?): String {
+        val isEnded = status != null && status != "Returning Series" && status != "In Production"
+        return when {
+            isEnded && endYear != null && endYear != startYear -> "$startYear - $endYear"
+            isEnded -> startYear
+            else -> "$startYear - "
         }
     }
 

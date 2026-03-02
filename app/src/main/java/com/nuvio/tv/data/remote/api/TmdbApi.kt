@@ -205,6 +205,8 @@ data class TmdbDetailsResponse(
     @Json(name = "original_language") val originalLanguage: String? = null,
     @Json(name = "backdrop_path") val backdropPath: String? = null,
     @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "last_air_date") val lastAirDate: String? = null,
+    @Json(name = "status") val status: String? = null,
     @Json(name = "belongs_to_collection") val belongsToCollection: TmdbCollectionSummary? = null
 )
 

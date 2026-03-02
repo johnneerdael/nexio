@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
@@ -14,10 +15,14 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardStyle
+import com.nuvio.tv.ui.theme.NuvioColors
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -81,21 +86,36 @@ fun CollectionSection(
                     else -> itemFocusRequesters.getOrPut(item.id) { FocusRequester() }
                 }
 
-                GridContentCard(
-                    item = item,
-                    onClick = { onItemClick(item) },
-                    posterCardStyle = landscapeStyle,
-                    showLabel = true,
-                    imageCrossfade = true,
-                    focusRequester = focusRequester,
-                    upFocusRequester = upFocusRequester,
-                    onFocused = {
-                        onItemFocused(item)
-                        if (isRestoreTarget && restoreFocusToken > 0) {
-                            onRestoreFocusHandled()
+                Column {
+                    GridContentCard(
+                        item = item,
+                        onClick = { onItemClick(item) },
+                        posterCardStyle = landscapeStyle,
+                        showLabel = true,
+                        imageCrossfade = true,
+                        focusRequester = focusRequester,
+                        upFocusRequester = upFocusRequester,
+                        onFocused = {
+                            onItemFocused(item)
+                            if (isRestoreTarget && restoreFocusToken > 0) {
+                                onRestoreFocusHandled()
+                            }
                         }
+                    )
+                    val year = item.releaseInfo
+                    if (!year.isNullOrBlank()) {
+                        Text(
+                            text = year,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NuvioColors.TextTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .width(landscapeStyle.width)
+                                .padding(start = 2.dp, end = 2.dp, top = 2.dp)
+                        )
                     }
-                )
+                }
             }
         }
     }
