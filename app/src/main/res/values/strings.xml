@@ -244,6 +244,13 @@
     <string name="sub_org_none_desc">Show subtitles in default addon result order.</string>
     <string name="sub_org_by_lang_desc">Group subtitles by language.</string>
     <string name="sub_org_by_addon_desc">Group subtitles by addon source.</string>
+    <string name="sub_startup_mode_title">Addon Subtitle Loading</string>
+    <string name="sub_startup_mode_fast">Fast startup</string>
+    <string name="sub_startup_mode_preferred">Preferred languages</string>
+    <string name="sub_startup_mode_all">All addon subtitles</string>
+    <string name="sub_startup_mode_fast_desc">Start playback immediately. Selecting addon subtitles may reload the player once.</string>
+    <string name="sub_startup_mode_preferred_desc">Prefetch addon subtitles before playback and attach preferred/secondary language tracks.</string>
+    <string name="sub_startup_mode_all_desc">Prefetch and attach all addon subtitles before playback. Slowest startup.</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Reuse Last Link</string>
