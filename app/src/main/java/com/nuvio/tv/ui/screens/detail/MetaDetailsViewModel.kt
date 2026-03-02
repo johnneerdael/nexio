@@ -1435,7 +1435,13 @@ class MetaDetailsViewModel @Inject constructor(
                 year = year,
                 tmdbId = tmdbId,
                 type = meta.apiType
-            )
+            ) ?: meta.trailerYtIds.firstOrNull()?.let { ytId ->
+                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
+                    youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
+                    title = meta.name,
+                    year = year
+                )
+            }
             val url = source?.videoUrl
             val audioUrl = source?.audioUrl
 
