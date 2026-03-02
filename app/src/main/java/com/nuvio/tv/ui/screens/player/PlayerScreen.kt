@@ -124,10 +124,18 @@ fun PlayerScreen(
     val sourceStreamsFocusRequester = remember { FocusRequester() }
     val skipIntroFocusRequester = remember { FocusRequester() }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
+    val exitPlayer: () -> Unit = {
+        viewModel.stopAndRelease()
+        onBackPress()
+    }
+    val exitPlayerFromError: () -> Unit = {
+        viewModel.stopAndRelease()
+        onPlaybackErrorBack()
+    }
 
     val handleBackPress = {
         if (uiState.error != null) {
-            onPlaybackErrorBack()
+            exitPlayerFromError()
         } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showMoreDialog) {
@@ -153,7 +161,7 @@ fun PlayerScreen(
             viewModel.hideControls()
         } else {
             // If controls are hidden, go back
-            onBackPress()
+            exitPlayer()
         }
     }
 
@@ -163,7 +171,7 @@ fun PlayerScreen(
 
     LaunchedEffect(uiState.playbackEnded, uiState.error) {
         if (uiState.playbackEnded && uiState.error == null) {
-            onBackPress()
+            exitPlayer()
         }
     }
 
@@ -554,7 +562,7 @@ fun PlayerScreen(
         if (uiState.error != null) {
             ErrorOverlay(
                 message = uiState.error!!,
-                onBack = onPlaybackErrorBack
+                onBack = exitPlayerFromError
             )
         }
 
@@ -701,7 +709,7 @@ fun PlayerScreen(
                     )
                 },
                 onResetHideTimer = { viewModel.scheduleHideControls(); viewModel.onUserInteraction() },
-                onBack = onBackPress
+                onBack = exitPlayer
             )
         }
 
