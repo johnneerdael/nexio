@@ -321,7 +321,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                 runAfrPreflightIfEnabled(
                     url = url,
                     headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
                 )
                 player.setMediaSource(mediaSourceFactory.createMediaSource(url, newHeaders))
                 player.playWhenReady = true
@@ -643,7 +644,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
                 runAfrPreflightIfEnabled(
                     url = url,
                     headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
                 )
                 player.setMediaSource(mediaSourceFactory.createMediaSource(url, newHeaders))
                 player.playWhenReady = true

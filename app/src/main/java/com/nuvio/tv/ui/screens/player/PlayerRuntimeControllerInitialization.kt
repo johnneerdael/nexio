@@ -64,7 +64,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             runAfrPreflightIfEnabled(
                 url = url,
                 headers = headers,
-                frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
             )
             val startupSubtitlePreparation = prepareStartupSubtitles(
                 mode = playerSettings.addonSubtitleStartupMode,
