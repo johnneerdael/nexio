@@ -5,8 +5,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +32,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -70,6 +75,7 @@ internal fun ModernSidebarBlurPanel(
     onDrawerItemClick: (String) -> Unit,
     activeProfileName: String,
     activeProfileColorHex: String,
+    showProfileSelector: Boolean,
     onSwitchProfile: () -> Unit
 ) {
     val delayedBlurProgress =
@@ -174,7 +180,7 @@ internal fun ModernSidebarBlurPanel(
             }
         }
 
-        if (activeProfileName.isNotEmpty()) {
+        if (showProfileSelector && activeProfileName.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -241,7 +247,14 @@ private fun SidebarNavigationItem(
                 onFocusChanged(it.isFocused)
             }
             .focusable(enabled = focusEnabled)
-            .clickable(onClick = onClick)
+            .onPreviewKeyEvent { event ->
+                if (focusEnabled && event.type == KeyEventType.KeyUp &&
+                    (event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter)
+                ) {
+                    onClick()
+                    true
+                } else false
+            }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -324,7 +337,14 @@ private fun SidebarProfileItem(
                 onFocusChanged(it.isFocused)
             }
             .focusable(enabled = focusEnabled)
-            .clickable(onClick = onClick)
+            .onPreviewKeyEvent { event ->
+                if (focusEnabled && event.type == KeyEventType.KeyUp &&
+                    (event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter)
+                ) {
+                    onClick()
+                    true
+                } else false
+            }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

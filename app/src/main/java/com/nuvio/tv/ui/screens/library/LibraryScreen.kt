@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -35,13 +40,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
@@ -65,9 +69,11 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
+import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.model.TraktListPrivacy
-import com.nuvio.tv.ui.components.ContentCard
 import com.nuvio.tv.ui.components.EmptyScreenState
+import com.nuvio.tv.ui.components.GridContentCard
+import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
@@ -76,6 +82,8 @@ import com.nuvio.tv.ui.util.formatAddonTypeLabel
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+
+private const val KEY_REPEAT_THROTTLE_MS = 80L
 
 @Composable
 private fun localizedTypeLabel(key: String): String = when (key.lowercase()) {
@@ -96,7 +104,20 @@ fun LibraryScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val primaryFocusRequester = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
     var pendingPrimaryFocus by remember { mutableStateOf(true) }
+    var lastFocusedPosterKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val visibleItemKeys = remember(uiState.visibleItems) {
+        uiState.visibleItems.map { "${it.type}:${it.id}" }
+    }
+    val visibleItemIndexByKey = remember(visibleItemKeys) {
+        visibleItemKeys.withIndex().associate { (index, key) -> key to index }
+    }
+    val posterFocusRequesters = remember(visibleItemKeys) {
+        visibleItemKeys.associateWith { FocusRequester() }
+    }
+    val firstVisiblePosterKey = visibleItemKeys.firstOrNull()
+    val posterCardStyle = PosterCardDefaults.Style
 
     LaunchedEffect(uiState.isLoading) {
         if (uiState.isLoading) {
@@ -106,12 +127,42 @@ fun LibraryScreen(
 
     LaunchedEffect(uiState.isLoading, uiState.sourceMode, uiState.listTabs.size) {
         if (!uiState.isLoading && pendingPrimaryFocus) {
-            val focused = runCatching { primaryFocusRequester.requestFocus() }.isSuccess
+            val restoreKey = lastFocusedPosterKey
+            val restoreIndex = restoreKey?.let { visibleItemIndexByKey[it] }
+            val restoreRequester = restoreKey?.let { posterFocusRequesters[it] }
+
+            var focused = false
+            if (restoreIndex != null && restoreRequester != null) {
+                runCatching { gridState.scrollToItem(restoreIndex) }
+                focused = runCatching { restoreRequester.requestFocus() }.isSuccess
+                if (!focused) {
+                    delay(16)
+                    focused = runCatching { restoreRequester.requestFocus() }.isSuccess
+                }
+            }
+
+            if (!focused) {
+                focused = runCatching { primaryFocusRequester.requestFocus() }.isSuccess
+            }
             if (!focused) {
                 delay(16)
                 runCatching { primaryFocusRequester.requestFocus() }
             }
             pendingPrimaryFocus = false
+        }
+    }
+
+    LaunchedEffect(uiState.sortSelectionVersion, firstVisiblePosterKey) {
+        if (uiState.sortSelectionVersion <= 0L) return@LaunchedEffect
+        val targetKey = firstVisiblePosterKey ?: return@LaunchedEffect
+        runCatching { gridState.scrollToItem(0) }
+        var focused = false
+        repeat(6) {
+            focused = posterFocusRequesters[targetKey]
+                ?.let { requester -> runCatching { requester.requestFocus() }.isSuccess }
+                ?: false
+            if (focused) return@LaunchedEffect
+            delay(24)
         }
     }
 
@@ -148,18 +199,32 @@ fun LibraryScreen(
         return
     }
 
-    LazyColumn(
+    val lastKeyRepeatTime = remember { longArrayOf(0L) }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = posterCardStyle.width),
+        state = gridState,
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background),
-        contentPadding = PaddingValues(vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .background(NuvioColors.Background)
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastKeyRepeatTime[0] < KEY_REPEAT_THROTTLE_MS) {
+                        return@onPreviewKeyEvent true
+                    }
+                    lastKeyRepeatTime[0] = now
+                }
+                false
+            },
+        contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 48.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
@@ -180,7 +245,7 @@ fun LibraryScreen(
             }
         }
 
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             LibrarySelectorsRow(
                 sourceMode = uiState.sourceMode,
                 listTabs = uiState.listTabs,
@@ -210,7 +275,7 @@ fun LibraryScreen(
         }
 
         if (uiState.sourceMode == LibrarySourceMode.TRAKT) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LibraryActionsRow(
                     pending = uiState.pendingOperation,
                     isSyncing = uiState.isSyncing,
@@ -220,8 +285,8 @@ fun LibraryScreen(
             }
         }
 
-        item {
-            if (uiState.visibleItems.isEmpty()) {
+        if (uiState.visibleItems.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 val selectedTypeLabel = uiState.selectedTypeTab?.let { localizedTypeLabel(it.key) }?.lowercase() ?: stringResource(R.string.library_type_items)
                 val title = when (uiState.sourceMode) {
                     LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_title, selectedTypeLabel)
@@ -239,26 +304,24 @@ fun LibraryScreen(
             }
         }
 
-        if (uiState.visibleItems.isNotEmpty()) {
-            item {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 48.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
-                        ContentCard(
-                            item = item.toMetaPreview(),
-                            onClick = {
-                                onNavigateToDetail(item.id, item.type, item.addonBaseUrl)
-                            }
-                        )
-                    }
+        items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
+            val focusKey = "${item.type}:${item.id}"
+            GridContentCard(
+                item = item.toMetaPreview().copy(posterShape = PosterShape.POSTER),
+                posterCardStyle = posterCardStyle,
+                focusRequester = posterFocusRequesters[focusKey],
+                showLabel = true,
+                onFocused = {
+                    lastFocusedPosterKey = focusKey
+                },
+                onClick = {
+                    lastFocusedPosterKey = focusKey
+                    onNavigateToDetail(item.id, item.type, item.addonBaseUrl)
                 }
-            }
+            )
         }
 
-        item { Spacer(modifier = Modifier.height(8.dp)) }
+        item(span = { GridItemSpan(maxLineSpan) }) { Spacer(modifier = Modifier.height(8.dp)) }
     }
 
     if (uiState.showManageDialog && uiState.sourceMode == LibrarySourceMode.TRAKT) {
@@ -303,7 +366,6 @@ fun LibraryScreen(
 
     val transientMessage = uiState.transientMessage
     if (!transientMessage.isNullOrBlank()) {
-        val transientMessageBg = NuvioColors.BackgroundElevated
         Box(
             modifier = Modifier
                 .fillMaxSize(),
@@ -315,16 +377,7 @@ fun LibraryScreen(
                 color = NuvioColors.TextPrimary,
                 modifier = Modifier
                     .padding(top = 24.dp)
-                    .drawWithCache {
-                        val radius = 10.dp.toPx()
-                        val bgColor = transientMessageBg
-                        onDrawBehind {
-                            drawRoundRect(
-                                color = bgColor,
-                                cornerRadius = CornerRadius(radius, radius)
-                            )
-                        }
-                    }
+                    .background(NuvioColors.BackgroundElevated, RoundedCornerShape(10.dp))
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             )
         }
@@ -360,7 +413,6 @@ private fun LibrarySelectorsRow(
             LibraryDropdownPicker(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 48.dp)
                     .focusRequester(primaryFocusRequester),
                 title = stringResource(R.string.library_filter_list),
                 value = selectedListLabel,
@@ -377,7 +429,6 @@ private fun LibrarySelectorsRow(
             } else {
                 Modifier
                     .width(420.dp)
-                    .padding(start = 48.dp, end = 48.dp)
                     .focusRequester(primaryFocusRequester)
             },
             title = stringResource(R.string.library_filter_type),
@@ -390,11 +441,10 @@ private fun LibrarySelectorsRow(
             }
         )
 
-        if (sourceMode == LibrarySourceMode.TRAKT) {
+        if (sortOptions.isNotEmpty()) {
             LibraryDropdownPicker(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 48.dp),
+                    .weight(1f),
                 title = stringResource(R.string.library_filter_sort),
                 value = selectedSortLabel,
                 expanded = expandedPicker == "sort",
@@ -528,9 +578,7 @@ private fun LibraryActionsRow(
     onRefresh: () -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 48.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Button(
@@ -585,20 +633,10 @@ private fun ManageListsDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        val manageDialogBg = NuvioColors.BackgroundElevated
         Box(
             modifier = Modifier
                 .width(620.dp)
-                .drawWithCache {
-                    val radius = 16.dp.toPx()
-                    val bgColor = manageDialogBg
-                    onDrawBehind {
-                        drawRoundRect(
-                            color = bgColor,
-                            cornerRadius = CornerRadius(radius, radius)
-                        )
-                    }
-                }
+                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {

@@ -11,6 +11,7 @@ import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
+import com.nuvio.tv.data.local.AddonSubtitleStartupMode
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.TrailerSettingsDataStore
@@ -83,6 +84,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setPreferredAudioLanguage(language: String) {
         playerSettingsDataStore.setPreferredAudioLanguage(language)
+    }
+
+    suspend fun setSecondaryPreferredAudioLanguage(language: String?) {
+        playerSettingsDataStore.setSecondaryPreferredAudioLanguage(language)
     }
 
     suspend fun setLoadingOverlayEnabled(enabled: Boolean) {
@@ -171,6 +176,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
         playerSettingsDataStore.setSubtitleOrganizationMode(mode)
+    }
+
+    suspend fun setAddonSubtitleStartupMode(mode: AddonSubtitleStartupMode) {
+        playerSettingsDataStore.setAddonSubtitleStartupMode(mode)
     }
 
     // Buffer settings functions
@@ -321,6 +330,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(enabled)
+    }
+
+    suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
+        playerSettingsDataStore.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
