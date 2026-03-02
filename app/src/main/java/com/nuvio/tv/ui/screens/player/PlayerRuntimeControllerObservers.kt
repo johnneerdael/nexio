@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 internal fun PlayerRuntimeController.fetchAddonSubtitles() {
     val id = contentId ?: return
@@ -255,31 +256,7 @@ internal fun PlayerRuntimeController.retryCurrentStreamFromStartAfter416() {
     if (hasRetriedCurrentStreamAfter416) return
     hasRetriedCurrentStreamAfter416 = true
     pendingResumeProgress = null
-    _uiState.update {
-        it.copy(
-            pendingSeekPosition = null,
-            error = null,
-            showLoadingOverlay = it.loadingOverlayEnabled
-        )
-    }
-    _exoPlayer?.let { player ->
-        runCatching {
-            player.stop()
-            player.clearMediaItems()
-            player.setMediaSource(mediaSourceFactory.createMediaSource(currentStreamUrl, currentHeaders))
-            player.seekTo(0L)
-            player.prepare()
-            player.playWhenReady = true
-        }.onFailure { e ->
-            _uiState.update {
-                it.copy(
-                    error = e.message ?: "Playback error",
-                    showLoadingOverlay = false,
-                    showPauseOverlay = false
-                )
-            }
-        }
-    }
+    scheduleDeferredPlayerReinitialize(fromPositionMs = 0L, clearResumeProgress = true)
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -294,67 +271,38 @@ internal fun PlayerRuntimeController.retryCurrentStreamAfterTimeout(fromPosition
             "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} " +
             "fromPositionMs=$fromPositionMs"
     )
-    _uiState.update {
-        it.copy(
-            error = null,
-            showLoadingOverlay = it.loadingOverlayEnabled
-        )
-    }
-    _exoPlayer?.let { player ->
-        runCatching {
-            player.stop()
-            player.clearMediaItems()
-            player.setMediaSource(mediaSourceFactory.createMediaSource(currentStreamUrl, currentHeaders))
-            if (fromPositionMs > 0L) {
-                player.seekTo(fromPositionMs)
-            }
-            player.prepare()
-            player.playWhenReady = true
-        }.onFailure { e ->
-            _uiState.update {
-                it.copy(
-                    error = e.message ?: "Playback error",
-                    showLoadingOverlay = false,
-                    showPauseOverlay = false
-                )
-            }
-        }
-    }
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.retryCurrentStreamAfterUnexpectedNpe(fromPositionMs: Long) {
-    _uiState.update {
-        it.copy(
-            error = null,
-            showLoadingOverlay = it.loadingOverlayEnabled
-        )
-    }
-    _exoPlayer?.let { player ->
-        runCatching {
-            player.stop()
-            player.clearMediaItems()
-            player.setMediaSource(mediaSourceFactory.createMediaSource(currentStreamUrl, currentHeaders))
-            if (fromPositionMs > 0L) {
-                player.seekTo(fromPositionMs)
-            }
-            player.prepare()
-            player.playWhenReady = true
-        }.onFailure { e ->
-            _uiState.update {
-                it.copy(
-                    error = e.message ?: "Playback error",
-                    showLoadingOverlay = false,
-                    showPauseOverlay = false
-                )
-            }
-        }
-    }
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamAfterMediaPeriodHolderCrash(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamWithSafeAudioFallback(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamWithAudioDisabled(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
 internal fun PlayerRuntimeController.retryCurrentStreamWithDolbyVisionFallback(fromPositionMs: Long) {
-    pendingResumeProgress = null
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs, clearResumeProgress = true)
+}
+
+private fun PlayerRuntimeController.scheduleDeferredPlayerReinitialize(
+    fromPositionMs: Long,
+    clearResumeProgress: Boolean = false
+) {
+    if (clearResumeProgress) {
+        pendingResumeProgress = null
+    }
     _uiState.update {
         it.copy(
             pendingSeekPosition = if (fromPositionMs > 0L) fromPositionMs else null,
@@ -362,6 +310,19 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithDolbyVisionFallback(f
             showLoadingOverlay = it.loadingOverlayEnabled
         )
     }
-    releasePlayer()
-    initializePlayer(currentStreamUrl, currentHeaders)
+    scope.launch {
+        yield()
+        runCatching {
+            releasePlayer()
+            initializePlayer(currentStreamUrl, currentHeaders)
+        }.onFailure { e ->
+            _uiState.update {
+                it.copy(
+                    error = e.message ?: "Playback error",
+                    showLoadingOverlay = false,
+                    showPauseOverlay = false
+                )
+            }
+        }
+    }
 }
