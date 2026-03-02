@@ -204,7 +204,8 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(item: MetaPreview) {
         itemId = item.id,
         title = item.name,
         releaseInfo = item.releaseInfo,
-        apiType = item.apiType
+        apiType = item.apiType,
+        fallbackYtId = item.trailerYtIds.firstOrNull()
     )
 }
 
@@ -212,7 +213,8 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
     itemId: String,
     title: String,
     releaseInfo: String?,
-    apiType: String
+    apiType: String,
+    fallbackYtId: String? = null
 ) {
     if (startupGracePeriodActive) return
     if (activeTrailerPreviewItemId != itemId) {
@@ -248,9 +250,17 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
         }
 
         if (trailerSource?.videoUrl.isNullOrBlank()) {
-            trailerPreviewNegativeCache.add(itemId)
-            trailerPreviewUrlsState.remove(itemId)
-            trailerPreviewAudioUrlsState.remove(itemId)
+            val fallbackUrl = fallbackYtId?.let { "https://www.youtube.com/watch?v=$it" }
+            if (fallbackUrl != null) {
+                if (trailerPreviewUrlsState[itemId] != fallbackUrl) {
+                    trailerPreviewUrlsState[itemId] = fallbackUrl
+                }
+                trailerPreviewAudioUrlsState.remove(itemId)
+            } else {
+                trailerPreviewNegativeCache.add(itemId)
+                trailerPreviewUrlsState.remove(itemId)
+                trailerPreviewAudioUrlsState.remove(itemId)
+            }
         } else {
             val videoUrl = trailerSource.videoUrl
             if (trailerPreviewUrlsState[itemId] != videoUrl) {
@@ -306,7 +316,8 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         description = meta.description ?: currentItem.description,
         releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
         imdbRating = meta.imdbRating ?: currentItem.imdbRating,
-        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
+        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres,
+        trailerYtIds = if (meta.trailerYtIds.isNotEmpty()) meta.trailerYtIds else currentItem.trailerYtIds
     )
 
     catalogsMap.forEach { (key, row) ->

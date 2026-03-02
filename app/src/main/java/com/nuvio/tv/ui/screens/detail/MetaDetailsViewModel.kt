@@ -1381,6 +1381,7 @@ class MetaDetailsViewModel @Inject constructor(
                 type = meta.apiType
             )
             val url = source?.videoUrl
+                ?: meta.trailerYtIds.firstOrNull()?.let { "https://www.youtube.com/watch?v=$it" }
             val audioUrl = source?.audioUrl
 
             _uiState.update { state ->
