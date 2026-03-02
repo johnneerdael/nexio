@@ -696,7 +696,7 @@ fun ModernHomeContent(
                         }
                         false
                     },
-                contentPadding = PaddingValues(bottom = 0.dp),
+                contentPadding = PaddingValues(bottom = rowsViewportHeight),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 itemsIndexed(
