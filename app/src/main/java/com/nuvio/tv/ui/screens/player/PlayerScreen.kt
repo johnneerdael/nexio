@@ -124,6 +124,7 @@ fun PlayerScreen(
     val streamsFocusRequester = remember { FocusRequester() }
     val sourceStreamsFocusRequester = remember { FocusRequester() }
     val skipIntroFocusRequester = remember { FocusRequester() }
+    var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
     val exitPlayer: () -> Unit = {
         viewModel.stopAndRelease()
@@ -153,7 +154,7 @@ fun PlayerScreen(
             } else {
                 viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
             }
-        } else if (uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed) {
+        } else if (uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed && !uiState.showControls) {
             viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
         } else if (uiState.showNextEpisodeCard && uiState.nextEpisode != null) {
             viewModel.onEvent(PlayerEvent.OnDismissNextEpisodeCard)
@@ -411,7 +412,7 @@ fun PlayerScreen(
                             if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnToggleControls)
                             } else {
-                                val skipVisible = uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed
+                                val skipVisible = skipButtonActuallyVisible
                                 if (skipVisible) {
                                     try {
                                         skipIntroFocusRequester.requestFocus()
@@ -569,17 +570,19 @@ fun PlayerScreen(
 
         // Skip Intro button (bottom-left, independent of controls)
         SkipIntroButton(
-            interval = uiState.activeSkipInterval,
+            interval = if (uiState.showPauseOverlay || uiState.showLoadingOverlay) null else uiState.activeSkipInterval,
             dismissed = uiState.skipIntervalDismissed,
             controlsVisible = uiState.showControls,
             onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissSkipIntro) },
+            onVisibilityChanged = { skipButtonActuallyVisible = it },
+            onFocused = { viewModel.scheduleHideControls() },
             focusRequester = skipIntroFocusRequester,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 32.dp, bottom = if (uiState.showControls) 120.dp else 32.dp)
+                .padding(start = 32.dp, bottom = 120.dp)
+                
         )
-
         NextEpisodeCardOverlay(
             nextEpisode = uiState.nextEpisode,
             visible = uiState.showNextEpisodeCard &&
@@ -711,7 +714,8 @@ fun PlayerScreen(
                     )
                 },
                 onResetHideTimer = { viewModel.scheduleHideControls(); viewModel.onUserInteraction() },
-                onBack = exitPlayer
+                onBack = onBackPress,
+                skipButtonVisible = skipButtonActuallyVisible
             )
         }
 
@@ -952,7 +956,8 @@ private fun PlayerControlsOverlay(
     onToggleMoreActions: () -> Unit,
     onOpenInExternalPlayer: () -> Unit,
     onResetHideTimer: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    skipButtonVisible: Boolean = false
 ) {
     val customPlayPainter = rememberRawSvgPainter(R.raw.ic_player_play)
     val customPausePainter = rememberRawSvgPainter(R.raw.ic_player_pause)
@@ -1001,7 +1006,7 @@ private fun PlayerControlsOverlay(
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 32.dp, vertical = 24.dp)
         ) {
-            val skipIntroVisible = uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed
+            val skipIntroVisible = uiState.activeSkipInterval != null
 
             AnimatedVisibility(
                 visible = !skipIntroVisible,

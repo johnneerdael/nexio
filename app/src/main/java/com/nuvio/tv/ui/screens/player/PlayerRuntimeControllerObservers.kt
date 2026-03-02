@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.util.Log
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -242,9 +243,12 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     if (!skipIntroEnabled) return
     if (id.isNullOrBlank()) return
 
+    // Prefer videoId over contentId — videoId carries the season/episode-specific ID
+    val effectiveId = currentVideoId?.takeIf { it.isNotBlank() } ?: id
+
     // MAL ID format: "mal:57658:1" (malId:episode)
-    if (id.startsWith("mal:")) {
-        val parts = id.split(":")
+    if (effectiveId.startsWith("mal:")) {
+        val parts = effectiveId.split(":")
         val malId = parts.getOrNull(1) ?: return
         val malEpisode = parts.getOrNull(2)?.toIntOrNull() ?: episode ?: return
         val key = "mal:$malId:$malEpisode"
@@ -257,8 +261,8 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
     }
 
     // Kitsu ID format: "kitsu:12345:1" (kitsuId:episode)
-    if (id.startsWith("kitsu:")) {
-        val parts = id.split(":")
+    if (effectiveId.startsWith("kitsu:")) {
+        val parts = effectiveId.split(":")
         val kitsuId = parts.getOrNull(1) ?: return
         val kitsuEpisode = parts.getOrNull(2)?.toIntOrNull() ?: episode ?: return
         val key = "kitsu:$kitsuId:$kitsuEpisode"
@@ -270,7 +274,7 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         return
     }
 
-    val imdbId = id.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
+    val imdbId = effectiveId.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
     if (season == null || episode == null) return
 
     val key = "$imdbId:$season:$episode"
