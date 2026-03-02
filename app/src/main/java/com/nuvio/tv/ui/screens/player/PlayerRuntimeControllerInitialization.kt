@@ -51,7 +51,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             runAfrPreflightIfEnabled(
                 url = url,
                 headers = headers,
-                frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
             )
             val useLibass = false // Temporarily disabled for maintenance
             val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
