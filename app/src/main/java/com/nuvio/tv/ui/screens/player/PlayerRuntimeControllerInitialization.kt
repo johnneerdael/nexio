@@ -151,8 +151,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             val safeAudioModeEnabled = safeAudioForcedStreamUrls.contains(url)
             val audioDisabledForStream = audioDisabledForcedStreamUrls.contains(url)
+            val vc1TrackSelectionBypassActive = vc1TrackSelectionBypassStreamUrls.contains(url)
             isSafeAudioModeActiveForCurrentPlayback = safeAudioModeEnabled
             isAudioDisabledForCurrentPlayback = audioDisabledForStream
+            isVc1TrackSelectionBypassActiveForCurrentPlayback = vc1TrackSelectionBypassActive
 
             
             trackSelector = DefaultTrackSelector(context).apply {
@@ -174,6 +176,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 if (audioDisabledForStream) {
                     setParameters(
                         buildUponParameters().setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO))
+                    )
+                }
+                if (vc1TrackSelectionBypassActive) {
+                    setParameters(
+                        buildUponParameters()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                            .setExceedVideoConstraintsIfNecessary(true)
+                            .setExceedRendererCapabilitiesIfNecessary(true)
+                            .setForceHighestSupportedBitrate(true)
                     )
                 }
 
@@ -247,15 +258,29 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             DolbyVisionCompatibility.setMapDv7ToHevcEnabled(mapDv7ToHevcEnabled)
             isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
             val codecSelector = createDolbyVisionFallbackCodecSelector(mapDv7ToHevcEnabled)
+            val vc1SoftwareFallbackActive = vc1SoftwarePreferredStreamUrls.contains(url)
+            isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
+            val effectiveDecoderPriority = if (vc1SoftwareFallbackActive) {
+                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+            } else {
+                playerSettings.decoderPriority
+            }
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
                 subtitleDelayUsProvider = subtitleDelayUs::get,
                 safeAudioModeEnabled = safeAudioModeEnabled
             )
-                .setExtensionRendererMode(playerSettings.decoderPriority)
+                .setExtensionRendererMode(effectiveDecoderPriority)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector(codecSelector)
                 .applyMapDv7ToHevcIfSupported(mapDv7ToHevcEnabled)
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "VIDEO_PATH: decoderMode=${describeExtensionRendererMode(effectiveDecoderPriority)} " +
+                    "vc1FallbackActive=$vc1SoftwareFallbackActive " +
+                    "vc1TrackBypassActive=$vc1TrackSelectionBypassActive " +
+                    "host=${url.safeHost()}"
+            )
 
             _exoPlayer = if (useLibass) {
                 
@@ -398,6 +423,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             }
                             // Re-evaluate subtitle auto-selection once player is ready.
                             tryAutoSelectPreferredSubtitleFromAvailableTracks()
+                            maybeScheduleFirstFrameWatchdog()
+                        } else if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
+                            cancelFirstFrameWatchdog()
                         }
                     
                         
@@ -439,6 +467,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onRenderedFirstFrame() {
+                        cancelFirstFrameWatchdog()
                         val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
                             .coerceAtLeast(0L)
                         val conversionCalls = DoviBridge.getConversionCallCount()
@@ -462,6 +491,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        cancelFirstFrameWatchdog()
                         if (error.isDolbyVisionDecoderFailure() &&
                             !isMapDv7ToHevcActiveForCurrentPlayback
                         ) {
@@ -744,6 +774,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
 }
 
 internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
+    cancelFirstFrameWatchdog()
     hasRenderedFirstFrame = false
     shouldEnforceAutoplayOnFirstReady = true
     userPausedManually = false
@@ -752,6 +783,8 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     hasAttemptedDv7ToDv81ForCurrentPlayback = false
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
+    isVc1SoftwareFallbackActiveForCurrentPlayback = false
+    isVc1TrackSelectionBypassActiveForCurrentPlayback = false
     isSafeAudioModeActiveForCurrentPlayback = false
     isAudioDisabledForCurrentPlayback = false
     dv7ToDv81BridgeVersionForCurrentPlayback = null
@@ -760,6 +793,15 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     pendingSeekTelemetryRequestedAtMs = 0L
     pendingSeekTelemetryTargetMs = -1L
     lastKnownDuration = 0L
+    currentStreamHasVideoTrack = false
+    currentVideoTrackIsLikelyVc1 = false
+    currentVideoTrackMimeType = null
+    currentVideoTrackCodecs = null
+    currentVideoTrackWidth = 0
+    currentVideoTrackHeight = 0
+    currentVideoTrackSelected = false
+    currentVideoTrackBestSupport = C.FORMAT_UNSUPPORTED_TYPE
+    lastLoggedVideoTrackSignature = null
     _uiState.update { state ->
         state.copy(
             showLoadingOverlay = state.loadingOverlayEnabled,
@@ -916,6 +958,15 @@ private fun createDolbyVisionFallbackCodecSelector(
                 requiresTunnelingDecoder
             )
         }
+    }
+}
+
+private fun describeExtensionRendererMode(mode: Int): String {
+    return when (mode) {
+        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF -> "off"
+        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON -> "on"
+        DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER -> "prefer"
+        else -> mode.toString()
     }
 }
 
