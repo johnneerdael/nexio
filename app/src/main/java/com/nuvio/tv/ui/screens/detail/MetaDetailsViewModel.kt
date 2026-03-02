@@ -145,8 +145,19 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun updateNextToWatch(nextToWatch: NextToWatch) {
         _uiState.update { state ->
-            if (state.nextToWatch == nextToWatch) {
-                state
+            if (state.nextToWatch == nextToWatch) return@update state
+            val nextSeason = nextToWatch.nextSeason
+            val meta = state.meta
+            val shouldSwitchSeason = nextSeason != null &&
+                nextSeason != state.selectedSeason &&
+                meta != null &&
+                state.seasons.contains(nextSeason)
+            if (shouldSwitchSeason && meta != null && nextSeason != null) {
+                state.copy(
+                    nextToWatch = nextToWatch,
+                    selectedSeason = nextSeason,
+                    episodesForSeason = getEpisodesForSeason(meta.videos, nextSeason)
+                )
             } else {
                 state.copy(nextToWatch = nextToWatch)
             }
