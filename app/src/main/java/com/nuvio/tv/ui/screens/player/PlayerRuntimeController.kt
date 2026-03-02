@@ -54,6 +54,7 @@ class PlayerRuntimeController(
     companion object {
         internal const val TAG = "PlayerViewModel"
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
+        internal const val FIRST_FRAME_TIMEOUT_MS = 12_000L
         internal const val MAX_TIMEOUT_RECOVERY_ATTEMPTS = 2
         internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "nuvio-addon-sub:"
         internal val PORTUGUESE_BRAZILIAN_TAGS = listOf(
@@ -134,6 +135,7 @@ class PlayerRuntimeController(
         get() = _exoPlayer
 
     internal var progressJob: Job? = null
+    internal var firstFrameWatchdogJob: Job? = null
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null
     internal var watchProgressSaveJob: Job? = null
@@ -201,10 +203,14 @@ class PlayerRuntimeController(
     internal var hasRetriedCurrentStreamAfterMediaPeriodHolderCrash: Boolean = false
     internal var timeoutRecoveryAttempts: Int = 0
     internal val dv7ToHevcForcedStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val vc1SoftwarePreferredStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal val audioDisabledForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false
     internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
+    internal var isVc1SoftwareFallbackActiveForCurrentPlayback: Boolean = false
+    internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
     internal var isSafeAudioModeActiveForCurrentPlayback: Boolean = false
     internal var isAudioDisabledForCurrentPlayback: Boolean = false
     internal var hasAttemptedDv7ToDv81ForCurrentPlayback: Boolean = false
@@ -216,6 +222,15 @@ class PlayerRuntimeController(
     internal var currentScrobbleItem: TraktScrobbleItem? = null
     internal var hasSentScrobbleStartForCurrentItem: Boolean = false
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false
+    internal var currentStreamHasVideoTrack: Boolean = false
+    internal var currentVideoTrackIsLikelyVc1: Boolean = false
+    internal var currentVideoTrackMimeType: String? = null
+    internal var currentVideoTrackCodecs: String? = null
+    internal var currentVideoTrackWidth: Int = 0
+    internal var currentVideoTrackHeight: Int = 0
+    internal var currentVideoTrackSelected: Boolean = false
+    internal var currentVideoTrackBestSupport: Int = C.FORMAT_UNSUPPORTED_TYPE
+    internal var lastLoggedVideoTrackSignature: String? = null
     internal var episodeStreamsJob: Job? = null
     internal var episodeStreamsCacheRequestKey: String? = null
     internal val streamCacheKey: String? by lazy {

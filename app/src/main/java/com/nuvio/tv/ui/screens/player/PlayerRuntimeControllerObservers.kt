@@ -3,10 +3,14 @@ package com.nuvio.tv.ui.screens.player
 import android.net.Uri
 import android.util.Log
 import com.nuvio.tv.core.player.OpenSubtitlesHasher
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
 import com.nuvio.tv.data.local.FrameRateMatchingMode
 import com.nuvio.tv.domain.model.Subtitle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
@@ -354,10 +358,80 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithDolbyVisionFallback(f
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs, clearResumeProgress = true)
 }
 
+internal fun PlayerRuntimeController.retryCurrentStreamWithVc1SoftwareFallback(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamWithVc1TrackSelectionBypass(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.cancelFirstFrameWatchdog() {
+    firstFrameWatchdogJob?.cancel()
+    firstFrameWatchdogJob = null
+}
+
+internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
+    if (hasRenderedFirstFrame || !currentStreamHasVideoTrack) return
+    val player = _exoPlayer ?: return
+    if (player.playbackState != Player.STATE_READY || !player.playWhenReady) return
+    if (firstFrameWatchdogJob?.isActive == true) return
+
+    firstFrameWatchdogJob = scope.launch {
+        delay(PlayerRuntimeController.FIRST_FRAME_TIMEOUT_MS)
+
+        val livePlayer = _exoPlayer ?: return@launch
+        if (hasRenderedFirstFrame) return@launch
+        if (livePlayer.playbackState != Player.STATE_READY || !livePlayer.playWhenReady) return@launch
+
+        val currentPosition = livePlayer.currentPosition
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "VIDEO_TIMEOUT: no first frame after ${PlayerRuntimeController.FIRST_FRAME_TIMEOUT_MS}ms " +
+                "mime=${currentVideoTrackMimeType ?: "unknown"} " +
+                "codecs=${currentVideoTrackCodecs ?: "unknown"} " +
+                "size=${currentVideoTrackWidth}x${currentVideoTrackHeight} " +
+                "vc1=$currentVideoTrackIsLikelyVc1 " +
+                "selected=$currentVideoTrackSelected " +
+                "bestSupport=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
+                "vc1FallbackActive=$isVc1SoftwareFallbackActiveForCurrentPlayback " +
+                "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback " +
+                "positionMs=$currentPosition " +
+                "host=${Uri.parse(currentStreamUrl).host ?: "unknown"}"
+        )
+
+        if (currentVideoTrackIsLikelyVc1 && !isVc1SoftwareFallbackActiveForCurrentPlayback) {
+            vc1SoftwarePreferredStreamUrls.add(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TIMEOUT: retrying with VC-1 software-preferred decoder path " +
+                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithVc1SoftwareFallback(currentPosition)
+            return@launch
+        }
+
+        if (currentVideoTrackIsLikelyVc1 &&
+            !currentVideoTrackSelected &&
+            isVc1SoftwareFallbackActiveForCurrentPlayback &&
+            !isVc1TrackSelectionBypassActiveForCurrentPlayback
+        ) {
+            vc1TrackSelectionBypassStreamUrls.add(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TIMEOUT: retrying with VC-1 track-selection bypass " +
+                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithVc1TrackSelectionBypass(currentPosition)
+        }
+    }
+}
+
 private fun PlayerRuntimeController.scheduleDeferredPlayerReinitialize(
     fromPositionMs: Long,
     clearResumeProgress: Boolean = false
 ) {
+    cancelFirstFrameWatchdog()
     if (clearResumeProgress) {
         pendingResumeProgress = null
     }
