@@ -27,6 +27,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -132,6 +133,8 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+
+val LocalSidebarExpanded = compositionLocalOf { false }
 
 data class DrawerItem(
     val route: String,
@@ -694,11 +697,15 @@ private fun LegacySidebarScaffold(
                     }
                 }
         ) {
-            NuvioNavHost(
-                navController = navController,
-                startDestination = startDestination,
-                hideBuiltInHeaders = hideBuiltInHeaders
-            )
+            CompositionLocalProvider(
+                LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open)
+            ) {
+                NuvioNavHost(
+                    navController = navController,
+                    startDestination = startDestination,
+                    hideBuiltInHeaders = hideBuiltInHeaders
+                )
+            }
         }
     }
 }
@@ -1033,11 +1040,15 @@ private fun ModernSidebarScaffold(
                     }
                 }
         ) {
-            NuvioNavHost(
-                navController = navController,
-                startDestination = startDestination,
-                hideBuiltInHeaders = hideBuiltInHeaders
-            )
+            CompositionLocalProvider(
+                LocalSidebarExpanded provides isSidebarExpanded
+            ) {
+                NuvioNavHost(
+                    navController = navController,
+                    startDestination = startDestination,
+                    hideBuiltInHeaders = hideBuiltInHeaders
+                )
+            }
         }
 
         if (showSidebar && (sidebarVisible || sidebarWidth > 0.dp)) {
