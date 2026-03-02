@@ -100,9 +100,14 @@
     <string name="appearance_language_dialog_title">Choose Language</string>
     <string name="appearance_language_restart_hint">Restart the app to apply the language change.</string>
 
+    <!-- Font -->
+    <string name="appearance_font">App Font</string>
+    <string name="appearance_font_subtitle">Choose your preferred font</string>
+    <string name="appearance_font_dialog_title">Choose Font</string>
+
     <!-- ThemeSettingsScreen -->
     <string name="appearance_title">Appearance</string>
-    <string name="appearance_subtitle">Choose your color theme and language</string>
+    <string name="appearance_subtitle">Choose your color theme, font and language</string>
     <string name="cd_selected">Selected</string>
 
     <!-- AboutScreen -->
