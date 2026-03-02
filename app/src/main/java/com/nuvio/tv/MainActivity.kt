@@ -104,6 +104,7 @@ import com.nuvio.tv.data.local.AppOnboardingDataStore
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
+import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.core.sync.ProfileSyncService
@@ -141,6 +142,7 @@ data class DrawerItem(
 
 private data class MainUiPrefs(
     val theme: AppTheme = AppTheme.WHITE,
+    val font: AppFont = AppFont.INTER,
     val hasChosenLayout: Boolean? = null,
     val sidebarCollapsed: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
@@ -221,23 +223,25 @@ class MainActivity : ComponentActivity() {
             val mainUiPrefsFlow = remember(themeDataStore, layoutPreferenceDataStore) {
                 combine(
                     themeDataStore.selectedTheme,
+                    themeDataStore.selectedFont,
                     layoutPreferenceDataStore.hasChosenLayout,
                     layoutPreferenceDataStore.sidebarCollapsedByDefault,
                     layoutPreferenceDataStore.modernSidebarEnabled,
-                    layoutPreferenceDataStore.modernSidebarBlurEnabled
-                ) { theme, hasChosenLayout, sidebarCollapsed, modernSidebarEnabled, modernSidebarBlurPref ->
+                ) { theme, font, hasChosenLayout, sidebarCollapsed, modernSidebarEnabled ->
                     MainUiPrefs(
                         theme = theme,
+                        font = font,
                         hasChosenLayout = hasChosenLayout,
                         sidebarCollapsed = sidebarCollapsed,
                         modernSidebarEnabled = modernSidebarEnabled,
-                        modernSidebarBlurPref = modernSidebarBlurPref
                     )
+                }.combine(layoutPreferenceDataStore.modernSidebarBlurEnabled) { prefs, modernSidebarBlurPref ->
+                    prefs.copy(modernSidebarBlurPref = modernSidebarBlurPref)
                 }
             }
             val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs(hasChosenLayout = null))
 
-            NuvioTheme(appTheme = mainUiPrefs.theme) {
+            NuvioTheme(appTheme = mainUiPrefs.theme, appFont = mainUiPrefs.font) {
                 CompositionLocalProvider(
                     LocalBringIntoViewSpec provides NuvioScrollDefaults.smoothScrollSpec
                 ) {
