@@ -143,13 +143,14 @@ data class PlayerSettings(
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
-    val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = false,
+    val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = true,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
-    val nextEpisodeThresholdPercent: Float = 98f,
+    val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
-    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE
+    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
+    val addonSubtitleStartupMode: AddonSubtitleStartupMode = AddonSubtitleStartupMode.ALL_SUBTITLES
 )
 
 enum class StreamAutoPlayMode {
@@ -179,6 +180,12 @@ enum class SubtitleOrganizationMode {
     NONE,
     BY_LANGUAGE,
     BY_ADDON
+}
+
+enum class AddonSubtitleStartupMode {
+    FAST_STARTUP,
+    PREFERRED_ONLY,
+    ALL_SUBTITLES
 }
 
 enum class PlayerPreference {
@@ -248,6 +255,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
+    private val addonSubtitleStartupModeKey = stringPreferencesKey("addon_subtitle_startup_mode")
 
     // Subtitle style settings keys
     private val subtitlePreferredLanguageKey = stringPreferencesKey("subtitle_preferred_language")
@@ -384,14 +392,14 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
                 streamAutoPlayPreferBingeGroupForNextEpisode =
-                    prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: false,
+                    prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: true,
                 nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
                 } ?: NextEpisodeThresholdMode.PERCENTAGE,
                 nextEpisodeThresholdPercent = normalizeHalfStep(
                     value = prefs[nextEpisodeThresholdPercentKey]
                         ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
-                        ?: 98f,
+                        ?: 99f,
                     min = 97f,
                     max = 99.5f
                 ),
@@ -405,6 +413,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
+                addonSubtitleStartupMode = parseAddonSubtitleStartupMode(prefs[addonSubtitleStartupModeKey]),
                 subtitleStyle = SubtitleStyleSettings(
                     preferredLanguage = normalizeSelectableLanguageCode(
                         prefs[subtitlePreferredLanguageKey] ?: "en"
@@ -630,12 +639,27 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setAddonSubtitleStartupMode(mode: AddonSubtitleStartupMode) {
+        store().edit { prefs ->
+            prefs[addonSubtitleStartupModeKey] = mode.name
+        }
+    }
+
     private fun parseSubtitleOrganizationMode(value: String?): SubtitleOrganizationMode {
         return when (value) {
             null, "NONE" -> SubtitleOrganizationMode.NONE
             "BY_LANGUAGE" -> SubtitleOrganizationMode.BY_LANGUAGE
             "BY_ADDON" -> SubtitleOrganizationMode.BY_ADDON
             else -> SubtitleOrganizationMode.NONE
+        }
+    }
+
+    private fun parseAddonSubtitleStartupMode(value: String?): AddonSubtitleStartupMode {
+        return when (value) {
+            null, "ALL_SUBTITLES" -> AddonSubtitleStartupMode.ALL_SUBTITLES
+            "PREFERRED_ONLY" -> AddonSubtitleStartupMode.PREFERRED_ONLY
+            "FAST_STARTUP" -> AddonSubtitleStartupMode.FAST_STARTUP
+            else -> AddonSubtitleStartupMode.ALL_SUBTITLES
         }
     }
 
