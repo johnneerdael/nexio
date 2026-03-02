@@ -250,12 +250,23 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
         }
 
         if (trailerSource?.videoUrl.isNullOrBlank()) {
-            val fallbackUrl = fallbackYtId?.let { "https://www.youtube.com/watch?v=$it" }
-            if (fallbackUrl != null) {
-                if (trailerPreviewUrlsState[itemId] != fallbackUrl) {
-                    trailerPreviewUrlsState[itemId] = fallbackUrl
+            val fallbackSource = fallbackYtId?.let { ytId ->
+                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
+                    youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
+                    title = title,
+                    year = extractYear(releaseInfo)
+                )
+            }
+            if (fallbackSource?.videoUrl != null) {
+                if (trailerPreviewUrlsState[itemId] != fallbackSource.videoUrl) {
+                    trailerPreviewUrlsState[itemId] = fallbackSource.videoUrl
                 }
-                trailerPreviewAudioUrlsState.remove(itemId)
+                val fallbackAudio = fallbackSource.audioUrl
+                if (fallbackAudio.isNullOrBlank()) {
+                    trailerPreviewAudioUrlsState.remove(itemId)
+                } else if (trailerPreviewAudioUrlsState[itemId] != fallbackAudio) {
+                    trailerPreviewAudioUrlsState[itemId] = fallbackAudio
+                }
             } else {
                 trailerPreviewNegativeCache.add(itemId)
                 trailerPreviewUrlsState.remove(itemId)
@@ -310,6 +321,8 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 }
 
 private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) {
+    val incomingTrailerYtIds = meta.trailerYtIds
+
     fun mergeItem(currentItem: MetaPreview): MetaPreview = currentItem.copy(
         background = meta.background ?: currentItem.background,
         logo = meta.logo ?: currentItem.logo,
@@ -317,7 +330,7 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
         imdbRating = meta.imdbRating ?: currentItem.imdbRating,
         genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres,
-        trailerYtIds = if (meta.trailerYtIds.isNotEmpty()) meta.trailerYtIds else currentItem.trailerYtIds
+        trailerYtIds = if (incomingTrailerYtIds.isNotEmpty()) incomingTrailerYtIds else currentItem.trailerYtIds
     )
 
     catalogsMap.forEach { (key, row) ->
@@ -352,6 +365,16 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
             }
         }
         if (changed) state.copy(catalogRows = updatedRows) else state
+    }
+
+    // If external meta brought new trailerYtIds and the item was previously a negative cache miss,
+    // clear the negative cache and retry the trailer pipeline with the updated fallback.
+    if (incomingTrailerYtIds.isNotEmpty() && trailerPreviewNegativeCache.remove(itemId)) {
+        trailerPreviewUrlsState.remove(itemId)
+        val currentItem = catalogsMap.values.firstNotNullOfOrNull { row ->
+            row.items.firstOrNull { it.id == itemId }
+        } ?: return
+        requestTrailerPreviewPipeline(currentItem)
     }
 }
 
