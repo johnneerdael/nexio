@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.runtime.Composable
@@ -676,6 +677,7 @@ fun PlayerScreen(
                 uiState = uiState,
                 playPauseFocusRequester = playPauseFocusRequester,
                 onPlayPause = { viewModel.onEvent(PlayerEvent.OnPlayPause) },
+                onPlayNextEpisode = { viewModel.onEvent(PlayerEvent.OnPlayNextEpisode) },
                 onSeekForward = { viewModel.onEvent(PlayerEvent.OnSeekForward) },
                 onSeekBackward = { viewModel.onEvent(PlayerEvent.OnSeekBackward) },
                 onSeekTo = { viewModel.onEvent(PlayerEvent.OnSeekTo(it)) },
@@ -936,6 +938,7 @@ private fun PlayerControlsOverlay(
     uiState: PlayerUiState,
     playPauseFocusRequester: FocusRequester,
     onPlayPause: () -> Unit,
+    onPlayNextEpisode: () -> Unit,
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -1091,6 +1094,9 @@ private fun PlayerControlsOverlay(
                     val hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null
                     val hasSubtitleControl = uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()
                     val hasAudioControl = uiState.audioTracks.isNotEmpty()
+                    val showNextEpisodeButton = uiState.nextEpisode?.hasAired == true &&
+                        !uiState.nextEpisodeAutoPlaySearching &&
+                        uiState.nextEpisodeAutoPlayCountdownSec == null
 
                     ControlButton(
                         icon = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -1100,6 +1106,15 @@ private fun PlayerControlsOverlay(
                         focusRequester = playPauseFocusRequester,
                         onFocused = onResetHideTimer
                     )
+
+                    if (showNextEpisodeButton) {
+                        ControlButton(
+                            icon = Icons.Default.SkipNext,
+                            contentDescription = stringResource(R.string.next_episode_label),
+                            onClick = onPlayNextEpisode,
+                            onFocused = onResetHideTimer
+                        )
+                    }
 
                     if (hasSubtitleControl) {
                         ControlButton(
