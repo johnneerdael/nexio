@@ -383,7 +383,8 @@ internal fun resolvePreferredAudioLanguages(
             normalize(secondaryPreferredAudioLanguage)
         ).distinct()
     }
-    
+}
+
 internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
     mode: AddonSubtitleStartupMode,
     preferredLanguage: String,

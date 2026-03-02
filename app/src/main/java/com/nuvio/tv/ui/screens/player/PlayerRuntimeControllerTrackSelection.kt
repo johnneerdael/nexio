@@ -107,6 +107,40 @@ internal fun PlayerRuntimeController.applyAddonSubtitleOverride(addonTrackId: St
     return false
 }
 
+internal fun PlayerRuntimeController.applyAddonSubtitleOverrideByLanguage(
+    language: String
+): Boolean {
+    val player = _exoPlayer ?: return false
+    player.currentTracks.groups.forEach { trackGroup ->
+        if (trackGroup.type != C.TRACK_TYPE_TEXT) return@forEach
+        for (i in 0 until trackGroup.length) {
+            val format = trackGroup.getTrackFormat(i)
+            if (format.id?.contains(PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX) != true) {
+                continue
+            }
+            if (!PlayerSubtitleUtils.matchesLanguageCode(format.language, language)) {
+                continue
+            }
+            val override = TrackSelectionOverride(trackGroup.mediaTrackGroup, i)
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .setOverrideForType(override)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .build()
+            Log.d(
+                PlayerRuntimeController.TAG,
+                "applyAddonSubtitleOverrideByLanguage: found id=${format.id} lang=${format.language} at group/track $i"
+            )
+            return true
+        }
+    }
+    Log.d(
+        PlayerRuntimeController.TAG,
+        "applyAddonSubtitleOverrideByLanguage: track not found yet for language=$language"
+    )
+    return false
+}
+
 internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
     _exoPlayer?.let { player ->
         Log.d(PlayerRuntimeController.TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex")
@@ -177,34 +211,19 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
 
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
         val addonTrackId = buildAddonSubtitleTrackId(subtitle)
-        val alreadyAttachedTrackIndex = _uiState.value.subtitleTracks.indexOfFirst {
-            it.trackId == addonTrackId
-        }
         val preAttachedByStartup = attachedAddonSubtitleKeys.contains(addonSubtitleKey(subtitle))
-        val fallbackAttachedTrackIndex = if (alreadyAttachedTrackIndex < 0 && preAttachedByStartup) {
-            _uiState.value.subtitleTracks.indexOfFirst { track ->
-                PlayerSubtitleUtils.matchesLanguageCode(track.language, normalizedLang)
-            }
-        } else {
-            -1
-        }
+        val appliedWithoutReload = applyAddonSubtitleOverride(addonTrackId) ||
+            (preAttachedByStartup && applyAddonSubtitleOverrideByLanguage(normalizedLang))
 
-        val trackIndexWithoutReload = when {
-            alreadyAttachedTrackIndex >= 0 -> alreadyAttachedTrackIndex
-            fallbackAttachedTrackIndex >= 0 -> fallbackAttachedTrackIndex
-            else -> -1
-        }
-
-        if (trackIndexWithoutReload >= 0) {
+        if (appliedWithoutReload) {
             Log.d(
                 PlayerRuntimeController.TAG,
-                "Switching ADDON subtitle without media reload id=${subtitle.id} index=$trackIndexWithoutReload"
+                "Switching ADDON subtitle without media reload id=${subtitle.id}"
             )
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
 
-            selectSubtitleTrack(trackIndexWithoutReload)
             _uiState.update {
                 it.copy(
                     selectedAddonSubtitle = subtitle,
