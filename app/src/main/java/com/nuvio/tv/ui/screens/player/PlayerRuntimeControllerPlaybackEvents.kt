@@ -342,7 +342,11 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
     _uiState.update { it.copy(showPauseOverlay = false) }
     pauseOverlayJob = scope.launch {
         delay(pauseOverlayDelayMs)
-        if (!_uiState.value.isPlaying && _uiState.value.pauseOverlayEnabled && _uiState.value.error == null) {
+        val s = _uiState.value
+        val anyPanelOpen = s.showSubtitleDialog || s.showSubtitleStylePanel ||
+            s.showSpeedDialog || s.showMoreDialog || s.showEpisodesPanel ||
+            s.showSourcesPanel || s.showAudioDialog
+        if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
         }
     }
@@ -355,9 +359,11 @@ internal fun PlayerRuntimeController.cancelPauseOverlay() {
 }
 
 fun PlayerRuntimeController.onUserInteraction() {
-    
-    if (_uiState.value.showPauseOverlay || pauseOverlayJob != null) {
+    if (_uiState.value.showPauseOverlay) {
         cancelPauseOverlay()
+        showControlsTemporarily()
+    } else if (pauseOverlayJob != null && !_uiState.value.isPlaying && userPausedManually) {
+        schedulePauseOverlay()
     }
 }
 
@@ -684,10 +690,13 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         PlayerEvent.OnSkipIntro -> {
             _uiState.value.activeSkipInterval?.let { interval ->
-                val target = (interval.endTime * 1000).toLong()
+                val duration = _exoPlayer?.duration?.takeIf { it > 0 } ?: Long.MAX_VALUE
+                val target = if (interval.endTime == Double.MAX_VALUE) duration
+                else (interval.endTime * 1000).toLong()
+                val seekMs = target.coerceAtMost(duration)
                 pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
-                pendingSeekTelemetryTargetMs = target
-                _exoPlayer?.seekTo(target)
+                pendingSeekTelemetryTargetMs = seekMs
+                _exoPlayer?.seekTo(seekMs)
                 scheduleProgressSyncAfterSeek()
                 _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
             }

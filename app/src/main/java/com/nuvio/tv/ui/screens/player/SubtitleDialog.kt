@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,13 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onKeyEvent
@@ -89,6 +87,7 @@ internal fun SubtitleSelectionDialog(
     addonSubtitles: List<Subtitle>,
     selectedAddonSubtitle: Subtitle?,
     preferredLanguage: String,
+    secondaryPreferredLanguage: String?,
     subtitleOrganizationMode: SubtitleOrganizationMode,
     isLoadingAddons: Boolean,
     onInternalTrackSelected: (Int) -> Unit,
@@ -101,7 +100,7 @@ internal fun SubtitleSelectionDialog(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val uniqueLanguageCount = remember(addonSubtitles) {
         addonSubtitles
-            .map { normalizeSubtitleLanguageCode(it.lang) }
+            .map { PlayerSubtitleUtils.normalizeLanguageCode(it.lang) }
             .distinct()
             .size
     }
@@ -176,6 +175,7 @@ internal fun SubtitleSelectionDialog(
                         selectedIndex = selectedInternalIndex,
                         selectedAddonSubtitle = selectedAddonSubtitle,
                         preferredLanguage = preferredLanguage,
+                        secondaryPreferredLanguage = secondaryPreferredLanguage,
                         onTrackSelected = onInternalTrackSelected,
                         onDisableSubtitles = onDisableSubtitles
                     )
@@ -183,6 +183,7 @@ internal fun SubtitleSelectionDialog(
                         subtitles = addonSubtitles,
                         selectedSubtitle = selectedAddonSubtitle,
                         preferredLanguage = preferredLanguage,
+                        secondaryPreferredLanguage = secondaryPreferredLanguage,
                         subtitleOrganizationMode = subtitleOrganizationMode,
                         isLoading = isLoadingAddons,
                         onSubtitleSelected = onAddonSubtitleSelected
@@ -263,11 +264,15 @@ private fun InternalSubtitlesContent(
     selectedIndex: Int,
     selectedAddonSubtitle: Subtitle?,
     preferredLanguage: String,
+    secondaryPreferredLanguage: String?,
     onTrackSelected: (Int) -> Unit,
     onDisableSubtitles: () -> Unit
 ) {
-    val orderedTracks = remember(tracks, preferredLanguage) {
-        sortByPreferredLanguage(tracks, preferredLanguage) { it.language }
+    val orderedTracks = remember(tracks, preferredLanguage, secondaryPreferredLanguage) {
+        sortByPreferredLanguages(
+            items = tracks,
+            preferredLanguages = listOfNotNull(preferredLanguage, secondaryPreferredLanguage)
+        ) { it.language }
     }
 
     LazyColumn(
@@ -315,6 +320,7 @@ private fun AddonSubtitlesContent(
     subtitles: List<Subtitle>,
     selectedSubtitle: Subtitle?,
     preferredLanguage: String,
+    secondaryPreferredLanguage: String?,
     subtitleOrganizationMode: SubtitleOrganizationMode,
     isLoading: Boolean,
     onSubtitleSelected: (Subtitle) -> Unit
@@ -322,10 +328,19 @@ private fun AddonSubtitlesContent(
     val strAll = stringResource(R.string.subtitle_all)
     val strLanguages = stringResource(R.string.subtitle_tab_languages)
     val strAddons = stringResource(R.string.subtitle_tab_addons)
-    val viewData = remember(subtitles, preferredLanguage, subtitleOrganizationMode, strAll, strLanguages, strAddons) {
+    val viewData = remember(
+        subtitles,
+        preferredLanguage,
+        secondaryPreferredLanguage,
+        subtitleOrganizationMode,
+        strAll,
+        strLanguages,
+        strAddons
+    ) {
         buildAddonSubtitleViewData(
             subtitles = subtitles,
             preferredLanguage = preferredLanguage,
+            secondaryPreferredLanguage = secondaryPreferredLanguage,
             mode = subtitleOrganizationMode,
             strAll = strAll,
             strLanguages = strLanguages,
@@ -333,7 +348,12 @@ private fun AddonSubtitlesContent(
         )
     }
 
-    var selectedFilterKey by remember(subtitles, preferredLanguage, subtitleOrganizationMode) {
+    var selectedFilterKey by remember(
+        subtitles,
+        preferredLanguage,
+        secondaryPreferredLanguage,
+        subtitleOrganizationMode
+    ) {
         mutableStateOf(viewData.filters.firstOrNull()?.key)
     }
     val currentFilter = selectedFilterKey?.let { key ->
@@ -401,7 +421,7 @@ private fun AddonSubtitlesContent(
             ) { subtitle ->
                 AddonSubtitleItem(
                     subtitle = subtitle,
-                    isSelected = selectedSubtitle?.id == subtitle.id,
+                    isSelected = selectedSubtitle?.id == subtitle.id && selectedSubtitle.url == subtitle.url,
                     onClick = { onSubtitleSelected(subtitle) },
                     focusRequester = if (subtitle == currentFilter?.items?.firstOrNull()) firstSubtitleFocusRequester else null
                 )
@@ -493,12 +513,16 @@ private data class AddonSubtitleViewData(
 private fun buildAddonSubtitleViewData(
     subtitles: List<Subtitle>,
     preferredLanguage: String,
+    secondaryPreferredLanguage: String?,
     mode: SubtitleOrganizationMode,
     strAll: String,
     strLanguages: String,
     strAddons: String
 ): AddonSubtitleViewData {
-    val preferredFirst = sortByPreferredLanguage(subtitles, preferredLanguage) { it.lang }
+    val preferredFirst = sortByPreferredLanguages(
+        items = subtitles,
+        preferredLanguages = listOfNotNull(preferredLanguage, secondaryPreferredLanguage)
+    ) { it.lang }
 
     return when (mode) {
         SubtitleOrganizationMode.NONE -> {
@@ -539,7 +563,10 @@ private fun buildAddonSubtitleViewData(
                         SubtitleFilter(
                             key = "addon:$addon",
                             label = addon,
-                            items = sortByPreferredLanguage(items, preferredLanguage) { it.lang }
+                            items = sortByPreferredLanguages(
+                                items = items,
+                                preferredLanguages = listOfNotNull(preferredLanguage, secondaryPreferredLanguage)
+                            ) { it.lang }
                         )
                     }
             )
@@ -548,7 +575,7 @@ private fun buildAddonSubtitleViewData(
 }
 
 private fun subtitleLanguageGroupKey(language: String): String {
-    val normalized = normalizeSubtitleLanguageCode(language)
+    val normalized = PlayerSubtitleUtils.normalizeLanguageCode(language)
     if (normalized == "pt-br") {
         return "pt-br"
     }
@@ -557,73 +584,27 @@ private fun subtitleLanguageGroupKey(language: String): String {
         .substringBefore('_')
 }
 
-private fun normalizeSubtitleLanguageCode(lang: String): String {
-    return when (lang.trim().lowercase()) {
-        "pt-br", "pt_br", "br", "pob" -> "pt-br"
-        "pt", "pt-pt", "pt_pt", "por" -> "pt"
-        "eng" -> "en"
-        "spa" -> "es"
-        "fre", "fra" -> "fr"
-        "ger", "deu" -> "de"
-        "ita" -> "it"
-        "rus" -> "ru"
-        "jpn" -> "ja"
-        "kor" -> "ko"
-        "chi", "zho" -> "zh"
-        "ara" -> "ar"
-        "hin" -> "hi"
-        "nld", "dut" -> "nl"
-        "pol" -> "pl"
-        "swe" -> "sv"
-        "nor" -> "no"
-        "dan" -> "da"
-        "fin" -> "fi"
-        "tur" -> "tr"
-        "ell", "gre" -> "el"
-        "heb" -> "he"
-        "tha" -> "th"
-        "vie" -> "vi"
-        "ind" -> "id"
-        "msa", "may" -> "ms"
-        "ces", "cze" -> "cs"
-        "hun" -> "hu"
-        "ron", "rum" -> "ro"
-        "ukr" -> "uk"
-        "bul" -> "bg"
-        "hrv" -> "hr"
-        "srp" -> "sr"
-        "slk", "slo" -> "sk"
-        "slv" -> "sl"
-        else -> lang.trim().lowercase()
-    }
-}
-
-private fun matchesPreferredLanguage(language: String?, preferredLanguage: String): Boolean {
-    if (language.isNullOrBlank()) return false
-    val preferred = preferredLanguage.trim().lowercase()
-    if (preferred.isBlank() || preferred == "none") return false
-
-    val normalizedLanguage = normalizeSubtitleLanguageCode(language)
-    val normalizedPreferred = normalizeSubtitleLanguageCode(preferred)
-
-    if (normalizedPreferred == "pt") {
-        return normalizedLanguage == "pt"
-    }
-
-    return normalizedLanguage == normalizedPreferred ||
-        normalizedLanguage.startsWith("$normalizedPreferred-") ||
-        normalizedLanguage.startsWith("${normalizedPreferred}_")
-}
-
-private fun <T> sortByPreferredLanguage(
+private fun <T> sortByPreferredLanguages(
     items: List<T>,
-    preferredLanguage: String,
+    preferredLanguages: List<String>,
     languageSelector: (T) -> String?
 ): List<T> {
-    val (preferred, others) = items.partition { item ->
-        matchesPreferredLanguage(languageSelector(item), preferredLanguage)
+    val targets = preferredLanguages
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.equals("none", ignoreCase = true) }
+        .distinctBy { PlayerSubtitleUtils.normalizeLanguageCode(it) }
+    if (targets.isEmpty()) {
+        return items
     }
-    return preferred + others
+
+    fun matchRank(language: String?): Int {
+        if (language.isNullOrBlank()) return Int.MAX_VALUE
+        return targets.indexOfFirst { target ->
+            PlayerSubtitleUtils.matchesLanguageCode(language, target)
+        }.let { index -> if (index >= 0) index else Int.MAX_VALUE }
+    }
+
+    return items.sortedWith(compareBy { item -> matchRank(languageSelector(item)) })
 }
 
 @Composable
@@ -659,7 +640,7 @@ private fun AddonSubtitleItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = Subtitle.languageCodeToName(normalizeSubtitleLanguageCode(subtitle.lang)),
+                    text = Subtitle.languageCodeToName(PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White
                 )
@@ -832,16 +813,8 @@ private fun StyleSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .drawWithCache {
-                val radius = 16.dp.toPx()
-                val bgColor = Color.White.copy(alpha = 0.05f)
-                onDrawBehind {
-                    drawRoundRect(
-                        color = bgColor,
-                        cornerRadius = CornerRadius(radius, radius)
-                    )
-                }
-            }
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.05f))
             .padding(16.dp)
     ) {
         // Section header
@@ -914,16 +887,8 @@ private fun StyleStepperButton(
 private fun StyleValueDisplay(text: String) {
     Box(
         modifier = Modifier
-            .drawWithCache {
-                val radius = 10.dp.toPx()
-                val bgColor = Color.White.copy(alpha = 0.12f)
-                onDrawBehind {
-                    drawRoundRect(
-                        color = bgColor,
-                        cornerRadius = CornerRadius(radius, radius)
-                    )
-                }
-            }
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.12f))
             .padding(horizontal = 14.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -943,29 +908,18 @@ private fun StyleColorChip(
 ) {
     val isLight = (color.red + color.green + color.blue) / 3f > 0.5f
     var isFocused by remember { mutableStateOf(false) }
-    val ringColor = when {
-        isFocused -> NuvioColors.FocusRing
-        isSelected -> Color.White
-        else -> Color.Transparent
+
+    val borderModifier = when {
+        isFocused -> Modifier.border(2.dp, NuvioColors.FocusRing, CircleShape)
+        isSelected -> Modifier.border(2.dp, Color.White, CircleShape)
+        else -> Modifier
     }
 
     IconButton(
         onClick = onClick,
         modifier = Modifier
             .size(36.dp)
-            .drawWithCache {
-                val strokeWidth = 2.dp.toPx()
-                onDrawWithContent {
-                    drawContent()
-                    if (ringColor.alpha > 0f) {
-                        drawCircle(
-                            color = ringColor,
-                            radius = (size.minDimension / 2f) - (strokeWidth / 2f),
-                            style = Stroke(width = strokeWidth)
-                        )
-                    }
-                }
-            }
+            .then(borderModifier)
             .onFocusChanged { isFocused = it.isFocused },
         colors = IconButtonDefaults.colors(
             containerColor = color,

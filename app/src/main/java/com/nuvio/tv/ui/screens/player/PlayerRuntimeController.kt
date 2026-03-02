@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.player
 
+import android.app.Activity
 import android.content.Context
 import android.media.audiofx.LoudnessEnhancer
 import androidx.lifecycle.SavedStateHandle
@@ -28,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 
 class PlayerRuntimeController(
@@ -94,7 +96,8 @@ class PlayerRuntimeController(
         ?: initialStreamUrl.substringBefore('?').substringAfterLast('/', "")
             .takeIf { it.isNotBlank() && it.contains('.') }
     internal var currentStreamUrl: String = initialStreamUrl
-    internal var currentHeaders: Map<String, String> = PlayerMediaSourceFactory.parseHeaders(headersJson)
+    internal var currentHeaders: Map<String, String> =
+        PlayerMediaSourceFactory.sanitizeHeaders(PlayerMediaSourceFactory.parseHeaders(headersJson))
 
     fun getCurrentStreamUrl(): String = currentStreamUrl
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
@@ -144,6 +147,8 @@ class PlayerRuntimeController(
     internal var sourceStreamsJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
+    internal var hostActivityRef: WeakReference<Activity>? = null
+    internal var initialPlaybackStarted: Boolean = false
     
     
     internal var lastSavedPosition: Long = 0L
@@ -169,6 +174,7 @@ class PlayerRuntimeController(
     internal var pendingAddonSubtitleLanguage: String? = null
     internal var pendingAddonSubtitleTrackId: String? = null
     internal var pendingAudioSelectionAfterSubtitleRefresh: PendingAudioSelection? = null
+    internal var attachedAddonSubtitleKeys: Set<String> = emptySet()
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false
     internal var streamAutoPlayModeSetting: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL
@@ -221,11 +227,11 @@ class PlayerRuntimeController(
     init {
         refreshScrobbleItem()
         mediaSourceFactory.warmupVodCacheAsync()
-        initializePlayer(currentStreamUrl, currentHeaders)
-        loadSavedProgressFor(currentSeason, currentEpisode)
+        if (!navigationArgs.startFromBeginning) {
+            loadSavedProgressFor(currentSeason, currentEpisode)
+        }
         fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
         observeSubtitleSettings()
-        fetchAddonSubtitles()
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()
         observeEpisodeWatchProgress()
