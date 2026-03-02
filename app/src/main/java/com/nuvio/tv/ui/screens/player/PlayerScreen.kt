@@ -138,8 +138,6 @@ fun PlayerScreen(
     val handleBackPress = {
         if (uiState.error != null) {
             exitPlayerFromError()
-        } else if (uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed && !uiState.showControls) {
-            viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
         } else if (uiState.showPauseOverlay) {
             viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
         } else if (uiState.showMoreDialog) {
@@ -156,7 +154,7 @@ fun PlayerScreen(
             } else {
                 viewModel.onEvent(PlayerEvent.OnDismissEpisodesPanel)
             }
-        } else if (uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed) {
+        } else if (uiState.activeSkipInterval != null && !uiState.skipIntervalDismissed && !uiState.showControls) {
             viewModel.onEvent(PlayerEvent.OnDismissSkipIntro)
         } else if (uiState.showNextEpisodeCard && uiState.nextEpisode != null) {
             viewModel.onEvent(PlayerEvent.OnDismissNextEpisodeCard)
