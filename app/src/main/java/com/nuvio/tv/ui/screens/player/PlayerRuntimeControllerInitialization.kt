@@ -20,6 +20,9 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ForwardingRenderer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.TextOutput
@@ -119,6 +122,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
+            val safeAudioModeEnabled = safeAudioForcedStreamUrls.contains(url)
+            val audioDisabledForStream = audioDisabledForcedStreamUrls.contains(url)
+            isSafeAudioModeActiveForCurrentPlayback = safeAudioModeEnabled
+            isAudioDisabledForCurrentPlayback = audioDisabledForStream
 
             
             trackSelector = DefaultTrackSelector(context).apply {
@@ -126,9 +133,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     buildUponParameters()
                         .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
                 )
-                if (playerSettings.tunnelingEnabled) {
+                if (playerSettings.tunnelingEnabled && !safeAudioModeEnabled) {
                     setParameters(
                         buildUponParameters().setTunnelingEnabled(true)
+                    )
+                } else if (safeAudioModeEnabled) {
+                    setParameters(
+                        buildUponParameters()
+                            .setTunnelingEnabled(false)
+                            .setConstrainAudioChannelCountToDeviceCapabilities(true)
+                    )
+                }
+                if (audioDisabledForStream) {
+                    setParameters(
+                        buildUponParameters().setDisabledTrackTypes(setOf(C.TRACK_TYPE_AUDIO))
                     )
                 }
                 
@@ -210,7 +228,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val codecSelector = createDolbyVisionFallbackCodecSelector(mapDv7ToHevcEnabled)
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
-                subtitleDelayUsProvider = subtitleDelayUs::get
+                subtitleDelayUsProvider = subtitleDelayUs::get,
+                safeAudioModeEnabled = safeAudioModeEnabled
             )
                 .setExtensionRendererMode(playerSettings.decoderPriority)
                 .setEnableDecoderFallback(true)
@@ -454,6 +473,56 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             return
                         }
 
+                        if (error.isAudioTrackInitializationFailure()) {
+                            if (!isSafeAudioModeActiveForCurrentPlayback) {
+                                Log.w(
+                                    PlayerRuntimeController.TAG,
+                                    "AudioTrack init failed, retrying with safe audio mode " +
+                                        "host=${currentStreamUrl.safeHost()} " +
+                                        "positionMs=$currentPosition"
+                                )
+                                safeAudioForcedStreamUrls.add(currentStreamUrl)
+                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
+                                return
+                            }
+                            if (!isAudioDisabledForCurrentPlayback) {
+                                Log.w(
+                                    PlayerRuntimeController.TAG,
+                                    "AudioTrack init still failing in safe audio mode, retrying " +
+                                        "with audio disabled host=${currentStreamUrl.safeHost()} " +
+                                        "positionMs=$currentPosition"
+                                )
+                                audioDisabledForcedStreamUrls.add(currentStreamUrl)
+                                retryCurrentStreamWithAudioDisabled(currentPosition)
+                                return
+                            }
+                        }
+
+                        if (error.isStuckPlayingNoProgress()) {
+                            if (!isSafeAudioModeActiveForCurrentPlayback) {
+                                Log.w(
+                                    PlayerRuntimeController.TAG,
+                                    "Stuck player detected, retrying with safe audio mode " +
+                                        "host=${currentStreamUrl.safeHost()} " +
+                                        "positionMs=$currentPosition"
+                                )
+                                safeAudioForcedStreamUrls.add(currentStreamUrl)
+                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
+                                return
+                            }
+                            if (!isAudioDisabledForCurrentPlayback) {
+                                Log.w(
+                                    PlayerRuntimeController.TAG,
+                                    "Stuck player persists in safe audio mode, retrying with " +
+                                        "audio disabled host=${currentStreamUrl.safeHost()} " +
+                                        "positionMs=$currentPosition"
+                                )
+                                audioDisabledForcedStreamUrls.add(currentStreamUrl)
+                                retryCurrentStreamWithAudioDisabled(currentPosition)
+                                return
+                            }
+                        }
+
                         val timeoutError = error.findCause<SocketTimeoutException>()
                         if (timeoutError != null &&
                             timeoutRecoveryAttempts < PlayerRuntimeController.MAX_TIMEOUT_RECOVERY_ATTEMPTS
@@ -481,6 +550,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                     "positionMs=$currentPosition"
                             )
                             retryCurrentStreamAfterUnexpectedNpe(currentPosition)
+                            return
+                        }
+
+                        if (error.isMediaPeriodHolderStateCrash() &&
+                            !hasRetriedCurrentStreamAfterMediaPeriodHolderCrash
+                        ) {
+                            hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = true
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "MediaPeriodHolder state crash detected, retrying stream once " +
+                                    "host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            retryCurrentStreamAfterMediaPeriodHolderCrash(currentPosition)
                             return
                         }
 
@@ -527,8 +610,11 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     userPausedManually = false
     timeoutRecoveryAttempts = 0
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
+    hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     hasAttemptedDv7ToDv81ForCurrentPlayback = false
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
+    isSafeAudioModeActiveForCurrentPlayback = false
+    isAudioDisabledForCurrentPlayback = false
     dv7ToDv81BridgeVersionForCurrentPlayback = null
     dv7ToDv81LastProbeReasonForCurrentPlayback = null
     playerInitializationStartedAtMs = 0L
@@ -545,8 +631,28 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
 
 private class SubtitleOffsetRenderersFactory(
     context: Context,
-    private val subtitleDelayUsProvider: () -> Long
+    private val subtitleDelayUsProvider: () -> Long,
+    private val safeAudioModeEnabled: Boolean
 ) : DefaultRenderersFactory(context) {
+
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioOutputPlaybackParams: Boolean
+    ): AudioSink {
+        if (!safeAudioModeEnabled) {
+            return DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                .build()
+        }
+        val filteredCapabilities = buildStableAudioCapabilities(context)
+        return DefaultAudioSink.Builder()
+            .setAudioCapabilities(filteredCapabilities)
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+            .build()
+    }
 
     override fun buildTextRenderers(
         context: Context,
@@ -610,6 +716,44 @@ private fun PlaybackException.isUnexpectedLoaderNullPointer(): Boolean {
             details.contains("matroskaextractor", ignoreCase = true))
 }
 
+private fun PlaybackException.isAudioTrackInitializationFailure(): Boolean {
+    if (errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED) return true
+    val details = buildString {
+        append(message ?: "")
+        append(' ')
+        append(cause?.message ?: "")
+        append(' ')
+        append(cause?.cause?.message ?: "")
+    }
+    return details.contains("audiotrack init failed", ignoreCase = true)
+}
+
+private fun PlaybackException.isStuckPlayingNoProgress(): Boolean {
+    if (errorCode != PlaybackException.ERROR_CODE_TIMEOUT) return false
+    val details = buildString {
+        append(message ?: "")
+        append(' ')
+        append(cause?.message ?: "")
+        append(' ')
+        append(cause?.cause?.message ?: "")
+    }
+    return details.contains("stuck playing with no progress", ignoreCase = true)
+}
+
+private fun PlaybackException.isMediaPeriodHolderStateCrash(): Boolean {
+    if (errorCode != PlaybackException.ERROR_CODE_UNSPECIFIED) return false
+    val details = buildString {
+        append(message ?: "")
+        append(' ')
+        append(cause?.message ?: "")
+        append(' ')
+        append(cause?.cause?.message ?: "")
+    }
+    return details.contains("mediaperiodholder", ignoreCase = true) &&
+        details.contains(".info", ignoreCase = true) &&
+        details.contains("null", ignoreCase = true)
+}
+
 private fun String.safeHost(): String {
     return runCatching { Uri.parse(this).host ?: "unknown" }.getOrDefault("unknown")
 }
@@ -644,4 +788,35 @@ private fun DefaultRenderersFactory.applyMapDv7ToHevcIfSupported(
         method.invoke(this, enabled)
         this
     }.getOrElse { this }
+}
+
+private fun buildStableAudioCapabilities(context: Context): AudioCapabilities {
+    val detected = AudioCapabilities.getCapabilities(context, AudioAttributes.DEFAULT, null)
+    val supportedEncodings = mutableListOf<Int>()
+    val knownEncodings = intArrayOf(
+        C.ENCODING_PCM_16BIT,
+        C.ENCODING_AC3,
+        C.ENCODING_AC4,
+        C.ENCODING_DTS,
+        C.ENCODING_E_AC3_JOC,
+        C.ENCODING_E_AC3,
+        C.ENCODING_DOLBY_TRUEHD
+    )
+    for (encoding in knownEncodings) {
+        if (detected.supportsEncoding(encoding)) {
+            supportedEncodings += encoding
+        }
+    }
+    // Force DTS-HD/DTS:X passthrough down to DTS core. This avoids AudioTrack init failures on
+    // devices that advertise DTS-HD direct playback but fail to initialize the encoded sink.
+    if ((detected.supportsEncoding(C.ENCODING_DTS_HD) ||
+            detected.supportsEncoding(C.ENCODING_DTS_UHD_P2)) &&
+        C.ENCODING_DTS !in supportedEncodings
+    ) {
+        supportedEncodings += C.ENCODING_DTS
+    }
+    return AudioCapabilities(
+        supportedEncodings.toIntArray(),
+        detected.maxChannelCount
+    )
 }
