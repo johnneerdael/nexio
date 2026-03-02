@@ -34,8 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Card
@@ -63,6 +65,7 @@ fun SkipIntroButton(
     onVisibilityChanged: (Boolean) -> Unit = {},
     onFocused: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier
 ) {
     var lastType by remember { mutableStateOf(interval?.type) }
@@ -134,6 +137,25 @@ fun SkipIntroButton(
             onClick = onSkip,
             modifier = Modifier
                 .focusRequester(activeFocusRequester)
+                .then(
+                    if (downFocusRequester != null) {
+                        Modifier.focusProperties { down = downFocusRequester }
+                    } else {
+                        Modifier
+                    }
+                )
+                .onPreviewKeyEvent { keyEvent ->
+                    if (
+                        downFocusRequester != null &&
+                        keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
+                        keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                    ) {
+                        try { downFocusRequester.requestFocus() } catch (_: Exception) {}
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .onFocusChanged {
                     isFocused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()
