@@ -437,6 +437,9 @@
     <string name="tmdb_episodes_subtitle">Episode titles, overviews, thumbnails, and runtime from TMDB</string>
     <string name="tmdb_more_like_this_title">More Like This</string>
     <string name="tmdb_more_like_this_subtitle">TMDB recommendation backdrops on detail page</string>
+    <string name="tmdb_collections_title">Collections</string>
+    <string name="tmdb_collections_subtitle">TMDB movie collections in release order</string>
+
     <string name="tmdb_language_dialog_title">TMDB Language</string>
 
     <!-- TraktScreen -->

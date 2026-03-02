@@ -134,6 +134,9 @@ class TmdbMetadataService @Inject constructor(
                     }
                 val poster = buildImageUrl(details?.posterPath, size = "w500")
                 val backdrop = buildImageUrl(details?.backdropPath, size = "w1280")
+                
+                val collectionId = details?.belongsToCollection?.id
+                val collectionName = details?.belongsToCollection?.name
 
                 val logoPath = images?.logos
                     ?.sortedWith(
@@ -283,7 +286,9 @@ class TmdbMetadataService @Inject constructor(
                     networks = networks,
                     ageRating = ageRating,
                     countries = countries,
-                    language = language
+                    language = language,
+                    collectionId = collectionId,
+                    collectionName = collectionName
                 )
                 enrichmentCache[cacheKey] = enrichment
                 enrichment
@@ -429,6 +434,72 @@ class TmdbMetadataService @Inject constructor(
             items
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch recommendations for $tmdbId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private val collectionCache = ConcurrentHashMap<String, List<MetaPreview>>()
+
+    suspend fun fetchMovieCollection(
+        collectionId: Int,
+        language: String = "en"
+    ): List<MetaPreview> = withContext(Dispatchers.IO) {
+        val normalizedLanguage = normalizeTmdbLanguage(language)
+        val cacheKey = "$collectionId:$normalizedLanguage:collection"
+        collectionCache[cacheKey]?.let { return@withContext it }
+
+        try {
+            val collectionResponse = tmdbApi.getCollectionDetails(collectionId, TMDB_API_KEY, normalizedLanguage).body()
+            val rawParts = collectionResponse?.parts.orEmpty()
+            
+            // Show in release order
+            val sortedParts = rawParts.sortedBy { it.releaseDate ?: "9999" }
+            
+            val includeImageLanguage = buildString {
+                append(normalizedLanguage.substringBefore("-"))
+                append(",")
+                append(normalizedLanguage)
+                append(",en,null")
+            }
+
+            val items = coroutineScope {
+                sortedParts.map { part ->
+                    async {
+                        val title = part.title ?: return@async null
+
+                        val localizedBackdropPath = runCatching {
+                            tmdbApi.getMovieImages(part.id, TMDB_API_KEY, includeImageLanguage).body()
+                        }.getOrNull()?.let { images ->
+                            selectBestLocalizedImagePath(
+                                images = images.backdrops.orEmpty(),
+                                normalizedLanguage = normalizedLanguage
+                            )
+                        }
+
+                        val backdrop = buildImageUrl(localizedBackdropPath ?: part.backdropPath, size = "w1280")
+                        val fallbackPoster = buildImageUrl(part.posterPath, size = "w780")
+                        val releaseInfo = part.releaseDate?.take(4)
+
+                        MetaPreview(
+                            id = "tmdb:${part.id}",
+                            type = ContentType.MOVIE,
+                            name = title,
+                            poster = backdrop ?: fallbackPoster,
+                            posterShape = PosterShape.LANDSCAPE,
+                            background = backdrop,
+                            logo = null,
+                            description = part.overview?.takeIf { it.isNotBlank() },
+                            releaseInfo = releaseInfo,
+                            imdbRating = part.voteAverage?.toFloat(),
+                            genres = emptyList()
+                        )
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            collectionCache[cacheKey] = items
+            items
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch collection for $collectionId: ${e.message}")
             emptyList()
         }
     }
@@ -700,7 +771,9 @@ data class TmdbEnrichment(
     val networks: List<MetaCompany>,
     val ageRating: String?,
     val countries: List<String>?,
-    val language: String?
+    val language: String?,
+    val collectionId: Int?,
+    val collectionName: String?
 )
 
 data class TmdbEpisodeEnrichment(

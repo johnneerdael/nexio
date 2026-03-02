@@ -21,7 +21,7 @@ import com.nuvio.tv.ui.components.PosterCardStyle
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun MoreLikeThisSection(
+fun CollectionSection(
     items: List<MetaPreview>,
     upFocusRequester: FocusRequester? = null,
     restoreItemId: String? = null,

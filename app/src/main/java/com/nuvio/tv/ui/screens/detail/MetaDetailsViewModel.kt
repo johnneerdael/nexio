@@ -75,6 +75,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
     private var moreLikeThisJob: Job? = null
+    private var collectionJob: Job? = null
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
 
@@ -335,7 +336,9 @@ class MetaDetailsViewModel @Inject constructor(
                     episodeRatingsError = null,
                     mdbListRatings = null,
                     showMdbListImdb = false,
-                    moreLikeThis = emptyList()
+                    moreLikeThis = emptyList(),
+                    collection = emptyList(),
+                    collectionName = null
                 )
             }
 
@@ -499,6 +502,37 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun shouldLoadMoreLikeThis(settings: TmdbSettings): Boolean {
         return settings.enabled && settings.useMoreLikeThis
+    }
+
+    private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {
+        collectionJob?.cancel()
+        collectionJob = viewModelScope.launch {
+            if (!settings.enabled || !settings.useCollections) {
+                _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
+                return@launch
+            }
+
+            val items = runCatching {
+                tmdbMetadataService.fetchMovieCollection(
+                    collectionId = collectionId,
+                    language = settings.language
+                )
+            }.getOrElse {
+                Log.w(TAG, "Failed to load collection $collectionId: ${it.message}")
+                emptyList()
+            }
+
+            val filteredItems = if (hideUnreleasedContent) {
+                val today = LocalDate.now()
+                items.filterNot { it.isUnreleased(today) }
+            } else {
+                items
+            }
+
+            _uiState.update { state ->
+                state.copy(collection = filteredItems, collectionName = collectionName)
+            }
+        }
     }
 
     private suspend fun loadMDBListRatings(meta: Meta) {
@@ -718,6 +752,10 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 )
             }
+        }
+
+        if (enrichment?.collectionId != null) {
+            loadCollectionAsync(enrichment.collectionId, enrichment.collectionName, settings)
         }
 
         return updated
