@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Proxy
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 object MatroskaDolbyVisionHookInstaller {
@@ -27,6 +28,13 @@ object MatroskaDolbyVisionHookInstaller {
     private const val FMP4_SETTER_NAME = "setFragmentedMp4DolbyVisionSampleTransformer"
     private const val TS_H265_SETTER_NAME = "setTsDolbyVisionNalTransformer"
     private const val NAL_TYPE_UNSPEC62 = 62
+    private val codecStringRewriteCount = AtomicLong(0L)
+
+    fun resetRuntimeCounters() {
+        codecStringRewriteCount.set(0L)
+    }
+
+    fun getCodecStringRewriteCount(): Long = codecStringRewriteCount.get()
 
     fun maybeInstall(
         extractorsFactory: DefaultExtractorsFactory,
@@ -152,7 +160,11 @@ object MatroskaDolbyVisionHookInstaller {
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
-                    normalizeDolbyVisionCodecString(codecs)
+                    val normalized = normalizeDolbyVisionCodecString(codecs)
+                    if (normalized != null && normalized != codecs) {
+                        codecStringRewriteCount.incrementAndGet()
+                    }
+                    normalized
                 }
                 "transformHevcSample" -> {
                     val sampleLengthDelimited = args?.getOrNull(0) as? ByteArray ?: return@InvocationHandler null
