@@ -468,6 +468,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
                     override fun onRenderedFirstFrame() {
                         cancelFirstFrameWatchdog()
+                        mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
                             .coerceAtLeast(0L)
                         val conversionCalls = DoviBridge.getConversionCallCount()

@@ -9,6 +9,7 @@ import com.nuvio.tv.data.repository.extractYear
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.data.repository.toTraktIds
 import com.nuvio.tv.domain.model.WatchProgress
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -40,14 +41,15 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                 
                 if (player.isPlaying) {
                     val now = System.currentTimeMillis()
-                    if (now - lastBufferLogTimeMs >= 10_000) {
+                    maybeRefreshVodTelemetry(now)
+                    if (now - lastBufferLogTimeMs >= 30_000) {
                         lastBufferLogTimeMs = now
                         val bufAhead = (player.bufferedPosition - player.currentPosition) / 1000
                         val loading = player.isLoading
                         val runtime = Runtime.getRuntime()
                         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
                         val maxMb = runtime.maxMemory() / (1024 * 1024)
-                        val vodCache = mediaSourceFactory.getVodCacheLogState(currentStreamUrl)
+                        val vodCache = cachedVodCacheLogState
                         val conversionCalls = DoviBridge.getConversionCallCount()
                         val conversionSuccess = DoviBridge.getConversionSuccessCount()
                         val conversionAttempted =
@@ -81,6 +83,8 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
 internal fun PlayerRuntimeController.stopProgressUpdates() {
     progressJob?.cancel()
     progressJob = null
+    vodTelemetryJob?.cancel()
+    vodTelemetryJob = null
 }
 
 internal fun PlayerRuntimeController.startWatchProgressSaving() {
@@ -124,6 +128,21 @@ internal fun PlayerRuntimeController.getEffectiveDuration(position: Long): Long 
     if (!isEnded && effectiveDuration < position) return 0L
 
     return effectiveDuration
+}
+
+private fun PlayerRuntimeController.maybeRefreshVodTelemetry(now: Long) {
+    if (vodTelemetryJob?.isActive == true) return
+    if (now - lastVodTelemetryRefreshTimeMs < 30_000) return
+    lastVodTelemetryRefreshTimeMs = now
+    val streamUrl = currentStreamUrl
+    vodTelemetryJob = scope.launch(Dispatchers.IO) {
+        val nextState = runCatching {
+            mediaSourceFactory.getVodCacheLogState(streamUrl)
+        }.getOrElse {
+            cachedVodCacheLogState
+        }
+        cachedVodCacheLogState = nextState
+    }
 }
 
 internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, duration: Long, syncRemote: Boolean = true) {

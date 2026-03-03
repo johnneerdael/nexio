@@ -8,6 +8,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import java.io.InterruptedIOException
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -32,7 +33,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ParallelRangeDataSource(
     private val upstreamFactory: OkHttpDataSource.Factory,
     private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
-    private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024
+    private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
+    private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
+    private val onResolvedUri: (Uri?) -> Unit = {}
 ) : DataSource {
 
     companion object {
@@ -65,6 +68,7 @@ class ParallelRangeDataSource(
     private var currentChunk: DownloadedChunk? = null
     private var currentChunkIndex: Long = -1
     private var currentChunkReadOffset: Int = 0
+    private var bootstrapPrefetchDeferred: Boolean = false
 
     private val transferListeners = mutableListOf<TransferListener>()
 
@@ -75,6 +79,7 @@ class ParallelRangeDataSource(
         closed.set(false)
         originalDataSpec = dataSpec
         position = dataSpec.position
+        bootstrapPrefetchDeferred = false
 
         // Cancel any in-flight chunks from a previous open (e.g., after seek)
         cancelAllChunks()
@@ -92,6 +97,7 @@ class ParallelRangeDataSource(
         try {
             openLength = probeSource.open(dataSpec)
             resolvedUri = probeSource.uri // Final URL after redirects (CDN URL)
+            onResolvedUri(resolvedUri)
         } catch (e: Exception) {
             probeSource.close()
             throw e
@@ -121,12 +127,13 @@ class ParallelRangeDataSource(
             val chunk = readIntoChunk(probeSource)
             probeSource.close()
             chunks[firstChunkIndex] = CompletableFuture.completedFuture(chunk)
+            // Avoid startup churn from immediate background chunk fetches before the first
+            // actual read. Media3 may perform extra startup opens/sniffing.
+            bootstrapPrefetchDeferred = true
         } else {
             probeSource.close()
+            scheduleChunks()
         }
-
-        // Schedule remaining chunks for download
-        scheduleChunks()
 
         return openLength
     }
@@ -138,6 +145,11 @@ class ParallelRangeDataSource(
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
 
         val toRead = minOf(length.toLong(), bytesRemaining).toInt()
+
+        if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch()) {
+            bootstrapPrefetchDeferred = false
+            scheduleChunks()
+        }
 
         val chunkIndex = position / chunkSize
 
@@ -177,6 +189,7 @@ class ParallelRangeDataSource(
     }
 
     private fun scheduleChunks() {
+        if (!shouldAllowBackgroundPrefetch()) return
         val currentChunkIdx = position / chunkSize
         val maxAhead = parallelConnections + 1
 
@@ -202,7 +215,15 @@ class ParallelRangeDataSource(
                 if (closed.get()) throw IOException("DataSource closed")
                 lastException = e
                 if (attempt == 0) {
-                    Log.w(TAG, "Chunk $chunkIndex download failed (attempt 1), retrying: ${e.message}")
+                    if (e.isTransientInterruption()) {
+                        Log.d(TAG, "Chunk $chunkIndex interrupted during prefetch (attempt 1), retrying")
+                        try {
+                            Thread.sleep(50)
+                        } catch (_: InterruptedException) {
+                        }
+                    } else {
+                        Log.w(TAG, "Chunk $chunkIndex download failed (attempt 1), retrying: ${e.message}")
+                    }
                 }
             }
         }
@@ -229,6 +250,12 @@ class ParallelRangeDataSource(
         val chunk = readIntoChunk(ds)
         ds.close()
         return chunk
+    }
+
+    private fun Exception.isTransientInterruption(): Boolean {
+        if (this is InterruptedIOException || this is InterruptedException) return true
+        val cause = cause
+        return cause is InterruptedIOException || cause is InterruptedException
     }
 
     /** Read from an already-opened DataSource into a pooled chunk buffer. */
@@ -328,10 +355,18 @@ class ParallelRangeDataSource(
     class Factory(
         private val upstreamFactory: OkHttpDataSource.Factory,
         private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
-        private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024
+        private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
+        private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
+        private val onResolvedUri: (Uri?) -> Unit = {}
     ) : DataSource.Factory {
         override fun createDataSource(): DataSource {
-            return ParallelRangeDataSource(upstreamFactory, parallelConnections, chunkSize)
+            return ParallelRangeDataSource(
+                upstreamFactory = upstreamFactory,
+                parallelConnections = parallelConnections,
+                chunkSize = chunkSize,
+                shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,
+                onResolvedUri = onResolvedUri
+            )
         }
     }
 }
