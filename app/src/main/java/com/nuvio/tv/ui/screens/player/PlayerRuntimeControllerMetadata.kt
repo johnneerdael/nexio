@@ -132,7 +132,7 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         unairedMessage = if (hasAired) {
             null
         } else {
-            "Next episode hasn't aired yet"
+            context.getString(com.nuvio.tv.R.string.next_episode_not_aired_yet)
         }
     )
 
