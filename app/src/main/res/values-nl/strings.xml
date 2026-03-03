@@ -327,7 +327,7 @@
 <string name="layout_modern_sidebar_blur_sub">Schakel vervagingseffect in voor moderne zijbalk.</string>
 <string name="layout_show_hero">Hero-sectie tonen</string>
 <string name="layout_show_hero_sub">Toon hero-carrousel bovenaan de startpagina.</string>
-<string name="layout_show_discover">Discover tonen bij zoeken</string>
+<string name="layout_show_discover">Ontdek tonen bij zoeken</string>
 <string name="layout_show_discover_sub">Toon bladersectie wanneer zoekveld leeg is.</string>
 <string name="layout_poster_labels">Posterlabels tonen</string>
 <string name="layout_poster_labels_sub">Toon titels onder posters in rijen, raster en alles-bekijken.</string>
@@ -674,7 +674,7 @@
 <string name="search_placeholder">Zoek films &amp; series</string>
 <string name="search_start_title">Begin met zoeken</string>
 <string name="search_start_subtitle">Voer minimaal 2 tekens in</string>
-<string name="search_start_subtitle_no_discover">Discover is uitgeschakeld. Voer minimaal 2 tekens in</string>
+<string name="search_start_subtitle_no_discover">Ontdek is uitgeschakeld. Voer minimaal 2 tekens in</string>
 
 <!-- LibraryScreen -->
 <string name="library_syncing">Trakt-bibliotheek synchroniseren…</string>
@@ -824,7 +824,7 @@
 <string name="ratings_season_summary">Seizoen %1$d - %2$d afleveringen</string>
 
 <!-- SearchDiscoverSection -->
-<string name="discover_title">Ontdekken</string>
+<string name="discover_title">Ontdek</string>
 <string name="discover_load_more">Meer laden</string>
 <string name="discover_loading">Laden…</string>
 <string name="discover_filter_type">Type</string>
@@ -833,7 +833,7 @@
 <string name="discover_select_catalog">Selecteren</string>
 <string name="discover_genre_default">Standaard</string>
 <string name="discover_empty_no_catalog_title">Selecteer een catalogus</string>
-<string name="discover_empty_no_catalog_subtitle">Kies een discover-catalogus om te bladeren</string>
+<string name="discover_empty_no_catalog_subtitle">Kies een ontdek-catalogus om te bladeren</string>
 <string name="discover_empty_no_content_title">Geen inhoud gevonden</string>
 <string name="discover_empty_no_content_subtitle">Probeer een ander genre of catalogus</string>
 
