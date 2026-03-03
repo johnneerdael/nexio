@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import com.nuvio.tv.data.local.PlayerSettings
 import java.util.concurrent.atomic.AtomicBoolean
+import android.os.SystemClock
 
 /**
  * A DataSource that downloads progressive files using multiple parallel HTTP range requests.
@@ -30,18 +31,20 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Only used for progressive downloads (MKV, MP4). HLS/DASH already handle chunked parallel downloads.
  */
 @UnstableApi
-class ParallelRangeDataSource(
+internal class ParallelRangeDataSource(
     private val upstreamFactory: OkHttpDataSource.Factory,
     private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
     private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
     private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
-    private val onResolvedUri: (Uri?) -> Unit = {}
+    private val onResolvedUri: (Uri?) -> Unit = {},
+    private val consumeBootstrapCache: (DataSpec) -> BootstrapCacheEntry? = { null },
+    private val updateBootstrapCache: (BootstrapCacheEntry?) -> Unit = {}
 ) : DataSource {
 
     companion object {
         private const val TAG = "ParallelRangeDS"
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
-        private const val BOOTSTRAP_READ_BYTES = 2L * 1024L * 1024L
+        private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
     }
 
     /**
@@ -49,6 +52,17 @@ class ParallelRangeDataSource(
      * The array may be larger than [size] (it's from the pool).
      */
     private class DownloadedChunk(val data: ByteArray, val size: Int)
+
+    internal data class BootstrapCacheEntry(
+        val requestUri: Uri,
+        val startPosition: Long,
+        val resolvedUri: Uri?,
+        val openLength: Long,
+        val totalFileLength: Long,
+        val bootstrapData: ByteArray,
+        val bootstrapSize: Int,
+        val createdAtUptimeMs: Long
+    )
 
     private var resolvedUri: Uri? = null
     private var originalDataSpec: DataSpec? = null
@@ -71,7 +85,7 @@ class ParallelRangeDataSource(
     private var currentChunkReadOffset: Int = 0
     private var bootstrapPrefetchDeferred: Boolean = false
     private var bootstrapChunk: DownloadedChunk? = null
-    private var bootstrapChunkIndex: Long = -1
+    private var bootstrapStartPosition: Long = C.TIME_UNSET
 
     private val transferListeners = mutableListOf<TransferListener>()
 
@@ -84,7 +98,7 @@ class ParallelRangeDataSource(
         position = dataSpec.position
         bootstrapPrefetchDeferred = false
         bootstrapChunk = null
-        bootstrapChunkIndex = -1
+        bootstrapStartPosition = C.TIME_UNSET
 
         // Cancel any in-flight chunks from a previous open (e.g., after seek)
         cancelAllChunks()
@@ -92,6 +106,22 @@ class ParallelRangeDataSource(
         // Recreate executor if it was shut down by a previous close()
         if (executor.isShutdown) {
             executor = Executors.newFixedThreadPool(parallelConnections)
+        }
+
+        consumeBootstrapCache(dataSpec)?.let { cached ->
+            resolvedUri = cached.resolvedUri
+            onResolvedUri(resolvedUri)
+            totalFileLength = cached.totalFileLength
+            bytesRemaining = cached.openLength
+            bootstrapChunk = DownloadedChunk(cached.bootstrapData, cached.bootstrapSize)
+            bootstrapStartPosition = cached.startPosition
+            bootstrapPrefetchDeferred = true
+            Log.d(
+                TAG,
+                "Reusing bootstrap window for immediate reopen at ${cached.startPosition}, " +
+                    "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}"
+            )
+            return cached.openLength
         }
 
         // Open first connection to determine total length and capture the resolved (redirected) URL
@@ -126,20 +156,34 @@ class ParallelRangeDataSource(
         Log.d(TAG, "Parallel mode: ${parallelConnections} connections, ${chunkSize / 1024 / 1024}MB chunks, " +
                 "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}")
 
-        // Reuse probe data as the first chunk (only when chunk-aligned, i.e., initial open)
+        // Reuse a small probe window immediately for both startup and large seek reopens.
         val firstChunkIndex = position / chunkSize
-        if (position % chunkSize == 0L) {
-            val bootstrapBytes = minOf(chunkSize, BOOTSTRAP_READ_BYTES).toInt()
+        if (openLength > 0L) {
+            val bootstrapBytes = minOf(minOf(chunkSize, BOOTSTRAP_READ_BYTES), openLength).toInt()
             val chunk = readBootstrapChunk(probeSource, bootstrapBytes)
             probeSource.close()
             bootstrapChunk = chunk
-            bootstrapChunkIndex = firstChunkIndex
-            // Avoid startup churn from immediate background chunk fetches before the first
-            // actual read. Media3 may perform extra startup opens/sniffing.
+            bootstrapStartPosition = position
+            // Avoid startup churn from immediate background fetches during repeated startup opens,
+            // but still start the target seek chunk download in parallel for non-zero positions.
             bootstrapPrefetchDeferred = true
+            updateBootstrapCache(
+                BootstrapCacheEntry(
+                    requestUri = dataSpec.uri,
+                    startPosition = dataSpec.position,
+                    resolvedUri = resolvedUri,
+                    openLength = openLength,
+                    totalFileLength = totalFileLength,
+                    bootstrapData = chunk.data,
+                    bootstrapSize = chunk.size,
+                    createdAtUptimeMs = SystemClock.uptimeMillis()
+                )
+            )
+            if (position != 0L) {
+                ensureChunkScheduled(firstChunkIndex)
+            }
         } else {
             probeSource.close()
-            scheduleChunks()
         }
 
         return openLength
@@ -162,12 +206,12 @@ class ParallelRangeDataSource(
         val bootstrap = bootstrapChunk
         if (currentChunk == null &&
             bootstrap != null &&
-            chunkIndex == bootstrapChunkIndex &&
-            (position % chunkSize).toInt() < bootstrap.size
+            position >= bootstrapStartPosition &&
+            position < bootstrapStartPosition + bootstrap.size
         ) {
             currentChunk = bootstrap
             currentChunkIndex = chunkIndex
-            currentChunkReadOffset = (position % chunkSize).toInt()
+            currentChunkReadOffset = (position - bootstrapStartPosition).toInt()
         }
 
         // Load the chunk for the current position
@@ -194,7 +238,7 @@ class ParallelRangeDataSource(
             // Current chunk exhausted, move to next
             if (chunk === bootstrapChunk) {
                 bootstrapChunk = null
-                bootstrapChunkIndex = -1
+                bootstrapStartPosition = C.TIME_UNSET
             }
             currentChunk = null
             return read(buffer, offset, length)
@@ -367,7 +411,7 @@ class ParallelRangeDataSource(
         currentChunk = null
         currentChunkIndex = -1
         bootstrapChunk = null
-        bootstrapChunkIndex = -1
+        bootstrapStartPosition = C.TIME_UNSET
 
         chunks.values.forEach { future ->
             if (future.isDone && !future.isCancelled) {
@@ -408,13 +452,30 @@ class ParallelRangeDataSource(
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
         private val onResolvedUri: (Uri?) -> Unit = {}
     ) : DataSource.Factory {
+        @Volatile
+        private var startupBootstrapCache: BootstrapCacheEntry? = null
+
         override fun createDataSource(): DataSource {
             return ParallelRangeDataSource(
                 upstreamFactory = upstreamFactory,
                 parallelConnections = parallelConnections,
                 chunkSize = chunkSize,
                 shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,
-                onResolvedUri = onResolvedUri
+                onResolvedUri = onResolvedUri,
+                consumeBootstrapCache = { dataSpec ->
+                    val cached = startupBootstrapCache ?: return@ParallelRangeDataSource null
+                    val isFresh = SystemClock.uptimeMillis() - cached.createdAtUptimeMs <= 15_000L
+                    if (!isFresh) {
+                        startupBootstrapCache = null
+                        return@ParallelRangeDataSource null
+                    }
+                    if (dataSpec.position != cached.startPosition) return@ParallelRangeDataSource null
+                    if (dataSpec.uri != cached.requestUri) return@ParallelRangeDataSource null
+                    cached
+                },
+                updateBootstrapCache = { entry ->
+                    startupBootstrapCache = entry
+                }
             )
         }
     }
