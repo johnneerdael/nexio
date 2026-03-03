@@ -294,6 +294,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     attachedAddonSubtitleKeys = emptySet()
     hasRetriedCurrentStreamAfter416 = false
     lastSavedPosition = 0L
+    _exoPlayer?.stop()
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
@@ -589,6 +590,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     refreshScrobbleItem()
 
     lastSavedPosition = 0L
+    _exoPlayer?.stop()
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
@@ -598,7 +600,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
             currentSeason = currentSeason,
             currentEpisode = currentEpisode,
             currentEpisodeTitle = currentEpisodeTitle,
-            currentStreamName = stream.name ?: stream.addonName, 
+            currentStreamName = stream.name ?: stream.addonName,
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),
