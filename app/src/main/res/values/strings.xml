@@ -187,6 +187,8 @@
     <string name="playback_afr_on_start_sub">Switch when playback starts.</string>
     <string name="playback_afr_on_start_stop">On start/stop</string>
     <string name="playback_afr_on_start_stop_sub">Switch on start and restore on stop.</string>
+    <string name="playback_resolution_matching">Resolution matching</string>
+    <string name="playback_resolution_matching_sub">Allow display mode changes to match video resolution.</string>
     <string name="playback_player_external_desc">Always open streams in an external app</string>
     <string name="playback_player_ask_desc">Choose the player each time</string>
 
