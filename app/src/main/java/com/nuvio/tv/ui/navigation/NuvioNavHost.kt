@@ -6,6 +6,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -39,7 +40,9 @@ import com.nuvio.tv.ui.screens.cast.CastDetailScreen
 fun NuvioNavHost(
     navController: NavHostController,
     startDestination: String = Screen.Home.route,
-    hideBuiltInHeaders: Boolean = false
+    hideBuiltInHeaders: Boolean = false,
+    activeProfileUsesPrimaryAddons: Boolean = false,
+    activeProfileUsesPrimaryPlugins: Boolean = false
 ) {
     fun isStreamToPlayer(from: String, to: String): Boolean {
         return from.startsWith("stream/") && to.startsWith("player/")
@@ -659,7 +662,8 @@ fun NuvioNavHost(
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
-                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) }
+                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
+                onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) }
             )
         }
 
@@ -694,10 +698,19 @@ fun NuvioNavHost(
         }
 
         composable(Screen.AddonManager.route) {
-            AddonManagerScreen(
-                showBuiltInHeader = !hideBuiltInHeaders,
-                onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) }
-            )
+            if (activeProfileUsesPrimaryAddons) {
+                LaunchedEffect(Unit) {
+                    navController.navigate(Screen.Settings.route) {
+                        popUpTo(Screen.AddonManager.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            } else {
+                AddonManagerScreen(
+                    showBuiltInHeader = !hideBuiltInHeaders,
+                    onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) }
+                )
+            }
         }
 
         composable(Screen.CatalogOrder.route) {
@@ -707,9 +720,18 @@ fun NuvioNavHost(
         }
 
         composable(Screen.Plugins.route) {
-            PluginScreen(
-                onBackPress = { navController.popBackStack() }
-            )
+            if (activeProfileUsesPrimaryPlugins) {
+                LaunchedEffect(Unit) {
+                    navController.navigate(Screen.Settings.route) {
+                        popUpTo(Screen.Plugins.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            } else {
+                PluginScreen(
+                    onBackPress = { navController.popBackStack() }
+                )
+            }
         }
 
         composable(Screen.Account.route) {
