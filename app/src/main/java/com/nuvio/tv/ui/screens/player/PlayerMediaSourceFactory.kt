@@ -35,7 +35,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     private var okHttpClient: OkHttpClient? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
     @Volatile private var currentVodCacheUrl: String? = null
+    @Volatile private var currentVodCacheResolvedUrl: String? = null
     @Volatile private var currentVodCacheActive: Boolean = false
+    private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
     var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
@@ -75,19 +77,33 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         val mediaItem = mediaItemBuilder.build()
+        parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
         val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
             ParallelRangeDataSource.Factory(
                 okHttpFactory,
                 parallelConnectionCount,
-                parallelChunkSizeMb.toLong() * 1024L * 1024L
+                parallelChunkSizeMb.toLong() * 1024L * 1024L,
+                shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+                onResolvedUri = { resolved ->
+                    currentVodCacheResolvedUrl = resolved?.toString()
+                }
             )
         } else {
             okHttpFactory
         }
         val useVodCache = ENABLE_VOD_CACHE && !isHls && !isDash && shouldUseVodCache(url)
+        val previousVodCacheActive = currentVodCacheActive
         currentVodCacheUrl = url
+        currentVodCacheResolvedUrl = null
         currentVodCacheActive = false
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
+        if (useVodCache && !isVodCacheDisabled) {
+            maybeApplyLiveVodCacheCapIncrease(
+                context = context,
+                requestedMaxBytes = vodCacheMaxBytes,
+                allowLiveReconfigure = !previousVodCacheActive
+            )
+        }
         val progressiveFactory = if (useVodCache && !isVodCacheDisabled) {
             val cache = getReadySimpleCache(vodCacheMaxBytes)
                 ?: getAnySimpleCache()?.also {
@@ -183,6 +199,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         startVodCacheInitialization(context, resolveVodCacheMaxBytes(context))
     }
 
+    fun notifyPlaybackFirstFrameRendered() {
+        parallelStartupPrefetchUnlocked.set(true)
+    }
+
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
         if (!ENABLE_VOD_CACHE) return "vod=off"
         if (isVodCacheDisabled) return "vod=disabled"
@@ -191,8 +211,22 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val streamUrl = currentStreamUrl ?: currentVodCacheUrl
         val streamBytes = runCatching {
             val cache = getAnySimpleCache() ?: return@runCatching 0L
-            val key = streamUrl ?: return@runCatching 0L
-            cache.getCachedSpans(key).sumOf { span -> span.length.coerceAtLeast(0L) }
+            val keys = linkedSetOf<String>()
+            fun addKey(value: String?) {
+                if (value.isNullOrBlank()) return
+                keys += value
+                runCatching { URLDecoder.decode(value, Charsets.UTF_8.name()) }
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { keys += it }
+            }
+            addKey(streamUrl)
+            addKey(currentVodCacheUrl)
+            addKey(currentVodCacheResolvedUrl)
+            val bytes = keys.sumOf { key ->
+                cache.getCachedSpans(key).sumOf { span -> span.length.coerceAtLeast(0L) }
+            }
+            bytes.coerceAtMost(usedBytes)
         }.getOrDefault(0L)
         val capBytes = when {
             configuredVodCacheMaxBytes > 0L -> configuredVodCacheMaxBytes
@@ -366,6 +400,60 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
         }
 
+        private fun maybeApplyLiveVodCacheCapIncrease(
+            context: Context,
+            requestedMaxBytes: Long,
+            allowLiveReconfigure: Boolean
+        ) {
+            val currentMaxBytes = configuredVodCacheMaxBytes
+            if (requestedMaxBytes <= 0L || currentMaxBytes <= 0L) return
+            if (requestedMaxBytes <= currentMaxBytes) return
+            if (requestedMaxBytes - currentMaxBytes < LIVE_CACHE_RECONFIGURE_MIN_DELTA_BYTES) return
+            if (!allowLiveReconfigure) {
+                maybeLogDeferredReconfigure(requestedMaxBytes)
+                return
+            }
+            sharedSimpleCache ?: return
+            synchronized(this) {
+                val liveCache = sharedSimpleCache ?: return
+                val liveCurrentMaxBytes = configuredVodCacheMaxBytes
+                if (requestedMaxBytes <= liveCurrentMaxBytes) return
+                if (requestedMaxBytes - liveCurrentMaxBytes < LIVE_CACHE_RECONFIGURE_MIN_DELTA_BYTES) {
+                    return
+                }
+                runCatching {
+                    Log.i(
+                        TAG,
+                        "Recreating VOD cache live to apply cap increase from " +
+                            "${liveCurrentMaxBytes / 1024L / 1024L}MB to " +
+                            "${requestedMaxBytes / 1024L / 1024L}MB"
+                    )
+                    liveCache.release()
+                    sharedSimpleCache = null
+                    configuredVodCacheMaxBytes = -1L
+                    getOrCreateSimpleCache(context, requestedMaxBytes)
+                    Log.i(
+                        TAG,
+                        "Applied VOD cache cap increase live with new cap=" +
+                            "${requestedMaxBytes / 1024L / 1024L}MB"
+                    )
+                }.onFailure { error ->
+                    Log.w(
+                        TAG,
+                        "Live VOD cache cap update failed, restoring previous cap=" +
+                            "${liveCurrentMaxBytes / 1024L / 1024L}MB",
+                        error
+                    )
+                    runCatching { getOrCreateSimpleCache(context, liveCurrentMaxBytes) }
+                        .onFailure { restoreError ->
+                            isVodCacheDisabled = true
+                            Log.e(TAG, "Disabling VOD cache after live reconfigure restore failure", restoreError)
+                        }
+                    maybeLogDeferredReconfigure(requestedMaxBytes)
+                }
+            }
+        }
+
         private fun startVodCacheInitialization(context: Context, maxBytes: Long) {
             if (isVodCacheDisabled) return
             if (getReadySimpleCache(maxBytes) != null) return
@@ -395,9 +483,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             Log.i(
                 TAG,
                 "Deferring VOD cache cap change from ${configuredVodCacheMaxBytes / 1024L / 1024L}MB " +
-                    "to ${requestedMaxBytes / 1024L / 1024L}MB until app restart to avoid in-use cache reconfiguration."
+                "to ${requestedMaxBytes / 1024L / 1024L}MB until app restart to avoid in-use cache reconfiguration."
             )
         }
+
+        private const val LIVE_CACHE_RECONFIGURE_MIN_DELTA_BYTES = 64L * 1024L * 1024L
     }
 }
 
