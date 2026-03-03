@@ -22,20 +22,6 @@ object StreamAutoPlaySelector {
     private fun resolvePlayableUrl(stream: Stream): String? {
         val url = stream.getStreamUrl() ?: return null
 
-        // Pixeldrain is the ONLY host that needs special resolving
-        if ("pixeldrain" in url) {
-            val id = url.substringAfterLast("/")
-            val infoUrl = "https://pixeldrain.dev/api/file/$id/info"
-
-            val infoJson = runCatching { URL(infoUrl).readText() }.getOrNull() ?: return null
-
-            if (!infoJson.contains("\"success\":true")) return null
-            if (!infoJson.contains("\"mime_type\":\"video")) return null
-
-            return "https://pixeldrain.dev/api/file/$id?download"
-        }
-
-        // Everything else: return as-is
         return url
     }
 
