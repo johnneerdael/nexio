@@ -463,7 +463,7 @@ fun LayoutSettingsContent(
                             subtitle = stringResource(R.string.layout_expand_delay_sub),
                             value = uiState.focusedPosterBackdropExpandDelaySeconds,
                             valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
-                            minValue = 1,
+                            minValue = 0,
                             maxValue = 10,
                             step = 1,
                             onValueChange = { seconds ->
