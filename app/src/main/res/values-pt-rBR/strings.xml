@@ -606,6 +606,16 @@
     <!-- AudioDialog -->
     <string name="audio_dialog_title">Áudio</string>
 
+    <!-- ParentalGuideOverlay -->
+    <string name="parental_nudity">Nudez</string>
+    <string name="parental_violence">Violência</string>
+    <string name="parental_profanity">Linguagem Imprópria</string>
+    <string name="parental_alcohol">Álcool/Drogas</string>
+    <string name="parental_frightening">Medo/Terror</string>
+    <string name="parental_severity_severe">Severa</string>
+    <string name="parental_severity_moderate">Moderada</string>
+    <string name="parental_severity_mild">Leve</string>
+
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
    <string name="subtitle_dialog_title">Legendas</string>
     <string name="subtitle_no_builtin">Nenhuma legenda embutida disponível</string>
