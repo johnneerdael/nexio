@@ -296,6 +296,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     lastSavedPosition = 0L
+    _exoPlayer?.stop()
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
@@ -323,7 +324,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                 runAfrPreflightIfEnabled(
                     url = url,
                     headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
                 )
                 player.setMediaSource(mediaSourceFactory.createMediaSource(url, newHeaders))
                 player.playWhenReady = true
@@ -592,6 +594,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     refreshScrobbleItem()
 
     lastSavedPosition = 0L
+    _exoPlayer?.stop()
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
@@ -601,7 +604,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
             currentSeason = currentSeason,
             currentEpisode = currentEpisode,
             currentEpisodeTitle = currentEpisodeTitle,
-            currentStreamName = stream.name ?: stream.addonName, 
+            currentStreamName = stream.name ?: stream.addonName,
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),
@@ -647,7 +650,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
                 runAfrPreflightIfEnabled(
                     url = url,
                     headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
                 )
                 player.setMediaSource(mediaSourceFactory.createMediaSource(url, newHeaders))
                 player.playWhenReady = true

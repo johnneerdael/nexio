@@ -367,11 +367,23 @@ fun PlayerScreen(
 
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     if (uiState.showPauseOverlay) {
-                        viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_CENTER,
+                            KeyEvent.KEYCODE_ENTER,
+                            KeyEvent.KEYCODE_NUMPAD_ENTER,
+                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                                // Resume directly from pause overlay in one click.
+                                viewModel.onEvent(PlayerEvent.OnPlayPause)
+                            }
+                            else -> {
+                                viewModel.onEvent(PlayerEvent.OnDismissPauseOverlay)
+                            }
+                        }
                         return@onKeyEvent true
                     }
                     when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                             if (!uiState.showControls) {
                                 viewModel.onEvent(PlayerEvent.OnPlayPause)
                                 true
@@ -444,6 +456,12 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                             viewModel.onEvent(PlayerEvent.OnPlayPause)
+                            true
+                        }
+                        KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                            if (!uiState.isPlaying) {
+                                viewModel.onEvent(PlayerEvent.OnPlayPause)
+                            }
                             true
                         }
                         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
