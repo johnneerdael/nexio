@@ -120,6 +120,7 @@ internal fun PlaybackSettingsSections(
     onSetOsdClockEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
+    onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetTrailerEnabled: (Boolean) -> Unit,
     onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
@@ -295,7 +296,9 @@ internal fun PlaybackSettingsSections(
                 item(key = "general_afr_options") {
                     FrameRateMatchingModeOptions(
                         selectedMode = playerSettings.frameRateMatchingMode,
+                        resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
                         onSelect = onSetFrameRateMatchingMode,
+                        onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
                         onFocused = { focusedSection = PlaybackSection.GENERAL },
                         enabled = !generalUi.isExternalPlayer
                     )
@@ -486,7 +489,9 @@ private fun PlaybackSectionHeader(
 @Composable
 private fun FrameRateMatchingModeOptions(
     selectedMode: FrameRateMatchingMode,
+    resolutionMatchingEnabled: Boolean,
     onSelect: (FrameRateMatchingMode) -> Unit,
+    onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onFocused: () -> Unit,
     enabled: Boolean
 ) {
@@ -518,6 +523,18 @@ private fun FrameRateMatchingModeOptions(
             subtitle = stringResource(R.string.playback_afr_on_start_stop_sub),
             isSelected = selectedMode == FrameRateMatchingMode.START_STOP,
             onClick = { onSelect(FrameRateMatchingMode.START_STOP) },
+            onFocused = onFocused,
+            enabled = enabled
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ToggleSettingsItem(
+            icon = Icons.Default.Image,
+            title = stringResource(R.string.playback_resolution_matching),
+            subtitle = stringResource(R.string.playback_resolution_matching_sub),
+            isChecked = resolutionMatchingEnabled,
+            onCheckedChange = onSetResolutionMatchingEnabled,
             onFocused = onFocused,
             enabled = enabled
         )

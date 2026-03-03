@@ -334,7 +334,7 @@ fun ModernHomeContent(
         if (!shouldActivateFocusedPosterFlow) return@LaunchedEffect
         if (isVerticalRowsScrolling) return@LaunchedEffect
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
-        delay(uiState.focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(1) * 1000L)
+        delay(uiState.focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(0) * 1000L)
         if (shouldActivateFocusedPosterFlow &&
             !isVerticalRowsScrolling &&
             focusedCatalogSelection?.focusKey == selection.focusKey
