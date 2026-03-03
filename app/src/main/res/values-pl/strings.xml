@@ -572,6 +572,16 @@
     <!-- PlayerScreen -->
     <string name="player_ends_at">Koniec o: %1$s</string>
     <string name="player_no_external_player">Nie znaleziono zewnętrznego odtwarzacza</string>
+
+    <!-- ParentalGuideOverlay -->
+    <string name="parental_nudity">Nagość</string>
+    <string name="parental_violence">Przemoc</string>
+    <string name="parental_profanity">Wulgaryzmy</string>
+    <string name="parental_alcohol">Alkohol/Narkotyki</string>
+    <string name="parental_frightening">Przerażające sceny</string>
+    <string name="parental_severity_severe">Silne</string>
+    <string name="parental_severity_moderate">Umiarkowane</string>
+    <string name="parental_severity_mild">Łagodne</string>
     <string name="player_via">przez %1$s</string>
     <string name="player_subtitle_delay">Opóźnienie napisów</string>
     <string name="player_error_title">Błąd odtwarzania</string>

@@ -265,11 +265,11 @@ internal fun PlayerRuntimeController.fetchParentalGuide(id: String?, type: Strin
         if (response?.parentalGuide != null) {
             val guide = response.parentalGuide
             val labels = mapOf(
-                "nudity" to "Nudity",
-                "violence" to "Violence",
-                "profanity" to "Profanity",
-                "alcohol" to "Alcohol/Drugs",
-                "frightening" to "Frightening"
+                "nudity" to context.getString(R.string.parental_nudity),
+                "violence" to context.getString(R.string.parental_violence),
+                "profanity" to context.getString(R.string.parental_profanity),
+                "alcohol" to context.getString(R.string.parental_alcohol),
+                "frightening" to context.getString(R.string.parental_frightening)
             )
             val severityOrder = mapOf(
                 "severe" to 0, "moderate" to 1, "mild" to 2
@@ -285,8 +285,16 @@ internal fun PlayerRuntimeController.fetchParentalGuide(id: String?, type: Strin
 
             val warnings = entries
                 .filter { it.second.lowercase() != "none" }
-                .map { ParentalWarning(label = labels[it.first] ?: it.first, severity = it.second) }
-                .sortedBy { severityOrder[it.severity.lowercase()] ?: 3 }
+                .sortedBy { severityOrder[it.second.lowercase()] ?: 3 }
+                .map {
+                    val localizedSeverity = when (it.second.lowercase()) {
+                        "severe" -> context.getString(R.string.parental_severity_severe)
+                        "moderate" -> context.getString(R.string.parental_severity_moderate)
+                        "mild" -> context.getString(R.string.parental_severity_mild)
+                        else -> it.second
+                    }
+                    ParentalWarning(label = labels[it.first] ?: it.first, severity = localizedSeverity)
+                }
                 .take(5)
 
             _uiState.update {

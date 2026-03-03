@@ -587,6 +587,16 @@
 
     <!-- PlayerScreen -->
     <string name="player_no_external_player">No external player found</string>
+
+    <!-- ParentalGuideOverlay -->
+    <string name="parental_nudity">Nudity</string>
+    <string name="parental_violence">Violence</string>
+    <string name="parental_profanity">Profanity</string>
+    <string name="parental_alcohol">Alcohol/Drugs</string>
+    <string name="parental_frightening">Frightening</string>
+    <string name="parental_severity_severe">Severe</string>
+    <string name="parental_severity_moderate">Moderate</string>
+    <string name="parental_severity_mild">Mild</string>
     <string name="player_ends_at">Ends at %1$s</string>
     <string name="player_via">via %1$s</string>
     <string name="player_subtitle_delay">Subtitles Delay</string>
