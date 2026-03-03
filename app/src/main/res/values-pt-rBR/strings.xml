@@ -100,6 +100,11 @@
     <string name="appearance_language_dialog_title">Escolher idioma</string>
     <string name="appearance_language_restart_hint">Reinicie o app para aplicar a alteração de idioma.</string>
 
+    <!-- Font -->
+    <string name="appearance_font">Fonte do App</string>
+    <string name="appearance_font_subtitle">Escolha sua fonte preferida</string>
+    <string name="appearance_font_dialog_title">Escolha a fonte</string>
+    
     <!-- ThemeSettingsScreen -->
     <string name="appearance_title">Aparência</string>
     <string name="appearance_subtitle">Ajuste o tema visual e o idioma</string>
@@ -178,10 +183,12 @@
     <string name="playback_afr_closed">Nunca</string>
     <string name="playback_afr_off">Desativado</string>
     <string name="playback_afr_off_sub">Não alterar a taxa de atualização da tela.</string>
-    <string name="playback_afr_on_start">Ao início</string>
+    <string name="playback_afr_on_start">Ao iníciar</string>
     <string name="playback_afr_on_start_sub">Ajustar quando a reprodução começar.</string>
-    <string name="playback_afr_on_start_stop">Ao início/parar</string>
+    <string name="playback_afr_on_start_stop">Ao iníciar/parar</string>
     <string name="playback_afr_on_start_stop_sub">Ajustar ao iniciar e restaurar ao sair.</string>
+    <string name="playback_resolution_matching">Ajuste de resolução</string>
+    <string name="playback_resolution_matching_sub">Sincronizar resolução da tela com o vídeo.</string>
     <string name="playback_player_external_desc">Sempre abrir vídeos em um app externo</string>
     <string name="playback_player_ask_desc">Escolher o player toda vez que assistir</string>
 
@@ -203,7 +210,7 @@
     <string name="audio_decoder_prefer_app">Preferir decodificadores do app (FFmpeg)</string>
     <string name="audio_decoder_priority">Prioridade do Decodificador</string>
     <string name="audio_tunneled">Reprodução Tunneled</string>
-    <string name="audio_tunneled_sub">Sincronização A/V via hardware. Pode Melhorar a fluidez.</string>
+    <string name="audio_tunneled_sub">Sincronia A/V via hardware para maior fluidez.</string>
     <string name="audio_dv_sub">Mapear DV7 para HEVC em dispositivos sem DV.</string>
     <string name="audio_decoder_device_only_desc">Usa apenas decodificadores nativos. Mais estável, mas suporta menos formatos.</string>
     <string name="audio_decoder_prefer_device_desc">Usa hardware quando disponível, com FFmpeg como fallback. (Recomendado)</string>
@@ -437,6 +444,9 @@
     <string name="tmdb_episodes_subtitle">Títulos, resumos e imagens dos episódios do TMDB</string>
     <string name="tmdb_more_like_this_title">Títulos Semelhantes</string>
     <string name="tmdb_more_like_this_subtitle">Sugestões e recomendações baseadas no TMDB</string>
+    <string name="tmdb_collections_title">Coleções</string>
+    <string name="tmdb_collections_subtitle">Coleções de Filmes em ordem de lançamento</string>
+   
     <string name="tmdb_language_dialog_title">Idioma do TMDB</string>
 
    <!-- TraktScreen -->
@@ -710,12 +720,12 @@
     <string name="account_sign_out">Sair da conta</string>
 
     <!-- AuthSignInScreen -->
-   <string name="auth_signin_title">Fazer Login</string>
+    <string name="auth_signin_title">Fazer Login</string>
     <string name="auth_signin_tv_disabled">A entrada por teclado na TV está desativada. Continue via QR Code.</string>
     <string name="auth_signin_qr_btn">Continuar com QR Code</string>
 
     <!-- AuthQrSignInScreen -->
-<string name="auth_qr_title">Entrar com QR Code</string>
+    <string name="auth_qr_title">Entrar com QR Code</string>
     <string name="auth_qr_account_login">Login da Conta</string>
     <string name="auth_qr_finishing">Finalizando acesso\u2026</string>
     <string name="auth_qr_code_label">Código: %1$s</string>
@@ -788,7 +798,7 @@
     <string name="cast_detail_retry">Tentar novamente</string>
     <string name="cast_detail_filmography">Filmografia</string>
 
-<!-- CatalogSeeAllScreen -->
+    <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">de %1$s</string>
     <string name="catalog_see_all_empty_title">Nada por aqui</string>
     <string name="catalog_see_all_empty_subtitle">Tente outro catálogo ou volte mais tarde</string>
@@ -850,7 +860,7 @@
     <string name="audio_dv_title">DV7 - Modo HEVC Alternativo</string>
 
     <!-- SidebarNavigation / MainActivity -->
-   <string name="nav_home">Início</string>
+    <string name="nav_home">Início</string>
     <string name="nav_discover">Descobrir</string>
     <string name="nav_search">Busca</string>
     <string name="nav_library">Minha Lista</string>
