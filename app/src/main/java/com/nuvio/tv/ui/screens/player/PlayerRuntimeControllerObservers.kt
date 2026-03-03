@@ -20,19 +20,10 @@ internal data class SubtitleFetchRequest(
 internal fun PlayerRuntimeController.buildSubtitleFetchRequest(): SubtitleFetchRequest? {
     val id = contentId ?: return null
     val type = contentType ?: return null
-    val normalizedType = type.lowercase()
-    val videoId = if (
-        (normalizedType == "series" || normalizedType == "tv") &&
-        currentVideoId != null
-    ) {
-        currentVideoId
-    } else {
-        null
-    }
     return SubtitleFetchRequest(
         type = type.lowercase(),
         id = id,
-        videoId = videoId
+        videoId = currentVideoId
     )
 }
 
