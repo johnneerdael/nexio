@@ -110,6 +110,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setFrameRateMatchingMode(mode)
     }
 
+    suspend fun setResolutionMatchingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setResolutionMatchingEnabled(enabled)
+    }
+
     suspend fun setMapDV7ToHevc(enabled: Boolean) {
         playerSettingsDataStore.setMapDV7ToHevc(enabled)
     }

@@ -147,6 +147,7 @@ data class PlayerSettings(
     val experimentalDv7ToDv81Enabled: Boolean = false,
     // Display settings
     val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
+    val resolutionMatchingEnabled: Boolean = false,
     // Stream selection settings
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
@@ -279,6 +280,7 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
     private val frameRateMatchingModeKey = stringPreferencesKey("frame_rate_matching_mode")
+    private val resolutionMatchingEnabledKey = booleanPreferencesKey("resolution_matching_enabled")
     private val streamAutoPlayModeKey = stringPreferencesKey("stream_auto_play_mode")
     private val streamAutoPlaySourceKey = stringPreferencesKey("stream_auto_play_source")
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
@@ -446,6 +448,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 } else {
                     FrameRateMatchingMode.OFF
                 },
+                resolutionMatchingEnabled = prefs[resolutionMatchingEnabledKey] ?: false,
                 streamAutoPlayMode = prefs[streamAutoPlayModeKey]?.let {
                     runCatching { StreamAutoPlayMode.valueOf(it) }.getOrDefault(StreamAutoPlayMode.MANUAL)
                 } ?: StreamAutoPlayMode.MANUAL,
@@ -626,6 +629,12 @@ class PlayerSettingsDataStore @Inject constructor(
         store().edit { prefs ->
             prefs[frameRateMatchingModeKey] = mode.name
             prefs[frameRateMatchingKey] = mode != FrameRateMatchingMode.OFF
+        }
+    }
+
+    suspend fun setResolutionMatchingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[resolutionMatchingEnabledKey] = enabled
         }
     }
 

@@ -290,9 +290,7 @@ fun SettingsScreen(
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                 allowDetailAutofocus = true
-                                pendingContentFocusCategory = selectedCategory
-                                pendingContentFocusRequestId += 1L
-                                true
+                                false
                             } else {
                                 false
                             }
