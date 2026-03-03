@@ -41,6 +41,7 @@ class ParallelRangeDataSource(
     companion object {
         private const val TAG = "ParallelRangeDS"
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
+        private const val BOOTSTRAP_READ_BYTES = 2L * 1024L * 1024L
     }
 
     /**
@@ -69,6 +70,8 @@ class ParallelRangeDataSource(
     private var currentChunkIndex: Long = -1
     private var currentChunkReadOffset: Int = 0
     private var bootstrapPrefetchDeferred: Boolean = false
+    private var bootstrapChunk: DownloadedChunk? = null
+    private var bootstrapChunkIndex: Long = -1
 
     private val transferListeners = mutableListOf<TransferListener>()
 
@@ -80,6 +83,8 @@ class ParallelRangeDataSource(
         originalDataSpec = dataSpec
         position = dataSpec.position
         bootstrapPrefetchDeferred = false
+        bootstrapChunk = null
+        bootstrapChunkIndex = -1
 
         // Cancel any in-flight chunks from a previous open (e.g., after seek)
         cancelAllChunks()
@@ -124,9 +129,11 @@ class ParallelRangeDataSource(
         // Reuse probe data as the first chunk (only when chunk-aligned, i.e., initial open)
         val firstChunkIndex = position / chunkSize
         if (position % chunkSize == 0L) {
-            val chunk = readIntoChunk(probeSource)
+            val bootstrapBytes = minOf(chunkSize, BOOTSTRAP_READ_BYTES).toInt()
+            val chunk = readBootstrapChunk(probeSource, bootstrapBytes)
             probeSource.close()
-            chunks[firstChunkIndex] = CompletableFuture.completedFuture(chunk)
+            bootstrapChunk = chunk
+            bootstrapChunkIndex = firstChunkIndex
             // Avoid startup churn from immediate background chunk fetches before the first
             // actual read. Media3 may perform extra startup opens/sniffing.
             bootstrapPrefetchDeferred = true
@@ -152,6 +159,16 @@ class ParallelRangeDataSource(
         }
 
         val chunkIndex = position / chunkSize
+        val bootstrap = bootstrapChunk
+        if (currentChunk == null &&
+            bootstrap != null &&
+            chunkIndex == bootstrapChunkIndex &&
+            (position % chunkSize).toInt() < bootstrap.size
+        ) {
+            currentChunk = bootstrap
+            currentChunkIndex = chunkIndex
+            currentChunkReadOffset = (position % chunkSize).toInt()
+        }
 
         // Load the chunk for the current position
         if (currentChunkIndex != chunkIndex || currentChunk == null) {
@@ -175,6 +192,10 @@ class ParallelRangeDataSource(
         val available = chunk.size - currentChunkReadOffset
         if (available <= 0) {
             // Current chunk exhausted, move to next
+            if (chunk === bootstrapChunk) {
+                bootstrapChunk = null
+                bootstrapChunkIndex = -1
+            }
             currentChunk = null
             return read(buffer, offset, length)
         }
@@ -282,6 +303,28 @@ class ParallelRangeDataSource(
         return DownloadedChunk(buffer, totalRead)
     }
 
+    /** Read only a small startup window from an already-opened DataSource. */
+    private fun readBootstrapChunk(ds: DataSource, maxBytes: Int): DownloadedChunk {
+        val buffer = ByteArray(maxBytes)
+        var totalRead = 0
+        try {
+            while (!closed.get() && totalRead < buffer.size) {
+                val maxRead = minOf(buffer.size - totalRead, READ_BUFFER_SIZE)
+                if (maxRead <= 0) break
+                val read = ds.read(buffer, totalRead, maxRead)
+                if (read == C.RESULT_END_OF_INPUT) break
+                totalRead += read
+            }
+        } catch (e: Exception) {
+            if (closed.get()) throw IOException("DataSource closed")
+            throw e
+        }
+        if (closed.get()) {
+            throw IOException("DataSource closed")
+        }
+        return DownloadedChunk(buffer, totalRead)
+    }
+
     private fun acquireBuffer(): ByteArray {
         return bufferPool.pollLast() ?: ByteArray(chunkSize.toInt())
     }
@@ -316,9 +359,15 @@ class ParallelRangeDataSource(
 
     /** Cancel and clean up all in-flight chunks, returning buffers to the pool. */
     private fun cancelAllChunks() {
-        currentChunk?.let { releaseBuffer(it.data) }
+        currentChunk?.let {
+            if (it !== bootstrapChunk) {
+                releaseBuffer(it.data)
+            }
+        }
         currentChunk = null
         currentChunkIndex = -1
+        bootstrapChunk = null
+        bootstrapChunkIndex = -1
 
         chunks.values.forEach { future ->
             if (future.isDone && !future.isCancelled) {

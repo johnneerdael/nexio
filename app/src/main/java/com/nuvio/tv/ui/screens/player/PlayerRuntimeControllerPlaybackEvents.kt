@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.player
 import android.util.Log
 import androidx.media3.common.Player
 import com.nuvio.tv.core.player.DoviBridge
+import com.nuvio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.data.repository.TraktScrobbleItem
 import com.nuvio.tv.data.repository.extractYear
@@ -50,15 +51,21 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
                         val maxMb = runtime.maxMemory() / (1024 * 1024)
                         val vodCache = cachedVodCacheLogState
+                        val signalingRewrites =
+                            MatroskaDolbyVisionHookInstaller.getCodecStringRewriteCount()
                         val conversionCalls = DoviBridge.getConversionCallCount()
                         val conversionSuccess = DoviBridge.getConversionSuccessCount()
                         val conversionAttempted =
-                            hasAttemptedDv7ToDv81ForCurrentPlayback || conversionCalls > 0
+                            hasAttemptedDv7ToDv81ForCurrentPlayback ||
+                                conversionCalls > 0 ||
+                                signalingRewrites > 0
                         val dv7doviState = buildString {
                             append("dv7dovi=")
                             append(if (isExperimentalDv7ToDv81ActiveForCurrentPlayback) "on" else "off")
                             append(",attempted=")
                             append(if (conversionAttempted) "yes" else "no")
+                            append(",signalRewrites=")
+                            append(signalingRewrites)
                             append(",calls=")
                             append(conversionCalls)
                             append(",success=")

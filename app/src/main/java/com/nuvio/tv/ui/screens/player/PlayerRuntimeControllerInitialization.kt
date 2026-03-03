@@ -87,6 +87,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val useLibass = false // Temporarily disabled for maintenance
             val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
             DoviBridge.resetRuntimeCounters()
+            MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
             val dv7ToDv81Probe = if (playerSettings.experimentalDv7ToDv81Enabled) {
                 DoviBridge.probeRealtimeConversionSupport(url)
             } else {
@@ -473,13 +474,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             .coerceAtLeast(0L)
                         val conversionCalls = DoviBridge.getConversionCallCount()
                         val conversionSucceeded = DoviBridge.getConversionSuccessCount()
+                        val signalingRewrites =
+                            MatroskaDolbyVisionHookInstaller.getCodecStringRewriteCount()
                         val conversionAttempted =
-                            hasAttemptedDv7ToDv81ForCurrentPlayback || conversionCalls > 0
+                            hasAttemptedDv7ToDv81ForCurrentPlayback ||
+                                conversionCalls > 0 ||
+                                signalingRewrites > 0
                         Log.i(
                             PlayerRuntimeController.TAG,
                             "PLAYBACK_STARTUP: firstFrameMs=$startupMs " +
                                 "dv7doviActive=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
                                 "dv7doviAttempted=$conversionAttempted " +
+                                "dv7doviSignalRewrites=$signalingRewrites " +
                                 "dv7doviCalls=$conversionCalls " +
                                 "dv7doviSuccess=$conversionSucceeded " +
                                 "dv7doviReason=${dv7ToDv81LastProbeReasonForCurrentPlayback ?: "n/a"} " +
