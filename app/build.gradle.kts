@@ -6,7 +6,6 @@
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
-    id("io.sentry.android.gradle") version "6.0.0"
 }
 
 import java.util.Properties
