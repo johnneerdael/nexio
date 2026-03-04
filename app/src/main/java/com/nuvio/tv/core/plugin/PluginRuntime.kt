@@ -3,7 +3,6 @@ package com.nuvio.tv.core.plugin
 import android.util.Log
 import com.dokar.quickjs.binding.define
 import com.dokar.quickjs.binding.function
-import com.dokar.quickjs.binding.asyncFunction
 import com.dokar.quickjs.quickJs
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -175,7 +174,7 @@ class PluginRuntime @Inject constructor() {
                         }
                     }
 
-                    asyncFunction("__native_fetch") { args ->
+                    function("__native_fetch") { args ->
                         val url = args.getOrNull(0)?.toString() ?: ""
                         val method = args.getOrNull(1)?.toString() ?: "GET"
                         val headersJson = args.getOrNull(2)?.toString() ?: "{}"
@@ -372,7 +371,7 @@ class PluginRuntime @Inject constructor() {
                 """.trimIndent()
 
                     evaluate<Any?>(callCode)
-                }
+            }
 
             return parseJsonResults(resultJson)
 
@@ -606,7 +605,7 @@ class PluginRuntime @Inject constructor() {
                     headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
                 }
 
-                var result = await __native_fetch(url, method, JSON.stringify(headers), body);
+                var result = __native_fetch(url, method, JSON.stringify(headers), body);
                 var parsed = JSON.parse(result);
 
                 if (signal && signal.aborted) {
