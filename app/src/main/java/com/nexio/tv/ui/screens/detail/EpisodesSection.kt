@@ -198,6 +198,8 @@ fun EpisodesRow(
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
+    onClearEpisodeProgress: (Video) -> Unit = {},
+    onCheckInEpisode: (Video) -> Unit = {},
     onMarkSeasonWatched: (Int) -> Unit = {},
     onMarkSeasonUnwatched: (Int) -> Unit = {},
     isSeasonFullyWatched: Boolean = false,
@@ -333,6 +335,14 @@ fun EpisodesRow(
             },
             onToggleWatched = {
                 onToggleEpisodeWatched(selectedEpisode)
+                optionsEpisode = null
+            },
+            onClearProgress = {
+                onClearEpisodeProgress(selectedEpisode)
+                optionsEpisode = null
+            },
+            onCheckIn = {
+                onCheckInEpisode(selectedEpisode)
                 optionsEpisode = null
             },
             onMarkSeasonWatched = {
@@ -724,6 +734,8 @@ private fun EpisodeOptionsDialog(
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
     onToggleWatched: () -> Unit,
+    onClearProgress: () -> Unit = {},
+    onCheckIn: () -> Unit = {},
     onMarkSeasonWatched: () -> Unit = {},
     onMarkSeasonUnwatched: () -> Unit = {},
     onMarkPreviousEpisodesWatched: () -> Unit = {}
@@ -775,6 +787,29 @@ private fun EpisodeOptionsDialog(
             ) {
                 Text(stringResource(R.string.episodes_mark_previous_watched))
             }
+        }
+
+        Button(
+            onClick = onClearProgress,
+            enabled = !isPending,
+            colors = ButtonDefaults.colors(
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.cw_action_clear_progress))
+        }
+
+        Button(
+            onClick = onCheckIn,
+            colors = ButtonDefaults.colors(
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.cw_action_check_in))
         }
 
         Button(

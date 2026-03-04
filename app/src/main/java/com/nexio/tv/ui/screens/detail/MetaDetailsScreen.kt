@@ -94,7 +94,6 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.MetaDetailsSkeleton
 import com.nexio.tv.ui.components.NexioDialog
-import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -382,6 +381,12 @@ fun MetaDetailsScreen(
                     onToggleEpisodeWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
                     },
+                    onClearEpisodeProgress = { video ->
+                        viewModel.onEvent(MetaDetailsEvent.OnClearEpisodeProgress(video))
+                    },
+                    onCheckInEpisode = { video ->
+                        viewModel.onEvent(MetaDetailsEvent.OnCheckInEpisode(video))
+                    },
                     onMarkSeasonWatched = { season ->
                         viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(season))
                     },
@@ -546,6 +551,8 @@ private fun MetaDetailsContent(
     onLibraryLongPress: () -> Unit,
     onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
+    onClearEpisodeProgress: (Video) -> Unit,
+    onCheckInEpisode: (Video) -> Unit,
     onMarkSeasonWatched: (Int) -> Unit,
     onMarkSeasonUnwatched: (Int) -> Unit,
     onMarkPreviousEpisodesWatched: (Video) -> Unit,
@@ -1006,19 +1013,6 @@ private fun MetaDetailsContent(
                 contentScale = ContentScale.Crop
             )
 
-            // Trailer video (fades in when trailer plays)
-            TrailerPlayer(
-                trailerUrl = trailerUrl,
-                trailerAudioUrl = trailerAudioUrl,
-                isPlaying = isTrailerPlaying,
-                seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
-                seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
-                onRemoteKey = onTrailerControlKey,
-                onProgressChanged = onTrailerProgressChanged,
-                onEnded = onTrailerEnded,
-                modifier = Modifier.fillMaxSize()
-            )
-
             // Light global dim so text remains readable
             Box(
                 modifier = Modifier
@@ -1068,10 +1062,10 @@ private fun MetaDetailsContent(
                         onToggleMovieWatched = onToggleMovieWatched,
                         mdbListRatings = mdbListRatings,
                         hideMetaInfoImdb = showMdbListImdb,
-                        trailerAvailable = trailerButtonEnabled && !trailerUrl.isNullOrBlank(),
+                        trailerAvailable = false,
                         onTrailerClick = onTrailerButtonClick,
-                        hideLogoDuringTrailer = hideLogoDuringTrailer,
-                        isTrailerPlaying = isTrailerPlaying,
+                        hideLogoDuringTrailer = false,
+                        isTrailerPlaying = false,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
@@ -1115,6 +1109,8 @@ private fun MetaDetailsContent(
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                         onEpisodeClick = episodeClick,
                         onToggleEpisodeWatched = onToggleEpisodeWatched,
+                        onClearEpisodeProgress = onClearEpisodeProgress,
+                        onCheckInEpisode = onCheckInEpisode,
                         onMarkSeasonWatched = onMarkSeasonWatched,
                         onMarkSeasonUnwatched = onMarkSeasonUnwatched,
                         isSeasonFullyWatched = isSeasonFullyWatched(selectedSeason),

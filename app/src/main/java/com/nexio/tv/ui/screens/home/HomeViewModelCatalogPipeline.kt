@@ -6,7 +6,10 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeLayout
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +29,36 @@ private data class CatalogUpdateResult(
     val gridItems: List<GridItem>,
     val fullRows: List<CatalogRow>
 )
+
+private const val TRAKT_RAIL_ADDON_ID = "trakt"
+private const val TRAKT_RAIL_ADDON_NAME = "Trakt"
+private const val TRAKT_RAIL_ADDON_BASE_URL = "https://api.trakt.tv"
+private const val TRAKT_CATALOG_UP_NEXT = "trakt_up_next"
+private const val TRAKT_CATALOG_CALENDAR = "trakt_calendar_next_7_days"
+private const val TRAKT_CATALOG_RECOMMENDED_MOVIES = "trakt_recommended_movies"
+private const val TRAKT_CATALOG_RECOMMENDED_SHOWS = "trakt_recommended_shows"
+
+internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
+    viewModelScope.launch {
+        traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+            traktDiscoverySnapshot = snapshot
+            scheduleUpdateCatalogRows()
+        }
+    }
+}
+
+internal fun HomeViewModel.dismissTraktRecommendationPipeline(
+    ref: com.nexio.tv.data.repository.TraktRecommendationRef
+) {
+    viewModelScope.launch {
+        runCatching {
+            traktDiscoveryService.dismissRecommendation(ref)
+            traktDiscoveryService.ensureFresh(force = true)
+        }.onFailure { error ->
+            Log.w(HomeViewModel.TAG, "Failed to dismiss Trakt recommendation ${ref.recommendationKey}", error)
+        }
+    }
+}
 
 internal fun HomeViewModel.loadHomeCatalogOrderPreferencePipeline() {
     viewModelScope.launch {
@@ -101,12 +134,6 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     _fullCatalogRows.value = emptyList()
     truncatedRowCache.clear()
     hasRenderedFirstCatalog = false
-    trailerPreviewLoadingIds.clear()
-    trailerPreviewNegativeCache.clear()
-    trailerPreviewUrlsState.clear()
-    trailerPreviewAudioUrlsState.clear()
-    activeTrailerPreviewItemId = null
-    trailerPreviewRequestVersion = 0L
     prefetchedExternalMetaIds.clear()
     externalMetaPrefetchInFlightIds.clear()
     externalMetaPrefetchJob?.cancel()
@@ -280,16 +307,32 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val heroCatalogKeys = currentHeroCatalogKeys
     val currentLayout = _uiState.value.homeLayout
     val currentGridItems = _uiState.value.gridItems
+    val continueWatchingItems = _uiState.value.continueWatchingItems
     val heroSectionEnabled = _uiState.value.heroSectionEnabled
     val hideUnreleased = _uiState.value.hideUnreleasedContent
+    val traktSnapshot = traktDiscoverySnapshot
+    val traktUpNextItems = continueWatchingItems
+        .filterIsInstance<ContinueWatchingItem.NextUp>()
+        .take(20)
+        .map { nextUpToMetaPreview(it) }
+    val syntheticTraktRows = buildSyntheticTraktRows(
+        upNextItems = traktUpNextItems,
+        calendarItems = traktSnapshot.calendarItems,
+        recommendationMovieItems = traktSnapshot.recommendationMovieItems,
+        recommendationShowItems = traktSnapshot.recommendationShowItems
+    )
+    val recommendationRefMap = traktSnapshot.recommendationRefsByStatusKey
 
     val (displayRows, baseHeroItems, baseGridItems, fullRowsFiltered) = withContext(Dispatchers.Default) {
         val rawRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
+        val combinedRows = syntheticTraktRows + rawRows
         val orderedRows = if (hideUnreleased) {
             val today = LocalDate.now()
-            rawRows.map { it.filterReleasedItems(today) }
+            combinedRows.map { row ->
+                if (row.addonId == TRAKT_RAIL_ADDON_ID) row else row.filterReleasedItems(today)
+            }
         } else {
-            rawRows
+            combinedRows
         }
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
@@ -408,6 +451,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             catalogRows = if (state.catalogRows == displayRows) state.catalogRows else displayRows,
             heroItems = if (state.heroItems == baseHeroItems) state.heroItems else baseHeroItems,
             gridItems = if (state.gridItems == nextGridItems) state.gridItems else nextGridItems,
+            traktRecommendationRefs = if (state.traktRecommendationRefs == recommendationRefMap) {
+                state.traktRecommendationRefs
+            } else {
+                recommendationRefMap
+            },
             isLoading = false
         )
     }
@@ -452,6 +500,96 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     schedulePosterStatusReconcilePipeline(displayRows)
+}
+
+private fun buildSyntheticTraktRows(
+    upNextItems: List<MetaPreview>,
+    calendarItems: List<MetaPreview>,
+    recommendationMovieItems: List<MetaPreview>,
+    recommendationShowItems: List<MetaPreview>
+): List<CatalogRow> {
+    val rows = mutableListOf<CatalogRow>()
+    if (upNextItems.isNotEmpty()) {
+        rows += buildTraktCatalogRow(
+            catalogId = TRAKT_CATALOG_UP_NEXT,
+            catalogName = "Trakt Up Next",
+            type = ContentType.SERIES,
+            items = upNextItems
+        )
+    }
+    if (calendarItems.isNotEmpty()) {
+        rows += buildTraktCatalogRow(
+            catalogId = TRAKT_CATALOG_CALENDAR,
+            catalogName = "Trakt Calendar (Next 7 Days)",
+            type = ContentType.SERIES,
+            items = calendarItems
+        )
+    }
+    if (recommendationMovieItems.isNotEmpty()) {
+        rows += buildTraktCatalogRow(
+            catalogId = TRAKT_CATALOG_RECOMMENDED_MOVIES,
+            catalogName = "Trakt Recommended Movies",
+            type = ContentType.MOVIE,
+            items = recommendationMovieItems
+        )
+    }
+    if (recommendationShowItems.isNotEmpty()) {
+        rows += buildTraktCatalogRow(
+            catalogId = TRAKT_CATALOG_RECOMMENDED_SHOWS,
+            catalogName = "Trakt Recommended Shows",
+            type = ContentType.SERIES,
+            items = recommendationShowItems
+        )
+    }
+    return rows
+}
+
+private fun buildTraktCatalogRow(
+    catalogId: String,
+    catalogName: String,
+    type: ContentType,
+    items: List<MetaPreview>
+): CatalogRow {
+    return CatalogRow(
+        addonId = TRAKT_RAIL_ADDON_ID,
+        addonName = TRAKT_RAIL_ADDON_NAME,
+        addonBaseUrl = TRAKT_RAIL_ADDON_BASE_URL,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items,
+        isLoading = false,
+        hasMore = false,
+        supportsSkip = false
+    )
+}
+
+private fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPreview {
+    val info = nextUp.info
+    val episodeSuffix = buildString {
+        append("S")
+        append(info.season)
+        append("E")
+        append(info.episode)
+        if (!info.episodeTitle.isNullOrBlank()) {
+            append(" ")
+            append(info.episodeTitle)
+        }
+    }
+    return MetaPreview(
+        id = info.contentId,
+        type = ContentType.SERIES,
+        rawType = info.contentType,
+        name = "${info.name} • $episodeSuffix",
+        poster = info.poster ?: info.thumbnail,
+        posterShape = PosterShape.LANDSCAPE,
+        background = info.backdrop ?: info.thumbnail,
+        logo = info.logo,
+        description = info.episodeDescription,
+        releaseInfo = info.releaseInfo ?: info.released,
+        imdbRating = info.imdbRating,
+        genres = info.genres
+    )
 }
 
 internal fun HomeViewModel.schedulePosterStatusReconcilePipeline(rows: List<CatalogRow>) {

@@ -150,10 +150,6 @@
     <string name="playback_player_ask_desc">Vybrať prehrávač pri každom prehratí</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Trailer</string>
-    <string name="audio_autoplay_trailers">Automaticky prehrávať trailery</string>
-    <string name="audio_autoplay_trailers_sub">Automaticky prehrať trailery na detailnej obrazovke po chvíli nečinnosti</string>
-    <string name="audio_trailer_delay">Oneskorenie traileru</string>
     <string name="audio_section">Audio</string>
     <string name="audio_lang_default">Predvolené (podľa súboru)</string>
     <string name="audio_lang_device">Jazyk zariadenia</string>
@@ -289,8 +285,6 @@
     <string name="layout_section_detail_desc">Nastavenia pre detailnú a epizódovú obrazovku.</string>
     <string name="layout_blur_unwatched">Rozmazať nevidené epizódy</string>
     <string name="layout_blur_unwatched_sub">Rozmazať náhľady epizód, kým nie sú videné, aby sa predišlo spoilerom.</string>
-    <string name="layout_trailer_button">Zobraziť tlačidlo traileru</string>
-    <string name="layout_trailer_button_sub">Zobraziť tlačidlo traileru na detailnej stránke (iba ak je dostupný).</string>
     <string name="layout_prefer_external_meta">Preferovať externé meta</string>
     <string name="layout_prefer_external_meta_sub">Použiť metadáta z externého doplnku namiesto katalógového.</string>
     <string name="layout_section_focused">Zameraná karta</string>
@@ -299,21 +293,10 @@
     <string name="layout_expand_poster_sub">Rozšíriť zameraný poster po oneskorení.</string>
     <string name="layout_expand_delay">Oneskorenie rozšírenia</string>
     <string name="layout_expand_delay_sub">Ako dlho čakať pred rozšírením zameraných kariet.</string>
-    <string name="layout_autoplay_trailer">Automaticky prehrať trailer</string>
-    <string name="layout_autoplay_trailer_expanded">Automaticky prehrať trailer v rozšírenej karte</string>
-    <string name="layout_autoplay_trailer_sub">Prehrať trailer pre zameraný obsah, ak je dostupný.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Prehrať trailer v rozšírenom pozadí, ak je dostupný.</string>
-    <string name="layout_trailer_muted">Prehrať trailer bez zvuku</string>
-    <string name="layout_trailer_muted_sub_preview">Stlmiť zvuk traileru počas náhľadu.</string>
-    <string name="layout_trailer_muted_sub_expanded">Stlmiť zvuk traileru v rozšírených kartách.</string>
     <string name="layout_section_card_style">Štýl posterov</string>
     <string name="layout_section_card_style_desc">Upraviť šírku a zaoblenie rohov kariet.</string>
     <string name="layout_open">Otvorené</string>
     <string name="layout_closed">Zatvorené</string>
-    <string name="layout_trailer_location">Umiestnenie traileru v modernom zobrazení</string>
-    <string name="layout_trailer_location_sub">Vyberte, kde sa prehráva trailer v modernom rozložení.</string>
-    <string name="layout_trailer_expanded_card">Rozšírená karta</string>
-    <string name="layout_trailer_hero_media">Hero médiá</string>
     <string name="layout_preset_compact">Kompaktné</string>
     <string name="layout_preset_dense">Husté</string>
     <string name="layout_preset_standard">Štandardné</string>

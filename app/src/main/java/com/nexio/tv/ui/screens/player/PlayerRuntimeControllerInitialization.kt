@@ -464,7 +464,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             startProgressUpdates()
                             startWatchProgressSaving()
                             scheduleHideControls()
-                            tryShowParentalGuide()
                             emitScrobbleStart()
                         } else {
                             if (userPausedManually) {

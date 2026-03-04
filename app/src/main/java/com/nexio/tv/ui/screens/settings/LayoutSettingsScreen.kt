@@ -53,7 +53,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.ui.components.ClassicLayoutPreview
 import com.nexio.tv.ui.components.GridLayoutPreview
@@ -397,20 +396,6 @@ fun LayoutSettingsContent(
                     )
 
                     CompactToggleRow(
-                        title = stringResource(R.string.layout_trailer_button),
-                        subtitle = stringResource(R.string.layout_trailer_button_sub),
-                        checked = uiState.detailPageTrailerButtonEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled(
-                                    !uiState.detailPageTrailerButtonEnabled
-                                )
-                            )
-                        },
-                        onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
-                    )
-
-                    CompactToggleRow(
                         title = stringResource(R.string.layout_prefer_external_meta),
                         subtitle = stringResource(R.string.layout_prefer_external_meta_sub),
                         checked = uiState.preferExternalMetaAddonDetail,
@@ -436,9 +421,9 @@ fun LayoutSettingsContent(
                     focusRequester = focusedPosterHeaderFocus,
                     onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
                 ) {
-                    val isModern = uiState.selectedLayout == HomeLayout.MODERN
-                    val isModernLandscape = isModern && uiState.modernLandscapePostersEnabled
-                    val showAutoplayRow = uiState.focusedPosterBackdropExpandEnabled || isModernLandscape
+                    val isModernLandscape =
+                        uiState.selectedLayout == HomeLayout.MODERN &&
+                            uiState.modernLandscapePostersEnabled
 
                     if (!isModernLandscape) {
                         CompactToggleRow(
@@ -475,65 +460,6 @@ fun LayoutSettingsContent(
                         )
                     }
 
-                    if (showAutoplayRow) {
-                        CompactToggleRow(
-                            title = if (isModern) {
-                                stringResource(R.string.layout_autoplay_trailer)
-                            } else {
-                                stringResource(R.string.layout_autoplay_trailer_expanded)
-                            },
-                            subtitle = if (isModern) {
-                                stringResource(R.string.layout_autoplay_trailer_sub)
-                            } else {
-                                stringResource(R.string.layout_autoplay_trailer_expanded_sub)
-                            },
-                            checked = uiState.focusedPosterBackdropTrailerEnabled,
-                            onToggle = {
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled(
-                                        !uiState.focusedPosterBackdropTrailerEnabled
-                                    )
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                        )
-                    }
-
-                    if (showAutoplayRow && uiState.focusedPosterBackdropTrailerEnabled) {
-                        CompactToggleRow(
-                            title = stringResource(R.string.layout_trailer_muted),
-                            subtitle = if (isModern) {
-                                stringResource(R.string.layout_trailer_muted_sub_preview)
-                            } else {
-                                stringResource(R.string.layout_trailer_muted_sub_expanded)
-                            },
-                            checked = uiState.focusedPosterBackdropTrailerMuted,
-                            onToggle = {
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted(
-                                        !uiState.focusedPosterBackdropTrailerMuted
-                                    )
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                        )
-                    }
-
-                    if (
-                        isModern &&
-                        showAutoplayRow &&
-                        uiState.focusedPosterBackdropTrailerEnabled
-                    ) {
-                        ModernTrailerPlaybackTargetRow(
-                            selectedTarget = uiState.focusedPosterBackdropTrailerPlaybackTarget,
-                            onTargetSelected = { target ->
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget(target)
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                        )
-                    }
                 }
             }
             }
@@ -615,49 +541,6 @@ private fun CompactToggleRow(
         onToggle = onToggle,
         onFocused = onFocused
     )
-}
-
-@Composable
-private fun ModernTrailerPlaybackTargetRow(
-    selectedTarget: FocusedPosterTrailerPlaybackTarget,
-    onTargetSelected: (FocusedPosterTrailerPlaybackTarget) -> Unit,
-    onFocused: () -> Unit
-) {
-    Text(
-        text = stringResource(R.string.layout_trailer_location),
-        style = MaterialTheme.typography.labelLarge,
-        color = NexioColors.TextSecondary
-    )
-    Text(
-        text = stringResource(R.string.layout_trailer_location_sub),
-        style = MaterialTheme.typography.bodySmall,
-        color = NexioColors.TextTertiary
-    )
-    LazyRow(
-        contentPadding = PaddingValues(end = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item(key = "trailer_target_expanded_card") {
-            SettingsChoiceChip(
-                label = stringResource(R.string.layout_trailer_expanded_card),
-                selected = selectedTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
-                onClick = {
-                    onTargetSelected(FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD)
-                },
-                onFocused = onFocused
-            )
-        }
-        item(key = "trailer_target_hero_media") {
-            SettingsChoiceChip(
-                label = stringResource(R.string.layout_trailer_hero_media),
-                selected = selectedTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
-                onClick = {
-                    onTargetSelected(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
-                },
-                onFocused = onFocused
-            )
-        }
-    }
 }
 
 @Composable

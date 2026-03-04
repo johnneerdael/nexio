@@ -297,14 +297,14 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
     hasSentScrobbleStartForCurrentItem = false
 }
 
-internal fun PlayerRuntimeController.emitPauseScrobbleStop(progressPercent: Float) {
+internal fun PlayerRuntimeController.emitPauseScrobble(progressPercent: Float) {
     if (progressPercent < 1f || progressPercent >= 80f) return
     val item = currentScrobbleItem
     if (item == null) return
     if (!hasRequestedScrobbleStartForCurrentItem) return
 
     scope.launch {
-        traktScrobbleService.scrobbleStop(
+        traktScrobbleService.scrobblePause(
             item = item,
             progressPercent = progressPercent
         )
@@ -322,7 +322,7 @@ internal fun PlayerRuntimeController.emitCompletionScrobbleStop(progressPercent:
 
 internal fun PlayerRuntimeController.emitStopScrobbleForCurrentProgress() {
     val progressPercent = currentPlaybackProgressPercent()
-    emitPauseScrobbleStop(progressPercent = progressPercent)
+    emitPauseScrobble(progressPercent = progressPercent)
     emitCompletionScrobbleStop(progressPercent = progressPercent)
 }
 
@@ -338,7 +338,7 @@ internal fun PlayerRuntimeController.scheduleProgressSyncAfterSeek() {
         saveWatchProgress()
 
         val progressPercent = currentPlaybackProgressPercent()
-        emitPauseScrobbleStop(progressPercent = progressPercent)
+        emitPauseScrobble(progressPercent = progressPercent)
 
         if (_exoPlayer?.isPlaying == true && progressPercent >= 1f && progressPercent < 80f) {
             emitScrobbleStart()
@@ -743,9 +743,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
             releasePlayer()
             initializePlayer(currentStreamUrl, currentHeaders)
-        }
-        PlayerEvent.OnParentalGuideHide -> {
-            _uiState.update { it.copy(showParentalGuide = false) }
         }
         is PlayerEvent.OnShowDisplayModeInfo -> {
             _uiState.update {

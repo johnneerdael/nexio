@@ -43,16 +43,16 @@ fun ClassicHomeContent(
     uiState: HomeUiState,
     posterCardStyle: PosterCardStyle,
     focusState: HomeScreenFocusState,
-    trailerPreviewUrls: Map<String, String>,
-    trailerPreviewAudioUrls: Map<String, String>,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    onMarkContinueWatchingWatched: (ContinueWatchingItem) -> Unit = {},
+    onCheckInContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
+    onManageListsContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
-    onRequestTrailerPreview: (MetaPreview) -> Unit,
     onItemFocus: (MetaPreview) -> Unit = {},
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
@@ -183,6 +183,9 @@ fun ClassicHomeContent(
                         onContinueWatchingClick(item)
                     },
                     onStartFromBeginning = onContinueWatchingStartFromBeginning,
+                    onMarkAsWatched = onMarkContinueWatchingWatched,
+                    onCheckIn = onCheckInContinueWatching,
+                    onManageLists = onManageListsContinueWatching,
                     onDetailsClick = { item ->
                         onNavigateToDetail(
                             when (item) {
@@ -258,11 +261,6 @@ fun ClassicHomeContent(
                 showCatalogTypeSuffix = uiState.catalogTypeSuffixEnabled,
                 focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
                 focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
-                focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
-                focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
-                trailerPreviewUrls = trailerPreviewUrls,
-                trailerPreviewAudioUrls = trailerPreviewAudioUrls,
-                onRequestTrailerPreview = onRequestTrailerPreview,
                 onItemFocus = onItemFocus,
                 isItemWatched = isCatalogItemWatched,
                 onItemLongPress = onCatalogItemLongPress,

@@ -184,10 +184,6 @@
     <string name="playback_player_ask_desc">Välj spelare varje gång</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Trailer</string>
-    <string name="audio_autoplay_trailers">Spela trailers automatiskt</string>
-    <string name="audio_autoplay_trailers_sub">Spela automatiskt trailers på detaljskärmen efter en stunds inaktivitet</string>
-    <string name="audio_trailer_delay">Trailerfördröjning</string>
     <string name="audio_section">Ljud</string>
     <string name="audio_lang_default">Standard (mediefil)</string>
     <string name="audio_lang_device">Enhetens språk</string>
@@ -323,8 +319,6 @@
     <string name="layout_section_detail_desc">Inställningar för detalj- och avsnittsskärmar.</string>
     <string name="layout_blur_unwatched">Sudda osedda avsnitt</string>
     <string name="layout_blur_unwatched_sub">Sudda avsnittsminiatyrer tills de är sedda för att undvika spoilers.</string>
-    <string name="layout_trailer_button">Visa trailerknapp</string>
-    <string name="layout_trailer_button_sub">Visa trailerknapp på detaljsidan (bara när trailer finns tillgänglig).</string>
     <string name="layout_prefer_external_meta">Föredra metadata från externt tillägg</string>
     <string name="layout_prefer_external_meta_sub">Använd metadata från externt tillägg istället för katalogtillägg.</string>
     <string name="layout_section_focused">Fokuserad affisch</string>
@@ -333,21 +327,10 @@
     <string name="layout_expand_poster_sub">Expandera fokuserad affisch efter vilofördröjning.</string>
     <string name="layout_expand_delay">Fördröjning för bakgrundsexpansion</string>
     <string name="layout_expand_delay_sub">Hur länge att vänta innan fokuserade kort expanderas.</string>
-    <string name="layout_autoplay_trailer">Spela trailer automatiskt</string>
-    <string name="layout_autoplay_trailer_expanded">Spela trailer automatiskt i expanderat kort</string>
-    <string name="layout_autoplay_trailer_sub">Spela trailerförhandsvisning för fokuserat innehåll när tillgängligt.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Spela trailer i expanderad bakgrund när tillgängligt.</string>
-    <string name="layout_trailer_muted">Spela trailer tyst</string>
-    <string name="layout_trailer_muted_sub_preview">Tysta trailerljud under automatisk förhandsvisning.</string>
-    <string name="layout_trailer_muted_sub_expanded">Tysta trailerljud i expanderade kort.</string>
     <string name="layout_section_card_style">Affischkortstil</string>
     <string name="layout_section_card_style_desc">Justera kortbredd och hörnradie.</string>
     <string name="layout_open">Öppen</string>
     <string name="layout_closed">Stängd</string>
-    <string name="layout_trailer_location">Modern traileruppspelningsplats</string>
-    <string name="layout_trailer_location_sub">Välj var trailerförhandsvisningen spelas i Modern hem.</string>
-    <string name="layout_trailer_expanded_card">Expanderat kort</string>
-    <string name="layout_trailer_hero_media">Hjältemedia</string>
     <string name="layout_preset_compact">Kompakt</string>
     <string name="layout_preset_dense">Tät</string>
     <string name="layout_preset_standard">Standard</string>

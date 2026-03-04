@@ -20,9 +20,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
@@ -52,18 +50,14 @@ import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.PlayerSettings
-import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
 internal fun LazyListScope.trailerAndAudioSettingsItems(
     playerSettings: PlayerSettings,
-    trailerSettings: TrailerSettings,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
-    onSetTrailerEnabled: (Boolean) -> Unit,
-    onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetMapDV7ToHevc: (Boolean) -> Unit,
@@ -74,46 +68,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
-    item(key = "audio_trailer_section_header") {
-        Text(
-            text = stringResource(R.string.audio_trailer_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = NexioColors.TextSecondary,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-    }
-
-    item(key = "audio_trailer_enabled") {
-        ToggleSettingsItem(
-            icon = Icons.Default.PlayCircle,
-            title = stringResource(R.string.audio_autoplay_trailers),
-            subtitle = stringResource(R.string.audio_autoplay_trailers_sub),
-            isChecked = trailerSettings.enabled,
-            onCheckedChange = onSetTrailerEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    if (trailerSettings.enabled) {
-        item(key = "audio_trailer_delay") {
-            SliderSettingsItem(
-                icon = Icons.Default.Timer,
-                title = stringResource(R.string.audio_trailer_delay),
-                value = trailerSettings.delaySeconds,
-                valueText = "${trailerSettings.delaySeconds}s",
-                minValue = 3,
-                maxValue = 15,
-                step = 1,
-                onValueChange = onSetTrailerDelaySeconds,
-                onFocused = onItemFocused,
-                enabled = enabled
-            )
-        }
-    }
-
     item(key = "audio_header") {
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.audio_section),
             style = MaterialTheme.typography.titleMedium,

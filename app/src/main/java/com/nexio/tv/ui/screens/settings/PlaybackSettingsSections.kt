@@ -57,7 +57,6 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
-import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -91,7 +90,6 @@ private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode, off: String,
 internal fun PlaybackSettingsSections(
     initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
-    trailerSettings: TrailerSettings,
     onShowPlayerPreferenceDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
@@ -121,8 +119,6 @@ internal fun PlaybackSettingsSections(
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
-    onSetTrailerEnabled: (Boolean) -> Unit,
-    onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetMapDV7ToHevc: (Boolean) -> Unit,
@@ -357,12 +353,9 @@ internal fun PlaybackSettingsSections(
         ) {
             trailerAndAudioSettingsItems(
                 playerSettings = playerSettings,
-                trailerSettings = trailerSettings,
                 onShowAudioLanguageDialog = onShowAudioLanguageDialog,
                 onShowSecondaryAudioLanguageDialog = onShowSecondaryAudioLanguageDialog,
                 onShowDecoderPriorityDialog = onShowDecoderPriorityDialog,
-                onSetTrailerEnabled = onSetTrailerEnabled,
-                onSetTrailerDelaySeconds = onSetTrailerDelaySeconds,
                 onSetSkipSilence = onSetSkipSilence,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetMapDV7ToHevc = onSetMapDV7ToHevc,

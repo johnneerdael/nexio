@@ -8,7 +8,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
-import com.nexio.tv.data.repository.ParentalGuideRepository
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.repository.AddonRepository
@@ -29,7 +28,6 @@ class PlayerViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val pluginManager: PluginManager,
     private val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
-    private val parentalGuideRepository: ParentalGuideRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -47,7 +45,6 @@ class PlayerViewModel @Inject constructor(
         addonRepository = addonRepository,
         pluginManager = pluginManager,
         subtitleRepository = subtitleRepository,
-        parentalGuideRepository = parentalGuideRepository,
         traktScrobbleService = traktScrobbleService,
         skipIntroRepository = skipIntroRepository,
         playerSettingsDataStore = playerSettingsDataStore,

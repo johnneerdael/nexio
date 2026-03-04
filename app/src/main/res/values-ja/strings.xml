@@ -184,10 +184,6 @@
     <string name="playback_player_ask_desc">毎回プレーヤーを選択する</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">予告編</string>
-    <string name="audio_autoplay_trailers">予告編の自動再生</string>
-    <string name="audio_autoplay_trailers_sub">詳細画面で一定時間操作がない場合に自動で予告編を再生</string>
-    <string name="audio_trailer_delay">予告編の遅延</string>
     <string name="audio_section">音声</string>
     <string name="audio_lang_default">デフォルト（メディアファイル）</string>
     <string name="audio_lang_device">デバイスの言語</string>
@@ -323,8 +319,6 @@
     <string name="layout_section_detail_desc">詳細画面とエピソード画面の設定。</string>
     <string name="layout_blur_unwatched">未視聴エピソードをぼかす</string>
     <string name="layout_blur_unwatched_sub">ネタバレを避けるため、視聴済みになるまでエピソードサムネイルをぼかす。</string>
-    <string name="layout_trailer_button">予告編ボタンを表示</string>
-    <string name="layout_trailer_button_sub">詳細ページに予告編ボタンを表示（予告編がある場合のみ）。</string>
     <string name="layout_prefer_external_meta">外部アドオンのメタを優先</string>
     <string name="layout_prefer_external_meta_sub">カタログアドオンの代わりに外部アドオンのメタデータを使用。</string>
     <string name="layout_section_focused">フォーカス中のポスター</string>
@@ -333,21 +327,10 @@
     <string name="layout_expand_poster_sub">アイドル遅延後にフォーカス中のポスターを拡大。</string>
     <string name="layout_expand_delay">バックドロップ拡大の遅延</string>
     <string name="layout_expand_delay_sub">フォーカス中のカードを拡大するまでの待機時間。</string>
-    <string name="layout_autoplay_trailer">予告編の自動再生</string>
-    <string name="layout_autoplay_trailer_expanded">拡大カードで予告編を自動再生</string>
-    <string name="layout_autoplay_trailer_sub">利用可能な場合、フォーカス中のコンテンツの予告編プレビューを再生。</string>
-    <string name="layout_autoplay_trailer_expanded_sub">利用可能な場合、拡大バックドロップ内で予告編を再生。</string>
-    <string name="layout_trailer_muted">予告編をミュートで再生</string>
-    <string name="layout_trailer_muted_sub_preview">自動再生プレビュー中の予告編音声をミュート。</string>
-    <string name="layout_trailer_muted_sub_expanded">拡大カードの予告編音声をミュート。</string>
     <string name="layout_section_card_style">ポスターカードスタイル</string>
     <string name="layout_section_card_style_desc">カードの幅と角の丸みを調整。</string>
     <string name="layout_open">開く</string>
     <string name="layout_closed">閉じる</string>
-    <string name="layout_trailer_location">モダン予告編再生場所</string>
-    <string name="layout_trailer_location_sub">モダンホームで予告編プレビューを再生する場所を選択。</string>
-    <string name="layout_trailer_expanded_card">拡大カード</string>
-    <string name="layout_trailer_hero_media">ヒーローメディア</string>
     <string name="layout_preset_compact">コンパクト</string>
     <string name="layout_preset_dense">密集</string>
     <string name="layout_preset_standard">標準</string>

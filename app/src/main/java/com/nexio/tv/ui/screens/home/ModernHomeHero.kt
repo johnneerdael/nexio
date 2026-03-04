@@ -39,21 +39,13 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
-import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 
 @Composable
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
     heroBackdropAlpha: Float,
-    shouldPlayHeroTrailer: Boolean,
-    heroTrailerUrl: String?,
-    heroTrailerAudioUrl: String?,
-    heroTrailerAlpha: Float,
-    muted: Boolean,
     bgColor: Color,
-    onTrailerEnded: () -> Unit,
-    onFirstFrameRendered: () -> Unit,
     modifier: Modifier,
     requestWidthPx: Int,
     requestHeightPx: Int
@@ -81,22 +73,6 @@ internal fun ModernHeroMediaLayer(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
                 alignment = Alignment.TopEnd
-            )
-        }
-
-        if (shouldPlayHeroTrailer) {
-            TrailerPlayer(
-                trailerUrl = heroTrailerUrl,
-                trailerAudioUrl = heroTrailerAudioUrl,
-                isPlaying = true,
-                onEnded = onTrailerEnded,
-                onFirstFrameRendered = onFirstFrameRendered,
-                muted = muted,
-                cropToFill = true,
-                overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = heroTrailerAlpha }
             )
         }
 

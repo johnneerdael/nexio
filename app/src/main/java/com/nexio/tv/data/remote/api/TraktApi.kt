@@ -3,6 +3,8 @@ package com.nexio.tv.data.remote.api
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktRecommendationItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryRemoveResponseDto
@@ -10,6 +12,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCheckinRequestDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCheckinResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
@@ -82,6 +86,18 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktScrobbleRequestDto
     ): Response<TraktScrobbleResponseDto>
+
+    @POST("scrobble/pause")
+    suspend fun scrobblePause(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktScrobbleRequestDto
+    ): Response<TraktScrobbleResponseDto>
+
+    @POST("checkin")
+    suspend fun checkin(
+        @Header("Authorization") authorization: String,
+        @Body body: TraktCheckinRequestDto
+    ): Response<TraktCheckinResponseDto>
 
     @GET("sync/last_activities")
     suspend fun getLastActivities(
@@ -222,4 +238,27 @@ interface TraktApi {
         @Header("Authorization") authorization: String,
         @Body body: TraktListItemsMutationRequestDto
     ): Response<TraktListItemsMutationResponseDto>
+
+    @GET("recommendations/{type}")
+    suspend fun getRecommendations(
+        @Header("Authorization") authorization: String,
+        @Path("type") type: String,
+        @Query("limit") limit: Int = 20,
+        @Query("ignore_collected") ignoreCollected: Boolean = true,
+        @Query("ignore_watchlisted") ignoreWatchlisted: Boolean = true
+    ): Response<List<TraktRecommendationItemDto>>
+
+    @DELETE("recommendations/{type}/{id}")
+    suspend fun hideRecommendation(
+        @Header("Authorization") authorization: String,
+        @Path("type") type: String,
+        @Path("id") id: String
+    ): Response<Unit>
+
+    @GET("calendars/my/shows/{start_date}/{days}")
+    suspend fun getMyShowsCalendar(
+        @Header("Authorization") authorization: String,
+        @Path("start_date") startDate: String,
+        @Path("days") days: Int = 7
+    ): Response<List<TraktCalendarEpisodeItemDto>>
 }

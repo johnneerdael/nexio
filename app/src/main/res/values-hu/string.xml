@@ -185,10 +185,6 @@
     <string name="playback_player_ask_desc">Lejátszó kiválasztása minden alkalommal.</string>	
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Előzetes</string>
-    <string name="audio_autoplay_trailers">Előzetesek automatikus lejátszása</string>
-    <string name="audio_autoplay_trailers_sub">Előzetesek automatikus lejátszása a részletek oldalon, ha egy ideig nem történik művelet.</string>
-    <string name="audio_trailer_delay">Előzetes késleltetése</string>
     <string name="audio_section">Hang</string>
     <string name="audio_lang_default">Alapértelmezett (médiafájl szerint)</string>
     <string name="audio_lang_device">Eszköz nyelve</string>
@@ -326,8 +322,6 @@
     <string name="layout_section_detail_desc">Beállítások a részletek és epizódok képernyőhöz.</string>
     <string name="layout_blur_unwatched">Nem látott epizódok elmosása</string>
     <string name="layout_blur_unwatched_sub">Epizód előnézeti képek elmosása megtekintésig a spoilerek elkerülése végett.</string>
-    <string name="layout_trailer_button">Előzetes gomb megjelenítése</string>
-    <string name="layout_trailer_button_sub">Előzetes gomb a részletek oldalon (csak ha van elérhető előzetes).</string>
     <string name="layout_prefer_external_meta">Külső bővítmény metaadatainak előnyben részesítése</string>
     <string name="layout_prefer_external_meta_sub">Külső bővítmény metaadatainak használata a katalógus-bővítményé helyett.</string>
     <string name="layout_section_focused">Fókuszált poszter</string>
@@ -336,21 +330,10 @@
     <string name="layout_expand_poster_sub">A kijelölt poszter kiterjesztése várakozás után.</string>
     <string name="layout_expand_delay">Háttérkiterjesztés késleltetése</string>
     <string name="layout_expand_delay_sub">Várakozási idő a kijelölt kártyák kiterjesztése előtt.</string>
-    <string name="layout_autoplay_trailer">Előzetes automatikus lejátszása</string>
-    <string name="layout_autoplay_trailer_expanded">Előzetes automatikus lejátszása kiterjesztett kártyán</string>
-    <string name="layout_autoplay_trailer_sub">Előnézeti videó lejátszása a kijelölt tartalomhoz, ha elérhető.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Előzetes lejátszása a kiterjesztett háttérben, ha elérhető.</string>
-    <string name="layout_trailer_muted">Előzetes lejátszása némítva</string>
-    <string name="layout_trailer_muted_sub_preview">Előzetes hangjának némítása automatikus lejátszáskor.</string>
-    <string name="layout_trailer_muted_sub_expanded">Előzetes hangjának némítása a kiterjesztett kártyákon.</string>
     <string name="layout_section_card_style">Poszterkártya stílusa</string>
     <string name="layout_section_card_style_desc">Kártyaszélesség és sarokkerekítés finomhangolása.</string>
     <string name="layout_open">Nyitott</string>
     <string name="layout_closed">Zárt</string>
-    <string name="layout_trailer_location">Modern előzetes lejátszási helye</string>
-    <string name="layout_trailer_location_sub">Válaszd ki, hol induljon az előzetes Modern nézetben.</string>
-    <string name="layout_trailer_expanded_card">Kiterjesztett kártya</string>
-    <string name="layout_trailer_hero_media">Kiemelt média</string>
     <string name="layout_preset_compact">Kompakt</string>
     <string name="layout_preset_dense">Sűrű</string>
     <string name="layout_preset_standard">Standard</string>

@@ -233,6 +233,23 @@ fun TraktScreen(
                     stats = uiState.connectedStats,
                     isLoading = uiState.isStatsLoading
                 )
+                if (uiState.watchingNowActive && !uiState.watchingNowTitle.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = buildString {
+                            append(stringResource(R.string.trakt_watching_now_label))
+                            append(": ")
+                            append(uiState.watchingNowTitle)
+                            uiState.watchingNowProgressPercent?.let { progress ->
+                                append(" (")
+                                append(progress.toInt().coerceIn(0, 100))
+                                append("%)")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NexioColors.Primary
+                    )
+                }
             } else {
                 Text(
                     text = stringResource(R.string.trakt_login_instruction),

@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.screens.home
 
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -8,7 +7,8 @@ import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.data.repository.TraktDiscoveryService
+import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -43,9 +43,10 @@ class HomeViewModel @Inject constructor(
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
+    internal val traktScrobbleService: TraktScrobbleService,
+    internal val traktDiscoveryService: TraktDiscoveryService,
     internal val tmdbService: TmdbService,
-    internal val tmdbMetadataService: TmdbMetadataService,
-    internal val trailerService: TrailerService
+    internal val tmdbMetadataService: TmdbMetadataService
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -91,13 +92,9 @@ class HomeViewModel @Inject constructor(
         val truncatedRow: CatalogRow
     )
     internal val truncatedRowCache = mutableMapOf<String, TruncatedRowCacheEntry>()
-    internal val trailerPreviewLoadingIds = mutableSetOf<String>()
-    internal val trailerPreviewNegativeCache = mutableSetOf<String>()
-    internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
-    internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
-    internal var activeTrailerPreviewItemId: String? = null
-    internal var trailerPreviewRequestVersion: Long = 0L
     internal var currentTmdbSettings: TmdbSettings = TmdbSettings()
+    internal var traktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
+        com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
@@ -112,10 +109,6 @@ class HomeViewModel @Inject constructor(
     internal var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
     internal var startupGracePeriodActive: Boolean = true
-    val trailerPreviewUrls: Map<String, String>
-        get() = trailerPreviewUrlsState
-    val trailerPreviewAudioUrls: Map<String, String>
-        get() = trailerPreviewAudioUrlsState
 
     init {
         observeLayoutPreferences()
@@ -124,6 +117,7 @@ class HomeViewModel @Inject constructor(
         loadDisabledHomeCatalogPreference()
         observeLibraryState()
         observeTmdbSettings()
+        observeTraktDiscovery()
         loadContinueWatching()
         observeInstalledAddons()
         viewModelScope.launch {
@@ -136,20 +130,6 @@ class HomeViewModel @Inject constructor(
 
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
 
-    fun requestTrailerPreview(item: MetaPreview) = requestTrailerPreviewPipeline(item)
-
-    fun requestTrailerPreview(
-        itemId: String,
-        title: String,
-        releaseInfo: String?,
-        apiType: String
-    ) = requestTrailerPreviewPipeline(
-        itemId = itemId,
-        title = title,
-        releaseInfo = releaseInfo,
-        apiType = apiType
-    )
-
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
@@ -157,6 +137,8 @@ class HomeViewModel @Inject constructor(
     private fun loadDisabledHomeCatalogPreference() = loadDisabledHomeCatalogPreferencePipeline()
 
     private fun observeTmdbSettings() = observeTmdbSettingsPipeline()
+
+    private fun observeTraktDiscovery() = observeTraktDiscoveryPipeline()
 
     fun onEvent(event: HomeEvent) {
         when (event) {
@@ -185,6 +167,18 @@ class HomeViewModel @Inject constructor(
         episode = episode,
         isNextUp = isNextUp
     )
+
+    fun markContinueWatchingAsWatched(item: ContinueWatchingItem) =
+        markContinueWatchingAsWatchedPipeline(item)
+
+    fun checkInContinueWatching(item: ContinueWatchingItem) =
+        checkInContinueWatchingPipeline(item)
+
+    fun dismissTraktRecommendation(ref: com.nexio.tv.data.repository.TraktRecommendationRef) =
+        dismissTraktRecommendationPipeline(ref)
+
+    fun openContinueWatchingListPicker(item: ContinueWatchingItem) =
+        openContinueWatchingListPickerPipeline(item)
 
     private fun observeInstalledAddons() = observeInstalledAddonsPipeline()
 

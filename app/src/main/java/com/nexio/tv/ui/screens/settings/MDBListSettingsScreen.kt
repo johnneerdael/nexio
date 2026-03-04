@@ -105,16 +105,6 @@ fun MDBListSettingsContent(
                     )
                 }
 
-                item(key = "mdblist_imdb") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.mdblist_imdb_title),
-                        subtitle = stringResource(R.string.mdblist_imdb_subtitle),
-                        checked = uiState.showImdb,
-                        enabled = uiState.enabled,
-                        onToggle = { viewModel.onEvent(MDBListSettingsEvent.ToggleImdb(!uiState.showImdb)) }
-                    )
-                }
-
                 item(key = "mdblist_tmdb") {
                     SettingsToggleRow(
                         title = stringResource(R.string.mdblist_tmdb_title),

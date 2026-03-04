@@ -63,6 +63,8 @@ sealed class MetaDetailsEvent {
     data object OnTrailerEnded : MetaDetailsEvent()
     data object OnToggleMovieWatched : MetaDetailsEvent()
     data class OnToggleEpisodeWatched(val video: Video) : MetaDetailsEvent()
+    data class OnClearEpisodeProgress(val video: Video) : MetaDetailsEvent()
+    data class OnCheckInEpisode(val video: Video) : MetaDetailsEvent()
     data class OnMarkSeasonWatched(val season: Int) : MetaDetailsEvent()
     data class OnMarkSeasonUnwatched(val season: Int) : MetaDetailsEvent()
     data class OnMarkPreviousEpisodesWatched(val video: Video) : MetaDetailsEvent()

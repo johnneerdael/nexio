@@ -36,7 +36,6 @@ class MDBListRepository @Inject constructor(
 
     private enum class ProviderType(val apiValue: String) {
         TRAKT("trakt"),
-        IMDB("imdb"),
         TMDB("tmdb"),
         LETTERBOXD("letterboxd"),
         TOMATOES("tomatoes"),
@@ -133,7 +132,7 @@ class MDBListRepository @Inject constructor(
 
         val ratings = MDBListRatings(
             trakt = results[ProviderType.TRAKT],
-            imdb = results[ProviderType.IMDB],
+            imdb = null,
             tmdb = results[ProviderType.TMDB],
             letterboxd = results[ProviderType.LETTERBOXD],
             tomatoes = results[ProviderType.TOMATOES],
@@ -178,7 +177,6 @@ class MDBListRepository @Inject constructor(
 
     private fun enabledProviders(settings: MDBListSettings): List<ProviderType> = buildList {
         if (settings.showTrakt) add(ProviderType.TRAKT)
-        if (settings.showImdb) add(ProviderType.IMDB)
         if (settings.showTmdb) add(ProviderType.TMDB)
         if (settings.showLetterboxd) add(ProviderType.LETTERBOXD)
         if (settings.showTomatoes) add(ProviderType.TOMATOES)
