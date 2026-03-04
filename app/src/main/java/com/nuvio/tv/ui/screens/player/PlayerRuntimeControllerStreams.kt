@@ -778,7 +778,8 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                                 currentStreamBingeGroup
                             } else {
                                 null
-                            }
+                            },
+                            preferBingeGroupInSelection = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
                         )
                         selectedStream != null
                     }
