@@ -9,7 +9,12 @@ body:
       value: |
         Thanks for reporting a bug.
 
-        A little context goes a long way. If we can't reproduce it from the report, we'll probably ask follow-up questions.
+        If we can reproduce it, we can usually fix it. This form is just to get the basics in one place.
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Quick checks
 
   - type: checkboxes
     id: checks
@@ -22,6 +27,11 @@ body:
           required: false
         - label: This issue is limited to a single bug (not multiple unrelated problems).
           required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Version & device
 
   - type: input
     id: app_version
@@ -101,11 +111,16 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: |
+        ## What happened?
+
   - type: dropdown
     id: area
     attributes:
       label: Area (tag)
-      description: Pick the closest match. This helps triage.
+      description: Pick the closest match. It helps triage.
       options:
         - Playback (start/stop/buffering)
         - Streams / Sources (selection, loading, errors)
@@ -126,7 +141,7 @@ body:
     id: steps
     attributes:
       label: Steps to reproduce
-      description: Write exact steps. If it depends on specific content, describe the type (movie/series), season/episode, and stream/source details (without sharing private links).
+      description: Exact steps. If it depends on specific content, describe it (movie/series, season/episode, source/addon name) without sharing private links.
       placeholder: |
         1. Open ...
         2. Navigate to ...
@@ -164,14 +179,21 @@ body:
     validations:
       required: true
 
-  - type: checkboxes
+  - type: dropdown
     id: regression
     attributes:
-      label: Regression?
-      description: Did this work in a previous version and recently break?
+      label: Did this work before?
       options:
-        - label: Yes, this is a regression
-          required: false
+        - Not sure
+        - Yes, it used to work
+        - No, it never worked
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Extra context (optional)
 
   - type: textarea
     id: media_details
