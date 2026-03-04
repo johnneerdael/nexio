@@ -76,6 +76,7 @@ internal fun PlayerRuntimeController.stopWatchProgressSaving() {
 }
 
 internal fun PlayerRuntimeController.saveWatchProgressIfNeeded() {
+    if (!hasRenderedFirstFrame) return
     val currentPosition = _exoPlayer?.currentPosition ?: return
     val duration = getEffectiveDuration(currentPosition)
     
@@ -87,6 +88,7 @@ internal fun PlayerRuntimeController.saveWatchProgressIfNeeded() {
 }
 
 internal fun PlayerRuntimeController.saveWatchProgress() {
+    if (!hasRenderedFirstFrame) return
     val currentPosition = _exoPlayer?.currentPosition ?: return
     val duration = getEffectiveDuration(currentPosition)
     saveWatchProgressInternal(currentPosition, duration)
@@ -134,6 +136,7 @@ internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, d
 }
 
 internal fun PlayerRuntimeController.currentPlaybackProgressPercent(): Float {
+    if (!hasRenderedFirstFrame) return 0f
     val player = _exoPlayer ?: return 0f
     val duration = player.duration.takeIf { it > 0 } ?: lastKnownDuration
     if (duration <= 0L) return 0f

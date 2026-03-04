@@ -280,6 +280,10 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     val newHeaders = PlayerMediaSourceFactory.sanitizeHeaders(
         stream.behaviorHints?.proxyHeaders?.request
     )
+    
+    resetLoadingOverlayForNewStream()
+    _exoPlayer?.stop()
+
     currentStreamUrl = url
     currentHeaders = newHeaders
     currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
@@ -294,8 +298,6 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     attachedAddonSubtitleKeys = emptySet()
     hasRetriedCurrentStreamAfter416 = false
     lastSavedPosition = 0L
-    _exoPlayer?.stop()
-    resetLoadingOverlayForNewStream()
 
     _uiState.update {
         it.copy(
@@ -570,6 +572,11 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     val targetVideo = forcedTargetVideo
         ?: _uiState.value.episodes.firstOrNull { it.id == _uiState.value.episodeStreamsForVideoId }
 
+    // Reset transient playback flags before stopping, so stop callbacks never
+    // persist stale positions into the newly selected episode.
+    resetLoadingOverlayForNewStream()
+    _exoPlayer?.stop()
+
     currentStreamUrl = url
     currentHeaders = newHeaders
     currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
@@ -588,10 +595,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
     refreshScrobbleItem()
-
     lastSavedPosition = 0L
-    _exoPlayer?.stop()
-    resetLoadingOverlayForNewStream()
 
     _uiState.update {
         it.copy(
