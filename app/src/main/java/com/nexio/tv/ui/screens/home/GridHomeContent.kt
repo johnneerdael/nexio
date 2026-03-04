@@ -70,6 +70,9 @@ fun GridHomeContent(
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
+    onMarkContinueWatchingWatched: (ContinueWatchingItem) -> Unit = {},
+    onCheckInContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
+    onManageListsContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
@@ -226,6 +229,9 @@ fun GridHomeContent(
                                         onContinueWatchingClick(item)
                                     },
                                     onStartFromBeginning = onContinueWatchingStartFromBeginning,
+                                    onMarkAsWatched = onMarkContinueWatchingWatched,
+                                    onCheckIn = onCheckInContinueWatching,
+                                    onManageLists = onManageListsContinueWatching,
                                     onDetailsClick = { item ->
                                         onNavigateToDetail(
                                             when (item) {
@@ -369,6 +375,9 @@ fun GridHomeContent(
                             onContinueWatchingClick(item)
                         },
                         onStartFromBeginning = onContinueWatchingStartFromBeginning,
+                        onMarkAsWatched = onMarkContinueWatchingWatched,
+                        onCheckIn = onCheckInContinueWatching,
+                        onManageLists = onManageListsContinueWatching,
                         onDetailsClick = { item ->
                             onNavigateToDetail(
                                 when (item) {

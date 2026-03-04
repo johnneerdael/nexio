@@ -12,7 +12,6 @@ import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
-import com.nexio.tv.data.repository.ParentalGuideRepository
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.TraktScrobbleItem
@@ -40,7 +39,6 @@ class PlayerRuntimeController(
     internal val addonRepository: AddonRepository,
     internal val pluginManager: PluginManager,
     internal val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
-    internal val parentalGuideRepository: ParentalGuideRepository,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val skipIntroRepository: SkipIntroRepository,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -159,7 +157,6 @@ class PlayerRuntimeController(
     internal var lastKnownDuration: Long = 0L
 
     
-    internal var playbackStartedForParentalGuide = false
     internal var hasRenderedFirstFrame = false
     internal var shouldEnforceAutoplayOnFirstReady = true
     internal var metaVideos: List<Video> = emptyList()
@@ -259,7 +256,6 @@ class PlayerRuntimeController(
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode)
         }
-        fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
         observeSubtitleSettings()
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()

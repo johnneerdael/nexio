@@ -9,12 +9,8 @@ import com.nexio.tv.data.remote.api.AnimeSkipApi
 import com.nexio.tv.data.remote.api.ArmApi
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.TraktApi
-import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.remote.api.IntroDbApi
-import com.nexio.tv.data.remote.api.ImdbTapframeApi
 import com.nexio.tv.data.remote.api.MDBListApi
-import com.nexio.tv.data.remote.api.ParentalGuideApi
-import com.nexio.tv.data.remote.api.SeriesGraphApi
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -169,21 +165,6 @@ object NetworkModule {
     fun provideTraktApi(@Named("trakt") retrofit: Retrofit): TraktApi =
         retrofit.create(TraktApi::class.java)
 
-    @Provides
-    @Singleton
-    @Named("parentalGuide")
-    fun provideParentalGuideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.PARENTAL_GUIDE_API_URL.ifEmpty { "https://localhost/" })
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideParentalGuideApi(@Named("parentalGuide") retrofit: Retrofit): ParentalGuideApi =
-        retrofit.create(ParentalGuideApi::class.java)
-
     // --- Skip Intro APIs ---
 
     @Provides
@@ -263,23 +244,6 @@ object NetworkModule {
     fun provideGitHubReleaseApi(@Named("github") retrofit: Retrofit): GitHubReleaseApi =
         retrofit.create(GitHubReleaseApi::class.java)
 
-    // --- Trailer API ---
-
-    @Provides
-    @Singleton
-    @Named("trailer")
-    fun provideTrailerRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.TRAILER_API_URL.ifEmpty { "https://localhost/" })
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-
-    @Provides
-    @Singleton
-    fun provideTrailerApi(@Named("trailer") retrofit: Retrofit): TrailerApi =
-        retrofit.create(TrailerApi::class.java)
-
     // --- MDBList API ---
 
     @Provides
@@ -297,49 +261,4 @@ object NetworkModule {
     fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
         retrofit.create(MDBListApi::class.java)
 
-    // --- SeriesGraph API ---
-
-    @Provides
-    @Singleton
-    @Named("seriesGraph")
-    fun provideSeriesGraphRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
-        val rawBaseUrl = BuildConfig.IMDB_RATINGS_API_BASE_URL
-        val normalizedBaseUrl = if (rawBaseUrl.isNotBlank()) {
-            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
-        } else {
-            "http://localhost/"
-        }
-        return Retrofit.Builder()
-            .baseUrl(normalizedBaseUrl)
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideSeriesGraphApi(@Named("seriesGraph") retrofit: Retrofit): SeriesGraphApi =
-        retrofit.create(SeriesGraphApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("imdbTapframe")
-    fun provideImdbTapframeRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit {
-        val rawBaseUrl = BuildConfig.IMDB_TAPFRAME_API_BASE_URL
-        val normalizedBaseUrl = if (rawBaseUrl.isNotBlank()) {
-            if (rawBaseUrl.endsWith('/')) rawBaseUrl else "$rawBaseUrl/"
-        } else {
-            "http://localhost/"
-        }
-        return Retrofit.Builder()
-            .baseUrl(normalizedBaseUrl)
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideImdbTapframeApi(@Named("imdbTapframe") retrofit: Retrofit): ImdbTapframeApi =
-        retrofit.create(ImdbTapframeApi::class.java)
 }

@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktTokenPollResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,6 +44,9 @@ data class TraktUiState(
     val continueWatchingDaysCap: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
     val showUnairedNextUp: Boolean = TraktSettingsDataStore.DEFAULT_SHOW_UNAIRED_NEXT_UP,
     val connectedStats: TraktProgressService.TraktCachedStats? = null,
+    val watchingNowActive: Boolean = false,
+    val watchingNowTitle: String? = null,
+    val watchingNowProgressPercent: Float? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -52,6 +56,7 @@ class TraktViewModel @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
+    private val traktScrobbleService: TraktScrobbleService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -68,6 +73,7 @@ class TraktViewModel @Inject constructor(
         }
         observeSettings()
         observeAuthState()
+        observeWatchingNow()
     }
 
     fun onContinueWatchingDaysCapSelected(days: Int) {
@@ -203,6 +209,20 @@ class TraktViewModel @Inject constructor(
                     it.copy(
                         continueWatchingDaysCap = daysCap,
                         showUnairedNextUp = showUnairedNextUp
+                    )
+                }
+            }
+        }
+    }
+
+    private fun observeWatchingNow() {
+        viewModelScope.launch {
+            traktScrobbleService.observeWatchingNowState().collectLatest { watching ->
+                _uiState.update {
+                    it.copy(
+                        watchingNowActive = watching.active,
+                        watchingNowTitle = watching.title,
+                        watchingNowProgressPercent = watching.progressPercent
                     )
                 }
             }

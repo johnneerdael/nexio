@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.Video
@@ -760,4 +762,123 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
             episode = targetEpisode
         )
     }
+}
+
+internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueWatchingItem) {
+    viewModelScope.launch {
+        runCatching {
+            val now = System.currentTimeMillis()
+            val progress = when (item) {
+                is ContinueWatchingItem.InProgress -> item.progress
+                is ContinueWatchingItem.NextUp -> WatchProgress(
+                    contentId = item.info.contentId,
+                    contentType = item.info.contentType,
+                    name = item.info.name,
+                    poster = item.info.poster,
+                    backdrop = item.info.backdrop,
+                    logo = item.info.logo,
+                    videoId = item.info.videoId,
+                    season = item.info.season,
+                    episode = item.info.episode,
+                    episodeTitle = item.info.episodeTitle,
+                    position = 1L,
+                    duration = 1L,
+                    lastWatched = now,
+                    progressPercent = 100f
+                )
+            }
+            watchProgressRepository.markAsCompleted(progress)
+        }.onFailure { error ->
+            Log.w(HomeViewModel.TAG, "Failed to mark continue-watching item as watched", error)
+        }
+    }
+}
+
+internal fun HomeViewModel.checkInContinueWatchingPipeline(item: ContinueWatchingItem) {
+    viewModelScope.launch {
+        val scrobbleItem = buildTraktScrobbleItemForContinueWatching(item)
+        if (scrobbleItem == null) {
+            Log.d(HomeViewModel.TAG, "Skipped Trakt check-in: missing/unsupported IDs for item=$item")
+            return@launch
+        }
+        runCatching {
+            traktScrobbleService.checkin(scrobbleItem)
+        }.onFailure { error ->
+            Log.w(HomeViewModel.TAG, "Failed Trakt check-in for continue-watching item", error)
+        }
+    }
+}
+
+private fun buildTraktScrobbleItemForContinueWatching(item: ContinueWatchingItem): TraktScrobbleItem? {
+    return when (item) {
+        is ContinueWatchingItem.InProgress -> {
+            val ids = parseTraktIdsForContinueWatching(item.progress.contentId)
+            if (!ids.hasAnyId()) return null
+            val isSeries = isSeriesTypeCW(item.progress.contentType)
+            val season = item.progress.season
+            val episode = item.progress.episode
+            if (isSeries) {
+                if (season == null || episode == null) return null
+                TraktScrobbleItem.Episode(
+                    showTitle = item.progress.name,
+                    showYear = null,
+                    showIds = ids,
+                    season = season,
+                    number = episode,
+                    episodeTitle = item.progress.episodeTitle
+                )
+            } else {
+                TraktScrobbleItem.Movie(
+                    title = item.progress.name,
+                    year = null,
+                    ids = ids
+                )
+            }
+        }
+
+        is ContinueWatchingItem.NextUp -> {
+            val ids = parseTraktIdsForContinueWatching(item.info.contentId)
+            if (!ids.hasAnyId()) return null
+            TraktScrobbleItem.Episode(
+                showTitle = item.info.name,
+                showYear = null,
+                showIds = ids,
+                season = item.info.season,
+                number = item.info.episode,
+                episodeTitle = item.info.episodeTitle
+            )
+        }
+    }
+}
+
+private fun parseTraktIdsForContinueWatching(contentId: String): TraktIdsDto {
+    val raw = contentId.trim()
+    if (raw.isBlank()) return TraktIdsDto()
+
+    return when {
+        raw.startsWith("tt", ignoreCase = true) -> TraktIdsDto(
+            imdb = raw.substringBefore(':').lowercase()
+        )
+
+        raw.startsWith("tmdb:", ignoreCase = true) -> TraktIdsDto(
+            tmdb = raw.substringAfter(':').toIntOrNull()
+        )
+
+        raw.startsWith("trakt:", ignoreCase = true) -> TraktIdsDto(
+            trakt = raw.substringAfter(':').toIntOrNull()
+        )
+
+        else -> {
+            val numeric = raw.substringBefore(':').toIntOrNull()
+            if (numeric != null) {
+                TraktIdsDto(trakt = numeric)
+            } else {
+                TraktIdsDto()
+            }
+        }
+    }
+}
+
+private fun TraktIdsDto.hasAnyId(): Boolean {
+    return trakt != null || !imdb.isNullOrBlank() || tmdb != null || tvdb != null || !slug.isNullOrBlank()
 }

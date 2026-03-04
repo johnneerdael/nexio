@@ -150,10 +150,6 @@
     <string name="playback_player_ask_desc">Choisir le lecteur à chaque fois</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Bande-annonce</string>
-    <string name="audio_autoplay_trailers">Lecture automatique des bandes-annonces</string>
-    <string name="audio_autoplay_trailers_sub">Lire automatiquement les bandes-annonces sur l\'écran de détail après une période d\'inactivité</string>
-    <string name="audio_trailer_delay">Délai de la bande-annonce</string>
     <string name="audio_section">Audio</string>
     <string name="audio_lang_default">Par défaut (fichier média)</string>
     <string name="audio_lang_device">Langue de l\'appareil</string>
@@ -291,8 +287,6 @@
     <string name="layout_section_detail_desc">Paramètres pour les écrans de détail et d\'épisodes.</string>
     <string name="layout_blur_unwatched">Flouter les épisodes non vus</string>
     <string name="layout_blur_unwatched_sub">Flouter les miniatures d\'épisodes jusqu\'à ce qu\'ils soient vus pour éviter les spoilers.</string>
-    <string name="layout_trailer_button">Afficher le bouton bande-annonce</string>
-    <string name="layout_trailer_button_sub">Afficher le bouton bande-annonce sur la page de détail (uniquement quand une bande-annonce est disponible).</string>
     <string name="layout_prefer_external_meta">Préférer les métadonnées de l\'addon externe</string>
     <string name="layout_prefer_external_meta_sub">Utiliser les métadonnées de l\'addon externe au lieu de l\'addon de catalogue.</string>
     <string name="layout_section_focused">Affiche au focus</string>
@@ -301,21 +295,10 @@
     <string name="layout_expand_poster_sub">Étendre l\'affiche au focus après un délai d\'inactivité.</string>
     <string name="layout_expand_delay">Délai d\'expansion de l\'arrière-plan</string>
     <string name="layout_expand_delay_sub">Temps d\'attente avant d\'étendre les cartes au focus.</string>
-    <string name="layout_autoplay_trailer">Lecture auto de la bande-annonce</string>
-    <string name="layout_autoplay_trailer_expanded">Lecture auto de la bande-annonce en carte étendue</string>
-    <string name="layout_autoplay_trailer_sub">Lire l\'aperçu de la bande-annonce pour le contenu au focus si disponible.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Lire la bande-annonce dans l\'arrière-plan étendu si disponible.</string>
-    <string name="layout_trailer_muted">Lire la bande-annonce en sourdine</string>
-    <string name="layout_trailer_muted_sub_preview">Couper le son de la bande-annonce pendant l\'aperçu automatique.</string>
-    <string name="layout_trailer_muted_sub_expanded">Couper le son de la bande-annonce dans les cartes étendues.</string>
     <string name="layout_section_card_style">Style des cartes d\'affiche</string>
     <string name="layout_section_card_style_desc">Ajuster la largeur et le rayon des coins des cartes.</string>
     <string name="layout_open">Ouvert</string>
     <string name="layout_closed">Fermé</string>
-    <string name="layout_trailer_location">Emplacement de la bande-annonce (Moderne)</string>
-    <string name="layout_trailer_location_sub">Choisir où la bande-annonce est lue dans l\'accueil Moderne.</string>
-    <string name="layout_trailer_expanded_card">Carte étendue</string>
-    <string name="layout_trailer_hero_media">Média vedette</string>
     <string name="layout_preset_compact">Compact</string>
     <string name="layout_preset_dense">Dense</string>
     <string name="layout_preset_standard">Standard</string>

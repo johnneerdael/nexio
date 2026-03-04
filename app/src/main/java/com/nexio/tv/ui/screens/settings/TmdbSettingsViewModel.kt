@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.TmdbSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,8 +15,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TmdbSettingsViewModel @Inject constructor(
-    private val dataStore: TmdbSettingsDataStore,
-    private val trailerService: TrailerService
+    private val dataStore: TmdbSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TmdbSettingsUiState())
@@ -36,11 +34,7 @@ class TmdbSettingsViewModel @Inject constructor(
             is TmdbSettingsEvent.ToggleEnabled -> update { dataStore.setEnabled(event.enabled) }
             is TmdbSettingsEvent.SetLanguage -> update {
                 val newLanguage = event.language.ifBlank { "en" }
-                val currentLanguage = _uiState.value.language.ifBlank { "en" }
                 dataStore.setLanguage(newLanguage)
-                if (!newLanguage.equals(currentLanguage, ignoreCase = true)) {
-                    trailerService.clearCache()
-                }
             }
             is TmdbSettingsEvent.ToggleArtwork -> update { dataStore.setUseArtwork(event.enabled) }
             is TmdbSettingsEvent.ToggleBasicInfo -> update { dataStore.setUseBasicInfo(event.enabled) }

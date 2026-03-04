@@ -38,6 +38,9 @@ fun GridContinueWatchingSection(
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
+    onMarkAsWatched: (ContinueWatchingItem) -> Unit = {},
+    onCheckIn: ((ContinueWatchingItem) -> Unit)? = null,
+    onManageLists: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1
@@ -137,9 +140,25 @@ fun GridContinueWatchingSection(
                 onRemoveItem(menuItem)
                 optionsItem = null
             },
+            onMarkAsWatched = {
+                onMarkAsWatched(menuItem)
+                optionsItem = null
+            },
             onDetails = {
                 onDetailsClick(menuItem)
                 optionsItem = null
+            },
+            onCheckIn = onCheckIn?.let { callback ->
+                {
+                    callback(menuItem)
+                    optionsItem = null
+                }
+            },
+            onManageLists = onManageLists?.let { callback ->
+                {
+                    callback(menuItem)
+                    optionsItem = null
+                }
             },
             onStartFromBeginning = {
                 onStartFromBeginning(menuItem)

@@ -38,6 +38,7 @@ import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.data.repository.TraktRecommendationRef
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.NexioDialog
@@ -50,7 +51,9 @@ import kotlin.math.roundToInt
 
 private data class HomePosterOptionsTarget(
     val item: MetaPreview,
-    val addonBaseUrl: String
+    val addonBaseUrl: String,
+    val statusKey: String,
+    val recommendationRef: TraktRecommendationRef?
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -192,7 +195,13 @@ fun HomeScreen(
                                     uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
                                 },
                                 onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
+                                    val statusKey = homeItemStatusKey(item.id, item.apiType)
+                                    posterOptionsTarget = HomePosterOptionsTarget(
+                                        item = item,
+                                        addonBaseUrl = addonBaseUrl,
+                                        statusKey = statusKey,
+                                        recommendationRef = uiState.traktRecommendationRefs[statusKey]
+                                    )
                                 }
                             )
 
@@ -208,7 +217,13 @@ fun HomeScreen(
                                     uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
                                 },
                                 onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
+                                    val statusKey = homeItemStatusKey(item.id, item.apiType)
+                                    posterOptionsTarget = HomePosterOptionsTarget(
+                                        item = item,
+                                        addonBaseUrl = addonBaseUrl,
+                                        statusKey = statusKey,
+                                        recommendationRef = uiState.traktRecommendationRefs[statusKey]
+                                    )
                                 }
                             )
 
@@ -222,7 +237,13 @@ fun HomeScreen(
                                     uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
                                 },
                                 onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
+                                    val statusKey = homeItemStatusKey(item.id, item.apiType)
+                                    posterOptionsTarget = HomePosterOptionsTarget(
+                                        item = item,
+                                        addonBaseUrl = addonBaseUrl,
+                                        statusKey = statusKey,
+                                        recommendationRef = uiState.traktRecommendationRefs[statusKey]
+                                    )
                                 }
                             )
                         }
@@ -261,6 +282,13 @@ fun HomeScreen(
             onToggleWatched = {
                 viewModel.togglePosterMovieWatched(item)
                 posterOptionsTarget = null
+            },
+            showHideRecommendation = selectedPoster.recommendationRef != null,
+            onHideRecommendation = {
+                selectedPoster.recommendationRef?.let { ref ->
+                    viewModel.dismissTraktRecommendation(ref)
+                }
+                posterOptionsTarget = null
             }
         )
     }
@@ -296,8 +324,6 @@ private fun ClassicHomeRoute(
         uiState = uiState,
         posterCardStyle = posterCardStyle,
         focusState = focusState,
-        trailerPreviewUrls = viewModel.trailerPreviewUrls,
-        trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
@@ -305,11 +331,19 @@ private fun ClassicHomeRoute(
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         },
+        onMarkContinueWatchingWatched = { item ->
+            viewModel.markContinueWatchingAsWatched(item)
+        },
+        onCheckInContinueWatching = { item ->
+            viewModel.checkInContinueWatching(item)
+        },
+        onManageListsContinueWatching = if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
+            { item -> viewModel.openContinueWatchingListPicker(item) }
+        } else {
+            null
+        },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
-        onRequestTrailerPreview = { item ->
-            viewModel.requestTrailerPreview(item)
-        },
         onItemFocus = { item ->
             viewModel.onItemFocus(item)
         },
@@ -343,6 +377,17 @@ private fun GridHomeRoute(
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         },
+        onMarkContinueWatchingWatched = { item ->
+            viewModel.markContinueWatchingAsWatched(item)
+        },
+        onCheckInContinueWatching = { item ->
+            viewModel.checkInContinueWatching(item)
+        },
+        onManageListsContinueWatching = if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
+            { item -> viewModel.openContinueWatchingListPicker(item) }
+        } else {
+            null
+        },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onItemFocus = { item ->
@@ -365,11 +410,6 @@ private fun ModernHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
-    val requestTrailerPreview = remember(viewModel) {
-        { itemId: String, title: String, releaseInfo: String?, apiType: String ->
-            viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType)
-        }
-    }
     val loadMoreCatalog = remember(viewModel) {
         { catalogId: String, addonId: String, type: String ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
@@ -380,6 +420,25 @@ private fun ModernHomeRoute(
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
         }
     }
+    val markContinueWatchingWatched = remember(viewModel) {
+        { item: ContinueWatchingItem ->
+            viewModel.markContinueWatchingAsWatched(item)
+        }
+    }
+    val checkInContinueWatching = remember(viewModel) {
+        { item: ContinueWatchingItem ->
+            viewModel.checkInContinueWatching(item)
+        }
+    }
+    val manageListsContinueWatching = remember(viewModel, uiState.librarySourceMode) {
+        if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
+            { item: ContinueWatchingItem ->
+                viewModel.openContinueWatchingListPicker(item)
+            }
+        } else {
+            null
+        }
+    }
     val saveModernFocusState = remember(viewModel) {
         { vi: Int, vo: Int, ri: Int, ii: Int, m: Map<String, Int> ->
             viewModel.saveFocusState(vi, vo, ri, ii, m)
@@ -388,14 +447,14 @@ private fun ModernHomeRoute(
     ModernHomeContent(
         uiState = uiState,
         focusState = focusState,
-        trailerPreviewUrls = viewModel.trailerPreviewUrls,
-        trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
-        onRequestTrailerPreview = requestTrailerPreview,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,
+        onMarkContinueWatchingWatched = markContinueWatchingWatched,
+        onCheckInContinueWatching = checkInContinueWatching,
+        onManageListsContinueWatching = manageListsContinueWatching,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onItemFocus = { item ->
@@ -418,7 +477,9 @@ private fun HomePosterOptionsDialog(
     onDismiss: () -> Unit,
     onDetails: () -> Unit,
     onToggleLibrary: () -> Unit,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    showHideRecommendation: Boolean = false,
+    onHideRecommendation: () -> Unit = {}
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
 
@@ -483,6 +544,19 @@ private fun HomePosterOptionsDialog(
                         stringResource(R.string.hero_mark_watched)
                     }
                 )
+            }
+        }
+
+        if (showHideRecommendation) {
+            Button(
+                onClick = onHideRecommendation,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.trakt_hide_recommendation))
             }
         }
     }

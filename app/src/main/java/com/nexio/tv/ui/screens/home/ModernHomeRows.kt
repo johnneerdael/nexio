@@ -70,12 +70,9 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nexio.tv.R
-import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
-import com.nexio.tv.ui.components.TrailerPlayer
-import com.nexio.tv.LocalSidebarExpanded
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.abs
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -118,46 +115,20 @@ private fun ModernCatalogRowItem(
     posterCardCornerRadius: Dp,
     modernCatalogCardWidth: Dp,
     modernCatalogCardHeight: Dp,
-    focusedPosterBackdropTrailerMuted: Boolean,
     effectiveExpandEnabled: Boolean,
-    effectiveAutoplayEnabled: Boolean,
-    trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     expandedCatalogFocusKey: String?,
-    expandedTrailerPreviewUrl: String?,
-    expandedTrailerPreviewAudioUrl: String?,
     isWatched: Boolean,
     onFocused: () -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLongPress: () -> Unit,
-    onBackdropInteraction: () -> Unit,
-    onExpandedCatalogFocusKeyChange: (String?) -> Unit
+    onBackdropInteraction: () -> Unit
 ) {
     val focusKey = payload.focusKey
-    val suppressCardExpansionForHeroTrailer =
-        effectiveAutoplayEnabled &&
-            trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
     val isBackdropExpanded =
         effectiveExpandEnabled &&
-            expandedCatalogFocusKey == focusKey &&
-            !suppressCardExpansionForHeroTrailer
-    val isSidebarExpanded = LocalSidebarExpanded.current
-    val playTrailerInExpandedCard =
-        effectiveAutoplayEnabled &&
-            !isSidebarExpanded &&
-            trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
-            isBackdropExpanded
-    val trailerPreviewUrl = if (playTrailerInExpandedCard) {
-        expandedTrailerPreviewUrl
-    } else {
-        null
-    }
-    val trailerPreviewAudioUrl = if (playTrailerInExpandedCard) {
-        expandedTrailerPreviewAudioUrl
-    } else {
-        null
-    }
+            expandedCatalogFocusKey == focusKey
 
     ModernCarouselCard(
         item = item,
@@ -168,10 +139,6 @@ private fun ModernCatalogRowItem(
         cardHeight = modernCatalogCardHeight,
         focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
         isBackdropExpanded = isBackdropExpanded,
-        playTrailerInExpandedCard = playTrailerInExpandedCard,
-        focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-        trailerPreviewUrl = trailerPreviewUrl,
-        trailerPreviewAudioUrl = trailerPreviewAudioUrl,
         isWatched = isWatched,
         focusRequester = requester,
         onFocused = {
@@ -192,8 +159,7 @@ private fun ModernCatalogRowItem(
             )
         },
         onLongPress = onLongPress,
-        onBackdropInteraction = onBackdropInteraction,
-        onTrailerEnded = { onExpandedCatalogFocusKeyChange(null) }
+        onBackdropInteraction = onBackdropInteraction
     )
 }
 
@@ -213,13 +179,8 @@ internal fun ModernRowSection(
     useLandscapePosters: Boolean,
     showLabels: Boolean,
     posterCardCornerRadius: Dp,
-    focusedPosterBackdropTrailerMuted: Boolean,
     effectiveExpandEnabled: Boolean,
-    effectiveAutoplayEnabled: Boolean,
-    trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     expandedCatalogFocusKey: String?,
-    expandedTrailerPreviewUrl: String?,
-    expandedTrailerPreviewAudioUrl: String?,
     modernCatalogCardWidth: Dp,
     modernCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
@@ -232,8 +193,7 @@ internal fun ModernRowSection(
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
-    onBackdropInteraction: () -> Unit,
-    onExpandedCatalogFocusKeyChange: (String?) -> Unit
+    onBackdropInteraction: () -> Unit
 ) {
     val focusedItemByRow = uiCaches.focusedItemByRow
     val itemFocusRequesters = uiCaches.itemFocusRequesters
@@ -434,13 +394,8 @@ internal fun ModernRowSection(
                                 posterCardCornerRadius = posterCardCornerRadius,
                                 modernCatalogCardWidth = modernCatalogCardWidth,
                                 modernCatalogCardHeight = modernCatalogCardHeight,
-                                focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
                                 effectiveExpandEnabled = effectiveExpandEnabled && !isRowScrolling,
-                                effectiveAutoplayEnabled = effectiveAutoplayEnabled && !isRowScrolling,
-                                trailerPlaybackTarget = trailerPlaybackTarget,
                                 expandedCatalogFocusKey = expandedCatalogFocusKey,
-                                expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
-                                expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
                                 isWatched = item.metaPreview?.let(isCatalogItemWatched) == true,
                                 onFocused = onFocused,
                                 onItemFocus = onItemFocus,
@@ -451,8 +406,7 @@ internal fun ModernRowSection(
                                         onCatalogItemLongPress(preview, payload.addonBaseUrl)
                                     }
                                 },
-                                onBackdropInteraction = onBackdropInteraction,
-                                onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange
+                                onBackdropInteraction = onBackdropInteraction
                             )
                         }
                     }
@@ -474,17 +428,12 @@ private fun ModernCarouselCard(
     cardHeight: Dp,
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
-    playTrailerInExpandedCard: Boolean,
-    focusedPosterBackdropTrailerMuted: Boolean,
-    trailerPreviewUrl: String?,
-    trailerPreviewAudioUrl: String?,
     isWatched: Boolean,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
-    onBackdropInteraction: () -> Unit,
-    onTrailerEnded: () -> Unit
+    onBackdropInteraction: () -> Unit
 ) {
     val cardShape = RoundedCornerShape(cardCornerRadius)
     val context = LocalContext.current
@@ -547,7 +496,6 @@ private fun ModernCarouselCard(
         }
     }
     var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
-    val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
     val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo =
         useLandscapePosters &&
@@ -656,19 +604,6 @@ private fun ModernCarouselCard(
                         )
                     } else {
                         MonochromePosterPlaceholder()
-                    }
-
-                    if (shouldPlayTrailerInCard) {
-                        TrailerPlayer(
-                            trailerUrl = trailerPreviewUrl,
-                            trailerAudioUrl = trailerPreviewAudioUrl,
-                            isPlaying = true,
-                            onEnded = onTrailerEnded,
-                            muted = focusedPosterBackdropTrailerMuted,
-                            cropToFill = true,
-                            overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
-                            modifier = Modifier.fillMaxSize()
-                        )
                     }
                 }
 

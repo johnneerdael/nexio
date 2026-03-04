@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
@@ -34,10 +33,7 @@ private data class CoreLayoutPrefs(
 
 private data class FocusedBackdropPrefs(
     val expandEnabled: Boolean,
-    val expandDelaySeconds: Int,
-    val trailerEnabled: Boolean,
-    val trailerMuted: Boolean,
-    val trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget
+    val expandDelaySeconds: Int
 )
 
 private data class LayoutUiPrefs(
@@ -51,9 +47,6 @@ private data class LayoutUiPrefs(
     val modernLandscapePostersEnabled: Boolean,
     val focusedBackdropExpandEnabled: Boolean,
     val focusedBackdropExpandDelaySeconds: Int,
-    val focusedBackdropTrailerEnabled: Boolean,
-    val focusedBackdropTrailerMuted: Boolean,
-    val focusedBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     val posterCardWidthDp: Int,
     val posterCardHeightDp: Int,
     val posterCardCornerRadiusDp: Int
@@ -90,17 +83,11 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
 
     val focusedBackdropPrefsFlow = combine(
         layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled,
-        layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds,
-        layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled,
-        layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted,
-        layoutPreferenceDataStore.focusedPosterBackdropTrailerPlaybackTarget
-    ) { expandEnabled, expandDelaySeconds, trailerEnabled, trailerMuted, trailerPlaybackTarget ->
+        layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds
+    ) { expandEnabled, expandDelaySeconds ->
         FocusedBackdropPrefs(
             expandEnabled = expandEnabled,
-            expandDelaySeconds = expandDelaySeconds,
-            trailerEnabled = trailerEnabled,
-            trailerMuted = trailerMuted,
-            trailerPlaybackTarget = trailerPlaybackTarget
+            expandDelaySeconds = expandDelaySeconds
         )
     }
 
@@ -124,9 +111,6 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             modernLandscapePostersEnabled = false,
             focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
             focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
-            focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
-            focusedBackdropTrailerMuted = focusedBackdropPrefs.trailerMuted,
-            focusedBackdropTrailerPlaybackTarget = focusedBackdropPrefs.trailerPlaybackTarget,
             posterCardWidthDp = posterCardWidthDp,
             posterCardHeightDp = posterCardHeightDp,
             posterCardCornerRadiusDp = posterCardCornerRadiusDp
@@ -169,9 +153,6 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
-                        focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
-                        focusedPosterBackdropTrailerMuted = prefs.focusedBackdropTrailerMuted,
-                        focusedPosterBackdropTrailerPlaybackTarget = prefs.focusedBackdropTrailerPlaybackTarget,
                         posterCardWidthDp = prefs.posterCardWidthDp,
                         posterCardHeightDp = prefs.posterCardHeightDp,
                         posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp
@@ -196,96 +177,6 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
                     externalMetaPrefetchInFlightIds.clear()
                 }
             }
-    }
-}
-
-internal fun HomeViewModel.requestTrailerPreviewPipeline(item: MetaPreview) {
-    requestTrailerPreviewPipeline(
-        itemId = item.id,
-        title = item.name,
-        releaseInfo = item.releaseInfo,
-        apiType = item.apiType,
-        fallbackYtId = item.trailerYtIds.firstOrNull()
-    )
-}
-
-internal fun HomeViewModel.requestTrailerPreviewPipeline(
-    itemId: String,
-    title: String,
-    releaseInfo: String?,
-    apiType: String,
-    fallbackYtId: String? = null
-) {
-    if (startupGracePeriodActive) return
-    if (activeTrailerPreviewItemId != itemId) {
-        activeTrailerPreviewItemId = itemId
-        trailerPreviewRequestVersion++
-    }
-
-    if (trailerPreviewNegativeCache.contains(itemId)) return
-    if (trailerPreviewUrlsState.containsKey(itemId)) return
-    if (!trailerPreviewLoadingIds.add(itemId)) return
-
-    val requestVersion = trailerPreviewRequestVersion
-
-    viewModelScope.launch {
-        val tmdbId = try {
-            tmdbService.ensureTmdbId(itemId, apiType)
-        } catch (_: Exception) {
-            null
-        }
-
-        val trailerSource = trailerService.getTrailerPlaybackSource(
-            title = title,
-            year = extractYear(releaseInfo),
-            tmdbId = tmdbId,
-            type = apiType
-        )
-
-        val isLatestFocusedItem =
-            activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
-        if (!isLatestFocusedItem) {
-            trailerPreviewLoadingIds.remove(itemId)
-            return@launch
-        }
-
-        if (trailerSource?.videoUrl.isNullOrBlank()) {
-            val fallbackSource = fallbackYtId?.let { ytId ->
-                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
-                    youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
-                    title = title,
-                    year = extractYear(releaseInfo)
-                )
-            }
-            if (fallbackSource?.videoUrl != null) {
-                if (trailerPreviewUrlsState[itemId] != fallbackSource.videoUrl) {
-                    trailerPreviewUrlsState[itemId] = fallbackSource.videoUrl
-                }
-                val fallbackAudio = fallbackSource.audioUrl
-                if (fallbackAudio.isNullOrBlank()) {
-                    trailerPreviewAudioUrlsState.remove(itemId)
-                } else if (trailerPreviewAudioUrlsState[itemId] != fallbackAudio) {
-                    trailerPreviewAudioUrlsState[itemId] = fallbackAudio
-                }
-            } else {
-                trailerPreviewNegativeCache.add(itemId)
-                trailerPreviewUrlsState.remove(itemId)
-                trailerPreviewAudioUrlsState.remove(itemId)
-            }
-        } else {
-            val videoUrl = trailerSource.videoUrl
-            if (trailerPreviewUrlsState[itemId] != videoUrl) {
-                trailerPreviewUrlsState[itemId] = videoUrl
-            }
-            val audioUrl = trailerSource.audioUrl
-            if (audioUrl.isNullOrBlank()) {
-                trailerPreviewAudioUrlsState.remove(itemId)
-            } else if (trailerPreviewAudioUrlsState[itemId] != audioUrl) {
-                trailerPreviewAudioUrlsState[itemId] = audioUrl
-            }
-        }
-
-        trailerPreviewLoadingIds.remove(itemId)
     }
 }
 
@@ -321,16 +212,13 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 }
 
 private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) {
-    val incomingTrailerYtIds = meta.trailerYtIds
-
     fun mergeItem(currentItem: MetaPreview): MetaPreview = currentItem.copy(
         background = meta.background ?: currentItem.background,
         logo = meta.logo ?: currentItem.logo,
         description = meta.description ?: currentItem.description,
         releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
         imdbRating = meta.imdbRating ?: currentItem.imdbRating,
-        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres,
-        trailerYtIds = if (incomingTrailerYtIds.isNotEmpty()) incomingTrailerYtIds else currentItem.trailerYtIds
+        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
     )
 
     catalogsMap.forEach { (key, row) ->
@@ -367,20 +255,6 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         if (changed) state.copy(catalogRows = updatedRows) else state
     }
 
-    // If external meta brought new trailerYtIds and the item has no trailer resolved yet, retry.
-    // Covers: (a) item was in negative cache, (b) pipeline finished without result but wasn't
-    // cached as negative (e.g. focus changed mid-flight), (c) pipeline still in-flight.
-    if (incomingTrailerYtIds.isNotEmpty() && !trailerPreviewUrlsState.containsKey(itemId)) {
-        trailerPreviewNegativeCache.remove(itemId)
-        trailerPreviewLoadingIds.remove(itemId)
-        // Bump version so any in-flight pipeline for this item treats itself as stale
-        // and won't overwrite the retry result with a negative cache entry.
-        if (activeTrailerPreviewItemId == itemId) trailerPreviewRequestVersion++
-        val currentItem = catalogsMap.values.firstNotNullOfOrNull { row ->
-            row.items.firstOrNull { it.id == itemId }
-        } ?: return
-        requestTrailerPreviewPipeline(currentItem)
-    }
 }
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(

@@ -150,10 +150,6 @@
     <string name="playback_player_ask_desc">Elige el reproductor cada vez</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Tráiler</string>
-    <string name="audio_autoplay_trailers">Reproducción automática de tráilers</string>
-    <string name="audio_autoplay_trailers_sub">Reproduce automáticamente tráilers en la pantalla de detalles después de un período de inactividad</string>
-    <string name="audio_trailer_delay">Retraso del tráiler</string>
     <string name="audio_section">Audio</string>
     <string name="audio_lang_default">Predeterminado (archivo de medios)</string>
     <string name="audio_lang_device">Idioma del dispositivo</string>
@@ -288,8 +284,6 @@
     <string name="layout_section_detail_desc">Configuración para pantallas de detalles y episodios.</string>
     <string name="layout_blur_unwatched">Desenfocar episodios no vistos</string>
     <string name="layout_blur_unwatched_sub">Desenfoca miniaturas de episodios hasta que se vean para evitar spoilers.</string>
-    <string name="layout_trailer_button">Mostrar botón de tráiler</string>
-    <string name="layout_trailer_button_sub">Muestra botón de tráiler en página de detalles (solo cuando el tráiler está disponible).</string>
     <string name="layout_prefer_external_meta">Preferir metadatos de complemento externo</string>
     <string name="layout_prefer_external_meta_sub">Usa metadatos de complemento externo en lugar de complemento de catálogo.</string>
     <string name="layout_section_focused">Póster enfocado</string>
@@ -298,21 +292,10 @@
     <string name="layout_expand_poster_sub">Expande póster enfocado después de retraso inactivo.</string>
     <string name="layout_expand_delay">Retraso de expansión de telón de fondo</string>
     <string name="layout_expand_delay_sub">Cuánto tiempo esperar antes de expandir tarjetas enfocadas.</string>
-    <string name="layout_autoplay_trailer">Reproducción automática de tráiler</string>
-    <string name="layout_autoplay_trailer_expanded">Reproducción automática de tráiler en tarjeta expandida</string>
-    <string name="layout_autoplay_trailer_sub">Reproduce vista previa de tráiler para contenido enfocado cuando esté disponible.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Reproduce tráiler dentro de telón de fondo expandido cuando esté disponible.</string>
-    <string name="layout_trailer_muted">Reproducir tráiler silenciado</string>
-    <string name="layout_trailer_muted_sub_preview">Silencia audio de tráiler durante vista previa de reproducción automática.</string>
-    <string name="layout_trailer_muted_sub_expanded">Silencia audio de tráiler en tarjetas expandidas.</string>
     <string name="layout_section_card_style">Estilo de tarjeta de póster</string>
     <string name="layout_section_card_style_desc">Ajusta ancho de tarjeta y radio de esquina.</string>
     <string name="layout_open">Abierto</string>
     <string name="layout_closed">Cerrado</string>
-    <string name="layout_trailer_location">Ubicación de reproducción de tráiler moderna</string>
-    <string name="layout_trailer_location_sub">Elige dónde se reproduce la vista previa de tráiler en inicio moderno.</string>
-    <string name="layout_trailer_expanded_card">Tarjeta expandida</string>
-    <string name="layout_trailer_hero_media">Medios de héroe</string>
     <string name="layout_preset_compact">Compacto</string>
     <string name="layout_preset_dense">Denso</string>
     <string name="layout_preset_standard">Estándar</string>

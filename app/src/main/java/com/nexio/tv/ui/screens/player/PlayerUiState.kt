@@ -94,10 +94,6 @@ data class PlayerUiState(
     val sourceChips: List<SourceChipItem> = emptyList(),
     val error: String? = null,
     val pendingSeekPosition: Long? = null,  // For resuming from saved progress
-    // Parental guide overlay
-    val parentalWarnings: List<ParentalWarning> = emptyList(),
-    val showParentalGuide: Boolean = false,
-    val parentalGuideHasShown: Boolean = false,
     // Skip intro
     val activeSkipInterval: SkipInterval? = null,
     val skipIntervalDismissed: Boolean = false,
@@ -187,7 +183,6 @@ sealed class PlayerEvent {
     data class OnSourceStreamSelected(val stream: Stream) : PlayerEvent()
     data object OnDismissDialog : PlayerEvent()
     data object OnRetry : PlayerEvent()
-    data object OnParentalGuideHide : PlayerEvent()
     data class OnShowDisplayModeInfo(val info: DisplayModeInfo) : PlayerEvent()
     data object OnHideDisplayModeInfo : PlayerEvent()
     data object OnDismissPauseOverlay : PlayerEvent()
@@ -205,11 +200,6 @@ sealed class PlayerEvent {
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()
 }
-
-data class ParentalWarning(
-    val label: String,
-    val severity: String
-)
 
 data class DisplayModeInfo(
     val width: Int,

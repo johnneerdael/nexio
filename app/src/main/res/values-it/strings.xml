@@ -168,10 +168,6 @@
     <string name="playback_player_ask_desc">Scegli il player ogni volta</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Trailer</string>
-    <string name="audio_autoplay_trailers">Riproduzione automatica trailer</string>
-    <string name="audio_autoplay_trailers_sub">Riproduci automaticamente i trailer nella schermata dei dettagli dopo un periodo di inattività</string>
-    <string name="audio_trailer_delay">Ritardo trailer</string>
     <string name="audio_section">Audio</string>
     <string name="audio_lang_default">Predefinito (file multimediale)</string>
     <string name="audio_lang_device">Lingua del dispositivo</string>
@@ -306,8 +302,6 @@
     <string name="layout_section_detail_desc">Impostazioni per le schermate dei dettagli e degli episodi.</string>
     <string name="layout_blur_unwatched">Sfoca episodi non visti</string>
     <string name="layout_blur_unwatched_sub">Sfoca le miniature degli episodi finché non vengono visti per evitare spoiler.</string>
-    <string name="layout_trailer_button">Mostra pulsante Trailer</string>
-    <string name="layout_trailer_button_sub">Mostra il pulsante trailer nella pagina dei dettagli (solo quando il trailer è disponibile).</string>
     <string name="layout_prefer_external_meta">Preferisci meta da addon esterni</string>
     <string name="layout_prefer_external_meta_sub">Usa i metadati degli addon esterni invece di quelli del catalogo.</string>
     <string name="layout_section_focused">Locandina a fuoco</string>
@@ -316,21 +310,10 @@
     <string name="layout_expand_poster_sub">Espandi la locandina a fuoco dopo un ritardo di inattività.</string>
     <string name="layout_expand_delay">Ritardo espansione sfondo</string>
     <string name="layout_expand_delay_sub">Quanto tempo attendere prima di espandere le schede a fuoco.</string>
-    <string name="layout_autoplay_trailer">Riproduzione automatica trailer</string>
-    <string name="layout_autoplay_trailer_expanded">Riproduci trailer in scheda espansa</string>
-    <string name="layout_autoplay_trailer_sub">Riproduci l\'anteprima del trailer per il contenuto a fuoco quando disponibile.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Riproduci il trailer all\'interno dello sfondo espanso quando disponibile.</string>
-    <string name="layout_trailer_muted">Riproduci trailer senza audio</string>
-    <string name="layout_trailer_muted_sub_preview">Disattiva l\'audio del trailer durante l\'anteprima automatica.</string>
-    <string name="layout_trailer_muted_sub_expanded">Disattiva l\'audio del trailer nelle schede espanse.</string>
     <string name="layout_section_card_style">Stile scheda locandina</string>
     <string name="layout_section_card_style_desc">Regola la larghezza della scheda e il raggio degli angoli.</string>
     <string name="layout_open">Aperto</string>
     <string name="layout_closed">Chiuso</string>
-    <string name="layout_trailer_location">Posizione riproduzione trailer stile Modern</string>
-    <string name="layout_trailer_location_sub">Scegli dove viene riprodotta l\'anteprima del trailer nella Home Modern.</string>
-    <string name="layout_trailer_expanded_card">Scheda Espansa</string>
-    <string name="layout_trailer_hero_media">Media Hero</string>
     <string name="layout_preset_compact">Compatto</string>
     <string name="layout_preset_dense">Denso</string>
     <string name="layout_preset_standard">Standard</string>

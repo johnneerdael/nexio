@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.core.profile.ProfileManager
-import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.domain.model.HomeLayout
@@ -52,15 +51,10 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val catalogTypeSuffixEnabledKey = booleanPreferencesKey("catalog_type_suffix_enabled")
     private val focusedPosterBackdropExpandEnabledKey = booleanPreferencesKey("focused_poster_backdrop_expand_enabled")
     private val focusedPosterBackdropExpandDelaySecondsKey = intPreferencesKey("focused_poster_backdrop_expand_delay_seconds")
-    private val focusedPosterBackdropTrailerEnabledKey = booleanPreferencesKey("focused_poster_backdrop_trailer_enabled")
-    private val focusedPosterBackdropTrailerMutedKey = booleanPreferencesKey("focused_poster_backdrop_trailer_muted")
-    private val focusedPosterBackdropTrailerPlaybackTargetKey =
-        stringPreferencesKey("focused_poster_backdrop_trailer_playback_target")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
     private val blurUnwatchedEpisodesKey = booleanPreferencesKey("blur_unwatched_episodes")
-    private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
     private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
 
@@ -159,22 +153,6 @@ class LayoutPreferenceDataStore @Inject constructor(
             .coerceAtLeast(MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
     }
 
-    val focusedPosterBackdropTrailerEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[focusedPosterBackdropTrailerEnabledKey] ?: false
-    }
-
-    val focusedPosterBackdropTrailerMuted: Flow<Boolean> = profileFlow { prefs ->
-        prefs[focusedPosterBackdropTrailerMutedKey] ?: true
-    }
-
-    val focusedPosterBackdropTrailerPlaybackTarget: Flow<FocusedPosterTrailerPlaybackTarget> =
-        profileFlow { prefs ->
-            val stored = prefs[focusedPosterBackdropTrailerPlaybackTargetKey]
-                ?: FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
-            runCatching { FocusedPosterTrailerPlaybackTarget.valueOf(stored) }
-                .getOrDefault(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
-        }
-
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->
         prefs[posterCardWidthDpKey] ?: DEFAULT_POSTER_CARD_WIDTH_DP
     }
@@ -191,10 +169,6 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[blurUnwatchedEpisodesKey] ?: false
     }
 
-    val detailPageTrailerButtonEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[detailPageTrailerButtonEnabledKey] ?: false
-    }
-
     val preferExternalMetaAddonDetail: Flow<Boolean> = profileFlow { prefs ->
         prefs[preferExternalMetaAddonDetailKey] ?: false
     }
@@ -205,16 +179,7 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     suspend fun setLayout(layout: HomeLayout) {
         store().edit { prefs ->
-            val hadChosenLayout = prefs[hasChosenKey] ?: false
             prefs[layoutKey] = layout.name
-            if (
-                layout == HomeLayout.MODERN &&
-                !hadChosenLayout &&
-                prefs[focusedPosterBackdropTrailerPlaybackTargetKey] == null
-            ) {
-                prefs[focusedPosterBackdropTrailerPlaybackTargetKey] =
-                    FocusedPosterTrailerPlaybackTarget.HERO_MEDIA.name
-            }
             prefs[hasChosenKey] = true
         }
     }
@@ -321,10 +286,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setFocusedPosterBackdropExpandEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[focusedPosterBackdropExpandEnabledKey] = enabled
-            if (!enabled) {
-                prefs[focusedPosterBackdropTrailerEnabledKey] = false
-                prefs[focusedPosterBackdropTrailerMutedKey] = true
-            }
         }
     }
 
@@ -332,29 +293,6 @@ class LayoutPreferenceDataStore @Inject constructor(
         store().edit { prefs ->
             prefs[focusedPosterBackdropExpandDelaySecondsKey] =
                 seconds.coerceAtLeast(MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS)
-        }
-    }
-
-    suspend fun setFocusedPosterBackdropTrailerEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[focusedPosterBackdropTrailerEnabledKey] = enabled
-            if (!enabled) {
-                prefs[focusedPosterBackdropTrailerMutedKey] = true
-            }
-        }
-    }
-
-    suspend fun setFocusedPosterBackdropTrailerMuted(muted: Boolean) {
-        store().edit { prefs ->
-            prefs[focusedPosterBackdropTrailerMutedKey] = muted
-        }
-    }
-
-    suspend fun setFocusedPosterBackdropTrailerPlaybackTarget(
-        target: FocusedPosterTrailerPlaybackTarget
-    ) {
-        store().edit { prefs ->
-            prefs[focusedPosterBackdropTrailerPlaybackTargetKey] = target.name
         }
     }
 
@@ -379,12 +317,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setBlurUnwatchedEpisodes(enabled: Boolean) {
         store().edit { prefs ->
             prefs[blurUnwatchedEpisodesKey] = enabled
-        }
-    }
-
-    suspend fun setDetailPageTrailerButtonEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[detailPageTrailerButtonEnabledKey] = enabled
         }
     }
 

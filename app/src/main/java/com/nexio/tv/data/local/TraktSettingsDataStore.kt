@@ -30,6 +30,7 @@ class TraktSettingsDataStore @Inject constructor(
 
     private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
     private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
+    private val dismissedRecommendationKeysKey = stringSetPreferencesKey("dismissed_recommendation_keys")
     private val showUnairedNextUpKey = booleanPreferencesKey("show_unaired_next_up")
 
     val continueWatchingDaysCap: Flow<Int> = profileManager.activeProfileId.flatMapLatest { pid ->
@@ -43,6 +44,12 @@ class TraktSettingsDataStore @Inject constructor(
     val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.map { prefs ->
             prefs[dismissedNextUpKeysKey] ?: emptySet()
+        }
+    }
+
+    val dismissedRecommendationKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
+        factory.get(pid, FEATURE).data.map { prefs ->
+            prefs[dismissedRecommendationKeysKey] ?: emptySet()
         }
     }
 
@@ -77,6 +84,22 @@ class TraktSettingsDataStore @Inject constructor(
     suspend fun setShowUnairedNextUp(enabled: Boolean) {
         store().edit { prefs ->
             prefs[showUnairedNextUpKey] = enabled
+        }
+    }
+
+    suspend fun addDismissedRecommendationKey(key: String) {
+        if (key.isBlank()) return
+        store().edit { prefs ->
+            val current = prefs[dismissedRecommendationKeysKey] ?: emptySet()
+            prefs[dismissedRecommendationKeysKey] = current + key
+        }
+    }
+
+    suspend fun clearDismissedRecommendationKey(key: String) {
+        if (key.isBlank()) return
+        store().edit { prefs ->
+            val current = prefs[dismissedRecommendationKeysKey] ?: emptySet()
+            prefs[dismissedRecommendationKeysKey] = current - key
         }
     }
 }

@@ -64,11 +64,6 @@ fun CatalogRowSection(
     showCatalogTypeSuffix: Boolean = true,
     focusedPosterBackdropExpandEnabled: Boolean = false,
     focusedPosterBackdropExpandDelaySeconds: Int = 3,
-    focusedPosterBackdropTrailerEnabled: Boolean = false,
-    focusedPosterBackdropTrailerMuted: Boolean = true,
-    trailerPreviewUrls: Map<String, String> = emptyMap(),
-    trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
-    onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     onItemFocus: (MetaPreview) -> Unit = {},
     isItemWatched: (MetaPreview) -> Boolean = { false },
     onItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
@@ -205,11 +200,6 @@ fun CatalogRowSection(
                     showLabels = showPosterLabels,
                     focusedPosterBackdropExpandEnabled = focusedPosterBackdropExpandEnabled,
                     focusedPosterBackdropExpandDelaySeconds = focusedPosterBackdropExpandDelaySeconds,
-                    focusedPosterBackdropTrailerEnabled = focusedPosterBackdropTrailerEnabled,
-                    focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
-                    trailerPreviewUrl = trailerPreviewUrls[item.id],
-                    trailerPreviewAudioUrl = trailerPreviewAudioUrls[item.id],
-                    onRequestTrailerPreview = onRequestTrailerPreview,
                     isWatched = isItemWatched(item),
                     onFocus = { focusedItem ->
                         currentOnItemFocus(focusedItem)

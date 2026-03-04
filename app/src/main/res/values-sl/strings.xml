@@ -150,10 +150,6 @@
     <string name="playback_player_ask_desc">Izberi predvajalnik vsakič znova</string>
 
     <!-- PlaybackAudioSettings -->
-    <string name="audio_trailer_section">Napovednik</string>
-    <string name="audio_autoplay_trailers">Samodejno predvajaj napovednike</string>
-    <string name="audio_autoplay_trailers_sub">Samodejno predvajaj napovednike na zaslonu s podrobnostmi po določenem času nedejavnosti</string>
-    <string name="audio_trailer_delay">Zamik napovednika</string>
     <string name="audio_section">Zvok</string>
     <string name="audio_lang_default">Privzeto (medijska datoteka)</string>
     <string name="audio_lang_device">Jezik naprave</string>
@@ -289,8 +285,6 @@
     <string name="layout_section_detail_desc">Nastavitve za zaslone s podrobnostmi in epizodami.</string>
     <string name="layout_blur_unwatched">Zamegli neogledane epizode</string>
     <string name="layout_blur_unwatched_sub">Zamegli sličice epizod, dokler niso ogledane, da se izognete kvarnikom.</string>
-    <string name="layout_trailer_button">Prikaži gumb za napovednik</string>
-    <string name="layout_trailer_button_sub">Prikaži gumb za napovednik na strani s podrobnostmi (samo, ko je na voljo).</string>
     <string name="layout_prefer_external_meta">Preferiraj meta podatke iz zunanjega dodatka</string>
     <string name="layout_prefer_external_meta_sub">Uporabi metapodatke iz zunanjega dodatka namesto iz kataloga.</string>
     <string name="layout_section_focused">Fokusiran plakat</string>
@@ -299,21 +293,10 @@
     <string name="layout_expand_poster_sub">Razširi fokusiran plakat po zakasnitvi nedejavnosti.</string>
     <string name="layout_expand_delay">Zakasnitev razširitve ozadja</string>
     <string name="layout_expand_delay_sub">Kako dolgo naj se čaka pred razširitvijo fokusiranih kartic.</string>
-    <string name="layout_autoplay_trailer">Samodejno predvajaj napovednik</string>
-    <string name="layout_autoplay_trailer_expanded">Samodejno predvajaj napovednik v razširjeni kartici</string>
-    <string name="layout_autoplay_trailer_sub">Predvajaj predogled napovednika za fokusirano vsebino, ko je na voljo.</string>
-    <string name="layout_autoplay_trailer_expanded_sub">Predvajaj napovednik znotraj razširjenega ozadja, ko je na voljo.</string>
-    <string name="layout_trailer_muted">Predvajaj napovednik brez zvoka</string>
-    <string name="layout_trailer_muted_sub_preview">Utišaj zvok napovednika med samodejnim predogledom.</string>
-    <string name="layout_trailer_muted_sub_expanded">Utišaj zvok napovednika v razširjenih karticah.</string>
     <string name="layout_section_card_style">Slog kartice plakata</string>
     <string name="layout_section_card_style_desc">Prilagodite širino kartice in radij vogalov.</string>
     <string name="layout_open">Odpri</string>
     <string name="layout_closed">Zapri</string>
-    <string name="layout_trailer_location">Lokacija predvajanja modernega napovednika</string>
-    <string name="layout_trailer_location_sub">Izberite, kje se predvaja predogled napovednika na modernem domačem zaslonu.</string>
-    <string name="layout_trailer_expanded_card">Razširjena kartica</string>
-    <string name="layout_trailer_hero_media">Glavna vsebina</string>
     <string name="layout_preset_compact">Kompaktno</string>
     <string name="layout_preset_dense">Gosto</string>
     <string name="layout_preset_standard">Standardno</string>

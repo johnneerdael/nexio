@@ -23,7 +23,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,7 +32,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
@@ -59,7 +57,6 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 
 private const val BACKDROP_ASPECT_RATIO = 16f / 9f
-private const val TRAILER_PREVIEW_REQUEST_FOCUS_DEBOUNCE_MS = 140L
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -72,11 +69,6 @@ fun ContentCard(
     showLabels: Boolean = true,
     focusedPosterBackdropExpandEnabled: Boolean = false,
     focusedPosterBackdropExpandDelaySeconds: Int = 3,
-    focusedPosterBackdropTrailerEnabled: Boolean = false,
-    focusedPosterBackdropTrailerMuted: Boolean = true,
-    trailerPreviewUrl: String? = null,
-    trailerPreviewAudioUrl: String? = null,
-    onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     isWatched: Boolean = false,
     onFocus: (MetaPreview) -> Unit = {},
     onLongPress: (() -> Unit)? = null,
@@ -99,14 +91,13 @@ fun ContentCard(
     var longPressTriggered by remember { mutableStateOf(false) }
     var interactionNonce by remember { mutableIntStateOf(0) }
     var isBackdropExpanded by remember { mutableStateOf(false) }
-    var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     val watchedIconEndPadding by animateDpAsState(
         targetValue = if (isFocused) 18.dp else 8.dp,
         animationSpec = tween(durationMillis = 180),
         label = "contentCardWatchedIconEndPadding"
     )
 
-    val needsFocusState = focusedPosterBackdropExpandEnabled || focusedPosterBackdropTrailerEnabled
+    val needsFocusState = focusedPosterBackdropExpandEnabled
     val lastFocusedRef = remember { booleanArrayOf(false) }
 
     if (focusedPosterBackdropExpandEnabled) {
@@ -129,20 +120,6 @@ fun ContentCard(
             if (isFocused && focusedPosterBackdropExpandEnabled) {
                 isBackdropExpanded = true
             }
-        }
-    }
-
-    if (focusedPosterBackdropTrailerEnabled) {
-        LaunchedEffect(
-            item.id,
-            isFocused,
-            trailerPreviewUrl
-        ) {
-            if (!isFocused) return@LaunchedEffect
-            if (trailerPreviewUrl != null) return@LaunchedEffect
-            delay(TRAILER_PREVIEW_REQUEST_FOCUS_DEBOUNCE_MS)
-            if (!isFocused) return@LaunchedEffect
-            onRequestTrailerPreview(item)
         }
     }
 
@@ -310,59 +287,6 @@ fun ContentCard(
                     )
                 } else {
                     MonochromePosterPlaceholder()
-                }
-
-                val shouldPlayTrailerPreview = isBackdropExpanded &&
-                    focusedPosterBackdropTrailerEnabled &&
-                    isFocused &&
-                    trailerPreviewUrl != null
-
-                if (focusedPosterBackdropTrailerEnabled) {
-                    LaunchedEffect(shouldPlayTrailerPreview) {
-                        if (!shouldPlayTrailerPreview) {
-                            trailerFirstFrameRendered = false
-                        }
-                    }
-                }
-
-                // Only allocate animation state when trailer is actually playing.
-                val trailerCoverAlpha = if (shouldPlayTrailerPreview) {
-                    val alpha by animateFloatAsState(
-                        targetValue = if (!trailerFirstFrameRendered) 1f else 0f,
-                        animationSpec = tween(durationMillis = 250),
-                        label = "trailerCoverAlpha"
-                    )
-                    alpha
-                } else {
-                    0f
-                }
-
-                if (shouldPlayTrailerPreview) {
-                    TrailerPlayer(
-                        trailerUrl = trailerPreviewUrl,
-                        trailerAudioUrl = trailerPreviewAudioUrl,
-                        isPlaying = true,
-                        onEnded = {
-                            trailerFirstFrameRendered = false
-                            isBackdropExpanded = false
-                        },
-                        onFirstFrameRendered = {
-                            trailerFirstFrameRendered = true
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                        muted = focusedPosterBackdropTrailerMuted
-                    )
-                }
-
-                if (shouldPlayTrailerPreview && !imageUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = trailerCoverAlpha },
-                        contentScale = ContentScale.Crop
-                    )
                 }
 
                 if (isBackdropExpanded) {

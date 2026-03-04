@@ -9,9 +9,12 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
-import com.nexio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.TraktScrobbleItem
+import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.parseContentIds
+import com.nexio.tv.data.repository.toTraktIds
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -25,8 +28,6 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.data.local.WatchedItemsPreferences
-import com.nexio.tv.data.local.TrailerSettingsDataStore
-import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.core.util.isUnreleased
 import java.time.LocalDate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,13 +56,11 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
-    private val imdbEpisodeRatingsRepository: ImdbEpisodeRatingsRepository,
     private val mdbListRepository: MDBListRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val traktScrobbleService: TraktScrobbleService,
     private val watchedItemsPreferences: WatchedItemsPreferences,
-    private val trailerService: TrailerService,
-    private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -72,22 +71,14 @@ class MetaDetailsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MetaDetailsUiState())
     val uiState: StateFlow<MetaDetailsUiState> = _uiState.asStateFlow()
 
-    private var idleTimerJob: Job? = null
-    private var trailerFetchJob: Job? = null
     private var moreLikeThisJob: Job? = null
     private var collectionJob: Job? = null
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
 
-    private var trailerDelayMs = 7000L
-    private var trailerAutoplayEnabled = false
-
-    private var isPlayButtonFocused = false
     private var hideUnreleasedContent = false
 
     init {
-        observeMetaViewSettings()
-        observeTrailerAutoplaySettings()
         observeLibraryState()
         observeWatchProgress()
         observeWatchedEpisodes()
@@ -104,43 +95,6 @@ class MetaDetailsViewModel @Inject constructor(
                 .collectLatest { enabled ->
                     hideUnreleasedContent = enabled
                 }
-        }
-    }
-
-    private fun observeMetaViewSettings() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.detailPageTrailerButtonEnabled
-                .distinctUntilChanged()
-                .collectLatest { enabled ->
-                    _uiState.update { state ->
-                        if (state.trailerButtonEnabled == enabled) {
-                            state
-                        } else {
-                            state.copy(trailerButtonEnabled = enabled)
-                        }
-                    }
-                }
-        }
-    }
-
-    private fun setTrailerPlaybackState(
-        isPlaying: Boolean,
-        showControls: Boolean,
-        hideLogo: Boolean
-    ) {
-        _uiState.update { state ->
-            if (state.isTrailerPlaying == isPlaying &&
-                state.showTrailerControls == showControls &&
-                state.hideLogoDuringTrailer == hideLogo
-            ) {
-                state
-            } else {
-                state.copy(
-                    isTrailerPlaying = isPlaying,
-                    showTrailerControls = showControls,
-                    hideLogoDuringTrailer = hideLogo
-                )
-            }
         }
     }
 
@@ -165,18 +119,6 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private fun observeTrailerAutoplaySettings() {
-        viewModelScope.launch {
-            trailerSettingsDataStore.settings.collectLatest { settings ->
-                trailerAutoplayEnabled = settings.enabled
-                trailerDelayMs = settings.delaySeconds * 1000L
-                if (!settings.enabled) {
-                    idleTimerJob?.cancel()
-                }
-            }
-        }
-    }
-
     fun onEvent(event: MetaDetailsEvent) {
         when (event) {
             is MetaDetailsEvent.OnSeasonSelected -> selectSeason(event.season)
@@ -185,12 +127,14 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
             MetaDetailsEvent.OnRetry -> loadMeta()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
-            MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
-            MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
-            MetaDetailsEvent.OnTrailerButtonClick -> handleTrailerButtonClick()
-            MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
+            MetaDetailsEvent.OnUserInteraction -> {}
+            MetaDetailsEvent.OnPlayButtonFocused -> {}
+            MetaDetailsEvent.OnTrailerButtonClick -> {}
+            MetaDetailsEvent.OnTrailerEnded -> {}
             MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
             is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
+            is MetaDetailsEvent.OnClearEpisodeProgress -> clearEpisodeProgress(event.video)
+            is MetaDetailsEvent.OnCheckInEpisode -> checkInEpisode(event.video)
             is MetaDetailsEvent.OnMarkSeasonWatched -> markSeasonWatched(event.season)
             is MetaDetailsEvent.OnMarkSeasonUnwatched -> markSeasonUnwatched(event.season)
             is MetaDetailsEvent.OnMarkPreviousEpisodesWatched -> markPreviousEpisodesWatched(event.video)
@@ -440,9 +384,6 @@ class MetaDetailsViewModel @Inject constructor(
         
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
-
-        // Start fetching trailer after meta is loaded
-        fetchTrailerUrl()
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
@@ -554,93 +495,15 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadEpisodeRatingsAsync(meta: Meta) {
         episodeRatingsJob?.cancel()
-
-        val isSeries = meta.type == ContentType.SERIES || meta.type == ContentType.TV || meta.apiType in listOf("series", "tv")
-        if (!isSeries) {
-            _uiState.update {
-                it.copy(
+        _uiState.update { state ->
+            if (state.meta == null || state.meta.id != meta.id) {
+                state
+            } else {
+                state.copy(
                     episodeImdbRatings = emptyMap(),
                     isEpisodeRatingsLoading = false,
                     episodeRatingsError = null
                 )
-            }
-            return
-        }
-
-        episodeRatingsJob = viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    episodeImdbRatings = emptyMap(),
-                    isEpisodeRatingsLoading = true,
-                    episodeRatingsError = null
-                )
-            }
-
-            try {
-                val tmdbContentType = resolveTmdbContentType(meta)
-                if (tmdbContentType !in listOf(ContentType.SERIES, ContentType.TV)) {
-                    _uiState.update {
-                        it.copy(
-                            episodeImdbRatings = emptyMap(),
-                            isEpisodeRatingsLoading = false,
-                            episodeRatingsError = null
-                        )
-                    }
-                    return@launch
-                }
-
-                val tmdbLookupType = tmdbContentType.toApiString()
-                val tmdbIdString = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                    ?: tmdbService.ensureTmdbId(itemId, itemType)
-                val tmdbId = tmdbIdString?.toIntOrNull()
-                val imdbId = extractImdbId(meta.id) ?: extractImdbId(itemId)
-
-                if (tmdbId == null && imdbId == null) {
-                    _uiState.update { state ->
-                        if (state.meta == null || state.meta.id != meta.id) {
-                            state
-                        } else {
-                            state.copy(
-                                episodeImdbRatings = emptyMap(),
-                                isEpisodeRatingsLoading = false,
-                                episodeRatingsError = "Ratings are unavailable for this show."
-                            )
-                        }
-                    }
-                    return@launch
-                }
-
-                val ratings = imdbEpisodeRatingsRepository.getEpisodeRatings(
-                    imdbId = imdbId,
-                    tmdbId = tmdbId
-                )
-
-                _uiState.update { state ->
-                    if (state.meta == null || state.meta.id != meta.id) {
-                        state
-                    } else {
-                        state.copy(
-                            episodeImdbRatings = ratings,
-                            isEpisodeRatingsLoading = false,
-                            episodeRatingsError = null
-                        )
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Log.w(TAG, "Failed to load episode ratings for ${meta.id}: ${error.message}")
-                _uiState.update { state ->
-                    if (state.meta == null || state.meta.id != meta.id) {
-                        state
-                    } else {
-                        state.copy(
-                            episodeImdbRatings = emptyMap(),
-                            isEpisodeRatingsLoading = false,
-                            episodeRatingsError = "Unable to load episode ratings."
-                        )
-                    }
-                }
             }
         }
     }
@@ -1408,133 +1271,78 @@ class MetaDetailsViewModel @Inject constructor(
         return nextToWatch?.displayText
     }
 
-    // --- Trailer ---
+    override fun onCleared() {
+        super.onCleared()
+        nextToWatchJob?.cancel()
+    }
 
-    private fun fetchTrailerUrl() {
-        val meta = _uiState.value.meta ?: return
+    private fun clearEpisodeProgress(video: Video) {
+        val season = video.season ?: return
+        val episode = video.episode ?: return
+        val pendingKey = episodePendingKey(video)
+        if (_uiState.value.episodeWatchedPendingKeys.contains(pendingKey)) return
 
-        trailerFetchJob?.cancel()
-        trailerFetchJob = viewModelScope.launch {
-            _uiState.update { state ->
-                if (state.isTrailerLoading) state else state.copy(isTrailerLoading = true)
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKey)
             }
-
-            val year = meta.releaseInfo?.let { info ->
-                if (info.isBlank()) null
-                else Regex("""\b(19|20)\d{2}\b""").find(info)?.value
-            }
-
-            val tmdbId = try {
-                tmdbService.ensureTmdbId(meta.id, meta.apiType)
-            } catch (_: Exception) {
-                null
-            }
-
-            val source = trailerService.getTrailerPlaybackSource(
-                title = meta.name,
-                year = year,
-                tmdbId = tmdbId,
-                type = meta.apiType
-            ) ?: meta.trailerYtIds.firstOrNull()?.let { ytId ->
-                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
-                    youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
-                    title = meta.name,
-                    year = year
+            runCatching {
+                watchProgressRepository.removeFromHistory(itemId, season, episode)
+                showMessage(context.getString(R.string.cw_action_clear_progress))
+            }.onFailure { error ->
+                showMessage(
+                    message = error.message ?: "Failed to clear episode progress",
+                    isError = true
                 )
             }
-            val url = source?.videoUrl
-            val audioUrl = source?.audioUrl
-
-            _uiState.update { state ->
-                if (state.trailerUrl == url &&
-                    state.trailerAudioUrl == audioUrl &&
-                    !state.isTrailerLoading
-                ) {
-                    state
-                } else {
-                    state.copy(
-                        trailerUrl = url,
-                        trailerAudioUrl = audioUrl,
-                        isTrailerLoading = false
-                    )
-                }
-            }
-
-            if (url != null && isPlayButtonFocused) {
-                startIdleTimer()
+            _uiState.update {
+                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - pendingKey)
             }
         }
     }
 
-    private fun startIdleTimer() {
-        idleTimerJob?.cancel()
-
-        val state = _uiState.value
-        if (state.trailerUrl == null || state.isTrailerPlaying) return
-        if (!trailerAutoplayEnabled) return
-        if (!isPlayButtonFocused) return
-
-        idleTimerJob = viewModelScope.launch {
-            delay(trailerDelayMs)
-            setTrailerPlaybackState(
-                isPlaying = true,
-                showControls = false,
-                hideLogo = false
-            )
+    private fun checkInEpisode(video: Video) {
+        val season = video.season ?: return
+        val episode = video.episode ?: return
+        val meta = _uiState.value.meta ?: return
+        val ids = run {
+            val primary = parseContentIds(itemId)
+            val fallback = parseContentIds(meta.id)
+            val merged = when {
+                primary.trakt != null || !primary.imdb.isNullOrBlank() || primary.tmdb != null -> primary
+                else -> fallback
+            }
+            toTraktIds(merged)
         }
-    }
-
-    private fun handlePlayButtonFocused() {
-        if (isPlayButtonFocused) return
-        isPlayButtonFocused = true
-        startIdleTimer()
-    }
-
-    private fun handleUserInteraction() {
-        val state = _uiState.value
-        val shouldStopAutoTrailer = state.isTrailerPlaying && !state.showTrailerControls
-        val hasActiveIdleTimer = idleTimerJob?.isActive == true
-        if (!isPlayButtonFocused && !hasActiveIdleTimer && !shouldStopAutoTrailer) {
+        if (!ids.hasAnyId()) {
+            showMessage(message = "Missing Trakt IDs for check-in", isError = true)
             return
         }
 
-        idleTimerJob?.cancel()
-        isPlayButtonFocused = false
-
-        if (shouldStopAutoTrailer) {
-            setTrailerPlaybackState(
-                isPlaying = false,
-                showControls = false,
-                hideLogo = false
-            )
+        viewModelScope.launch {
+            runCatching {
+                traktScrobbleService.checkin(
+                    TraktScrobbleItem.Episode(
+                        showTitle = meta.name,
+                        showYear = null,
+                        showIds = ids,
+                        season = season,
+                        number = episode,
+                        episodeTitle = video.title
+                    )
+                )
+            }.onSuccess { success ->
+                if (success) {
+                    showMessage(context.getString(R.string.cw_action_check_in))
+                } else {
+                    showMessage(message = "Trakt check-in failed", isError = true)
+                }
+            }.onFailure { error ->
+                showMessage(
+                    message = error.message ?: "Trakt check-in failed",
+                    isError = true
+                )
+            }
         }
-    }
-
-    private fun handleTrailerButtonClick() {
-        val state = _uiState.value
-        if (state.trailerUrl.isNullOrBlank()) return
-        idleTimerJob?.cancel()
-        isPlayButtonFocused = false
-        setTrailerPlaybackState(
-            isPlaying = true,
-            showControls = true,
-            hideLogo = true
-        )
-    }
-
-    private fun handleTrailerEnded() {
-        isPlayButtonFocused = false
-        setTrailerPlaybackState(
-            isPlaying = false,
-            showControls = false,
-            hideLogo = false
-        )
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        idleTimerJob?.cancel()
-        trailerFetchJob?.cancel()
-        nextToWatchJob?.cancel()
     }
 }

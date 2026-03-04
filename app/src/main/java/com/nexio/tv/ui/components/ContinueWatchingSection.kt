@@ -73,6 +73,9 @@ fun ContinueWatchingSection(
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
+    onMarkAsWatched: (ContinueWatchingItem) -> Unit = {},
+    onCheckIn: ((ContinueWatchingItem) -> Unit)? = null,
+    onManageLists: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1,
@@ -177,9 +180,25 @@ fun ContinueWatchingSection(
                 onRemoveItem(menuItem)
                 optionsItem = null
             },
+            onMarkAsWatched = {
+                onMarkAsWatched(menuItem)
+                optionsItem = null
+            },
             onDetails = {
                 onDetailsClick(menuItem)
                 optionsItem = null
+            },
+            onCheckIn = onCheckIn?.let { callback ->
+                {
+                    callback(menuItem)
+                    optionsItem = null
+                }
+            },
+            onManageLists = onManageLists?.let { callback ->
+                {
+                    callback(menuItem)
+                    optionsItem = null
+                }
             },
             onStartFromBeginning = {
                 onStartFromBeginning(menuItem)
@@ -451,7 +470,10 @@ fun ContinueWatchingOptionsDialog(
     item: ContinueWatchingItem,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
+    onMarkAsWatched: () -> Unit,
     onDetails: () -> Unit,
+    onCheckIn: (() -> Unit)? = null,
+    onManageLists: (() -> Unit)? = null,
     onStartFromBeginning: () -> Unit = {}
 ) {
     val title = when (item) {
@@ -497,6 +519,43 @@ fun ContinueWatchingOptionsDialog(
         }
 
         Button(
+            onClick = onMarkAsWatched,
+            colors = ButtonDefaults.colors(
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.cw_action_mark_watched))
+        }
+
+        onCheckIn?.let { onCheckInAction ->
+            Button(
+                onClick = onCheckInAction,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.cw_action_check_in))
+            }
+        }
+
+        onManageLists?.let { onManageListsAction ->
+            Button(
+                onClick = onManageListsAction,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.library_manage_lists))
+            }
+        }
+
+        Button(
             onClick = onRemove,
             colors = ButtonDefaults.colors(
                 containerColor = NexioColors.BackgroundCard,
@@ -504,7 +563,7 @@ fun ContinueWatchingOptionsDialog(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(stringResource(R.string.cw_action_remove))
+            Text(stringResource(R.string.cw_action_clear_progress))
         }
     }
 }

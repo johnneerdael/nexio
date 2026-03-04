@@ -618,11 +618,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
             showEpisodeStreams = false,
             isLoadingEpisodeStreams = false,
             episodeStreamsError = null,
-            
-            parentalWarnings = emptyList(),
-            showParentalGuide = false,
-            parentalGuideHasShown = false,
-            
             activeSkipInterval = null,
             skipIntervalDismissed = false,
             showNextEpisodeCard = false,
@@ -638,13 +633,10 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     updateEpisodeDescription()
     refreshSubtitlesForCurrentEpisode()
 
-    playbackStartedForParentalGuide = false
     skipIntervals = emptyList()
     skipIntroFetchedKey = null
     lastActiveSkipType = null
 
-    
-    fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
 
     _exoPlayer?.let { player ->
