@@ -127,6 +127,8 @@ internal fun PlaybackSettingsSections(
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetMapDV7ToHevc: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
+    onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
+    onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
@@ -364,6 +366,9 @@ internal fun PlaybackSettingsSections(
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetMapDV7ToHevc = onSetMapDV7ToHevc,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
+                onSetExperimentalDv5ToDv81Enabled = onSetExperimentalDv5ToDv81Enabled,
+                onSetExperimentalDv7ToDv81PreserveMappingEnabled =
+                    onSetExperimentalDv7ToDv81PreserveMappingEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
                 enabled = !generalUi.isExternalPlayer
             )

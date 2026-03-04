@@ -122,6 +122,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setExperimentalDv7ToDv81Enabled(enabled)
     }
 
+    suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDv5ToDv81Enabled(enabled)
+    }
+
+    suspend fun setExperimentalDv7ToDv81PreserveMappingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDv7ToDv81PreserveMappingEnabled(enabled)
+    }
+
     /**
      * Set whether to use libass for ASS/SSA subtitle rendering
      */
