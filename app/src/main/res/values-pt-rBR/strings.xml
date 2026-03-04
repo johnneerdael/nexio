@@ -32,7 +32,7 @@
     <string name="action_see_all">Ver tudo</string>
 
     <!-- HeroSection -->
-   <string name="hero_creator">Criação: %1$s</string>
+    <string name="hero_creator">Criação: %1$s</string>
     <string name="hero_director">Direção: %1$s</string>
     <string name="hero_writer">Roteiro: %1$s</string>
     <string name="hero_play">Assistir</string>
@@ -85,7 +85,7 @@
     <string name="cast_role_director">Direção</string>
     <string name="cast_role_writer">Roteiro</string>
     <string name="detail_tab_ratings">Avaliações</string>
-    <string name="detail_tab_more_like_this">Títulos Similares</string>
+    <string name="detail_tab_more_like_this">Títulos Semelhantes</string>
     <string name="detail_section_network">Rede</string>
     <string name="detail_section_production">Produção</string>
     <string name="detail_lists_fallback">Listas</string>
@@ -107,7 +107,7 @@
     
     <!-- ThemeSettingsScreen -->
     <string name="appearance_title">Aparência</string>
-    <string name="appearance_subtitle">Ajuste o tema visual e o idioma</string>
+    <string name="appearance_subtitle">Ajuste o tema visual, fonte e idioma</string>
     <string name="cd_selected">Selecionado</string>
 
     <!-- AboutScreen -->
@@ -270,6 +270,8 @@
     <string name="autoplay_stream_selection">Seleção Automática de Fonte</string>
     <string name="autoplay_next_episode">Próximo episódio automático</string>
     <string name="autoplay_next_episode_sub">Inicia o próximo episódio assim que o aviso aparecer.</string>
+    <string name="autoplay_prefer_binge_group">Preferir Grupo Binge (Próximo Episódio)</string>
+    <string name="autoplay_prefer_binge_group_sub">Prioriza mesma fonte antes da busca automática.</string>
     <string name="autoplay_threshold_pct">Porcentagem</string>
     <string name="autoplay_threshold_min">Minutos antes do Término</string>
     <string name="autoplay_threshold_mode">Modo de Início do Próximo Episódio</string>
@@ -408,6 +410,7 @@
     <string name="mdblist_dialog_subtitle">Insira sua chave API para buscar as avaliações</string>
     <string name="mdblist_dialog_placeholder">Inserir chave API MDBList</string>
     <string name="mdblist_not_set">Não definido</string>
+    <string name="mdblist_invalid_api_key">chave API inválida</string>
 
     <!-- Anime-Skip -->
     <string name="animeskip_title">Anime Skip</string>
@@ -419,6 +422,7 @@
     <string name="animeskip_dialog_title">ID de Cliente Anime Skip</string>
     <string name="animeskip_dialog_subtitle">Crie seu ID em anime-skip.com/account/settings</string>
     <string name="animeskip_dialog_placeholder">Insira o ID de Cliente</string>
+    <string name="animeskip_invalid_client_id">ID de Cliente inválido</string>
     <string name="action_clear">Limpar</string>
     
     <!-- TmdbSettingsScreen -->
@@ -468,6 +472,8 @@
     <string name="trakt_unaired_next_up_subtitle">Mostrar episódios futuros antes de estrear</string>
     <string name="trakt_unaired_shown">Exibidos</string>
     <string name="trakt_unaired_hidden">Ocultos</string>
+    <string name="trakt_unaired_now_shown">Episódios não lançados agora são exibidos</string>
+    <string name="trakt_unaired_now_hidden">>Episódios não lançados agora estão ocultos</string>
     <string name="trakt_cached_label">Em cache</string>
     <string name="trakt_stat_movies">Filmes</string>
     <string name="trakt_stat_shows">Séries</string>
@@ -576,20 +582,31 @@
     <string name="stream_type_youtube">YouTube</string>
     <string name="stream_type_external">Link Externo</string>
     <string name="stream_player_picker_title">Qual player deseja usar?</string>
-    <string name="stream_player_internal">Player Nativo</string>
+    <string name="stream_player_internal">Player Interno</string>
     <string name="stream_player_external">Player Externo</string>
 
     <!-- PlayerScreen -->
+    <string name="player_no_external_player">Nenhum player externo encontrado</string>
+    
+    <!-- ParentalGuideOverlay -->
+    <string name="parental_nudity">Nudez</string>
+    <string name="parental_violence">Violência</string>
+    <string name="parental_profanity">Linguagem Imprópria</string>
+    <string name="parental_alcohol">Drogas/Álcool</string>
+    <string name="parental_frightening">Medo</string>
+    <string name="parental_severity_severe">Intenso</string>
+    <string name="parental_severity_moderate">Moderado</string>
+    <string name="parental_severity_mild">Leve</string>
     <string name="player_ends_at">Termina às %1$s</string>
     <string name="player_via">via %1$s</string>
     <string name="player_subtitle_delay">Atraso da legenda</string>
     <string name="player_error_title">Erro de Reprodução</string>
-    <string name="player_go_back">Sair do vídeo</string>
+    <string name="player_go_back">Voltar</string>
     <string name="player_speed_title">Velocidade de reprodução</string>
     <string name="player_more_actions_title">Mais opções</string>
-    <string name="player_more_speed">Velocidade</string>
-    <string name="player_more_aspect_ratio">Proporção da tela</string>
-    <string name="player_more_open_external">Abrir em player externo</string>
+    <string name="player_more_speed">Velocidade de reprodução</string>
+    <string name="player_more_aspect_ratio">Proporção</string>
+    <string name="player_more_open_external">Player Externo</string>    
 
     <!-- StreamSourcesSidePanel -->
     <string name="sources_title">Fontes</string>
@@ -665,6 +682,7 @@
     <string name="next_episode_playing_via">Reproduzindo via %1$s em %2$ds</string>
     <string name="next_episode_play">Reproduzir</string>
     <string name="next_episode_unaired">Ainda não estreou</string>
+    <string name="next_episode_not_aired_yet">O próximo episódio ainda não foi exibido</string>
     <string name="skip_intro">Pular Abertura</string>
     <string name="skip_ending">Pular Encerramento</string>
     <string name="skip_recap">Pular Resumo</string>
@@ -679,6 +697,10 @@
     <string name="search_start_title">Comece a pesquisar</string>
     <string name="search_start_subtitle">Digite ao menos 2 caracteres</string>
     <string name="search_start_subtitle_no_discover">Descoberta desativada. Digite 2 caracteres.</string>
+    <string name="search_voice_no_speech">Nenhuma voz detectada. Tente novamente.</string>
+    <string name="search_voice_mic_permission">A permissão do microfone é necessária para a busca por voz.</string>
+    <string name="search_voice_failed">Falha no reconhecimento de voz. Tente novamente.</string>
+    <string name="search_voice_unavailable">A busca por voz não está disponível neste dispositivo.</string>
 
     <!-- LibraryScreen -->
     <string name="library_syncing">Sincronizando biblioteca Trakt\u2026</string>
@@ -721,7 +743,7 @@
 
     <!-- AuthSignInScreen -->
     <string name="auth_signin_title">Fazer Login</string>
-    <string name="auth_signin_tv_disabled">Entrada por teclado desativada. Use o QR Code.</string>
+    <string name="auth_signin_tv_disabled">Login por e-mail e senha está desativado na TV. Use o QR Code para entrar.</string>
     <string name="auth_signin_qr_btn">Continuar com QR Code</string>
 
     <!-- AuthQrSignInScreen -->
@@ -814,7 +836,7 @@
     <string name="update_unknown_sources">Permita "Fontes Desconhecidas" para instalar.</string>
     <!-- AccountScreen -->
     <string name="account_title">Minha Conta</string>
-    <string name="account_sign_in_description">Entre para sincronizar seus dados entre aparelhos. Observação: A biblioteca e o progresso só sincronizam via nuvem própria quando o não logado ao Trakt.</string>
+    <string name="account_sign_in_description">Entre para sincronizar seus dados entre aparelhos. Observação: A biblioteca e o progresso só sincronizam via nuvem própria quando não estiver logado ao Trakt.</string>
     <string name="account_sync_code_title">Código de Sincronização</string>
     <string name="account_sync_code_description">Sincronize sem precisar criar uma conta de e-mail.</string>
     <string name="account_linked_devices">Aparelhos vinculados (%1$d)</string>
