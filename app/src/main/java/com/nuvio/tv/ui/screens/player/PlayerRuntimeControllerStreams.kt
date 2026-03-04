@@ -298,6 +298,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     lastSavedPosition = 0L
+    _exoPlayer?.stop()
+    resetLoadingOverlayForNewStream()
 
     _uiState.update {
         it.copy(
@@ -596,6 +598,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
     refreshScrobbleItem()
     lastSavedPosition = 0L
+    _exoPlayer?.stop()
+    resetLoadingOverlayForNewStream()
 
     _uiState.update {
         it.copy(

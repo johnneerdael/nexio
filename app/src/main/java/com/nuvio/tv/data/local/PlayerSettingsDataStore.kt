@@ -145,6 +145,8 @@ data class PlayerSettings(
     val mapDV7ToHevc: Boolean = false,
     // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
     val experimentalDv7ToDv81Enabled: Boolean = false,
+    // Experimental: enable Fire OS audio-path quirks (DTS core fallback, capability routing, etc).
+    val experimentalDtsIecPassthroughEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
     // Experimental: preserve mapping metadata when converting DV7 -> DV8.1.
@@ -282,6 +284,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val experimentalDv7ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
+    private val experimentalDtsIecPassthroughEnabledKey =
+        booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
     private val experimentalDv5ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv5_to_dv81_enabled")
     private val experimentalDv7ToDv81PreserveMappingEnabledKey =
@@ -512,6 +516,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
                 mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
                 experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: false,
+                experimentalDtsIecPassthroughEnabled =
+                    prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
                 experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
                 experimentalDv7ToDv81PreserveMappingEnabled =
                     prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false,
@@ -868,6 +874,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDv7ToDv81Enabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDv7ToDv81EnabledKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDtsIecPassthroughEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDtsIecPassthroughEnabledKey] = enabled
         }
     }
 

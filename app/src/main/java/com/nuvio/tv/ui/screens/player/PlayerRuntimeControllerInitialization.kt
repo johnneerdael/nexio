@@ -69,6 +69,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             resetLoadingOverlayForNewStream()
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
+            AudioCapabilities.setExperimentalFireOsAudioQuirksEnabled(
+                playerSettings.experimentalDtsIecPassthroughEnabled
+            )
             _uiState.update {
                 it.copy(
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode
