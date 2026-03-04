@@ -122,6 +122,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setExperimentalDv7ToDv81Enabled(enabled)
     }
 
+    suspend fun setExperimentalDtsIecPassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDtsIecPassthroughEnabled(enabled)
+    }
+
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDv5ToDv81Enabled(enabled)
     }

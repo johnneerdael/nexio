@@ -166,6 +166,7 @@ object MatroskaDolbyVisionHookInstaller {
             val mode = if (resolvedProfile == 7 && preserveMappingEnabled) 5 else 2
             lastSelectedConversionMode.set(mode)
             return mode
+            return if (resolvedProfile == 7 && preserveMappingEnabled) 5 else 2
         }
 
         return InvocationHandler { proxy, method, args ->

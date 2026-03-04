@@ -214,6 +214,8 @@
     <string name="audio_dv_sub">Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support</string>
     <string name="audio_dv_experimental_title">DV7 - Experimental DV8.1</string>
     <string name="audio_dv_experimental_sub">Experimental native conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
+    <string name="audio_dts_iec_experimental_title">Fire OS - Experimental Audio Compatibility</string>
+    <string name="audio_dts_iec_experimental_sub">Experimental Fire OS audio quirk path. Enables the Fire TV compatibility layer in the Media3 audio stack, including DTS core fallback and capability-routing quirks. Default off because it can regress non-Fire devices.</string>
     <string name="audio_dv5_compatibility_title">DV5 - Compatibility Remap</string>
     <string name="audio_dv5_compatibility_sub">Allows DV5 streams to use the DV8.1 compatibility path. May fix color/signaling issues on some devices, but can regress others.</string>
     <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Preserve Mapping</string>
