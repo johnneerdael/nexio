@@ -70,6 +70,10 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         val vodCache = cachedVodCacheLogState
                         val signalingRewrites =
                             MatroskaDolbyVisionHookInstaller.getCodecStringRewriteCount()
+                        val sourceProfile =
+                            MatroskaDolbyVisionHookInstaller.getLastDetectedSourceProfile()
+                        val conversionMode =
+                            MatroskaDolbyVisionHookInstaller.getLastSelectedConversionMode()
                         val conversionCalls = DoviBridge.getConversionCallCount()
                         val conversionSuccess = DoviBridge.getConversionSuccessCount()
                         val conversionAttempted =
@@ -84,6 +88,10 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                                 append(if (experimentalDvEnabled) "on" else "off")
                                 append(",attempted=")
                                 append(if (conversionAttempted) "yes" else "no")
+                                append(",sourceProfile=")
+                                append(sourceProfile ?: "n/a")
+                                append(",mode=")
+                                append(conversionMode ?: "n/a")
                                 append(",signalRewrites=")
                                 append(signalingRewrites)
                                 append(",calls=")
@@ -451,8 +459,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 val target = (player.currentPosition + event.deltaMs)
                     .coerceAtLeast(0L)
                     .coerceAtMost(maxDuration)
-                pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
-                pendingSeekTelemetryTargetMs = target
+                beginSeekTelemetry(target)
                 player.seekTo(target)
                 _uiState.update { it.copy(currentPosition = target) }
                 scheduleProgressSyncAfterSeek()
@@ -482,8 +489,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnCommitPreviewSeek -> {
             val target = pendingPreviewSeekPosition
             if (target != null) {
-                pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
-                pendingSeekTelemetryTargetMs = target
+                beginSeekTelemetry(target)
                 _exoPlayer?.seekTo(target)
                 _uiState.update { it.copy(currentPosition = target) }
                 pendingPreviewSeekPosition = null
@@ -497,8 +503,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         }
         is PlayerEvent.OnSeekTo -> {
             pendingPreviewSeekPosition = null
-            pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
-            pendingSeekTelemetryTargetMs = event.position
+            beginSeekTelemetry(event.position)
             _exoPlayer?.seekTo(event.position)
             _uiState.update { it.copy(currentPosition = event.position) }
             scheduleProgressSyncAfterSeek()
@@ -743,8 +748,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 val target = if (interval.endTime == Double.MAX_VALUE) duration
                 else (interval.endTime * 1000).toLong()
                 val seekMs = target.coerceAtMost(duration)
-                pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
-                pendingSeekTelemetryTargetMs = seekMs
+                beginSeekTelemetry(seekMs)
                 _exoPlayer?.seekTo(seekMs)
                 scheduleProgressSyncAfterSeek()
                 _uiState.update { it.copy(activeSkipInterval = null, skipIntervalDismissed = true) }
@@ -820,4 +824,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             }
         }
     }
+}
+
+private fun PlayerRuntimeController.beginSeekTelemetry(targetMs: Long) {
+    pendingSeekTelemetryRequestedAtMs = System.currentTimeMillis()
+    pendingSeekTelemetryTargetMs = targetMs
+    pendingSeekTelemetryReadyAtMs = 0L
+    pendingSeekTelemetryReadyLatencyMs = -1L
+    pendingSeekTelemetryAwaitingFirstFrame = true
 }
