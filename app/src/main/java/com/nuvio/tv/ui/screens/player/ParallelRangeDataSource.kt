@@ -204,13 +204,28 @@ internal class ParallelRangeDataSource(
 
         val toRead = minOf(length.toLong(), bytesRemaining).toInt()
 
-        if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch()) {
+        val chunkIndex = position / chunkSize
+        val bootstrap = bootstrapChunk
+        if (currentChunk == null &&
+            bootstrap != null &&
+            position >= bootstrapStartPosition &&
+            position < bootstrapStartPosition + bootstrap.size
+        ) {
+            currentChunk = bootstrap
+            currentChunkIndex = chunkIndex
+            currentChunkReadOffset = (position - bootstrapStartPosition).toInt()
+        }
+
+        if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch() && currentChunk == null) {
             bootstrapPrefetchDeferred = false
             scheduleChunks()
         }
 
         continuationSource?.let { source ->
-            if (position < continuationEndPositionExclusive && bytesRemaining > 0L) {
+            if (position < continuationEndPositionExclusive &&
+                bytesRemaining > 0L &&
+                (bootstrap == null || position >= bootstrapStartPosition + bootstrap.size)
+            ) {
                 val read = source.read(buffer, offset, toRead)
                 if (read > 0) {
                     position += read
@@ -229,23 +244,11 @@ internal class ParallelRangeDataSource(
                     continuationEndPositionExclusive = C.TIME_UNSET
                     scheduleChunks()
                 }
-            } else {
+            } else if (position >= continuationEndPositionExclusive || bytesRemaining <= 0L) {
                 source.close()
                 continuationSource = null
                 continuationEndPositionExclusive = C.TIME_UNSET
             }
-        }
-
-        val chunkIndex = position / chunkSize
-        val bootstrap = bootstrapChunk
-        if (currentChunk == null &&
-            bootstrap != null &&
-            position >= bootstrapStartPosition &&
-            position < bootstrapStartPosition + bootstrap.size
-        ) {
-            currentChunk = bootstrap
-            currentChunkIndex = chunkIndex
-            currentChunkReadOffset = (position - bootstrapStartPosition).toInt()
         }
 
         // Load the chunk for the current position
