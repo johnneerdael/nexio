@@ -115,7 +115,8 @@ import kotlinx.coroutines.delay
 fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
     onBackPress: () -> Unit,
-    onPlaybackErrorBack: () -> Unit = onBackPress
+    onPlaybackErrorBack: () -> Unit = onBackPress,
+    onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -174,8 +175,17 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(uiState.playbackEnded, uiState.error) {
-        if (uiState.playbackEnded && uiState.error == null) {
-            exitPlayer()
+        if (uiState.playbackEnded && uiState.error == null &&
+            !uiState.nextEpisodeAutoPlaySearching &&
+            uiState.nextEpisodeAutoPlayCountdownSec == null
+        ) {
+            viewModel.stopAndRelease()
+            val next = uiState.nextEpisode
+            if (onPlaybackEnded != null) {
+                onPlaybackEnded(next?.videoId, next?.season, next?.episode)
+            } else {
+                onBackPress()
+            }
         }
     }
 
