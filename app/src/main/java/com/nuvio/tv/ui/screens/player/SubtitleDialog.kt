@@ -997,7 +997,7 @@ internal fun TrackItem(
                 )
                 if (track.language != null) {
                     Text(
-                        text = track.language.uppercase(),
+                        text = Subtitle.languageCodeToName(track.language),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.5f)
                     )
