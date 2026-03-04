@@ -56,7 +56,7 @@ cd NEXIO
 ./gradlew installDebug
 
 # Run on connected device
-adb shell am start -n com.nuvio.tv/.MainActivity
+adb shell am start -n com.nexio.tv/.MainActivity
 ```
 
 ## Legal & DMCA

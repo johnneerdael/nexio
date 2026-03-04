@@ -1,0 +1,103 @@
+package com.nexio.tv.data.mapper
+
+import com.nexio.tv.data.remote.dto.AddonManifestDto
+import com.nexio.tv.data.remote.dto.CatalogDescriptorDto
+import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.model.CatalogExtra
+import com.nexio.tv.domain.model.CatalogDescriptor
+import com.nexio.tv.domain.model.ContentType
+
+fun AddonManifestDto.toDomain(baseUrl: String): Addon {
+    val manifestTypes = types.map { it.trim() }.filter { it.isNotEmpty() }
+    return Addon(
+        id = id,
+        name = name,
+        version = version,
+        description = description,
+        logo = logo,
+        baseUrl = baseUrl,
+        catalogs = catalogs.map { it.toDomain() },
+        types = manifestTypes.map { ContentType.fromString(it) },
+        rawTypes = manifestTypes,
+        resources = parseResources(resources, manifestTypes)
+    )
+}
+
+fun CatalogDescriptorDto.toDomain(): CatalogDescriptor {
+    val manifestType = type.trim()
+    return CatalogDescriptor(
+        type = ContentType.fromString(manifestType),
+        rawType = manifestType,
+        id = id,
+        name = name,
+        extra = parseCatalogExtras(extra)
+    )
+}
+
+private fun parseResources(resources: List<Any>, defaultTypes: List<String>): List<AddonResource> {
+    return resources.mapNotNull { resource ->
+        when (resource) {
+            is String -> {
+                // Simple resource format: "meta", "stream", etc.
+                AddonResource(
+                    name = resource,
+                    types = defaultTypes,
+                    idPrefixes = null
+                )
+            }
+            is Map<*, *> -> {
+                // Complex resource format with types and idPrefixes
+                val name = resource["name"] as? String ?: return@mapNotNull null
+                val types = (resource["types"] as? List<*>)?.filterIsInstance<String>() ?: defaultTypes
+                val idPrefixes = (resource["idPrefixes"] as? List<*>)?.filterIsInstance<String>()
+                AddonResource(
+                    name = name,
+                    types = types,
+                    idPrefixes = idPrefixes
+                )
+            }
+            else -> null
+        }
+    }
+}
+
+private fun parseCatalogExtras(rawExtras: List<Any>?): List<CatalogExtra> {
+    return rawExtras.orEmpty().mapNotNull { raw ->
+        when (raw) {
+            is String -> {
+                val name = raw.trim().lowercase()
+                if (name.isBlank()) {
+                    null
+                } else {
+                    CatalogExtra(name = name)
+                }
+            }
+            is Map<*, *> -> {
+                val name = (raw["name"] as? String)?.trim()?.lowercase().orEmpty()
+                if (name.isBlank()) return@mapNotNull null
+
+                val isRequired = when (val required = raw["isRequired"]) {
+                    is Boolean -> required
+                    is String -> required.equals("true", ignoreCase = true)
+                    is Number -> required.toInt() != 0
+                    else -> false
+                }
+                val options = (raw["options"] as? List<*>)?.mapNotNull { option ->
+                    when (option) {
+                        null -> null
+                        is String -> option
+                        else -> option.toString()
+                    }
+                }?.takeIf { it.isNotEmpty() }
+
+                CatalogExtra(
+                    name = name,
+                    isRequired = isRequired,
+                    options = options
+                )
+            }
+            else -> null
+        }
+    }.distinct()
+}

@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
@@ -54,11 +54,11 @@ val useMedia3Source = parseBooleanProperty(
 )
 
 android {
-    namespace = "com.nuvio.tv"
+    namespace = "com.nexio.tv"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.nuvio.tv"
+        applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
         versionCode = 27
@@ -197,7 +197,7 @@ android {
 
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
-        variant.applicationId.set("com.nuviodebug.com")
+        variant.applicationId.set("com.nexiodebug.tv")
     }
 }
 
