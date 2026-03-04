@@ -21,10 +21,15 @@ jobs:
 
             const issue = context.payload.issue;
             const body = issue.body || "";
+            const labels = (issue.labels || []).map(l => (typeof l === "string" ? l : l.name).toLowerCase());
 
             const NEEDS_INFO = "needs-info";
             const NEEDS_INFO_COLOR = "d4c5f9"; // light purple (GitHub-ish)
             const NEEDS_INFO_DESC = "More details needed to reproduce / triage.";
+
+            function hasLabel(name) {
+              return labels.includes(name.toLowerCase());
+            }
 
             function extractSection(title) {
               // Issue forms render headings like "### Steps to reproduce"
@@ -41,6 +46,19 @@ jobs:
             const steps = extractSection("Steps to reproduce");
             const expected = extractSection("Expected behavior");
             const actual = extractSection("Actual behavior");
+
+            // Only triage bug-style issues.
+            // Skip feature/enhancement issues so they don't get "missing repro" comments.
+            const looksLikeBugForm = !!(steps || expected || actual);
+            const isBugIssue = hasLabel("bug") || looksLikeBugForm;
+            const isFeatureIssue =
+              hasLabel("enhancement") ||
+              hasLabel("feature") ||
+              hasLabel("feature request");
+
+            if (!isBugIssue || isFeatureIssue) {
+              return;
+            }
 
             // Keep checks simple and forgiving: required fields can still be low-effort (e.g. "doesn't work").
             const problems = [];
@@ -61,7 +79,7 @@ jobs:
               }
             }
 
-            const hasNeedsInfo = (issue.labels || []).some(l => (typeof l === "string" ? l : l.name) === NEEDS_INFO);
+            const hasNeedsInfo = hasLabel(NEEDS_INFO);
 
             if (problems.length > 0) {
               await ensureLabel(NEEDS_INFO, NEEDS_INFO_COLOR, NEEDS_INFO_DESC);
@@ -106,4 +124,3 @@ jobs:
                 await github.rest.issues.removeLabel({ owner, repo, issue_number, name: NEEDS_INFO });
               } catch (_) {}
             }
-
