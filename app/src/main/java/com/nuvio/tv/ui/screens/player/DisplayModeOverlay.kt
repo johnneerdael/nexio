@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -113,7 +113,7 @@ fun DisplayModeOverlay(
             Text(
                 text = statusMessage,
                 fontSize = 11.sp,
-                color = NuvioColors.Secondary,
+                color = NexioColors.Secondary,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End,
                 modifier = Modifier
@@ -163,7 +163,7 @@ fun DisplayModeOverlay(
                     .width(3.dp)
                     .height((totalLineHeight * lineHeightFraction.value).dp)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(NuvioColors.Secondary)
+                    .background(NexioColors.Secondary)
             )
         }
     }

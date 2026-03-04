@@ -17,7 +17,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -34,16 +34,16 @@ fun ErrorState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodyLarge,
-            color = NuvioColors.TextSecondary
+            color = NexioColors.TextSecondary
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onRetry,
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary,
-                focusedContainerColor = NuvioColors.FocusBackground,
-                focusedContentColor = NuvioColors.Primary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary,
+                focusedContainerColor = NexioColors.FocusBackground,
+                focusedContentColor = NexioColors.Primary
             ),
             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
         ) {

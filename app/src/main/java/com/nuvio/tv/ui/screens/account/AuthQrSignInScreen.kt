@@ -47,7 +47,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.AuthState
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
 @Composable
@@ -119,7 +119,7 @@ fun AuthQrSignInScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         Row(
             modifier = Modifier
@@ -136,7 +136,7 @@ fun AuthQrSignInScreen(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.app_logo_wordmark),
-                    contentDescription = "Nuvio",
+                    contentDescription = "NEXIO",
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
                         .height(60.dp),
@@ -146,7 +146,7 @@ fun AuthQrSignInScreen(
                 Text(
                     text = stringResource(R.string.auth_qr_title),
                     style = MaterialTheme.typography.headlineLarge,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -157,7 +157,7 @@ fun AuthQrSignInScreen(
                         stringResource(R.string.auth_qr_phone_hint)
                     },
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     textAlign = TextAlign.Center
                 )
                 if (isSignedIn) {
@@ -172,7 +172,7 @@ fun AuthQrSignInScreen(
                     Text(
                         text = fullAccount.userId,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary,
+                        color = NexioColors.TextSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -182,9 +182,9 @@ fun AuthQrSignInScreen(
                 modifier = Modifier
                     .weight(0.55f)
                     .fillMaxHeight()
-                    .border(1.dp, NuvioColors.Border.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                    .border(1.dp, NexioColors.Border.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
                     .background(
-                        NuvioColors.BackgroundElevated.copy(alpha = 0.35f),
+                        NexioColors.BackgroundElevated.copy(alpha = 0.35f),
                         RoundedCornerShape(18.dp)
                     )
                     .padding(26.dp),
@@ -194,7 +194,7 @@ fun AuthQrSignInScreen(
                 Text(
                     text = stringResource(R.string.auth_qr_account_login),
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 Text(
                     text = if (isSignedIn) {
@@ -203,7 +203,7 @@ fun AuthQrSignInScreen(
                         stringResource(R.string.auth_qr_scan_instruction)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -215,8 +215,8 @@ fun AuthQrSignInScreen(
                 } else if (isSignedIn && isOnboardingMode) {
                     StatusPill(
                         text = stringResource(R.string.auth_qr_finishing),
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextSecondary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextSecondary
                     )
                 } else {
                     if (uiState.qrLoginBitmap != null) {
@@ -233,12 +233,12 @@ fun AuthQrSignInScreen(
                         Box(
                             modifier = Modifier
                                 .size(200.dp)
-                                .background(NuvioColors.BackgroundCard, RoundedCornerShape(12.dp)),
+                                .background(NexioColors.BackgroundCard, RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = if (uiState.isLoading) stringResource(R.string.auth_qr_generating) else stringResource(R.string.auth_qr_unavailable),
-                                color = NuvioColors.TextSecondary,
+                                color = NexioColors.TextSecondary,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -248,7 +248,7 @@ fun AuthQrSignInScreen(
                         Text(
                             text = stringResource(R.string.auth_qr_code_display, uiState.qrLoginCode!!),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = NuvioColors.TextPrimary,
+                            color = NexioColors.TextPrimary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -256,7 +256,7 @@ fun AuthQrSignInScreen(
                         Text(
                             text = stringResource(R.string.auth_qr_expires, formatDuration(remainingMillis)),
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextSecondary
+                            color = NexioColors.TextSecondary
                         )
                     }
 
@@ -264,8 +264,8 @@ fun AuthQrSignInScreen(
                     if (!statusText.isNullOrBlank()) {
                         StatusPill(
                             text = statusText,
-                            containerColor = if (uiState.error != null) Color(0x33C62828) else NuvioColors.BackgroundCard,
-                            contentColor = if (uiState.error != null) Color(0xFFFF6E6E) else NuvioColors.TextSecondary
+                            containerColor = if (uiState.error != null) Color(0x33C62828) else NexioColors.BackgroundCard,
+                            contentColor = if (uiState.error != null) Color(0xFFFF6E6E) else NexioColors.TextSecondary
                         )
                     }
                 }
@@ -282,11 +282,11 @@ fun AuthQrSignInScreen(
                         },
                         enabled = !uiState.isLoading,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
+                            containerColor = NexioColors.BackgroundCard,
                             focusedContainerColor = Color.White,
-                            contentColor = NuvioColors.TextPrimary,
+                            contentColor = NexioColors.TextPrimary,
                             focusedContentColor = Color.Black,
-                            disabledContainerColor = NuvioColors.BackgroundCard.copy(alpha = 0.55f)
+                            disabledContainerColor = NexioColors.BackgroundCard.copy(alpha = 0.55f)
                         )
                     ) {
                         Text(
@@ -310,9 +310,9 @@ fun AuthQrSignInScreen(
                             }
                         },
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
+                            containerColor = NexioColors.BackgroundCard,
                             focusedContainerColor = Color.White,
-                            contentColor = NuvioColors.TextPrimary,
+                            contentColor = NexioColors.TextPrimary,
                             focusedContentColor = Color.Black
                         )
                     ) {
@@ -339,7 +339,7 @@ private fun StatusPill(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, NuvioColors.Border.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .border(1.dp, NexioColors.Border.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
             .background(containerColor, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
@@ -384,7 +384,7 @@ private fun AccountConnectedStatsStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(NuvioColors.Border.copy(alpha = 0.8f))
+                .background(NexioColors.Border.copy(alpha = 0.8f))
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -401,7 +401,7 @@ private fun AccountConnectedStatsStrip(
                         modifier = Modifier
                             .height(44.dp)
                             .width(1.dp)
-                            .background(NuvioColors.Border.copy(alpha = 0.75f))
+                            .background(NexioColors.Border.copy(alpha = 0.75f))
                     )
                 }
             }
@@ -410,7 +410,7 @@ private fun AccountConnectedStatsStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(NuvioColors.Border.copy(alpha = 0.8f))
+                .background(NexioColors.Border.copy(alpha = 0.8f))
         )
     }
 }
@@ -428,14 +428,14 @@ private fun AccountStatItem(
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             textAlign = TextAlign.Center
         )
     }

@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 fun StreamsSkeletonList(
@@ -61,7 +61,7 @@ fun StreamCardSkeleton(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(NuvioColors.BackgroundElevated)
+            .background(NexioColors.BackgroundElevated)
             .padding(16.dp)
     ) {
         Row(
@@ -104,7 +104,7 @@ fun MetaDetailsSkeleton() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize()
@@ -224,7 +224,7 @@ private fun EpisodesRowSkeleton(shimmerBrush: Brush) {
                 modifier = Modifier
                     .width(280.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(NuvioColors.BackgroundCard)
+                    .background(NexioColors.BackgroundCard)
             ) {
                 Box(
                     modifier = Modifier
@@ -364,9 +364,9 @@ fun SkeletonPill(
 @Composable
 fun rememberShimmerBrush(): Brush {
     val shimmerColors = listOf(
-        NuvioColors.SurfaceVariant.copy(alpha = 0.30f),
-        NuvioColors.SurfaceVariant.copy(alpha = 0.60f),
-        NuvioColors.SurfaceVariant.copy(alpha = 0.30f)
+        NexioColors.SurfaceVariant.copy(alpha = 0.30f),
+        NexioColors.SurfaceVariant.copy(alpha = 0.60f),
+        NexioColors.SurfaceVariant.copy(alpha = 0.30f)
     )
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translate by transition.animateFloat(

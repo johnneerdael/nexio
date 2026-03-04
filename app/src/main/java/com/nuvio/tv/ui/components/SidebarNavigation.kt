@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 private val NavItemShape = RoundedCornerShape(14.dp)
 private val NavItemIconShape = RoundedCornerShape(10.dp)
@@ -73,7 +73,7 @@ fun SidebarNavigation(
             .offset { offsetX }
             .width(260.dp)
             .fillMaxHeight()
-            .background(NuvioColors.BackgroundElevated)
+            .background(NexioColors.BackgroundElevated)
             .padding(vertical = 24.dp, horizontal = 16.dp)
             .onFocusChanged { state ->
                 onFocusChange(state.hasFocus)
@@ -82,9 +82,9 @@ fun SidebarNavigation(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "NUVIO",
+            text = "Nexio",
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = NuvioColors.Primary
+            color = NexioColors.Primary
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -110,11 +110,11 @@ private fun SidebarNavItem(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val backgroundColor by animateColorAsState(
-        targetValue = if (isFocused || isSelected) NuvioColors.FocusBackground else Color.Transparent,
+        targetValue = if (isFocused || isSelected) NexioColors.FocusBackground else Color.Transparent,
         label = "navItemBackground"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isFocused) NuvioColors.FocusRing else Color.Transparent,
+        targetValue = if (isFocused) NexioColors.FocusRing else Color.Transparent,
         label = "navItemBorder"
     )
 
@@ -138,13 +138,13 @@ private fun SidebarNavItem(
             modifier = Modifier
                 .size(32.dp)
                 .clip(NavItemIconShape)
-                .background(NuvioColors.SurfaceVariant),
+                .background(NexioColors.SurfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = item.icon,
                 contentDescription = item.label,
-                tint = NuvioColors.TextPrimary,
+                tint = NexioColors.TextPrimary,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -152,7 +152,7 @@ private fun SidebarNavItem(
         Text(
             text = item.label,
             style = MaterialTheme.typography.titleMedium,
-            color = if (isFocused || isSelected) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+            color = if (isFocused || isSelected) NexioColors.TextPrimary else NexioColors.TextSecondary
         )
     }
 }

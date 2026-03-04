@@ -72,9 +72,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.Video
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -161,12 +161,12 @@ fun SeasonTabs(
                     shape = RoundedCornerShape(20.dp)
                 ),
                 colors = CardDefaults.colors(
-                    containerColor = if (isSelected) NuvioColors.SurfaceVariant else NuvioColors.BackgroundCard,
-                    focusedContainerColor = NuvioColors.Secondary
+                    containerColor = if (isSelected) NexioColors.SurfaceVariant else NexioColors.BackgroundCard,
+                    focusedContainerColor = NexioColors.Secondary
                 ),
                 border = CardDefaults.border(
                     focusedBorder = Border(
-                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        border = BorderStroke(2.dp, NexioColors.FocusRing),
                         shape = RoundedCornerShape(20.dp)
                     )
                 ),
@@ -176,9 +176,9 @@ fun SeasonTabs(
                     text = if (season == 0) stringResource(R.string.episodes_specials) else stringResource(R.string.episodes_season, season),
                     style = MaterialTheme.typography.titleMedium,
                     color = when {
-                        isFocused -> NuvioColors.OnSecondary
-                        isSelected -> NuvioColors.TextPrimary
-                        else -> NuvioTheme.extendedColors.textSecondary
+                        isFocused -> NexioColors.OnSecondary
+                        isSelected -> NexioColors.TextPrimary
+                        else -> NexioTheme.extendedColors.textSecondary
                     },
                     modifier = Modifier.padding(vertical = 10.dp, horizontal = 20.dp)
                 )
@@ -490,7 +490,7 @@ private fun EpisodeCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = shape
             )
         ),
@@ -501,7 +501,7 @@ private fun EpisodeCard(
                 .width(cardMetrics.cardWidth)
                 .height(cardMetrics.cardHeight)
                 .clip(shape)
-                .background(NuvioColors.BackgroundCard)
+                .background(NexioColors.BackgroundCard)
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.14f),
@@ -565,7 +565,7 @@ private fun EpisodeCard(
                         fontWeight = FontWeight.ExtraBold,
                         lineHeight = cardMetrics.titleLineHeight
                     ),
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -596,13 +596,13 @@ private fun EpisodeCard(
                                 Icon(
                                     imageVector = Icons.Outlined.Schedule,
                                     contentDescription = null,
-                                    tint = NuvioColors.TextSecondary,
+                                    tint = NexioColors.TextSecondary,
                                     modifier = Modifier.size(cardMetrics.metadataIconSize)
                                 )
                                 Text(
                                     text = runtime,
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        color = NuvioColors.TextSecondary
+                                        color = NexioColors.TextSecondary
                                     ),
                                     maxLines = 1
                                 )
@@ -636,7 +636,7 @@ private fun EpisodeCard(
                         if (formattedDate.isNotBlank()) {
                             Text(
                                 text = formattedDate,
-                                style = MaterialTheme.typography.labelSmall.copy(color = NuvioColors.TextSecondary),
+                                style = MaterialTheme.typography.labelSmall.copy(color = NexioColors.TextSecondary),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.End,
@@ -666,7 +666,7 @@ private fun EpisodeCard(
                             .fillMaxWidth(progressPercent)
                             .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
                             .height(cardMetrics.progressBarHeight)
-                            .background(NuvioColors.Primary)
+                            .background(NexioColors.Primary)
                     )
                 }
             }
@@ -680,7 +680,7 @@ private fun EpisodeCard(
                             top = cardMetrics.statusBadgeInset
                         )
                         .size(cardMetrics.statusBadgeSize)
-                        .background(NuvioColors.Primary, CircleShape),
+                        .background(NexioColors.Primary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -701,7 +701,7 @@ private fun EpisodeCard(
                         .size(cardMetrics.statusBadgeSize)
                 ) {
                     drawCircle(
-                        color = NuvioColors.TextSecondary.copy(alpha = 0.9f),
+                        color = NexioColors.TextSecondary.copy(alpha = 0.9f),
                         style = Stroke(
                             width = 2.dp.toPx(),
                             pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
@@ -734,7 +734,7 @@ private fun EpisodeOptionsDialog(
         primaryFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = episode.title,
         subtitle = stringResource(R.string.episodes_dialog_subtitle)
@@ -746,8 +746,8 @@ private fun EpisodeOptionsDialog(
                 .fillMaxWidth()
                 .focusRequester(primaryFocusRequester),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(if (isWatched) stringResource(R.string.episodes_mark_unwatched) else stringResource(R.string.episodes_mark_watched))
@@ -756,8 +756,8 @@ private fun EpisodeOptionsDialog(
         Button(
             onClick = if (isSeasonFullyWatched) onMarkSeasonUnwatched else onMarkSeasonWatched,
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -768,8 +768,8 @@ private fun EpisodeOptionsDialog(
             Button(
                 onClick = onMarkPreviousEpisodesWatched,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -780,8 +780,8 @@ private fun EpisodeOptionsDialog(
         Button(
             onClick = onPlay,
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -805,7 +805,7 @@ fun SeasonOptionsDialog(
         primaryFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = if (season == 0) stringResource(R.string.episodes_specials) else stringResource(R.string.episodes_season, season),
         subtitle = stringResource(R.string.episodes_season_actions)
@@ -816,8 +816,8 @@ fun SeasonOptionsDialog(
                 .fillMaxWidth()
                 .focusRequester(primaryFocusRequester),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(if (isFullyWatched) stringResource(R.string.episodes_mark_season_unwatched) else stringResource(R.string.episodes_mark_season_watched))

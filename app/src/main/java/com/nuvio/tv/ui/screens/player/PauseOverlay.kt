@@ -47,7 +47,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.MetaCastMember
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import android.text.format.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -191,7 +191,7 @@ private fun PauseMetadataView(
             Text(
                 text = stringResource(R.string.pause_you_are_watching),
                 style = MaterialTheme.typography.bodyLarge,
-                color = NuvioColors.TextTertiary
+                color = NexioColors.TextTertiary
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -214,7 +214,7 @@ private fun PauseMetadataView(
                 Text(
                     text = "$year$episodeLabel",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
@@ -234,7 +234,7 @@ private fun PauseMetadataView(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 16.dp)
@@ -247,7 +247,7 @@ private fun PauseMetadataView(
                 Text(
                     text = stringResource(R.string.pause_cast_label),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextTertiary
+                    color = NexioColors.TextTertiary
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -307,14 +307,14 @@ private fun CastDetailView(
             Icon(
                 imageVector = Icons.Default.ArrowBack,
                 contentDescription = "Back",
-                tint = NuvioColors.TextSecondary,
+                tint = NexioColors.TextSecondary,
                 modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = stringResource(R.string.pause_back_to_details),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 modifier = Modifier.clickable(onClick = onBack)
             )
         }
@@ -352,7 +352,7 @@ private fun CastDetailView(
                     Text(
                         text = stringResource(R.string.pause_as_character, member.character ?: ""),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioColors.TextSecondary,
+                        color = NexioColors.TextSecondary,
                         modifier = Modifier.padding(top = 8.dp),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis

@@ -442,7 +442,7 @@
     <string name="trakt_stat_watched_hours">視聴時間</string>
     <string name="trakt_disconnect">切断</string>
     <string name="trakt_disconnect_title">Traktを切断しますか？</string>
-    <string name="trakt_disconnect_subtitle">NuvioからTraktアカウントが切断されます。</string>
+    <string name="trakt_disconnect_subtitle">NEXIOからTraktアカウントが切断されます。</string>
     <string name="trakt_login">ログイン</string>
     <string name="trakt_retry">再試行</string>
     <string name="trakt_back">戻る</string>
@@ -768,7 +768,7 @@
     <string name="catalog_see_all_empty_subtitle">別のカタログを試すか、後で確認してください</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Nuvioへようこそ</string>
+    <string name="layout_selection_welcome">NEXIOへようこそ</string>
     <string name="layout_selection_subtitle">ホーム画面のレイアウトを選択</string>
     <string name="layout_selection_continue">続ける</string>
 

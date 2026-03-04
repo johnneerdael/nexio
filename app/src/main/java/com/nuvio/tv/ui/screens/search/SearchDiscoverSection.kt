@@ -59,7 +59,7 @@ import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.PosterCardStyle
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -109,7 +109,7 @@ internal fun DiscoverSection(
         Text(
             text = stringResource(R.string.discover_title),
             style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
 
         Row(
@@ -181,7 +181,7 @@ internal fun DiscoverSection(
             Text(
                 text = metadataSegments.joinToString(" • "),
                 style = MaterialTheme.typography.bodySmall,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
         }
 
@@ -266,16 +266,16 @@ private fun DiscoverDropdownPicker(
                 },
             shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.FocusBackground
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.FocusBackground
             ),
             border = CardDefaults.border(
                 border = Border(
-                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    border = BorderStroke(1.dp, NexioColors.Border),
                     shape = RoundedCornerShape(14.dp)
                 ),
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(14.dp)
                 )
             ),
@@ -293,7 +293,7 @@ private fun DiscoverDropdownPicker(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.labelSmall,
-                    color = NuvioColors.TextTertiary
+                    color = NexioColors.TextTertiary
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -303,7 +303,7 @@ private fun DiscoverDropdownPicker(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -311,7 +311,7 @@ private fun DiscoverDropdownPicker(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = if (expanded) "Collapse $title" else "Expand $title",
                         modifier = Modifier.size(20.dp),
-                        tint = if (isFocused) NuvioColors.FocusRing else NuvioColors.TextSecondary
+                        tint = if (isFocused) NexioColors.FocusRing else NexioColors.TextSecondary
                     )
                 }
             }
@@ -324,25 +324,25 @@ private fun DiscoverDropdownPicker(
                 .width(with(LocalDensity.current) { anchorSize.width.toDp() })
                 .heightIn(max = 320.dp),
             shape = RoundedCornerShape(14.dp),
-            containerColor = NuvioColors.BackgroundCard,
+            containerColor = NexioColors.BackgroundCard,
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, NuvioColors.Border)
+            border = BorderStroke(1.dp, NexioColors.Border)
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
                     text = {
                         Text(
                             text = option.label,
-                            color = NuvioColors.TextPrimary,
+                            color = NexioColors.TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     },
                     onClick = { onSelect(option) },
                     colors = MenuDefaults.itemColors(
-                        textColor = NuvioColors.TextPrimary,
-                        disabledTextColor = NuvioColors.TextDisabled
+                        textColor = NexioColors.TextPrimary,
+                        disabledTextColor = NexioColors.TextDisabled
                     )
                 )
             }
@@ -541,16 +541,16 @@ private fun DiscoverActionCard(
             ),
         shape = CardDefaults.shape(shape = cardShape),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = CardDefaults.border(
             border = Border(
-                border = BorderStroke(1.dp, NuvioColors.Border),
+                border = BorderStroke(1.dp, NexioColors.Border),
                 shape = cardShape
             ),
             focusedBorder = Border(
-                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
                 shape = cardShape
             )
         ),
@@ -567,7 +567,7 @@ private fun DiscoverActionCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 textAlign = TextAlign.Center
             )
         }

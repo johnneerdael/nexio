@@ -33,7 +33,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.updater.UpdateViewModel
 
 @Composable
@@ -79,7 +79,7 @@ fun AboutSettingsContent(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.app_logo_wordmark),
-                    contentDescription = "NuvioTV",
+                    contentDescription = "NEXIO",
                     modifier = Modifier
                         .width(180.dp)
                         .height(50.dp),
@@ -89,14 +89,14 @@ fun AboutSettingsContent(
                 Text(
                     text = stringResource(R.string.about_made_with_love),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
                 Text(
                     text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -123,7 +123,7 @@ fun AboutSettingsContent(
                     onClick = {
                         val intent = Intent(
                             Intent.ACTION_VIEW,
-                            Uri.parse("https://tapframe.github.io/NuvioStreaming/#privacy-policy")
+                            Uri.parse("https://johnneerdael.github.io/NEXIOStreaming/#privacy-policy")
                         )
                         context.startActivity(intent)
                     }

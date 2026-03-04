@@ -443,7 +443,7 @@
     <string name="trakt_stat_watched_hours">Tittade timmar</string>
     <string name="trakt_disconnect">Koppla från</string>
     <string name="trakt_disconnect_title">Koppla från Trakt?</string>
-    <string name="trakt_disconnect_subtitle">Detta kopplar från ditt Trakt-konto från Nuvio.</string>
+    <string name="trakt_disconnect_subtitle">Detta kopplar från ditt Trakt-konto från NEXIO.</string>
     <string name="trakt_login">Logga in</string>
     <string name="trakt_retry">Försök igen</string>
     <string name="trakt_back">Tillbaka</string>
@@ -772,7 +772,7 @@
     <string name="catalog_see_all_empty_subtitle">Prova en annan katalog eller kom tillbaka senare</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Välkommen till Nuvio</string>
+    <string name="layout_selection_welcome">Välkommen till NEXIO</string>
     <string name="layout_selection_subtitle">Välj din hemskärmslayout</string>
     <string name="layout_selection_continue">Fortsätt</string>
 

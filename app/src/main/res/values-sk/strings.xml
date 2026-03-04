@@ -404,7 +404,7 @@
     <string name="trakt_stat_watched_hours">Hodiny sledovania</string>
     <string name="trakt_disconnect">Odpojiť</string>
     <string name="trakt_disconnect_title">Odpojiť Trakt?</string>
-    <string name="trakt_disconnect_subtitle">Týmto odpojíte svoj Trakt účet od Nuvio.</string>
+    <string name="trakt_disconnect_subtitle">Týmto odpojíte svoj Trakt účet od NEXIO.</string>
     <string name="trakt_login">Prihlásiť sa</string>
     <string name="trakt_retry">Skúsiť znova</string>
     <string name="trakt_back">Späť</string>
@@ -671,7 +671,7 @@
     <string name="catalog_see_all_empty_subtitle">Skúste iný katalóg alebo sa vráťte neskôr</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Vitajte v Nuvio</string>
+    <string name="layout_selection_welcome">Vitajte v NEXIO</string>
     <string name="layout_selection_subtitle">Vyberte rozloženie domovskej obrazovky</string>
     <string name="layout_selection_continue">Pokračovať</string>
 

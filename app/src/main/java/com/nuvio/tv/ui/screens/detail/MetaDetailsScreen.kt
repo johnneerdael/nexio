@@ -93,9 +93,9 @@ import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
-import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.components.NexioDialog
 import com.nuvio.tv.ui.components.TrailerPlayer
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
@@ -225,7 +225,7 @@ fun MetaDetailsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .onPreviewKeyEvent { keyEvent ->
                 if (currentIsTrailerPlaying) {
                     if (currentShowTrailerControls) {
@@ -477,7 +477,7 @@ fun MetaDetailsScreen(
                         color = if (uiState.userMessageIsError) {
                             Color(0xFF5A1C1C)
                         } else {
-                            NuvioColors.BackgroundElevated
+                            NexioColors.BackgroundElevated
                         },
                         shape = RoundedCornerShape(10.dp)
                     )
@@ -486,7 +486,7 @@ fun MetaDetailsScreen(
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
             }
         }
@@ -883,7 +883,7 @@ private fun MetaDetailsContent(
         label = "backdropFade"
     )
 
-    val backgroundColor = NuvioColors.Background
+    val backgroundColor = NexioColors.Background
 
     // Pre-compute gradient brushes once
     val leftGradient = remember(backgroundColor) {
@@ -1328,7 +1328,7 @@ private fun PeopleSectionTabs(
                 Text(
                     text = "|",
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary.copy(alpha = 0.45f),
+                    color = NexioColors.TextPrimary.copy(alpha = 0.45f),
                     modifier = Modifier.padding(horizontal = 10.dp)
                 )
             }
@@ -1390,9 +1390,9 @@ private fun PeopleSectionTabButton(
             text = label,
             style = MaterialTheme.typography.titleLarge,
             color = when {
-                isFocused -> NuvioColors.TextPrimary
-                selected -> NuvioColors.TextPrimary.copy(alpha = 0.92f)
-                else -> NuvioColors.TextPrimary.copy(alpha = 0.55f)
+                isFocused -> NexioColors.TextPrimary
+                selected -> NexioColors.TextPrimary.copy(alpha = 0.92f)
+                else -> NexioColors.TextPrimary.copy(alpha = 0.55f)
             },
             modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
         )
@@ -1451,7 +1451,7 @@ private fun TrailerSeekOverlay(
                     .fillMaxHeight()
                     .fillMaxWidth(animatedProgress)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(NuvioColors.Secondary)
+                    .background(NexioColors.Secondary)
             )
         }
 
@@ -1501,7 +1501,7 @@ private fun LibraryListPickerDialog(
         primaryFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = title,
         subtitle = stringResource(R.string.detail_lists_subtitle),
@@ -1535,8 +1535,8 @@ private fun LibraryListPickerDialog(
                         Modifier.fillMaxWidth()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = if (selected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(
@@ -1548,15 +1548,15 @@ private fun LibraryListPickerDialog(
             }
         }
 
-        Divider(color = NuvioColors.Border, thickness = 1.dp)
+        Divider(color = NexioColors.Border, thickness = 1.dp)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
                 onClick = onSave,
                 enabled = !isPending,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))

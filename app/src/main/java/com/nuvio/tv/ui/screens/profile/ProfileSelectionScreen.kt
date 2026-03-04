@@ -53,7 +53,7 @@ import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.UserProfile
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 private object ProfileSelectionSpacing {
     val ScreenPaddingHorizontal = 56.dp
@@ -91,21 +91,21 @@ fun ProfileSelectionScreen(
         animationSpec = tween(durationMillis = 520),
         label = "focusedAvatarColor"
     )
-    val gradientTop = lerp(NuvioColors.BackgroundElevated, animatedAvatarColor, 0.3f)
-    val gradientMid = lerp(NuvioColors.Background, animatedAvatarColor, 0.14f)
+    val gradientTop = lerp(NexioColors.BackgroundElevated, animatedAvatarColor, 0.3f)
+    val gradientMid = lerp(NexioColors.Background, animatedAvatarColor, 0.14f)
     val halfFadeStrong = animatedAvatarColor.copy(alpha = 0.26f)
     val halfFadeSoft = animatedAvatarColor.copy(alpha = 0.08f)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .background(
                 brush = Brush.verticalGradient(
                     colorStops = arrayOf(
                         0f to gradientTop,
                         0.42f to gradientMid,
-                        1f to NuvioColors.Background
+                        1f to NexioColors.Background
                     )
                 )
             )
@@ -131,7 +131,7 @@ fun ProfileSelectionScreen(
         ) {
             Image(
                 painter = painterResource(id = R.drawable.app_logo_wordmark),
-                contentDescription = "NuvioTV",
+                contentDescription = "NEXIO",
                 modifier = Modifier
                     .width(ProfileSelectionSpacing.LogoWidth)
                     .height(ProfileSelectionSpacing.LogoHeight),
@@ -142,7 +142,7 @@ fun ProfileSelectionScreen(
 
             Text(
                 text = stringResource(R.string.profile_selection_title),
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontSize = 44.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.5).sp
@@ -152,7 +152,7 @@ fun ProfileSelectionScreen(
 
             Text(
                 text = stringResource(R.string.profile_selection_subtitle),
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -173,7 +173,7 @@ fun ProfileSelectionScreen(
 
             Text(
                 text = stringResource(R.string.profile_selection_hint),
-                color = NuvioColors.TextTertiary.copy(alpha = 0.9f),
+                color = NexioColors.TextTertiary.copy(alpha = 0.9f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -201,7 +201,7 @@ private fun ProfileGrid(
     if (profiles.isEmpty()) {
         Text(
             text = stringResource(R.string.profile_selection_empty),
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Medium
         )
@@ -253,12 +253,12 @@ private fun ProfileCard(
         label = "profileRingWidth"
     )
     val ringColor by animateColorAsState(
-        targetValue = if (isFocused) NuvioColors.Secondary else NuvioColors.Border.copy(alpha = 0.75f),
+        targetValue = if (isFocused) NexioColors.Secondary else NexioColors.Border.copy(alpha = 0.75f),
         animationSpec = tween(durationMillis = 140),
         label = "profileRingColor"
     )
     val nameColor by animateColorAsState(
-        targetValue = if (isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+        targetValue = if (isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
         animationSpec = tween(durationMillis = 120),
         label = "profileNameColor"
     )
@@ -319,7 +319,7 @@ private fun ProfileCard(
                         .background(Color(0xFFFFB300), CircleShape)
                         .border(
                             width = 2.dp,
-                            color = NuvioColors.Background,
+                            color = NexioColors.Background,
                             shape = CircleShape
                         ),
                     contentAlignment = Alignment.Center

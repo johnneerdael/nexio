@@ -42,7 +42,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -129,12 +129,12 @@ fun GridContentCard(
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.BackgroundCard
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.BackgroundCard
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
                     shape = cardShape
                 )
             ),
@@ -194,7 +194,7 @@ fun GridContentCard(
             Text(
                 text = item.name,
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier

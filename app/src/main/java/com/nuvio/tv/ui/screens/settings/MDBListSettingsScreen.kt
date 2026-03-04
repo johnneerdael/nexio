@@ -43,8 +43,8 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 fun MDBListSettingsContent(
@@ -201,7 +201,7 @@ private fun MDBListApiKeyDialog(
         }
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.mdblist_dialog_title),
         subtitle = stringResource(R.string.mdblist_dialog_subtitle),
@@ -213,16 +213,16 @@ private fun MDBListApiKeyDialog(
                 .fillMaxWidth()
                 .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundElevated,
-                focusedContainerColor = NuvioColors.BackgroundElevated
+                containerColor = NexioColors.BackgroundElevated,
+                focusedContainerColor = NexioColors.BackgroundElevated
             ),
             border = CardDefaults.border(
                 border = Border(
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NuvioColors.Border),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NexioColors.Border),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                 ),
                 focusedBorder = Border(
-                    border = androidx.compose.foundation.BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                 )
             ),
@@ -244,9 +244,9 @@ private fun MDBListApiKeyDialog(
                     keyboardActions = KeyboardActions(
                         onDone = { keyboardController?.hide() }
                     ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
                     cursorBrush = SolidColor(
-                        if (isInputFocused) NuvioColors.Primary
+                        if (isInputFocused) NexioColors.Primary
                         else androidx.compose.ui.graphics.Color.Transparent
                     ),
                     decorationBox = { innerTextField ->
@@ -254,7 +254,7 @@ private fun MDBListApiKeyDialog(
                             Text(
                                 text = stringResource(R.string.mdblist_dialog_placeholder),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextTertiary
+                                color = NexioColors.TextTertiary
                             )
                         }
                         innerTextField()
@@ -270,8 +270,8 @@ private fun MDBListApiKeyDialog(
             Button(
                 onClick = onDismiss,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundElevated,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(stringResource(R.string.action_cancel))
@@ -280,8 +280,8 @@ private fun MDBListApiKeyDialog(
             Button(
                 onClick = onClear,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundElevated,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(stringResource(R.string.action_clear))
@@ -290,8 +290,8 @@ private fun MDBListApiKeyDialog(
             Button(
                 onClick = { if (!validating) viewModel.validateAndSaveApiKey(value, onSaved) },
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(if (validating) stringResource(R.string.action_saving) else stringResource(R.string.action_save))

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">NEXIO</string>
     <string name="type_movie">Movie</string>
     <string name="type_series">Series</string>
     <string name="type_unknown">Unknown</string>
@@ -490,7 +490,7 @@
     <string name="trakt_stat_watched_hours">Watched Hours</string>
     <string name="trakt_disconnect">Disconnect</string>
     <string name="trakt_disconnect_title">Disconnect Trakt?</string>
-    <string name="trakt_disconnect_subtitle">This will disconnect your Trakt account from Nuvio.</string>
+    <string name="trakt_disconnect_subtitle">This will disconnect your Trakt account from NEXIO.</string>
     <string name="trakt_login">Login</string>
     <string name="trakt_retry">Retry</string>
     <string name="trakt_back">Back</string>
@@ -837,7 +837,7 @@
     <string name="catalog_see_all_empty_subtitle">Try a different catalog or check back later</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Welcome to Nuvio</string>
+    <string name="layout_selection_welcome">Welcome to NEXIO</string>
     <string name="layout_selection_subtitle">Choose your home screen layout</string>
     <string name="layout_selection_continue">Continue</string>
 

@@ -47,7 +47,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.data.repository.SkipInterval
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
 /**
@@ -162,7 +162,7 @@ fun SkipIntroButton(
                 },
             colors = CardDefaults.colors(
                 containerColor = Color(0xFF1E1E1E).copy(alpha = 0.85f),
-                focusedContainerColor = NuvioColors.Secondary
+                focusedContainerColor = NexioColors.Secondary
             ),
             shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp))
         ) {
@@ -176,12 +176,12 @@ fun SkipIntroButton(
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = null,
-                        tint = if (isFocused) NuvioColors.OnSecondary else Color.White,
+                        tint = if (isFocused) NexioColors.OnSecondary else Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
                         text = getSkipLabel(lastType),
-                        color = if (isFocused) NuvioColors.OnSecondary else Color.White,
+                        color = if (isFocused) NexioColors.OnSecondary else Color.White,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(start = 8.dp)
                     )

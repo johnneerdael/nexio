@@ -37,7 +37,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.Video
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -80,8 +80,8 @@ fun EpisodeRatingsSection(
             .filter { it.season == selectedSeason && it.episode != null }
             .sortedBy { it.episode }
     }
-    val defaultChipColor = NuvioColors.BackgroundCard
-    val defaultChipTextColor = NuvioColors.TextSecondary
+    val defaultChipColor = NexioColors.BackgroundCard
+    val defaultChipTextColor = NexioColors.TextSecondary
     val seasonRatings = remember(episodesForSeason, ratings) {
         episodesForSeason.mapNotNull { episode ->
             val season = episode.season ?: return@mapNotNull null
@@ -115,7 +115,7 @@ fun EpisodeRatingsSection(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 modifier = Modifier.padding(horizontal = 48.dp)
             )
         }
@@ -125,7 +125,7 @@ fun EpisodeRatingsSection(
                 Text(
                     text = stringResource(R.string.ratings_loading),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp)
                 )
             }
@@ -133,7 +133,7 @@ fun EpisodeRatingsSection(
                 Text(
                     text = error,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp)
                 )
             }
@@ -141,7 +141,7 @@ fun EpisodeRatingsSection(
                 Text(
                     text = stringResource(R.string.ratings_unavailable),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp)
                 )
             }
@@ -173,15 +173,15 @@ fun EpisodeRatingsSection(
                             shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
                             colors = CardDefaults.colors(
                                 containerColor = if (isSelected) {
-                                    NuvioColors.FocusBackground
+                                    NexioColors.FocusBackground
                                 } else {
-                                    NuvioColors.BackgroundCard
+                                    NexioColors.BackgroundCard
                                 },
-                                focusedContainerColor = NuvioColors.FocusBackground
+                                focusedContainerColor = NexioColors.FocusBackground
                             ),
                             border = CardDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = RoundedCornerShape(14.dp)
                                 )
                             ),
@@ -190,7 +190,7 @@ fun EpisodeRatingsSection(
                             Text(
                                 text = "S$season",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = NuvioColors.TextPrimary,
+                                color = NexioColors.TextPrimary,
                                 modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                             )
                         }
@@ -200,7 +200,7 @@ fun EpisodeRatingsSection(
                 Text(
                     text = stringResource(R.string.ratings_season_summary, selectedSeason, episodesForSeason.size),
                     style = MaterialTheme.typography.labelSmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.padding(horizontal = 48.dp, vertical = 2.dp)
                 )
 
@@ -228,7 +228,7 @@ fun EpisodeRatingsSection(
                             ),
                             border = CardDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = RoundedCornerShape(14.dp)
                                 )
                             ),

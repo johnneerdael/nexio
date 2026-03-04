@@ -39,7 +39,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -145,7 +145,7 @@ private fun AudioTrackItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.Secondary,
+                    tint = NexioColors.Secondary,
                     modifier = Modifier.size(20.dp)
                 )
             }

@@ -76,7 +76,7 @@ import com.nuvio.tv.ui.components.ContinueWatchingCard
 import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.LocalSidebarExpanded
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlin.math.abs
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -244,7 +244,7 @@ internal fun ModernRowSection(
         Text(
             text = row.title,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             modifier = Modifier.padding(start = 52.dp, bottom = rowTitleBottom)
         )
 
@@ -560,8 +560,8 @@ private fun ModernCarouselCard(
         animationSpec = tween(durationMillis = 180),
         label = "modernCardWatchedIconEndPadding"
     )
-    val backgroundCardColor = NuvioColors.BackgroundCard
-    val focusRingColor = NuvioColors.FocusRing
+    val backgroundCardColor = NexioColors.BackgroundCard
+    val focusRingColor = NexioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
     val focusedBorder = remember(cardShape, focusRingColor) {
         Border(
@@ -733,7 +733,7 @@ private fun ModernCarouselCard(
                 Text(
                     text = item.title,
                     style = titleStyle,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -742,7 +742,7 @@ private fun ModernCarouselCard(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.labelMedium,
-                        color = NuvioColors.TextSecondary,
+                        color = NexioColors.TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

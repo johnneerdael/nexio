@@ -1,5 +1,5 @@
-﻿<resources>
-    <string name="app_name">Nuvio</string>
+<resources>
+    <string name="app_name">NEXIO</string>
     <string name="type_movie">Film</string>
     <string name="type_series">Dizi</string>
     <string name="type_unknown">Bilinmeyen</string>
@@ -446,7 +446,7 @@
     <string name="trakt_stat_watched_hours">İzlenen Saat</string>
     <string name="trakt_disconnect">Bağlantıyı Kes</string>
     <string name="trakt_disconnect_title">Trakt bağlantısı kesilsin mi?</string>
-    <string name="trakt_disconnect_subtitle">Bu işlem Trakt hesabınızın Nuvio ile bağlantısını kesecektir.</string>
+    <string name="trakt_disconnect_subtitle">Bu işlem Trakt hesabınızın NEXIO ile bağlantısını kesecektir.</string>
     <string name="trakt_login">Giriş Yap</string>
     <string name="trakt_retry">Tekrar Dene</string>
     <string name="trakt_back">Geri</string>
@@ -775,14 +775,14 @@
     <string name="catalog_see_all_empty_subtitle">Daha sonra başka bir alt alan türünü denemek de faydalı olacaktır.</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Nuvio\'ya Hoş Geldiniz</string>
+    <string name="layout_selection_welcome">NEXIO\'ya Hoş Geldiniz</string>
     <string name="layout_selection_subtitle">Televizyon boyutuna uygun ideal ekran düzenini oluşturabilirsiniz.</string>
     <string name="layout_selection_continue">Uygulamaya Devam Et</string>
 
     <!-- UpdatePromptDialog -->
     <string name="update_title">Uygulama Güncellemesi</string>
     <string name="update_downloading">Güncelleme İndiriliyor</string>
-    <string name="update_unknown_sources">Nuvio\'nun indirdiği eklentileri yüklayabilmek adına `Bilinmeyen kaynaklar` veya `Dışarıdan yükleme` iznine ihtiyaç var.</string>
+    <string name="update_unknown_sources">NEXIO\'nun indirdiği eklentileri yüklayabilmek adına `Bilinmeyen kaynaklar` veya `Dışarıdan yükleme` iznine ihtiyaç var.</string>
     <!-- AccountScreen -->
     <string name="account_title">Ana Bilgi Modülleri</string>
     <string name="account_sign_in_description">Senkron başlatmak için oturumunuzun aktif olduğundan emin olmalısınız. Ayrıca bağlantıların her türlü kopya dosyaları da bulutta bekleyecektir.</string>

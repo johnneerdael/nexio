@@ -29,7 +29,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -76,7 +76,7 @@ fun GridContinueWatchingSection(
                 Text(
                     text = stringResource(R.string.continue_watching),
                     style = MaterialTheme.typography.headlineMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
             }
         }

@@ -36,8 +36,8 @@ import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.AddonSubtitleStartupMode
 import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 
 private val subtitleColors = listOf(
     Color.White,
@@ -89,7 +89,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         Text(
             text = stringResource(R.string.sub_section),
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
         )
     }
@@ -248,7 +248,7 @@ internal fun LazyListScope.subtitleSettingsItems(
         Text(
             text = stringResource(R.string.sub_advanced_section),
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
         )
     }
@@ -270,7 +270,7 @@ internal fun LazyListScope.subtitleSettingsItems(
             Text(
                 text = stringResource(R.string.sub_libass_mode),
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
             )
         }
@@ -473,7 +473,7 @@ private fun SubtitleOrganizationModeDialog(
         Triple(SubtitleOrganizationMode.BY_ADDON, stringResource(R.string.sub_org_by_addon), stringResource(R.string.sub_org_by_addon_desc))
     )
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.sub_organization),
         width = 460.dp,
@@ -498,8 +498,8 @@ private fun SubtitleOrganizationModeDialog(
                         onClick = { onModeSelected(mode) },
                         modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                         colors = androidx.tv.material3.CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
                         ),
                         shape = androidx.tv.material3.CardDefaults.shape(
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
@@ -518,20 +518,20 @@ private fun SubtitleOrganizationModeDialog(
                                 Text(
                                     text = title,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary
                                 )
                                 Spacer(modifier = androidx.compose.ui.Modifier.height(4.dp))
                                 Text(
                                     text = description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.TextSecondary
+                                    color = NexioColors.TextSecondary
                                 )
                             }
                             if (isSelected) {
                                 androidx.tv.material3.Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary
+                                    tint = NexioColors.Primary
                                 )
                             }
                         }
@@ -570,7 +570,7 @@ private fun AddonSubtitleStartupModeDialog(
         androidx.compose.foundation.layout.Box(
             modifier = androidx.compose.ui.Modifier
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundCard)
+                .background(NexioColors.BackgroundCard)
         ) {
             androidx.compose.foundation.layout.Column(
                 modifier = androidx.compose.ui.Modifier
@@ -580,7 +580,7 @@ private fun AddonSubtitleStartupModeDialog(
                 Text(
                     text = stringResource(R.string.sub_startup_mode_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
 

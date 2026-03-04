@@ -75,9 +75,9 @@ import com.nuvio.tv.ui.components.EmptyScreenState
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
@@ -175,7 +175,7 @@ fun LibraryScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(NuvioColors.Background),
+                .background(NexioColors.Background),
             contentAlignment = androidx.compose.ui.Alignment.Center
         ) {
             Box(
@@ -192,7 +192,7 @@ fun LibraryScreen(
                 Text(
                     text = stringResource(R.string.library_syncing),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
         }
@@ -206,7 +206,7 @@ fun LibraryScreen(
         state = gridState,
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
@@ -231,14 +231,14 @@ fun LibraryScreen(
                 Text(
                     text = stringResource(R.string.library_title),
                     style = MaterialTheme.typography.headlineMedium,
-                    color = if (showBuiltInHeader) NuvioColors.TextPrimary else Color.Transparent,
+                    color = if (showBuiltInHeader) NexioColors.TextPrimary else Color.Transparent,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.5.sp
                 )
                 Text(
                     text = if (uiState.sourceMode == LibrarySourceMode.TRAKT) "TRAKT" else stringResource(R.string.library_source_local),
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (showBuiltInHeader) NuvioColors.TextTertiary else Color.Transparent,
+                    color = if (showBuiltInHeader) NexioColors.TextTertiary else Color.Transparent,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 2.sp
                 )
@@ -374,10 +374,10 @@ fun LibraryScreen(
             Text(
                 text = transientMessage,
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 modifier = Modifier
                     .padding(top = 24.dp)
-                    .background(NuvioColors.BackgroundElevated, RoundedCornerShape(10.dp))
+                    .background(NexioColors.BackgroundElevated, RoundedCornerShape(10.dp))
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             )
         }
@@ -481,16 +481,16 @@ private fun LibraryDropdownPicker(
                 .onFocusChanged { isFocused = it.isFocused },
             shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.FocusBackground
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.FocusBackground
             ),
             border = CardDefaults.border(
                 border = androidx.tv.material3.Border(
-                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    border = BorderStroke(1.dp, NexioColors.Border),
                     shape = RoundedCornerShape(14.dp)
                 ),
                 focusedBorder = androidx.tv.material3.Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(14.dp)
                 )
             ),
@@ -508,7 +508,7 @@ private fun LibraryDropdownPicker(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.labelSmall,
-                    color = NuvioColors.TextTertiary
+                    color = NexioColors.TextTertiary
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -518,14 +518,14 @@ private fun LibraryDropdownPicker(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = if (expanded) "Collapse $title" else "Expand $title",
-                        tint = if (isFocused) NuvioColors.FocusRing else NuvioColors.TextSecondary
+                        tint = if (isFocused) NexioColors.FocusRing else NexioColors.TextSecondary
                     )
                 }
             }
@@ -538,25 +538,25 @@ private fun LibraryDropdownPicker(
                 .width(with(LocalDensity.current) { anchorSize.width.toDp() })
                 .heightIn(max = 320.dp),
             shape = RoundedCornerShape(14.dp),
-            containerColor = NuvioColors.BackgroundCard,
+            containerColor = NexioColors.BackgroundCard,
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, NuvioColors.Border)
+            border = BorderStroke(1.dp, NexioColors.Border)
         ) {
             options.forEach { option ->
                 DropdownMenuItem(
                     text = {
                         Text(
                             text = option.label,
-                            color = NuvioColors.TextPrimary,
+                            color = NexioColors.TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     },
                     onClick = { onSelect(option) },
                     colors = MenuDefaults.itemColors(
-                        textColor = NuvioColors.TextPrimary,
-                        disabledTextColor = NuvioColors.TextDisabled
+                        textColor = NexioColors.TextPrimary,
+                        disabledTextColor = NexioColors.TextDisabled
                     )
                 )
             }
@@ -585,8 +585,8 @@ private fun LibraryActionsRow(
             onClick = onManageLists,
             enabled = !pending && !isSyncing,
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(stringResource(R.string.library_manage_lists))
@@ -595,8 +595,8 @@ private fun LibraryActionsRow(
             onClick = onRefresh,
             enabled = !pending && !isSyncing,
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(if (isSyncing) "Syncing..." else "Sync")
@@ -636,14 +636,14 @@ private fun ManageListsDialog(
         Box(
             modifier = Modifier
                 .width(620.dp)
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .background(NexioColors.BackgroundElevated, RoundedCornerShape(16.dp))
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
                     text = stringResource(R.string.library_manage_trakt_lists),
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
 
                 if (errorMessage != null) {
@@ -658,7 +658,7 @@ private fun ManageListsDialog(
                     Text(
                         text = stringResource(R.string.library_no_lists),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioTheme.extendedColors.textSecondary
+                        color = NexioTheme.extendedColors.textSecondary
                     )
                 } else {
                     LazyColumn(
@@ -680,8 +680,8 @@ private fun ManageListsDialog(
                                     Modifier.fillMaxWidth()
                                 },
                                 colors = ButtonDefaults.colors(
-                                    containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                    contentColor = NuvioColors.TextPrimary
+                                    containerColor = if (selected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                                    contentColor = NexioColors.TextPrimary
                                 )
                             ) {
                                 Text(
@@ -699,32 +699,32 @@ private fun ManageListsDialog(
                         onClick = onCreate,
                         enabled = !pending,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) { Text(stringResource(R.string.library_list_create)) }
                     Button(
                         onClick = onEdit,
                         enabled = !pending && selectedKey != null,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) { Text(stringResource(R.string.library_list_edit)) }
                     Button(
                         onClick = onMoveUp,
                         enabled = !pending && selectedKey != null,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) { Text(stringResource(R.string.library_list_move_up)) }
                     Button(
                         onClick = onMoveDown,
                         enabled = !pending && selectedKey != null,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) { Text(stringResource(R.string.library_list_move_down)) }
                 }
@@ -735,7 +735,7 @@ private fun ManageListsDialog(
                         enabled = !pending && selectedKey != null,
                         colors = ButtonDefaults.colors(
                             containerColor = Color(0xFF4A2323),
-                            contentColor = NuvioColors.TextPrimary
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) { Text(stringResource(R.string.library_list_delete)) }
                     Button(
@@ -743,8 +743,8 @@ private fun ManageListsDialog(
                         enabled = !pending,
                         modifier = Modifier.focusRequester(closeFocusRequester),
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) { Text(stringResource(R.string.library_list_close)) }
                 }
@@ -780,7 +780,7 @@ private fun ListEditorDialog(
         nameFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onCancel,
         title = if (state.mode == LibraryListEditorState.Mode.CREATE) "Create List" else "Edit List",
         width = 560.dp
@@ -818,15 +818,15 @@ private fun ListEditorDialog(
             ),
             label = { androidx.compose.material3.Text(stringResource(R.string.library_list_name_label)) },
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                focusedTextColor = NuvioColors.TextPrimary,
-                unfocusedTextColor = NuvioColors.TextPrimary,
-                focusedContainerColor = NuvioColors.BackgroundCard,
-                unfocusedContainerColor = NuvioColors.BackgroundCard,
-                focusedBorderColor = NuvioColors.FocusRing,
-                unfocusedBorderColor = NuvioColors.Border,
-                focusedLabelColor = NuvioColors.TextSecondary,
-                unfocusedLabelColor = NuvioColors.TextTertiary,
-                cursorColor = NuvioColors.FocusRing
+                focusedTextColor = NexioColors.TextPrimary,
+                unfocusedTextColor = NexioColors.TextPrimary,
+                focusedContainerColor = NexioColors.BackgroundCard,
+                unfocusedContainerColor = NexioColors.BackgroundCard,
+                focusedBorderColor = NexioColors.FocusRing,
+                unfocusedBorderColor = NexioColors.Border,
+                focusedLabelColor = NexioColors.TextSecondary,
+                unfocusedLabelColor = NexioColors.TextTertiary,
+                cursorColor = NexioColors.FocusRing
             )
         )
 
@@ -856,22 +856,22 @@ private fun ListEditorDialog(
             maxLines = 5,
             label = { androidx.compose.material3.Text(stringResource(R.string.library_list_description_label)) },
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                focusedTextColor = NuvioColors.TextPrimary,
-                unfocusedTextColor = NuvioColors.TextPrimary,
-                focusedContainerColor = NuvioColors.BackgroundCard,
-                unfocusedContainerColor = NuvioColors.BackgroundCard,
-                focusedBorderColor = NuvioColors.FocusRing,
-                unfocusedBorderColor = NuvioColors.Border,
-                focusedLabelColor = NuvioColors.TextSecondary,
-                unfocusedLabelColor = NuvioColors.TextTertiary,
-                cursorColor = NuvioColors.FocusRing
+                focusedTextColor = NexioColors.TextPrimary,
+                unfocusedTextColor = NexioColors.TextPrimary,
+                focusedContainerColor = NexioColors.BackgroundCard,
+                unfocusedContainerColor = NexioColors.BackgroundCard,
+                focusedBorderColor = NexioColors.FocusRing,
+                unfocusedBorderColor = NexioColors.Border,
+                focusedLabelColor = NexioColors.TextSecondary,
+                unfocusedLabelColor = NexioColors.TextTertiary,
+                cursorColor = NexioColors.FocusRing
             )
         )
 
         Text(
             text = stringResource(R.string.library_list_privacy),
             style = MaterialTheme.typography.bodyMedium,
-            color = NuvioTheme.extendedColors.textSecondary
+            color = NexioTheme.extendedColors.textSecondary
         )
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -881,8 +881,8 @@ private fun ListEditorDialog(
                     onClick = { onPrivacyChanged(privacy) },
                     enabled = !pending,
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = if (selected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(privacy.apiValue.replaceFirstChar { it.uppercase() })
@@ -895,8 +895,8 @@ private fun ListEditorDialog(
             enabled = !pending,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(if (pending) "Saving..." else "Save")
@@ -911,7 +911,7 @@ private fun ConfirmDeleteDialog(
     onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onCancel,
         title = stringResource(R.string.library_delete_title),
         subtitle = stringResource(R.string.library_delete_subtitle),
@@ -923,7 +923,7 @@ private fun ConfirmDeleteDialog(
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.colors(
                 containerColor = Color(0xFF4A2323),
-                contentColor = NuvioColors.TextPrimary
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(stringResource(R.string.library_list_delete))

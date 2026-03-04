@@ -42,8 +42,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -83,7 +83,7 @@ internal fun StreamSourcesSidePanel(
             .fillMaxHeight()
             .width(520.dp)
             .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-            .background(NuvioColors.BackgroundElevated)
+            .background(NexioColors.BackgroundElevated)
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
             Row(
@@ -94,7 +94,7 @@ internal fun StreamSourcesSidePanel(
                 Text(
                     text = stringResource(R.string.sources_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,7 +126,7 @@ internal fun StreamSourcesSidePanel(
                     }
                 },
                 style = MaterialTheme.typography.bodyLarge,
-                color = NuvioTheme.extendedColors.textSecondary,
+                color = NexioTheme.extendedColors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

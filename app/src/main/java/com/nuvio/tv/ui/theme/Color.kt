@@ -10,7 +10,7 @@ import com.nuvio.tv.domain.model.AppTheme
  * Background colors have subtle theme tinting.
  * Accent colors (secondary, focus) change per theme.
  */
-class NuvioColorScheme(palette: ThemeColorPalette) {
+class NexioColorScheme(palette: ThemeColorPalette) {
     // Primary Background - Theme dependent with subtle tinting
     val Background = palette.background
     val BackgroundElevated = palette.backgroundElevated
@@ -52,26 +52,26 @@ class NuvioColorScheme(palette: ThemeColorPalette) {
 }
 
 /**
- * Legacy NuvioColors object for backwards compatibility.
- * Components should migrate to using NuvioTheme.colors instead.
+ * Legacy NexioColors object for backwards compatibility.
+ * Components should migrate to using NexioTheme.colors instead.
  * This object provides the current theme's colors via composition local.
  */
-object NuvioColors {
+object NexioColors {
     // Dynamic background colors - Theme dependent with subtle tinting
     val Background: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.Background
+        get() = NexioTheme.colors.Background
 
     val BackgroundElevated: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.BackgroundElevated
+        get() = NexioTheme.colors.BackgroundElevated
 
     val BackgroundCard: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.BackgroundCard
+        get() = NexioTheme.colors.BackgroundCard
 
     // Surface colors (constant)
     val Surface = Color(0xFF1E1E1E)
@@ -100,35 +100,35 @@ object NuvioColors {
     val Secondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.Secondary
+        get() = NexioTheme.colors.Secondary
 
     val SecondaryVariant: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.SecondaryVariant
+        get() = NexioTheme.colors.SecondaryVariant
 
     val OnSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.OnSecondary
+        get() = NexioTheme.colors.OnSecondary
 
     val OnSecondaryVariant: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.OnSecondaryVariant
+        get() = NexioTheme.colors.OnSecondaryVariant
 
     val FocusRing: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.FocusRing
+        get() = NexioTheme.colors.FocusRing
 
     val FocusBackground: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.FocusBackground
+        get() = NexioTheme.colors.FocusBackground
 
     val BorderFocused: Color
         @Composable
         @ReadOnlyComposable
-        get() = NuvioTheme.colors.BorderFocused
+        get() = NexioTheme.colors.BorderFocused
 }

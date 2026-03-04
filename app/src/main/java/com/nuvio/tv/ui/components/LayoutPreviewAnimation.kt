@@ -20,7 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 /**
  * Animated preview of the classic horizontal row layout.
@@ -29,7 +29,7 @@ import com.nuvio.tv.ui.theme.NuvioColors
 @Composable
 fun ClassicLayoutPreview(
     modifier: Modifier = Modifier,
-    accentColor: Color = NuvioColors.Primary
+    accentColor: Color = NexioColors.Primary
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "classicPreview")
     val scrollOffset by infiniteTransition.animateFloat(
@@ -42,7 +42,7 @@ fun ClassicLayoutPreview(
         label = "classicScroll"
     )
 
-    val bgColor = NuvioColors.Background
+    val bgColor = NexioColors.Background
     val cardColor = accentColor.copy(alpha = 0.6f)
     val cardColorDim = accentColor.copy(alpha = 0.3f)
 
@@ -95,7 +95,7 @@ fun ClassicLayoutPreview(
 @Composable
 fun GridLayoutPreview(
     modifier: Modifier = Modifier,
-    accentColor: Color = NuvioColors.Primary
+    accentColor: Color = NexioColors.Primary
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "gridPreview")
     val scrollOffset by infiniteTransition.animateFloat(
@@ -108,7 +108,7 @@ fun GridLayoutPreview(
         label = "gridScroll"
     )
 
-    val bgColor = NuvioColors.Background
+    val bgColor = NexioColors.Background
     val cardColor = accentColor.copy(alpha = 0.5f)
     val cardColorAlt = accentColor.copy(alpha = 0.3f)
 
@@ -154,7 +154,7 @@ fun GridLayoutPreview(
 @Composable
 fun ModernLayoutPreview(
     modifier: Modifier = Modifier,
-    accentColor: Color = NuvioColors.Primary
+    accentColor: Color = NexioColors.Primary
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "modernPreview")
     val scrollOffset by infiniteTransition.animateFloat(
@@ -170,7 +170,7 @@ fun ModernLayoutPreview(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width

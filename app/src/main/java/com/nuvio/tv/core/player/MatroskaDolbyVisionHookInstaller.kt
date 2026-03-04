@@ -249,7 +249,7 @@ object MatroskaDolbyVisionHookInstaller {
                 }
                 "equals" -> proxy === args?.getOrNull(0)
                 "hashCode" -> System.identityHashCode(proxy)
-                "toString" -> "NuvioDv7MatroskaTransformerProxy(host=$host)"
+                "toString" -> "NEXIODv7MatroskaTransformerProxy(host=$host)"
                 else -> null
             }
         }

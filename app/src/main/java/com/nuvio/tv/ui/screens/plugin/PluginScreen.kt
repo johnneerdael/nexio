@@ -86,7 +86,7 @@ import com.nuvio.tv.domain.model.LocalScraperResult
 import com.nuvio.tv.domain.model.PluginRepository
 import com.nuvio.tv.domain.model.ScraperInfo
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -106,7 +106,7 @@ fun PluginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 48.dp, vertical = 24.dp)
     ) {
         PluginScreenContent(
@@ -171,7 +171,7 @@ fun PluginScreenContent(
                         androidx.tv.material3.Text(
                             text = stringResource(R.string.plugin_readonly_notice),
                             style = androidx.tv.material3.MaterialTheme.typography.bodyMedium,
-                            color = com.nuvio.tv.ui.theme.NuvioColors.TextSecondary,
+                            color = com.nuvio.tv.ui.theme.NexioColors.TextSecondary,
                             modifier = Modifier.padding(16.dp)
                         )
                     }
@@ -204,7 +204,7 @@ fun PluginScreenContent(
                 Text(
                     text = stringResource(R.string.plugin_repositories_section, uiState.repositories.size),
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
             }
 
@@ -234,7 +234,7 @@ fun PluginScreenContent(
                     Text(
                         text = stringResource(R.string.plugin_providers_section, uiState.scrapers.size),
                         style = MaterialTheme.typography.titleLarge,
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                 }
 
@@ -301,7 +301,7 @@ private fun PluginHeader(
             Text(
                 text = stringResource(R.string.plugin_title),
                 style = MaterialTheme.typography.headlineMedium,
-                color = NuvioColors.Secondary
+                color = NexioColors.Secondary
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -309,7 +309,7 @@ private fun PluginHeader(
             Text(
                 text = stringResource(R.string.plugin_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
         }
 
@@ -320,12 +320,12 @@ private fun PluginHeader(
                 }
             },
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.FocusBackground
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.FocusBackground
             ),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(12.dp)
                 )
             ),
@@ -340,14 +340,14 @@ private fun PluginHeader(
                 Text(
                     text = if (pluginsEnabled) stringResource(R.string.plugin_enabled) else stringResource(R.string.plugin_disabled),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (pluginsEnabled) NuvioColors.Secondary else NuvioColors.TextSecondary
+                    color = if (pluginsEnabled) NexioColors.Secondary else NexioColors.TextSecondary
                 )
                 Switch(
                     checked = pluginsEnabled,
                     onCheckedChange = null,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = NuvioColors.Secondary,
-                        checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f)
+                        checkedThumbColor = NexioColors.Secondary,
+                        checkedTrackColor = NexioColors.Secondary.copy(alpha = 0.3f)
                     )
                 )
             }
@@ -377,14 +377,14 @@ private fun AddRepositoryInline(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
+        colors = CardDefaults.cardColors(containerColor = NexioColors.BackgroundCard),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 text = stringResource(R.string.plugin_add_repository),
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(12.dp))
             Row(
@@ -397,16 +397,16 @@ private fun AddRepositoryInline(
                     onClick = { isEditing = true },
                     modifier = Modifier.weight(1f),
                     colors = ClickableSurfaceDefaults.colors(
-                        containerColor = NuvioColors.BackgroundElevated,
-                        focusedContainerColor = NuvioColors.BackgroundElevated
+                        containerColor = NexioColors.BackgroundElevated,
+                        focusedContainerColor = NexioColors.BackgroundElevated
                     ),
                     border = ClickableSurfaceDefaults.border(
                         border = Border(
-                            border = BorderStroke(1.dp, NuvioColors.Border),
+                            border = BorderStroke(1.dp, NexioColors.Border),
                             shape = RoundedCornerShape(12.dp)
                         ),
                         focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                             shape = RoundedCornerShape(12.dp)
                         )
                     ),
@@ -440,15 +440,15 @@ private fun AddRepositoryInline(
                                 }
                             ),
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = NuvioColors.TextPrimary
+                                color = NexioColors.TextPrimary
                             ),
-                            cursorBrush = SolidColor(if (isEditing) NuvioColors.Primary else Color.Transparent),
+                            cursorBrush = SolidColor(if (isEditing) NexioColors.Primary else Color.Transparent),
                             decorationBox = { innerTextField ->
                                 if (url.isEmpty()) {
                                     Text(
                                         text = "https://example.com/manifest.json",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = NuvioColors.TextTertiary
+                                        color = NexioColors.TextTertiary
                                     )
                                 }
                                 innerTextField()
@@ -466,14 +466,14 @@ private fun AddRepositoryInline(
                     },
                     enabled = !isLoading && url.isNotBlank(),
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Secondary,
-                        focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = NuvioColors.OnSecondary,
-                        focusedContentColor = NuvioColors.OnSecondaryVariant
+                        containerColor = NexioColors.Secondary,
+                        focusedContainerColor = NexioColors.SecondaryVariant,
+                        contentColor = NexioColors.OnSecondary,
+                        focusedContentColor = NexioColors.OnSecondaryVariant
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                             shape = RoundedCornerShape(50)
                         )
                     )
@@ -505,12 +505,12 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(18.dp)
             )
         ),
@@ -529,19 +529,19 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                     imageVector = Icons.Default.QrCode2,
                     contentDescription = null,
                     modifier = Modifier.size(28.dp),
-                    tint = if (isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
+                    tint = if (isFocused) NexioColors.Secondary else NexioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
                         text = stringResource(R.string.plugin_manage_from_phone_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                     Text(
                         text = stringResource(R.string.plugin_manage_from_phone_subtitle),
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -549,7 +549,7 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                 imageVector = Icons.Default.PhoneAndroid,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = NuvioColors.TextSecondary
+                tint = NexioColors.TextSecondary
             )
         }
     }
@@ -584,7 +584,7 @@ private fun QrCodeOverlay(
             Text(
                 text = stringResource(R.string.plugin_qr_instruction),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
 
@@ -605,7 +605,7 @@ private fun QrCodeOverlay(
                 Text(
                     text = serverUrl,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -616,12 +616,12 @@ private fun QrCodeOverlay(
                 onClick = onClose,
                 modifier = Modifier.focusRequester(focusRequester),
                 colors = ClickableSurfaceDefaults.colors(
-                    containerColor = NuvioColors.Surface,
-                    focusedContainerColor = NuvioColors.FocusBackground
+                    containerColor = NexioColors.Surface,
+                    focusedContainerColor = NexioColors.FocusBackground
                 ),
                 border = ClickableSurfaceDefaults.border(
                     focusedBorder = Border(
-                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        border = BorderStroke(2.dp, NexioColors.FocusRing),
                         shape = RoundedCornerShape(50)
                     )
                 ),
@@ -636,12 +636,12 @@ private fun QrCodeOverlay(
                         imageVector = Icons.Default.Close,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = NuvioColors.TextPrimary
+                        tint = NexioColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.plugin_qr_close),
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                 }
             }
@@ -676,7 +676,7 @@ private fun ConfirmRepoChangesDialog(
                 .width(560.dp)
                 .heightIn(max = 640.dp),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.SurfaceVariant
+                containerColor = NexioColors.SurfaceVariant
             ),
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
         ) {
@@ -687,7 +687,7 @@ private fun ConfirmRepoChangesDialog(
                 Text(
                     text = stringResource(R.string.plugin_confirm_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -695,7 +695,7 @@ private fun ConfirmRepoChangesDialog(
                 Text(
                     text = stringResource(R.string.plugin_confirm_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -705,7 +705,7 @@ private fun ConfirmRepoChangesDialog(
                         .fillMaxWidth()
                         .heightIn(max = 320.dp)
                         .background(
-                            color = NuvioColors.Surface,
+                            color = NexioColors.Surface,
                             shape = RoundedCornerShape(12.dp)
                         )
                 ) {
@@ -719,7 +719,7 @@ private fun ConfirmRepoChangesDialog(
                             Text(
                                 text = stringResource(R.string.plugin_confirm_added),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = NuvioColors.Success,
+                                color = NexioColors.Success,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
@@ -728,7 +728,7 @@ private fun ConfirmRepoChangesDialog(
                                 Text(
                                     text = "+ $url",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.Success,
+                                    color = NexioColors.Success,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp, bottom = 2.dp)
@@ -741,7 +741,7 @@ private fun ConfirmRepoChangesDialog(
                             Text(
                                 text = stringResource(R.string.plugin_confirm_removed),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = NuvioColors.Error,
+                                color = NexioColors.Error,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
@@ -750,7 +750,7 @@ private fun ConfirmRepoChangesDialog(
                                 Text(
                                     text = "- $url",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.Error,
+                                    color = NexioColors.Error,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp, bottom = 2.dp)
@@ -763,7 +763,7 @@ private fun ConfirmRepoChangesDialog(
                             Text(
                                 text = stringResource(R.string.plugin_confirm_no_changes),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextSecondary
+                                color = NexioColors.TextSecondary
                             )
                         }
                     }
@@ -772,7 +772,7 @@ private fun ConfirmRepoChangesDialog(
                 Text(
                     text = stringResource(R.string.plugin_confirm_total, pendingChange.proposedUrls.size),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -787,12 +787,12 @@ private fun ConfirmRepoChangesDialog(
                         Surface(
                             onClick = onReject,
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = NuvioColors.Surface,
-                                focusedContainerColor = NuvioColors.FocusBackground
+                                containerColor = NexioColors.Surface,
+                                focusedContainerColor = NexioColors.FocusBackground
                             ),
                             border = ClickableSurfaceDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = RoundedCornerShape(50)
                                 )
                             ),
@@ -806,12 +806,12 @@ private fun ConfirmRepoChangesDialog(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
-                                    tint = NuvioColors.TextPrimary
+                                    tint = NexioColors.TextPrimary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = stringResource(R.string.plugin_confirm_reject),
-                                    color = NuvioColors.TextPrimary
+                                    color = NexioColors.TextPrimary
                                 )
                             }
                         }
@@ -820,12 +820,12 @@ private fun ConfirmRepoChangesDialog(
                             onClick = onConfirm,
                             modifier = Modifier.focusRequester(focusRequester),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = NuvioColors.Secondary,
-                                focusedContainerColor = NuvioColors.SecondaryVariant
+                                containerColor = NexioColors.Secondary,
+                                focusedContainerColor = NexioColors.SecondaryVariant
                             ),
                             border = ClickableSurfaceDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = RoundedCornerShape(50)
                                 )
                             ),
@@ -834,7 +834,7 @@ private fun ConfirmRepoChangesDialog(
                             Text(
                                 text = stringResource(R.string.plugin_confirm_confirm),
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                                color = NuvioColors.OnSecondary
+                                color = NexioColors.OnSecondary
                             )
                         }
                     }
@@ -856,7 +856,7 @@ private fun RepositoryCard(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.BackgroundCard,
+                color = NexioColors.BackgroundCard,
                 shape = RoundedCornerShape(12.dp)
             )
     ) {
@@ -871,18 +871,18 @@ private fun RepositoryCard(
                 Text(
                     text = repository.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.plugin_providers_count, repository.scraperCount),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
                 Text(
                     text = stringResource(R.string.plugin_updated_format, formatDate(repository.lastUpdated)),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
 
@@ -891,10 +891,10 @@ private fun RepositoryCard(
                     onClick = onRefresh,
                     enabled = !isLoading,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Surface,
-                        contentColor = NuvioColors.TextSecondary,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = NuvioColors.Primary
+                        containerColor = NexioColors.Surface,
+                        contentColor = NexioColors.TextSecondary,
+                        focusedContainerColor = NexioColors.FocusBackground,
+                        focusedContentColor = NexioColors.Primary
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                 ) {
@@ -908,10 +908,10 @@ private fun RepositoryCard(
                     onClick = onRemove,
                     enabled = !isLoading,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Surface,
-                        contentColor = NuvioColors.TextSecondary,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = NuvioColors.Error
+                        containerColor = NexioColors.Surface,
+                        contentColor = NexioColors.TextSecondary,
+                        focusedContainerColor = NexioColors.FocusBackground,
+                        focusedContentColor = NexioColors.Error
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                 ) {
@@ -945,7 +945,7 @@ private fun ScraperCard(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.BackgroundCard,
+                color = NexioColors.BackgroundCard,
                 shape = RoundedCornerShape(12.dp)
             )
     ) {
@@ -967,7 +967,7 @@ private fun ScraperCard(
                         Text(
                             text = scraper.name,
                             style = MaterialTheme.typography.titleMedium,
-                            color = NuvioColors.TextPrimary
+                            color = NexioColors.TextPrimary
                         )
 
                         // Type badges
@@ -981,7 +981,7 @@ private fun ScraperCard(
                     Text(
                         text = "Version ${scraper.version}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
 
@@ -994,10 +994,10 @@ private fun ScraperCard(
                         onClick = onTest,
                         enabled = !isTesting && scraper.enabled,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.Surface,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.Surface,
+                            contentColor = NexioColors.TextPrimary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -1020,8 +1020,8 @@ private fun ScraperCard(
                             checked = scraper.enabled,
                             onCheckedChange = onToggle,
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = NuvioColors.Secondary,
-                                checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f)
+                                checkedThumbColor = NexioColors.Secondary,
+                                checkedTrackColor = NexioColors.Secondary.copy(alpha = 0.3f)
                             )
                         )
                     }
@@ -1038,7 +1038,7 @@ private fun ScraperCard(
                     Text(
                         text = stringResource(R.string.plugin_test_results, testResults?.size ?: 0),
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -1051,7 +1051,7 @@ private fun ScraperCard(
                         Text(
                             text = stringResource(R.string.plugin_and_more, testResults!!.size - 3),
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextSecondary
+                            color = NexioColors.TextSecondary
                         )
                     }
                 }
@@ -1065,7 +1065,7 @@ private fun TypeBadge(type: String) {
     val color = when (type.lowercase()) {
         "movie" -> Color(0xFF4CAF50)
         "series", "show", "tv" -> Color(0xFF2196F3)
-        else -> NuvioColors.TextSecondary
+        else -> NexioColors.TextSecondary
     }
 
     Box(
@@ -1090,7 +1090,7 @@ private fun TestResultItem(result: LocalScraperResult) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.Surface,
+                color = NexioColors.Surface,
                 shape = RoundedCornerShape(6.dp)
             )
             .padding(8.dp)
@@ -1104,7 +1104,7 @@ private fun TestResultItem(result: LocalScraperResult) {
                 Text(
                     text = result.title,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1112,7 +1112,7 @@ private fun TestResultItem(result: LocalScraperResult) {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.labelSmall,
-                        color = NuvioColors.Primary
+                        color = NexioColors.Primary
                     )
                 }
             }
@@ -1140,7 +1140,7 @@ private fun EmptyState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodyLarge,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             textAlign = TextAlign.Center
         )
     }

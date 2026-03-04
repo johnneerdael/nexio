@@ -11,7 +11,7 @@ import androidx.tv.material3.darkColorScheme
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 
-data class NuvioExtendedColors(
+data class NexioExtendedColors(
     val backgroundElevated: Color,
     val backgroundCard: Color,
     val textSecondary: Color,
@@ -21,12 +21,12 @@ data class NuvioExtendedColors(
     val rating: Color
 )
 
-val LocalNuvioColors = staticCompositionLocalOf {
-    NuvioColorScheme(ThemeColors.Ocean)
+val LocalNexioColors = staticCompositionLocalOf {
+    NexioColorScheme(ThemeColors.Ocean)
 }
 
-val LocalNuvioExtendedColors = staticCompositionLocalOf {
-    NuvioExtendedColors(
+val LocalNexioExtendedColors = staticCompositionLocalOf {
+    NexioExtendedColors(
         backgroundElevated = Color(0xFF1A1A1A),
         backgroundCard = Color(0xFF242424),
         textSecondary = Color(0xFFB3B3B3),
@@ -41,13 +41,13 @@ val LocalAppTheme = staticCompositionLocalOf { AppTheme.WHITE }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun NuvioTheme(
+fun NexioTheme(
     appTheme: AppTheme = AppTheme.WHITE,
     appFont: AppFont = AppFont.INTER,
     content: @Composable () -> Unit
 ) {
     val palette = ThemeColors.getColorPalette(appTheme)
-    val colorScheme = NuvioColorScheme(palette)
+    val colorScheme = NexioColorScheme(palette)
 
     val materialColorScheme = darkColorScheme(
         primary = colorScheme.Primary,
@@ -63,7 +63,7 @@ fun NuvioTheme(
         error = colorScheme.Error
     )
 
-    val extendedColors = NuvioExtendedColors(
+    val extendedColors = NexioExtendedColors(
         backgroundElevated = colorScheme.BackgroundElevated,
         backgroundCard = colorScheme.BackgroundCard,
         textSecondary = colorScheme.TextSecondary,
@@ -74,28 +74,28 @@ fun NuvioTheme(
     )
 
     CompositionLocalProvider(
-        LocalNuvioColors provides colorScheme,
-        LocalNuvioExtendedColors provides extendedColors,
+        LocalNexioColors provides colorScheme,
+        LocalNexioExtendedColors provides extendedColors,
         LocalAppTheme provides appTheme
     ) {
         MaterialTheme(
             colorScheme = materialColorScheme,
-            typography = buildNuvioTypography(getFontFamily(appFont)),
+            typography = buildNexioTypography(getFontFamily(appFont)),
             content = content
         )
     }
 }
 
-object NuvioTheme {
-    val colors: NuvioColorScheme
+object NexioTheme {
+    val colors: NexioColorScheme
         @Composable
         @ReadOnlyComposable
-        get() = LocalNuvioColors.current
+        get() = LocalNexioColors.current
 
-    val extendedColors: NuvioExtendedColors
+    val extendedColors: NexioExtendedColors
         @Composable
         @ReadOnlyComposable
-        get() = LocalNuvioExtendedColors.current
+        get() = LocalNexioExtendedColors.current
 
     val currentTheme: AppTheme
         @Composable

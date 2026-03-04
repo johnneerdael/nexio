@@ -40,7 +40,7 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.ui.components.TrailerPlayer
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 internal fun ModernHeroMediaLayer(
@@ -220,7 +220,7 @@ internal fun HeroTitleBlock(
             Text(
                 text = preview.title,
                 style = scaledTitleStyle,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -236,7 +236,7 @@ internal fun HeroTitleBlock(
                 Text(
                     text = contentType,
                     style = labelMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -250,7 +250,7 @@ internal fun HeroTitleBlock(
                 Text(
                     text = genre,
                     style = labelMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -272,7 +272,7 @@ internal fun HeroTitleBlock(
                         Text(
                             text = yearText,
                             style = labelMedium,
-                            color = NuvioColors.TextSecondary,
+                            color = NexioColors.TextSecondary,
                             maxLines = 1
                         )
                     }
@@ -290,7 +290,7 @@ internal fun HeroTitleBlock(
                             Text(
                                 text = imdbText,
                                 style = labelMedium,
-                                color = NuvioColors.TextSecondary,
+                                color = NexioColors.TextSecondary,
                                 maxLines = 1
                             )
                         }
@@ -304,7 +304,7 @@ internal fun HeroTitleBlock(
             Text(
                 text = description,
                 style = scaledDescriptionStyle,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 maxLines = descriptionMaxLines,
                 overflow = TextOverflow.Ellipsis
             )
@@ -318,6 +318,6 @@ private fun HeroMetaDivider(scale: Float) {
         modifier = Modifier
             .size((4.dp * scale).coerceAtLeast(2.dp))
             .clip(RoundedCornerShape(percent = 50))
-            .background(NuvioColors.TextTertiary.copy(alpha = 0.78f))
+            .background(NexioColors.TextTertiary.copy(alpha = 0.78f))
     )
 }

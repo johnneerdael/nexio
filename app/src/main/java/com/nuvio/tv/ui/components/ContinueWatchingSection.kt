@@ -53,8 +53,8 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
 import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
@@ -117,7 +117,7 @@ fun ContinueWatchingSection(
             Text(
                 text = stringResource(R.string.continue_watching),
                 style = MaterialTheme.typography.headlineMedium,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
         }
 
@@ -285,7 +285,7 @@ fun ContinueWatchingCard(
             .build()
     }
 
-    val bgColor = NuvioColors.Background
+    val bgColor = NexioColors.Background
     val overlayBrush = remember(bgColor) {
         Brush.verticalGradient(
             colorStops = arrayOf(
@@ -332,12 +332,12 @@ fun ContinueWatchingCard(
             },
         shape = CardDefaults.shape(shape = CwCardShape),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = CwCardShape
             )
         ),
@@ -381,14 +381,14 @@ fun ContinueWatchingCard(
                         Text(
                             text = episodeStr,
                             style = MaterialTheme.typography.labelMedium,
-                            color = NuvioColors.Primary
+                            color = NexioColors.Primary
                         )
                     }
 
                     Text(
                         text = titleText,
                         style = MaterialTheme.typography.titleSmall,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -398,7 +398,7 @@ fun ContinueWatchingCard(
                         Text(
                             text = title,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary,
+                            color = NexioTheme.extendedColors.textSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -417,7 +417,7 @@ fun ContinueWatchingCard(
                     Text(
                         text = badgeText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                 }
 
@@ -436,7 +436,7 @@ fun ContinueWatchingCard(
                                 .fillMaxWidth(progressFraction)
                                 .clip(RoundedCornerShape(1.5.dp))
                                 .height(3.dp)
-                                .background(NuvioColors.Primary)
+                                .background(NexioColors.Primary)
                         )
                     }
                 }
@@ -465,7 +465,7 @@ fun ContinueWatchingOptionsDialog(
         detailsFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = title,
         subtitle = stringResource(R.string.cw_dialog_subtitle)
@@ -476,8 +476,8 @@ fun ContinueWatchingOptionsDialog(
                 .fillMaxWidth()
                 .focusRequester(detailsFocusRequester),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
@@ -487,8 +487,8 @@ fun ContinueWatchingOptionsDialog(
             Button(
                 onClick = onStartFromBeginning,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -499,8 +499,8 @@ fun ContinueWatchingOptionsDialog(
         Button(
             onClick = onRemove,
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             ),
             modifier = Modifier.fillMaxWidth()
         ) {

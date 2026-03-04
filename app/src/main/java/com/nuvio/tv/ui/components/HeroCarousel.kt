@@ -49,7 +49,7 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.domain.model.MetaPreview
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
 private const val AUTO_ADVANCE_INTERVAL_MS = 10000L
@@ -131,7 +131,7 @@ fun HeroCarousel(
         }
 
         // Indicator dots — pre-compute colors + shape to avoid reallocation per dot
-        val focusRing = NuvioColors.FocusRing
+        val focusRing = NexioColors.FocusRing
         val dotColorFocusedInactive = remember(focusRing) { focusRing.copy(alpha = 0.4f) }
         val dotColorUnfocusedInactive = remember { Color.White.copy(alpha = 0.3f) }
         val dotShape = remember { RoundedCornerShape(3.dp) }
@@ -200,7 +200,7 @@ private fun HeroCarouselSlide(
     var logoLoadFailed by remember(item.logo) { mutableStateOf(false) }
     val showLogo = !item.logo.isNullOrBlank() && !logoLoadFailed
 
-    val bgColor = NuvioColors.Background
+    val bgColor = NexioColors.Background
     val bottomGradient = remember(bgColor) {
         Brush.verticalGradient(
             colorStops = arrayOf(

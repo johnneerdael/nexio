@@ -24,7 +24,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -39,14 +39,14 @@ fun AuthSignInScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background),
+            .background(NexioColors.Background),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.5f)
                 .background(
-                    color = NuvioColors.BackgroundElevated,
+                    color = NexioColors.BackgroundElevated,
                     shape = RoundedCornerShape(20.dp)
                 )
                 .padding(32.dp),
@@ -55,24 +55,24 @@ fun AuthSignInScreen(
             Text(
                 text = stringResource(R.string.auth_signin_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = stringResource(R.string.auth_signin_tv_disabled),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(22.dp))
             Button(
                 onClick = onNavigateToQrSignIn,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.Secondary,
-                    focusedContainerColor = NuvioColors.SecondaryVariant,
-                    contentColor = NuvioColors.OnSecondary,
-                    focusedContentColor = NuvioColors.OnSecondaryVariant
+                    containerColor = NexioColors.Secondary,
+                    focusedContainerColor = NexioColors.SecondaryVariant,
+                    contentColor = NexioColors.OnSecondary,
+                    focusedContentColor = NexioColors.OnSecondaryVariant
                 ),
                 shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                 modifier = Modifier.fillMaxWidth()

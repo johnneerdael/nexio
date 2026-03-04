@@ -59,7 +59,7 @@ import com.nuvio.tv.data.local.SubtitleOrganizationMode
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -247,13 +247,13 @@ private fun SubtitleTab(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isSelected) Color.White.copy(alpha = 0.2f) else NuvioColors.Secondary)
+                        .background(if (isSelected) Color.White.copy(alpha = 0.2f) else NexioColors.Secondary)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = badgeCount.toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) Color.White else NuvioColors.OnSecondary
+                        color = if (isSelected) Color.White else NexioColors.OnSecondary
                     )
                 }
             }
@@ -658,7 +658,7 @@ private fun AddonSubtitleItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.Secondary,
+                    tint = NexioColors.Secondary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -913,7 +913,7 @@ private fun StyleColorChip(
     var isFocused by remember { mutableStateOf(false) }
 
     val borderModifier = when {
-        isFocused -> Modifier.border(2.dp, NuvioColors.FocusRing, CircleShape)
+        isFocused -> Modifier.border(2.dp, NexioColors.FocusRing, CircleShape)
         isSelected -> Modifier.border(2.dp, Color.White, CircleShape)
         else -> Modifier
     }
@@ -1008,7 +1008,7 @@ internal fun TrackItem(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.Secondary,
+                    tint = NexioColors.Secondary,
                     modifier = Modifier.size(20.dp)
                 )
             }

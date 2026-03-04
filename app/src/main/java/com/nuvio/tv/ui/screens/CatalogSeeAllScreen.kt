@@ -48,7 +48,7 @@ import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.screens.home.HomeEvent
 import com.nuvio.tv.ui.screens.home.HomeViewModel
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
 import androidx.compose.runtime.withFrameNanos
@@ -142,7 +142,7 @@ fun CatalogSeeAllScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 48.dp, vertical = 24.dp)
     ) {
         // Header
@@ -153,7 +153,7 @@ fun CatalogSeeAllScreen(
             Text(
                 text = catalogRow?.catalogName ?: "Catalog",
                 style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
         }
 
@@ -162,7 +162,7 @@ fun CatalogSeeAllScreen(
                 Text(
                     text = stringResource(R.string.catalog_see_all_from, addonName),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
         }

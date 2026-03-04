@@ -59,8 +59,8 @@ import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.data.local.VodCacheSizeMode
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 
 private enum class PlaybackSection {
     GENERAL,
@@ -463,7 +463,7 @@ private fun LazyListScope.playbackCollapsibleSection(
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
                     .height(1.dp)
-                    .background(NuvioColors.Border)
+                    .background(NexioColors.Border)
             )
         }
     }
@@ -700,12 +700,12 @@ private fun PlayerPreferenceDialog(
     }
 
     val options = listOf(
-        Triple(PlayerPreference.INTERNAL, stringResource(R.string.playback_player_internal), "Use NuvioTV's built-in player"),
+        Triple(PlayerPreference.INTERNAL, stringResource(R.string.playback_player_internal), "Use NEXIO's built-in player"),
         Triple(PlayerPreference.EXTERNAL, stringResource(R.string.playback_player_external), stringResource(R.string.playback_player_external_desc)),
         Triple(PlayerPreference.ASK_EVERY_TIME, stringResource(R.string.playback_player_ask), stringResource(R.string.playback_player_ask_desc))
     )
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.playback_player),
         width = 420.dp,
@@ -733,8 +733,8 @@ private fun PlayerPreferenceDialog(
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -748,13 +748,13 @@ private fun PlayerPreferenceDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = description,
-                                    color = NuvioColors.TextSecondary,
+                                    color = NexioColors.TextSecondary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -763,7 +763,7 @@ private fun PlayerPreferenceDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary,
+                                    tint = NexioColors.Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

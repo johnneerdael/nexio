@@ -46,7 +46,7 @@ import com.nuvio.tv.ui.components.GridLayoutPreview
 import com.nuvio.tv.ui.components.ModernLayoutPreview
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsEvent
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsViewModel
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -64,7 +64,7 @@ fun LayoutSelectionScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         Column(
             modifier = Modifier
@@ -76,7 +76,7 @@ fun LayoutSelectionScreen(
             Text(
                 text = stringResource(R.string.layout_selection_welcome),
                 style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -84,7 +84,7 @@ fun LayoutSelectionScreen(
             Text(
                 text = stringResource(R.string.layout_selection_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -133,12 +133,12 @@ fun LayoutSelectionScreen(
                     shape = RoundedCornerShape(24.dp)
                 ),
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.Primary,
-                    focusedContainerColor = NuvioColors.FocusBackground
+                    containerColor = NexioColors.Primary,
+                    focusedContainerColor = NexioColors.FocusBackground
                 ),
                 border = ButtonDefaults.border(
                     focusedBorder = Border(
-                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        border = BorderStroke(2.dp, NexioColors.FocusRing),
                         shape = RoundedCornerShape(24.dp)
                     )
                 )
@@ -172,13 +172,13 @@ private fun LayoutOptionCard(
         modifier = modifier
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             border = Border.None,
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(16.dp)
             )
         ),
@@ -220,7 +220,7 @@ private fun LayoutOptionCard(
                         HomeLayout.MODERN -> stringResource(R.string.layout_modern)
                     },
                     style = MaterialTheme.typography.titleLarge,
-                    color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                    color = if (isSelected || isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary
                 )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -232,7 +232,7 @@ private fun LayoutOptionCard(
                     HomeLayout.MODERN -> stringResource(R.string.layout_modern_desc)
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = NuvioColors.TextTertiary
+                color = NexioColors.TextTertiary
             )
             }
 
@@ -240,7 +240,7 @@ private fun LayoutOptionCard(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.FocusRing,
+                    tint = NexioColors.FocusRing,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)

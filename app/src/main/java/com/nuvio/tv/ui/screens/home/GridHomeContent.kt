@@ -55,7 +55,7 @@ import com.nuvio.tv.ui.components.GridContinueWatchingSection
 import com.nuvio.tv.ui.components.HeroCarousel
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 /** Minimum interval between processed key repeat events to prevent HWUI overload. */
 private const val KEY_REPEAT_THROTTLE_MS = 80L
@@ -429,7 +429,7 @@ private fun SectionDivider(
         Text(
             text = catalogName,
             style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
     }
 }
@@ -439,7 +439,7 @@ private fun StickyCategoryHeader(
     sectionName: String,
     modifier: Modifier = Modifier
 ) {
-    val bgColor = NuvioColors.Background
+    val bgColor = NexioColors.Background
     val headerGradient = remember(bgColor) {
         Brush.verticalGradient(
             colorStops = arrayOf(
@@ -459,7 +459,7 @@ private fun StickyCategoryHeader(
         Text(
             text = sectionName,
             style = MaterialTheme.typography.titleLarge,
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
     }
 }
@@ -483,12 +483,12 @@ private fun SeeAllGridCard(
             shape = seeAllCardShape
         ),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
                 shape = seeAllCardShape
             )
         ),
@@ -508,13 +508,13 @@ private fun SeeAllGridCard(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = stringResource(R.string.action_see_all),
                     modifier = Modifier.size(32.dp),
-                    tint = NuvioColors.TextSecondary
+                    tint = NexioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.action_see_all),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
         }

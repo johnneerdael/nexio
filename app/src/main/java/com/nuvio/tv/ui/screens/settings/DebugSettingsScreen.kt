@@ -37,9 +37,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.components.NexioDialog
 import com.nuvio.tv.ui.screens.account.InputField
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 fun DebugSettingsContent(
@@ -52,7 +52,7 @@ fun DebugSettingsContent(
         Text(
             text = stringResource(R.string.debug_title),
             style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.Secondary
+            color = NexioColors.Secondary
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -60,7 +60,7 @@ fun DebugSettingsContent(
         Text(
             text = stringResource(R.string.debug_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
+            color = NexioColors.TextSecondary
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -74,7 +74,7 @@ fun DebugSettingsContent(
                 Text(
                     text = stringResource(R.string.debug_section_popup),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
@@ -93,7 +93,7 @@ fun DebugSettingsContent(
                 Text(
                     text = stringResource(R.string.debug_section_features),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
@@ -131,7 +131,7 @@ fun DebugSettingsContent(
                 Text(
                     text = stringResource(R.string.debug_section_account),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
@@ -149,7 +149,7 @@ fun DebugSettingsContent(
     }
 
     if (showErrorDialog) {
-        NuvioDialog(
+        NexioDialog(
             onDismiss = { showErrorDialog = false },
             title = stringResource(R.string.debug_error_dialog_title),
             subtitle = stringResource(R.string.debug_error_dialog_subtitle)
@@ -174,12 +174,12 @@ private fun DebugToggleCard(
         modifier = Modifier
             .fillMaxWidth(),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(12.dp)
             )
         ),
@@ -197,13 +197,13 @@ private fun DebugToggleCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
 
@@ -213,10 +213,10 @@ private fun DebugToggleCard(
                 checked = checked,
                 onCheckedChange = { onToggle(it) },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = NuvioColors.Secondary,
-                    checkedTrackColor = NuvioColors.Secondary.copy(alpha = 0.3f),
-                    uncheckedThumbColor = NuvioColors.TextSecondary,
-                    uncheckedTrackColor = NuvioColors.BackgroundCard
+                    checkedThumbColor = NexioColors.Secondary,
+                    checkedTrackColor = NexioColors.Secondary.copy(alpha = 0.3f),
+                    uncheckedThumbColor = NexioColors.TextSecondary,
+                    uncheckedTrackColor = NexioColors.BackgroundCard
                 )
             )
         }
@@ -237,12 +237,12 @@ private fun DebugActionCard(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(12.dp)
             )
         ),
@@ -257,13 +257,13 @@ private fun DebugActionCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
         }
     }
@@ -282,8 +282,8 @@ private fun DebugDialogButton(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.Secondary
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.Secondary
         ),
         shape = CardDefaults.shape(RoundedCornerShape(8.dp)),
         scale = CardDefaults.scale(focusedScale = 1.0f)
@@ -291,7 +291,7 @@ private fun DebugDialogButton(
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+            color = if (isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp, horizontal = 16.dp),
@@ -318,12 +318,12 @@ private fun DebugSignInCard(
         Text(
             text = stringResource(R.string.debug_manual_signin_title),
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
         Text(
             text = stringResource(R.string.debug_manual_signin_subtitle),
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary
+            color = NexioColors.TextSecondary
         )
 
         InputField(
@@ -344,7 +344,7 @@ private fun DebugSignInCard(
             Text(
                 text = result,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (result.startsWith("Failed")) NuvioColors.Error else NuvioColors.Secondary
+                color = if (result.startsWith("Failed")) NexioColors.Error else NexioColors.Secondary
             )
         }
 

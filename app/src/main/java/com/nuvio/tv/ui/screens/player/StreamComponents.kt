@@ -53,8 +53,8 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -79,20 +79,20 @@ internal fun StreamItem(
                 } else false
             } else Modifier),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundElevated,
-            focusedContainerColor = NuvioColors.BackgroundElevated
+            containerColor = NexioColors.BackgroundElevated,
+            focusedContainerColor = NexioColors.BackgroundElevated
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
         border = CardDefaults.border(
             border = Border(
                 border = BorderStroke(
                     1.dp,
-                    if (isCurrentStream) NuvioColors.Primary.copy(alpha = 0.65f) else Color.Transparent
+                    if (isCurrentStream) NexioColors.Primary.copy(alpha = 0.65f) else Color.Transparent
                 ),
                 shape = RoundedCornerShape(12.dp)
             ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(12.dp)
             )
         ),
@@ -116,20 +116,20 @@ internal fun StreamItem(
                     Text(
                         text = stream.getDisplayName(),
                         style = MaterialTheme.typography.titleMedium,
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
 
                     if (isCurrentStream) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(NuvioColors.Primary.copy(alpha = 0.2f))
+                                .background(NexioColors.Primary.copy(alpha = 0.2f))
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = stringResource(R.string.sources_playing),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = NuvioColors.Primary
+                                color = NexioColors.Primary
                             )
                         }
                     }
@@ -140,7 +140,7 @@ internal fun StreamItem(
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary
+                            color = NexioTheme.extendedColors.textSecondary
                         )
                     }
                 }
@@ -149,13 +149,13 @@ internal fun StreamItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (stream.isTorrent()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NuvioColors.Secondary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NexioColors.Secondary)
                     }
                     if (stream.isYouTube()) {
                         StreamTypeChip(text = stringResource(R.string.stream_type_youtube), color = Color(0xFFFF0000))
                     }
                     if (stream.isExternal()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NuvioColors.Primary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NexioColors.Primary)
                     }
                 }
             }
@@ -182,7 +182,7 @@ internal fun StreamItem(
                 Text(
                     text = stream.addonName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = NuvioTheme.extendedColors.textTertiary,
+                    color = NexioTheme.extendedColors.textTertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

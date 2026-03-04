@@ -52,8 +52,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.PosterShape
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
@@ -284,12 +284,12 @@ fun ContentCard(
                 ),
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.BackgroundCard
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.BackgroundCard
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                    border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
                     shape = cardShape
                 )
             ),
@@ -447,7 +447,7 @@ fun ContentCard(
                     Text(
                         text = metaTokens.joinToString("  •  "),
                         style = MaterialTheme.typography.labelMedium,
-                        color = NuvioTheme.extendedColors.textSecondary,
+                        color = NexioTheme.extendedColors.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -458,7 +458,7 @@ fun ContentCard(
                     Text(
                         text = description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -475,7 +475,7 @@ fun ContentCard(
                 Text(
                     text = item.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -483,7 +483,7 @@ fun ContentCard(
                     Text(
                         text = info,
                         style = MaterialTheme.typography.labelMedium,
-                        color = NuvioTheme.extendedColors.textSecondary,
+                        color = NexioTheme.extendedColors.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

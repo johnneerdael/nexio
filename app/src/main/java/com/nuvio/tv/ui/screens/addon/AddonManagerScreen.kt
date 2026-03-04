@@ -82,7 +82,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -156,7 +156,7 @@ fun AddonManagerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -167,7 +167,7 @@ fun AddonManagerScreen(
                 Text(
                     text = stringResource(R.string.addon_title),
                     style = MaterialTheme.typography.headlineMedium,
-                    color = if (showBuiltInHeader) NuvioColors.TextPrimary else Color.Transparent
+                    color = if (showBuiltInHeader) NexioColors.TextPrimary else Color.Transparent
                 )
             }
 
@@ -181,7 +181,7 @@ fun AddonManagerScreen(
                         Text(
                             text = stringResource(R.string.addon_readonly_notice),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = NuvioColors.TextSecondary,
+                            color = NexioColors.TextSecondary,
                             modifier = androidx.compose.ui.Modifier.padding(16.dp)
                         )
                     }
@@ -194,14 +194,14 @@ fun AddonManagerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .animateContentSize(),
-                        colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
+                        colors = CardDefaults.cardColors(containerColor = NexioColors.BackgroundCard),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Text(
                                 text = stringResource(R.string.addon_install_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = NuvioColors.TextPrimary
+                                color = NexioColors.TextPrimary
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(
@@ -216,16 +216,16 @@ fun AddonManagerScreen(
                                         .weight(1f)
                                         .focusRequester(surfaceFocusRequester),
                                     colors = ClickableSurfaceDefaults.colors(
-                                        containerColor = NuvioColors.BackgroundElevated,
-                                        focusedContainerColor = NuvioColors.BackgroundElevated
+                                        containerColor = NexioColors.BackgroundElevated,
+                                        focusedContainerColor = NexioColors.BackgroundElevated
                                     ),
                                     border = ClickableSurfaceDefaults.border(
                                         border = Border(
-                                            border = BorderStroke(1.dp, NuvioColors.Border),
+                                            border = BorderStroke(1.dp, NexioColors.Border),
                                             shape = RoundedCornerShape(12.dp)
                                         ),
                                         focusedBorder = Border(
-                                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                                             shape = RoundedCornerShape(12.dp)
                                         )
                                     ),
@@ -259,15 +259,15 @@ fun AddonManagerScreen(
                                                 }
                                             ),
                                             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                color = NuvioColors.TextPrimary
+                                                color = NexioColors.TextPrimary
                                             ),
-                                            cursorBrush = SolidColor(if (isEditing) NuvioColors.Primary else Color.Transparent),
+                                            cursorBrush = SolidColor(if (isEditing) NexioColors.Primary else Color.Transparent),
                                             decorationBox = { innerTextField ->
                                                 if (uiState.installUrl.isEmpty()) {
                                                     Text(
                                                         text = stringResource(R.string.addon_install_placeholder),
                                                         style = MaterialTheme.typography.bodyMedium,
-                                                        color = NuvioColors.TextTertiary
+                                                        color = NexioColors.TextTertiary
                                                     )
                                                 }
                                                 innerTextField()
@@ -286,10 +286,10 @@ fun AddonManagerScreen(
                                     enabled = !uiState.isInstalling,
                                     modifier = Modifier.focusRequester(installButtonFocusRequester),
                                     colors = ButtonDefaults.colors(
-                                        containerColor = NuvioColors.BackgroundCard,
-                                        contentColor = NuvioColors.TextPrimary,
-                                        focusedContainerColor = NuvioColors.FocusBackground,
-                                        focusedContentColor = NuvioColors.Primary
+                                        containerColor = NexioColors.BackgroundCard,
+                                        contentColor = NexioColors.TextPrimary,
+                                        focusedContainerColor = NexioColors.FocusBackground,
+                                        focusedContentColor = NexioColors.Primary
                                     ),
                                     shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                                 ) {
@@ -301,7 +301,7 @@ fun AddonManagerScreen(
                                 Text(
                                     text = uiState.error.orEmpty(),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = NuvioColors.Error,
+                                    color = NexioColors.Error,
                                     modifier = Modifier.padding(top = 10.dp)
                                 )
                             }
@@ -329,7 +329,7 @@ fun AddonManagerScreen(
                     Text(
                         text = stringResource(R.string.addon_installed_section),
                         style = MaterialTheme.typography.titleLarge,
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     if (uiState.isLoading && uiState.installedAddons.isEmpty()) {
@@ -343,7 +343,7 @@ fun AddonManagerScreen(
                     Text(
                         text = stringResource(R.string.addon_empty),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             } else {
@@ -402,12 +402,12 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(18.dp)
             )
         ),
@@ -426,19 +426,19 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                     imageVector = Icons.Default.QrCode2,
                     contentDescription = null,
                     modifier = Modifier.size(28.dp),
-                    tint = if (isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
+                    tint = if (isFocused) NexioColors.Secondary else NexioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
                         text = stringResource(R.string.addon_manage_from_phone_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                     Text(
                         text = stringResource(R.string.addon_manage_from_phone_subtitle),
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -446,7 +446,7 @@ private fun ManageFromPhoneCard(onClick: () -> Unit) {
                 imageVector = Icons.Default.PhoneAndroid,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = NuvioColors.TextSecondary
+                tint = NexioColors.TextSecondary
             )
         }
     }
@@ -463,12 +463,12 @@ private fun CatalogOrderEntryCard(onClick: () -> Unit) {
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(18.dp)
             )
         ),
@@ -487,19 +487,19 @@ private fun CatalogOrderEntryCard(onClick: () -> Unit) {
                     imageVector = Icons.Default.Reorder,
                     contentDescription = null,
                     modifier = Modifier.size(28.dp),
-                    tint = if (isFocused) NuvioColors.Secondary else NuvioColors.TextSecondary
+                    tint = if (isFocused) NexioColors.Secondary else NexioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(
                         text = stringResource(R.string.addon_reorder_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                     Text(
                         text = stringResource(R.string.addon_reorder_subtitle),
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -507,7 +507,7 @@ private fun CatalogOrderEntryCard(onClick: () -> Unit) {
                 imageVector = Icons.Default.ArrowDownward,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = NuvioColors.TextSecondary
+                tint = NexioColors.TextSecondary
             )
         }
     }
@@ -543,7 +543,7 @@ private fun QrCodeOverlay(
             Text(
                 text = stringResource(R.string.addon_qr_scan_instruction),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
 
@@ -564,7 +564,7 @@ private fun QrCodeOverlay(
                 Text(
                     text = serverUrl,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -575,12 +575,12 @@ private fun QrCodeOverlay(
                 onClick = onClose,
                 modifier = Modifier.focusRequester(focusRequester),
                 colors = ClickableSurfaceDefaults.colors(
-                    containerColor = NuvioColors.Surface,
-                    focusedContainerColor = NuvioColors.FocusBackground
+                    containerColor = NexioColors.Surface,
+                    focusedContainerColor = NexioColors.FocusBackground
                 ),
                 border = ClickableSurfaceDefaults.border(
                     focusedBorder = Border(
-                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        border = BorderStroke(2.dp, NexioColors.FocusRing),
                         shape = RoundedCornerShape(50)
                     )
                 ),
@@ -595,12 +595,12 @@ private fun QrCodeOverlay(
                         imageVector = Icons.Default.Close,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = NuvioColors.TextPrimary
+                        tint = NexioColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.addon_qr_close),
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                 }
             }
@@ -636,7 +636,7 @@ private fun ConfirmAddonChangesDialog(
                 .width(560.dp)
                 .heightIn(max = 640.dp),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.SurfaceVariant
+                containerColor = NexioColors.SurfaceVariant
             ),
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
         ) {
@@ -647,7 +647,7 @@ private fun ConfirmAddonChangesDialog(
                 Text(
                     text = stringResource(R.string.addon_confirm_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -655,7 +655,7 @@ private fun ConfirmAddonChangesDialog(
                 Text(
                     text = stringResource(R.string.addon_confirm_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -665,7 +665,7 @@ private fun ConfirmAddonChangesDialog(
                         .fillMaxWidth()
                         .heightIn(max = 320.dp)
                         .background(
-                            color = NuvioColors.Surface,
+                            color = NexioColors.Surface,
                             shape = RoundedCornerShape(12.dp)
                         )
                 ) {
@@ -679,7 +679,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_added),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = NuvioColors.Success,
+                                color = NexioColors.Success,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
@@ -689,7 +689,7 @@ private fun ConfirmAddonChangesDialog(
                                 Text(
                                     text = "+ $displayName",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.Success,
+                                    color = NexioColors.Success,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp, bottom = 2.dp)
@@ -702,7 +702,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_removed),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = NuvioColors.Error,
+                                color = NexioColors.Error,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
@@ -712,7 +712,7 @@ private fun ConfirmAddonChangesDialog(
                                 Text(
                                     text = "- $displayName",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.Error,
+                                    color = NexioColors.Error,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp, bottom = 2.dp)
@@ -725,7 +725,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_catalog_reordered),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextSecondary,
+                                color = NexioColors.TextSecondary,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 6.dp)
@@ -736,7 +736,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_catalogs_disabled),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = NuvioColors.Error,
+                                color = NexioColors.Error,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
@@ -745,7 +745,7 @@ private fun ConfirmAddonChangesDialog(
                                 Text(
                                     text = "- $name",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.Error,
+                                    color = NexioColors.Error,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp, bottom = 2.dp)
@@ -758,7 +758,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_catalogs_enabled),
                                 style = MaterialTheme.typography.titleSmall,
-                                color = NuvioColors.Success,
+                                color = NexioColors.Success,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 4.dp)
@@ -767,7 +767,7 @@ private fun ConfirmAddonChangesDialog(
                                 Text(
                                     text = "+ $name",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = NuvioColors.Success,
+                                    color = NexioColors.Success,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp, bottom = 2.dp)
@@ -786,7 +786,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_no_changes),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextSecondary
+                                color = NexioColors.TextSecondary
                             )
                         }
                     }
@@ -795,13 +795,13 @@ private fun ConfirmAddonChangesDialog(
                 Text(
                     text = stringResource(R.string.addon_confirm_total_addons, pendingChange.proposedUrls.size),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = stringResource(R.string.addon_confirm_total_catalogs, pendingChange.proposedCatalogOrderKeys.size),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -816,12 +816,12 @@ private fun ConfirmAddonChangesDialog(
                         Surface(
                             onClick = onReject,
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = NuvioColors.Surface,
-                                focusedContainerColor = NuvioColors.FocusBackground
+                                containerColor = NexioColors.Surface,
+                                focusedContainerColor = NexioColors.FocusBackground
                             ),
                             border = ClickableSurfaceDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = RoundedCornerShape(50)
                                 )
                             ),
@@ -835,12 +835,12 @@ private fun ConfirmAddonChangesDialog(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
-                                    tint = NuvioColors.TextPrimary
+                                    tint = NexioColors.TextPrimary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = stringResource(R.string.addon_confirm_reject),
-                                    color = NuvioColors.TextPrimary
+                                    color = NexioColors.TextPrimary
                                 )
                             }
                         }
@@ -849,12 +849,12 @@ private fun ConfirmAddonChangesDialog(
                             onClick = onConfirm,
                             modifier = Modifier.focusRequester(focusRequester),
                             colors = ClickableSurfaceDefaults.colors(
-                                containerColor = NuvioColors.Secondary,
-                                focusedContainerColor = NuvioColors.SecondaryVariant
+                                containerColor = NexioColors.Secondary,
+                                focusedContainerColor = NexioColors.SecondaryVariant
                             ),
                             border = ClickableSurfaceDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = RoundedCornerShape(50)
                                 )
                             ),
@@ -863,7 +863,7 @@ private fun ConfirmAddonChangesDialog(
                             Text(
                                 text = stringResource(R.string.addon_confirm_confirm),
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                                color = NuvioColors.OnSecondary
+                                color = NexioColors.OnSecondary
                             )
                         }
                     }
@@ -891,12 +891,12 @@ private fun AddonCard(
                 .fillMaxWidth()
                 .animateContentSize(),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.BackgroundCard
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.BackgroundCard
             ),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(12.dp)
                 )
             ),
@@ -910,7 +910,7 @@ private fun AddonCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize(),
-            colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
+            colors = CardDefaults.cardColors(containerColor = NexioColors.BackgroundCard),
             shape = RoundedCornerShape(12.dp)
         ) {
             AddonCardContent(
@@ -947,12 +947,12 @@ private fun AddonCardContent(
                 Text(
                     text = addon.displayName,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 Text(
                     text = "v${addon.version}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
             if (!isReadOnly) {
@@ -964,10 +964,10 @@ private fun AddonCardContent(
                         onClick = onMoveUp,
                         enabled = canMoveUp,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextSecondary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextSecondary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -977,10 +977,10 @@ private fun AddonCardContent(
                         onClick = onMoveDown,
                         enabled = canMoveDown,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextSecondary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextSecondary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -989,10 +989,10 @@ private fun AddonCardContent(
                     Button(
                         onClick = onRemove,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextSecondary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Error
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextSecondary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Error
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -1007,7 +1007,7 @@ private fun AddonCardContent(
             Text(
                 text = addon.description ?: "",
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
         }
 
@@ -1015,14 +1015,14 @@ private fun AddonCardContent(
         Text(
             text = addon.baseUrl,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextTertiary
+            color = NexioColors.TextTertiary
         )
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.addon_catalogs_types, addon.catalogs.size, addon.rawTypes.joinToString()),
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextTertiary
+            color = NexioColors.TextTertiary
         )
     }
 }
