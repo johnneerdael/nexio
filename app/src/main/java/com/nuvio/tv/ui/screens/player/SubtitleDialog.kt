@@ -238,7 +238,7 @@ private fun SubtitleTab(
         Row(
             modifier = Modifier
                 .padding(horizontal = 12.dp, vertical = 10.dp)
-                .width(IntrinsicSize.Min), 
+                .width(IntrinsicSize.Max), 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
@@ -247,7 +247,9 @@ private fun SubtitleTab(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                softWrap = false,
+                overflow = TextOverflow.Visible,
+                modifier = Modifier.wrapContentWidth(unbounded = true)
             )
 
             if (badgeCount != null && badgeCount > 0) {
