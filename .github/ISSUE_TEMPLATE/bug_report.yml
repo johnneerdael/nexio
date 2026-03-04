@@ -86,19 +86,6 @@ body:
       required: true
 
   - type: dropdown
-    id: input_method
-    attributes:
-      label: Input method
-      options:
-        - D-pad remote
-        - Game controller
-        - Mouse / keyboard
-        - Touch
-        - Other (please describe below)
-    validations:
-      required: true
-
-  - type: dropdown
     id: player_mode
     attributes:
       label: Player mode
