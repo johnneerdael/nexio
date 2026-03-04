@@ -329,8 +329,8 @@
     <string name="layout_modern_sidebar_blur_sub">Ativar efeito de desfoque (blur) no menu.</string>
     <string name="layout_show_hero">Mostrar Destaque</string>
     <string name="layout_show_hero_sub">Exibir Destaque de topo na home.</string>
-    <string name="layout_show_discover">Mostrar 'Descobrir' na busca</string>
-    <string name="layout_show_discover_sub">Mostrar seção 'Descobrir' quando a busca estiver vazia.</string>
+    <string name="layout_show_discover">Mostrar Descobrir na busca</string>
+    <string name="layout_show_discover_sub">Mostrar seção Descobrir quando a busca estiver vazia.</string>
     <string name="layout_poster_labels">Nomes nos pôsteres</string>
     <string name="layout_poster_labels_sub">Mostrar títulos abaixo dos pôsteres e grades.</string>
     <string name="layout_addon_name">Nome do addon</string>
@@ -632,16 +632,6 @@
 
     <!-- AudioDialog -->
     <string name="audio_dialog_title">Áudio</string>
-
-    <!-- ParentalGuideOverlay -->
-    <string name="parental_nudity">Nudez</string>
-    <string name="parental_violence">Violência</string>
-    <string name="parental_profanity">Linguagem Imprópria</string>
-    <string name="parental_alcohol">Álcool/Drogas</string>
-    <string name="parental_frightening">Medo/Terror</string>
-    <string name="parental_severity_severe">Severa</string>
-    <string name="parental_severity_moderate">Moderada</string>
-    <string name="parental_severity_mild">Leve</string>
 
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
    <string name="subtitle_dialog_title">Legendas</string>
