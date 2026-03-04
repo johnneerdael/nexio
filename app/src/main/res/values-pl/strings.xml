@@ -177,6 +177,8 @@
     <string name="playback_afr_on_start_sub">Przełącz przy rozpoczęciu odtwarzania.</string>
     <string name="playback_afr_on_start_stop">Przy starcie/zatrzymaniu</string>
     <string name="playback_afr_on_start_stop_sub">Przełącz przy starcie i przywróć przy zatrzymaniu.</string>
+    <string name="playback_resolution_matching">Dopasowanie rozdzielczości</string>
+    <string name="playback_resolution_matching_sub">Zezwól na zmianę trybu wyświetlania w celu dopasowania rozdzielczości wideo.</string>
     <string name="playback_player_external_desc">Zawsze otwieraj strumienie w zewnętrznej aplikacji</string>
     <string name="playback_player_ask_desc">Wybieraj odtwarzacz za każdym razem</string>
 
