@@ -260,6 +260,15 @@ fun PlaybackSettingsContent(
                 onSetExperimentalDv7ToDv81Enabled = {
                     enabled -> coroutineScope.launch { viewModel.setExperimentalDv7ToDv81Enabled(enabled) }
                 },
+                onSetExperimentalDv5ToDv81Enabled = {
+                    enabled -> coroutineScope.launch { viewModel.setExperimentalDv5ToDv81Enabled(enabled) }
+                },
+                onSetExperimentalDv7ToDv81PreserveMappingEnabled = {
+                    enabled ->
+                    coroutineScope.launch {
+                        viewModel.setExperimentalDv7ToDv81PreserveMappingEnabled(enabled)
+                    }
+                },
                 onSetSubtitleSize = { newSize -> coroutineScope.launch { viewModel.setSubtitleSize(newSize) } },
                 onSetSubtitleVerticalOffset = { newOffset -> coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) } },
                 onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },

@@ -214,6 +214,10 @@
     <string name="audio_dv_sub">Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support</string>
     <string name="audio_dv_experimental_title">DV7 - Experimental DV8.1</string>
     <string name="audio_dv_experimental_sub">Experimental native conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
+    <string name="audio_dv5_compatibility_title">DV5 - Compatibility Remap</string>
+    <string name="audio_dv5_compatibility_sub">Allows DV5 streams to use the DV8.1 compatibility path. May fix color/signaling issues on some devices, but can regress others.</string>
+    <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Preserve Mapping</string>
+    <string name="audio_dv_experimental_preserve_mapping_sub">Experimental higher-fidelity DV8.1 conversion that preserves mapping metadata. May be less compatible than the default DV7 conversion path.</string>
     <string name="audio_decoder_device_only_desc">Only use built-in hardware decoders. Most compatible but may not support all formats.</string>
     <string name="audio_decoder_prefer_device_desc">Use hardware decoders when available, fall back to FFmpeg. Recommended for most devices.</string>
     <string name="audio_decoder_prefer_app_desc">Use FFmpeg decoders when available. Better format support but higher CPU usage.</string>
