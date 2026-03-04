@@ -60,7 +60,7 @@ import com.nuvio.tv.domain.model.PersonDetail
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.components.PosterCardDefaults
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -82,7 +82,7 @@ fun CastDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         Crossfade(
             targetState = uiState,
@@ -115,8 +115,8 @@ private fun CastDetailContent(
     person: PersonDetail,
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit
 ) {
-    val backgroundColor = NuvioColors.Background
-    val accentColor = NuvioColors.Secondary
+    val backgroundColor = NexioColors.Background
+    val accentColor = NexioColors.Secondary
 
     val allCredits = remember(person.movieCredits, person.tvCredits) {
         (person.movieCredits + person.tvCredits)
@@ -247,16 +247,16 @@ private fun HeroSection(person: PersonDetail) {
                 shape = RoundedCornerShape(16.dp)
             ),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.SurfaceVariant,
-                focusedContainerColor = NuvioColors.SurfaceVariant
+                containerColor = NexioColors.SurfaceVariant,
+                focusedContainerColor = NexioColors.SurfaceVariant
             ),
             border = CardDefaults.border(
                 border = Border(
-                    border = BorderStroke(1.dp, NuvioColors.Border),
+                    border = BorderStroke(1.dp, NexioColors.Border),
                     shape = RoundedCornerShape(16.dp)
                 ),
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(16.dp)
                 )
             )
@@ -286,7 +286,7 @@ private fun HeroSection(person: PersonDetail) {
                     Text(
                         text = person.name.firstOrNull()?.uppercase() ?: "?",
                         style = MaterialTheme.typography.displayLarge,
-                        color = NuvioColors.TextTertiary
+                        color = NexioColors.TextTertiary
                     )
                 }
             }
@@ -307,7 +307,7 @@ private fun HeroSection(person: PersonDetail) {
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.5).sp
                 ),
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -333,7 +333,7 @@ private fun HeroSection(person: PersonDetail) {
                     Text(
                         text = info,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary,
+                        color = NexioColors.TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -349,7 +349,7 @@ private fun HeroSection(person: PersonDetail) {
                     style = MaterialTheme.typography.bodyMedium.copy(
                         lineHeight = 20.sp
                     ),
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     maxLines = 5,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -372,16 +372,16 @@ private fun SectionHeader(title: String, count: Int) {
             style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.SemiBold
             ),
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = "$count",
             style = MaterialTheme.typography.labelMedium,
-            color = NuvioColors.TextTertiary,
+            color = NexioColors.TextTertiary,
             modifier = Modifier
                 .background(
-                    color = NuvioColors.SurfaceVariant,
+                    color = NexioColors.SurfaceVariant,
                     shape = RoundedCornerShape(4.dp)
                 )
                 .padding(horizontal = 8.dp, vertical = 2.dp)
@@ -433,8 +433,8 @@ private fun FilmographyRow(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CastDetailSkeleton(personName: String) {
-    val backgroundColor = NuvioColors.Background
-    val accentColor = NuvioColors.Secondary
+    val backgroundColor = NexioColors.Background
+    val accentColor = NexioColors.Secondary
 
     Box(modifier = Modifier.fillMaxSize()) {
         val accentGradient = remember(accentColor, backgroundColor) {
@@ -489,7 +489,7 @@ private fun CastDetailSkeleton(personName: String) {
                         .width(160.dp)
                         .height(240.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(NuvioColors.SurfaceVariant)
+                        .background(NexioColors.SurfaceVariant)
                 )
 
                 Spacer(modifier = Modifier.width(24.dp))
@@ -502,7 +502,7 @@ private fun CastDetailSkeleton(personName: String) {
                     Text(
                         text = personName,
                         style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -515,7 +515,7 @@ private fun CastDetailSkeleton(personName: String) {
                                 .fillMaxWidth(if (it == 0) 0.60f else if (it == 1) 0.48f else 0.72f)
                                 .height(14.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(NuvioColors.SurfaceVariant)
+                                .background(NexioColors.SurfaceVariant)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                     }
@@ -525,7 +525,7 @@ private fun CastDetailSkeleton(personName: String) {
                             .fillMaxWidth(0.86f)
                             .height(14.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(NuvioColors.SurfaceVariant)
+                            .background(NexioColors.SurfaceVariant)
                     )
                 }
             }
@@ -542,7 +542,7 @@ private fun CastDetailSkeleton(personName: String) {
                         .width(140.dp)
                         .height(20.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(NuvioColors.SurfaceVariant)
+                        .background(NexioColors.SurfaceVariant)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Box(
@@ -550,7 +550,7 @@ private fun CastDetailSkeleton(personName: String) {
                         .width(36.dp)
                         .height(18.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(NuvioColors.SurfaceVariant)
+                        .background(NexioColors.SurfaceVariant)
                 )
             }
 
@@ -568,7 +568,7 @@ private fun CastDetailSkeleton(personName: String) {
                                 .width(112.dp)
                                 .height(168.dp)
                                 .clip(RoundedCornerShape(PosterCardDefaults.Style.cornerRadius))
-                                .background(NuvioColors.SurfaceVariant)
+                                .background(NexioColors.SurfaceVariant)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Box(
@@ -576,7 +576,7 @@ private fun CastDetailSkeleton(personName: String) {
                                 .fillMaxWidth()
                                 .height(16.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(NuvioColors.SurfaceVariant)
+                                .background(NexioColors.SurfaceVariant)
                         )
                     }
                 }
@@ -599,22 +599,22 @@ private fun CastDetailError(
             Text(
                 text = stringResource(R.string.cast_detail_error),
                 style = MaterialTheme.typography.titleLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = onRetry,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.Secondary,
-                    contentColor = NuvioColors.OnSecondary,
-                    focusedContainerColor = NuvioColors.SecondaryVariant,
-                    focusedContentColor = NuvioColors.OnSecondaryVariant
+                    containerColor = NexioColors.Secondary,
+                    contentColor = NexioColors.OnSecondary,
+                    focusedContainerColor = NexioColors.SecondaryVariant,
+                    focusedContentColor = NexioColors.OnSecondaryVariant
                 )
             ) {
                 Text(stringResource(R.string.cast_detail_retry))

@@ -74,7 +74,7 @@ import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import android.view.inputmethod.CompletionInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.platform.LocalView
@@ -385,7 +385,7 @@ fun SearchScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background),
+            .background(NexioColors.Background),
         contentAlignment = Alignment.TopCenter
     ) {
         if (isDiscoverMode) {
@@ -458,7 +458,7 @@ fun SearchScreen(
                         Text(
                             text = stringResource(R.string.search_keyboard_hint),
                             style = androidx.tv.material3.MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextSecondary,
+                            color = NexioColors.TextSecondary,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 52.dp)
@@ -585,18 +585,18 @@ private fun SearchInputField(
                 .size(56.dp)
                 .border(
                     width = if (isDiscoverButtonFocused) 2.dp else 1.dp,
-                    color = if (isDiscoverButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
+                    color = if (isDiscoverButtonFocused) NexioColors.FocusRing else NexioColors.Border,
                     shape = RoundedCornerShape(12.dp)
                 )
                 .background(
-                    color = NuvioColors.BackgroundCard,
+                    color = NexioColors.BackgroundCard,
                     shape = RoundedCornerShape(12.dp)
                 )
         ) {
             Icon(
                 imageVector = Icons.Default.Explore,
                 contentDescription = "Open discover",
-                tint = NuvioColors.TextPrimary
+                tint = NexioColors.TextPrimary
             )
         }
 
@@ -617,18 +617,18 @@ private fun SearchInputField(
                     .size(56.dp)
                     .border(
                         width = if (isVoiceButtonFocused) 2.dp else 1.dp,
-                        color = if (isVoiceButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
+                        color = if (isVoiceButtonFocused) NexioColors.FocusRing else NexioColors.Border,
                         shape = RoundedCornerShape(12.dp)
                     )
                     .background(
-                        color = NuvioColors.BackgroundCard,
+                        color = NexioColors.BackgroundCard,
                         shape = RoundedCornerShape(12.dp)
                     )
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Voice search",
-                    tint = NuvioColors.TextPrimary
+                    tint = NexioColors.TextPrimary
                 )
             }
 
@@ -674,17 +674,17 @@ private fun SearchInputField(
             placeholder = {
                 Text(
                     text = stringResource(R.string.search_placeholder),
-                    color = NuvioColors.TextTertiary
+                    color = NexioColors.TextTertiary
                 )
             },
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = NuvioColors.BackgroundCard,
-                unfocusedContainerColor = NuvioColors.BackgroundCard,
-                focusedIndicatorColor = NuvioColors.FocusRing,
-                unfocusedIndicatorColor = NuvioColors.Border,
-                focusedTextColor = NuvioColors.TextPrimary,
-                unfocusedTextColor = NuvioColors.TextPrimary,
-                cursorColor = NuvioColors.FocusRing
+                focusedContainerColor = NexioColors.BackgroundCard,
+                unfocusedContainerColor = NexioColors.BackgroundCard,
+                focusedIndicatorColor = NexioColors.FocusRing,
+                unfocusedIndicatorColor = NexioColors.Border,
+                focusedTextColor = NexioColors.TextPrimary,
+                unfocusedTextColor = NexioColors.TextPrimary,
+                cursorColor = NexioColors.FocusRing
             )
         )
     }

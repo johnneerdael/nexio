@@ -55,8 +55,8 @@ import com.nuvio.tv.R
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.repository.TraktProgressService
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
@@ -111,7 +111,7 @@ fun TraktScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 48.dp, vertical = 28.dp),
         horizontalArrangement = Arrangement.spacedBy(36.dp)
     ) {
@@ -131,13 +131,13 @@ fun TraktScreen(
             Text(
                 text = "Trakt",
                 style = MaterialTheme.typography.headlineLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = stringResource(R.string.trakt_description),
                 style = MaterialTheme.typography.bodyLarge,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
             if (uiState.mode == TraktConnectionMode.CONNECTED) {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -153,8 +153,8 @@ fun TraktScreen(
             modifier = Modifier
                 .weight(0.55f)
                 .fillMaxHeight()
-                .border(1.dp, NuvioColors.Border.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
-                .background(NuvioColors.BackgroundElevated.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                .border(1.dp, NexioColors.Border.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                .background(NexioColors.BackgroundElevated.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -169,14 +169,14 @@ fun TraktScreen(
                 Text(
                     text = stringResource(R.string.trakt_account_login),
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 if (uiState.mode == TraktConnectionMode.AWAITING_APPROVAL) {
                     Button(
                         onClick = { viewModel.onCancelDeviceFlow() },
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) {
                         Text(stringResource(R.string.action_cancel))
@@ -188,11 +188,11 @@ fun TraktScreen(
                 Text(
                     text = stringResource(R.string.trakt_awaiting_instruction),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
                 Text(
                     text = userCode ?: "-",
-                    color = NuvioColors.Primary,
+                    color = NexioColors.Primary,
                     fontSize = 38.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 4.sp
@@ -208,22 +208,22 @@ fun TraktScreen(
                 Text(
                     text = stringResource(R.string.trakt_code_expires, formatDuration(remaining)),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             } else if (uiState.mode == TraktConnectionMode.CONNECTED) {
                 uiState.tokenExpiresAtMillis?.let { expiresAtMillis ->
                     Text(
                         text = stringResource(R.string.trakt_token_refreshes, formatDuration((expiresAtMillis - nowMillis).coerceAtLeast(0L))),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
                 Button(
                     onClick = { showDisconnectConfirm = true },
                     modifier = Modifier.focusRequester(primaryFocusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(stringResource(R.string.trakt_disconnect))
@@ -237,14 +237,14 @@ fun TraktScreen(
                 Text(
                     text = stringResource(R.string.trakt_login_instruction),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
                 Button(
                     onClick = { viewModel.onConnectClick() },
                     enabled = uiState.credentialsConfigured && !uiState.isLoading,
                     modifier = Modifier.focusRequester(primaryFocusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Primary,
+                        containerColor = NexioColors.Primary,
                         contentColor = Color.Black
                     )
                 ) {
@@ -279,7 +279,7 @@ fun TraktScreen(
                     Text(
                         text = status,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -307,8 +307,8 @@ fun TraktScreen(
                 Button(
                     onClick = onBackPress,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(stringResource(R.string.trakt_back))
@@ -318,7 +318,7 @@ fun TraktScreen(
     }
 
     if (showDaysCapDialog) {
-        NuvioDialog(
+        NexioDialog(
             onDismiss = { showDaysCapDialog = false },
             title = stringResource(R.string.trakt_cw_window_title),
             subtitle = stringResource(R.string.trakt_cw_window_subtitle),
@@ -340,8 +340,8 @@ fun TraktScreen(
                                 },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.colors(
-                                    containerColor = if (selected) NuvioColors.Primary else NuvioColors.BackgroundCard,
-                                    contentColor = if (selected) Color.Black else NuvioColors.TextPrimary
+                                    containerColor = if (selected) NexioColors.Primary else NexioColors.BackgroundCard,
+                                    contentColor = if (selected) Color.Black else NexioColors.TextPrimary
                                 )
                             ) {
                                 Text(cwWindowFormatter(days))
@@ -360,8 +360,8 @@ fun TraktScreen(
                     Button(
                         onClick = { showDaysCapDialog = false },
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) {
                         Text(stringResource(R.string.action_cancel))
@@ -372,7 +372,7 @@ fun TraktScreen(
     }
 
     if (showUnairedNextUpDialog) {
-        NuvioDialog(
+        NexioDialog(
             onDismiss = { showUnairedNextUpDialog = false },
             title = stringResource(R.string.trakt_unaired_dialog_title),
             subtitle = stringResource(R.string.trakt_unaired_dialog_subtitle),
@@ -386,8 +386,8 @@ fun TraktScreen(
                         showUnairedNextUpDialog = false
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (uiState.showUnairedNextUp) NuvioColors.Primary else NuvioColors.BackgroundCard,
-                        contentColor = if (uiState.showUnairedNextUp) Color.Black else NuvioColors.TextPrimary
+                        containerColor = if (uiState.showUnairedNextUp) NexioColors.Primary else NexioColors.BackgroundCard,
+                        contentColor = if (uiState.showUnairedNextUp) Color.Black else NexioColors.TextPrimary
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -399,8 +399,8 @@ fun TraktScreen(
                         showUnairedNextUpDialog = false
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (!uiState.showUnairedNextUp) NuvioColors.Primary else NuvioColors.BackgroundCard,
-                        contentColor = if (!uiState.showUnairedNextUp) Color.Black else NuvioColors.TextPrimary
+                        containerColor = if (!uiState.showUnairedNextUp) NexioColors.Primary else NexioColors.BackgroundCard,
+                        contentColor = if (!uiState.showUnairedNextUp) Color.Black else NexioColors.TextPrimary
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -413,8 +413,8 @@ fun TraktScreen(
                     Button(
                         onClick = { showUnairedNextUpDialog = false },
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
                         )
                     ) {
                         Text(stringResource(R.string.action_cancel))
@@ -425,7 +425,7 @@ fun TraktScreen(
     }
 
     if (showDisconnectConfirm) {
-        NuvioDialog(
+        NexioDialog(
             onDismiss = { showDisconnectConfirm = false },
             title = stringResource(R.string.trakt_disconnect_title),
             subtitle = stringResource(R.string.trakt_disconnect_subtitle),
@@ -441,8 +441,8 @@ fun TraktScreen(
                         viewModel.onDisconnectClick()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(stringResource(R.string.trakt_disconnect))
@@ -450,8 +450,8 @@ fun TraktScreen(
                 Button(
                     onClick = { showDisconnectConfirm = false },
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(stringResource(R.string.action_cancel))
@@ -490,13 +490,13 @@ private fun TraktConnectedStatsStrip(
         Text(
             text = stringResource(R.string.trakt_cached_label),
             style = MaterialTheme.typography.labelMedium,
-            color = NuvioColors.TextTertiary
+            color = NexioColors.TextTertiary
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(NuvioColors.Border.copy(alpha = 0.8f))
+                .background(NexioColors.Border.copy(alpha = 0.8f))
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -513,7 +513,7 @@ private fun TraktConnectedStatsStrip(
                         modifier = Modifier
                             .width(1.dp)
                             .height(44.dp)
-                            .background(NuvioColors.Border.copy(alpha = 0.75f))
+                            .background(NexioColors.Border.copy(alpha = 0.75f))
                     )
                 }
             }
@@ -522,7 +522,7 @@ private fun TraktConnectedStatsStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(NuvioColors.Border.copy(alpha = 0.8f))
+                .background(NexioColors.Border.copy(alpha = 0.8f))
         )
     }
 }
@@ -540,14 +540,14 @@ private fun TraktStatItem(
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             textAlign = TextAlign.Center
         )
     }

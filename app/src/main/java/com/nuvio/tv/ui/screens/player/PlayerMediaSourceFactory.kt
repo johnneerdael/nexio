@@ -329,7 +329,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         @Volatile private var hasLoggedVodCacheNotReady: Boolean = false
         private val cacheInitStarted = AtomicBoolean(false)
         private val cacheInitExecutor = Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "nuvio-vod-cache-init").apply { isDaemon = true }
+            Thread(runnable, "Nexio-vod-cache-init").apply { isDaemon = true }
         }
 
         fun sanitizeHeaders(headers: Map<String, String>?): Map<String, String> {

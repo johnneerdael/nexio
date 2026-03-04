@@ -14,28 +14,28 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun NuvioTopBar(
+fun NexioTopBar(
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(80.dp)
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 48.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "NUVIO",
+            text = "Nexio",
             style = MaterialTheme.typography.headlineLarge.copy(
                 fontWeight = FontWeight.Bold
             ),
-            color = NuvioColors.Primary
+            color = NexioColors.Primary
         )
 
         Row(
@@ -61,7 +61,7 @@ private fun TopBarNavItem(
     Text(
         text = text,
         style = MaterialTheme.typography.titleMedium,
-        color = if (isSelected) NuvioColors.Primary else NuvioColors.TextSecondary,
+        color = if (isSelected) NexioColors.Primary else NexioColors.TextSecondary,
         modifier = modifier
     )
 }

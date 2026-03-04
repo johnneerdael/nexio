@@ -35,7 +35,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -55,14 +55,14 @@ fun SyncCodeClaimScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background),
+            .background(NexioColors.Background),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.5f)
                 .background(
-                    color = NuvioColors.BackgroundElevated,
+                    color = NexioColors.BackgroundElevated,
                     shape = RoundedCornerShape(20.dp)
                 )
                 .padding(32.dp),
@@ -71,7 +71,7 @@ fun SyncCodeClaimScreen(
             Text(
                 text = stringResource(R.string.sync_claim_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontWeight = FontWeight.SemiBold
             )
 
@@ -80,7 +80,7 @@ fun SyncCodeClaimScreen(
             Text(
                 text = stringResource(R.string.sync_claim_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
 
@@ -113,10 +113,10 @@ fun SyncCodeClaimScreen(
                         onBackPress()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Secondary,
-                        focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = NuvioColors.OnSecondary,
-                        focusedContentColor = NuvioColors.OnSecondaryVariant
+                        containerColor = NexioColors.Secondary,
+                        focusedContainerColor = NexioColors.SecondaryVariant,
+                        contentColor = NexioColors.OnSecondary,
+                        focusedContentColor = NexioColors.OnSecondaryVariant
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()
@@ -128,7 +128,7 @@ fun SyncCodeClaimScreen(
                 Text(
                     text = stringResource(R.string.sync_claim_code_label),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -147,7 +147,7 @@ fun SyncCodeClaimScreen(
                 Text(
                     text = stringResource(R.string.sync_claim_pin_label),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -181,10 +181,10 @@ fun SyncCodeClaimScreen(
                     onClick = { viewModel.claimSyncCode(code, pin) },
                     enabled = !uiState.isLoading && code.isNotBlank() && pin.length >= 4,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Secondary,
-                        focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = NuvioColors.OnSecondary,
-                        focusedContentColor = NuvioColors.OnSecondaryVariant
+                        containerColor = NexioColors.Secondary,
+                        focusedContainerColor = NexioColors.SecondaryVariant,
+                        contentColor = NexioColors.OnSecondary,
+                        focusedContentColor = NexioColors.OnSecondaryVariant
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()

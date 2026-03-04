@@ -42,7 +42,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import kotlinx.coroutines.launch
@@ -61,7 +61,7 @@ fun CatalogOrderScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 48.dp, vertical = 24.dp)
     ) {
         LazyColumn(
@@ -74,13 +74,13 @@ fun CatalogOrderScreen(
                 Text(
                     text = stringResource(R.string.catalog_order_title),
                     style = MaterialTheme.typography.headlineLarge,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.catalog_order_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
 
@@ -103,7 +103,7 @@ fun CatalogOrderScreen(
                         Text(
                             text = stringResource(R.string.catalog_order_empty),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = NuvioColors.TextSecondary
+                            color = NexioColors.TextSecondary
                         )
                     }
                 }
@@ -147,7 +147,7 @@ private fun CatalogOrderCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = NuvioColors.BackgroundCard),
+        colors = CardDefaults.cardColors(containerColor = NexioColors.BackgroundCard),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -161,20 +161,20 @@ private fun CatalogOrderCard(
                 Text(
                     text = "${item.catalogName} - ${item.typeLabel.toDisplayTypeLabel()}",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = if (item.isDisabled) NuvioColors.TextSecondary else NuvioColors.TextPrimary
+                    color = if (item.isDisabled) NexioColors.TextSecondary else NexioColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = item.addonName,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
                 if (item.isDisabled) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.catalog_order_disabled_on_home),
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.Error
+                        color = NexioColors.Error
                     )
                 }
             }
@@ -187,14 +187,14 @@ private fun CatalogOrderCard(
                     onClick = onMoveUp,
                     enabled = item.canMoveUp,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextSecondary,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = NuvioColors.Primary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextSecondary,
+                        focusedContainerColor = NexioColors.FocusBackground,
+                        focusedContentColor = NexioColors.Primary
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                             shape = RoundedCornerShape(12.dp)
                         )
                     ),
@@ -210,14 +210,14 @@ private fun CatalogOrderCard(
                     onClick = onMoveDown,
                     enabled = item.canMoveDown,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextSecondary,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = NuvioColors.Primary
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextSecondary,
+                        focusedContainerColor = NexioColors.FocusBackground,
+                        focusedContentColor = NexioColors.Primary
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                             shape = RoundedCornerShape(12.dp)
                         )
                     ),
@@ -232,14 +232,14 @@ private fun CatalogOrderCard(
                 Button(
                     onClick = onToggleEnabled,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.BackgroundCard,
-                        contentColor = if (item.isDisabled) NuvioColors.Success else NuvioColors.TextSecondary,
-                        focusedContainerColor = NuvioColors.FocusBackground,
-                        focusedContentColor = if (item.isDisabled) NuvioColors.Success else NuvioColors.Error
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = if (item.isDisabled) NexioColors.Success else NexioColors.TextSecondary,
+                        focusedContainerColor = NexioColors.FocusBackground,
+                        focusedContentColor = if (item.isDisabled) NexioColors.Success else NexioColors.Error
                     ),
                     border = ButtonDefaults.border(
                         focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                             shape = RoundedCornerShape(12.dp)
                         )
                     ),

@@ -38,7 +38,7 @@ fun getFontFamily(appFont: AppFont): FontFamily = when (appFont) {
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
-fun buildNuvioTypography(fontFamily: FontFamily): Typography = Typography(
+fun buildNexioTypography(fontFamily: FontFamily): Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = fontFamily,
         fontWeight = FontWeight.Bold,
@@ -133,4 +133,4 @@ fun buildNuvioTypography(fontFamily: FontFamily): Typography = Typography(
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
-val NuvioTypography = buildNuvioTypography(InterFamily)
+val NexioTypography = buildNexioTypography(InterFamily)

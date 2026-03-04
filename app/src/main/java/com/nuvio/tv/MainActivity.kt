@@ -111,14 +111,14 @@ import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
-import com.nuvio.tv.ui.navigation.NuvioNavHost
+import com.nuvio.tv.ui.navigation.NexioNavHost
 import com.nuvio.tv.ui.navigation.Screen
-import com.nuvio.tv.ui.components.NuvioScrollDefaults
+import com.nuvio.tv.ui.components.NexioScrollDefaults
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import com.nuvio.tv.updater.UpdateViewModel
 import com.nuvio.tv.updater.ui.UpdatePromptDialog
 import dagger.hilt.android.AndroidEntryPoint
@@ -245,22 +245,22 @@ class MainActivity : ComponentActivity() {
             }
             val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs(hasChosenLayout = null))
 
-            NuvioTheme(appTheme = mainUiPrefs.theme, appFont = mainUiPrefs.font) {
+            NexioTheme(appTheme = mainUiPrefs.theme, appFont = mainUiPrefs.font) {
                 CompositionLocalProvider(
-                    LocalBringIntoViewSpec provides NuvioScrollDefaults.smoothScrollSpec
+                    LocalBringIntoViewSpec provides NexioScrollDefaults.smoothScrollSpec
                 ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RectangleShape,
                     colors = SurfaceDefaults.colors(
-                        containerColor = NuvioColors.Background
+                        containerColor = NexioColors.Background
                     )
                 ) {
                     if (hasSeenAuthQrOnFirstLaunch == null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(NuvioColors.Background)
+                                .background(NexioColors.Background)
                         )
                         return@Surface
                     }
@@ -331,7 +331,7 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(NuvioColors.Background)
+                                .background(NexioColors.Background)
                         )
                         return@Surface
                     }
@@ -574,7 +574,7 @@ private fun LegacySidebarScaffold(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(drawerWidth)
-                        .background(NuvioColors.Background)
+                        .background(NexioColors.Background)
                         .padding(12.dp)
                         .selectableGroup()
                         .onPreviewKeyEvent { keyEvent ->
@@ -592,7 +592,7 @@ private fun LegacySidebarScaffold(
                         Spacer(modifier = Modifier.height(30.dp))
                         Image(
                             painter = painterResource(id = R.drawable.app_logo_wordmark),
-                            contentDescription = "NuvioTV",
+                            contentDescription = "NEXIO",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(42.dp)
@@ -637,7 +637,7 @@ private fun LegacySidebarScaffold(
                         var isProfileFocused by remember { mutableStateOf(false) }
                         val profileItemShape = RoundedCornerShape(32.dp)
                         val profileBgColor by animateColorAsState(
-                            targetValue = if (isProfileFocused) NuvioColors.FocusBackground else Color.Transparent,
+                            targetValue = if (isProfileFocused) NexioColors.FocusBackground else Color.Transparent,
                             label = "legacyProfileItemBg"
                         )
                         Box(
@@ -666,7 +666,7 @@ private fun LegacySidebarScaffold(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = activeProfileName,
-                                    color = if (isProfileFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+                                    color = if (isProfileFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
                                     maxLines = 1,
                                     textAlign = TextAlign.Start
                                 )
@@ -704,7 +704,7 @@ private fun LegacySidebarScaffold(
             CompositionLocalProvider(
                 LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open)
             ) {
-                NuvioNavHost(
+                NexioNavHost(
                     navController = navController,
                     startDestination = startDestination,
                     hideBuiltInHeaders = hideBuiltInHeaders
@@ -728,17 +728,17 @@ private fun LegacySidebarButton(
     val itemShape = RoundedCornerShape(32.dp)
     val backgroundColor by animateColorAsState(
         targetValue = when {
-            isFocused -> NuvioColors.FocusBackground
-            selected -> NuvioColors.BackgroundCard
+            isFocused -> NexioColors.FocusBackground
+            selected -> NexioColors.BackgroundCard
             else -> Color.Transparent
         },
         label = "legacySidebarItemBackground"
     )
     val contentColor by animateColorAsState(
         targetValue = when {
-            isFocused -> NuvioColors.TextPrimary
-            selected -> NuvioColors.TextPrimary
-            else -> NuvioColors.TextSecondary
+            isFocused -> NexioColors.TextPrimary
+            selected -> NexioColors.TextPrimary
+            else -> NexioColors.TextSecondary
         },
         label = "legacySidebarItemContent"
     )
@@ -1047,7 +1047,7 @@ private fun ModernSidebarScaffold(
             CompositionLocalProvider(
                 LocalSidebarExpanded provides isSidebarExpanded
             ) {
-                NuvioNavHost(
+                NexioNavHost(
                     navController = navController,
                     startDestination = startDestination,
                     hideBuiltInHeaders = hideBuiltInHeaders
@@ -1183,9 +1183,9 @@ private fun CollapsedSidebarPill(
     onExpand: () -> Unit
 ) {
     val pillShape = RoundedCornerShape(999.dp)
-    val bgElevated = NuvioColors.BackgroundElevated
-    val bgCard = NuvioColors.BackgroundCard
-    val borderBase = NuvioColors.Border
+    val bgElevated = NexioColors.BackgroundElevated
+    val bgCard = NexioColors.BackgroundCard
+    val borderBase = NexioColors.Border
     val pillBackgroundBrush = remember(blurEnabled, bgElevated, bgCard) {
         if (blurEnabled) {
             Brush.verticalGradient(listOf(Color(0xD1424851), Color(0xC73B4149)))

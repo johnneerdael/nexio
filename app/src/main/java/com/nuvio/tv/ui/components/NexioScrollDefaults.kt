@@ -6,7 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 
 @OptIn(ExperimentalFoundationApi::class)
-object NuvioScrollDefaults {
+object NexioScrollDefaults {
     val smoothScrollSpec = object : BringIntoViewSpec {
         @Suppress("DEPRECATION")
         override val scrollAnimationSpec: AnimationSpec<Float> = spring(

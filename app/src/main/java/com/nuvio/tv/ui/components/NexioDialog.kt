@@ -25,11 +25,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun NuvioDialog(
+fun NexioDialog(
     onDismiss: () -> Unit,
     title: String,
     subtitle: String? = null,
@@ -44,8 +44,8 @@ fun NuvioDialog(
             modifier = Modifier
                 .width(width)
                 .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(16.dp))
-                .border(1.dp, NuvioColors.Border, RoundedCornerShape(16.dp))
+                .background(NexioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .border(1.dp, NexioColors.Border, RoundedCornerShape(16.dp))
                 .padding(24.dp)
                 .onPreviewKeyEvent { event ->
                     val native = event.nativeKeyEvent
@@ -62,7 +62,7 @@ fun NuvioDialog(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -71,7 +71,7 @@ fun NuvioDialog(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
 

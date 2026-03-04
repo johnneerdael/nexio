@@ -40,12 +40,12 @@ import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.components.NuvioDialog
+import com.nuvio.tv.ui.components.NexioDialog
 import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlin.math.roundToInt
 
 private data class HomePosterOptionsTarget(
@@ -103,7 +103,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
             uiState.continueWatchingItems.isNotEmpty() ||
@@ -127,7 +127,7 @@ fun HomeScreen(
                     Text(
                         text = stringResource(R.string.home_no_addons),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -140,7 +140,7 @@ fun HomeScreen(
                     Text(
                         text = stringResource(R.string.home_no_catalog_addons),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -426,7 +426,7 @@ private fun HomePosterOptionsDialog(
         primaryFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = title,
         subtitle = stringResource(R.string.home_poster_dialog_subtitle)
@@ -437,8 +437,8 @@ private fun HomePosterOptionsDialog(
                 .fillMaxWidth()
                 .focusRequester(primaryFocusRequester),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
@@ -449,8 +449,8 @@ private fun HomePosterOptionsDialog(
             enabled = !isLibraryPending,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                contentColor = NuvioColors.TextPrimary
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
             )
         ) {
             Text(
@@ -472,8 +472,8 @@ private fun HomePosterOptionsDialog(
                 enabled = !isWatchedPending,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(
@@ -506,7 +506,7 @@ private fun HomeLibraryListPickerDialog(
         primaryFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = title,
         subtitle = stringResource(R.string.detail_lists_subtitle),
@@ -540,8 +540,8 @@ private fun HomeLibraryListPickerDialog(
                         Modifier.fillMaxWidth()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = if (selected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                        contentColor = NuvioColors.TextPrimary
+                        containerColor = if (selected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
                     )
                 ) {
                     Text(
@@ -553,15 +553,15 @@ private fun HomeLibraryListPickerDialog(
             }
         }
 
-        Divider(color = NuvioColors.Border, thickness = 1.dp)
+        Divider(color = NexioColors.Border, thickness = 1.dp)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
                 onClick = onSave,
                 enabled = !isPending,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))

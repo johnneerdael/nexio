@@ -63,8 +63,8 @@ import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.NextEpisodeThresholdMode
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -397,7 +397,7 @@ private fun NextEpisodeThresholdModeDialog(
         focusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.autoplay_threshold_mode),
         width = 520.dp,
@@ -425,8 +425,8 @@ private fun NextEpisodeThresholdModeDialog(
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -440,13 +440,13 @@ private fun NextEpisodeThresholdModeDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = description,
-                                    color = NuvioColors.TextSecondary,
+                                    color = NexioColors.TextSecondary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -455,7 +455,7 @@ private fun NextEpisodeThresholdModeDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary,
+                                    tint = NexioColors.Primary,
                                     modifier = Modifier.height(20.dp)
                                 )
                             }
@@ -499,7 +499,7 @@ private fun StreamAutoPlayModeDialog(
         focusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.autoplay_stream_selection),
         width = 460.dp,
@@ -529,8 +529,8 @@ private fun StreamAutoPlayModeDialog(
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
                             .onFocusChanged { isFocused = it.isFocused },
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -544,13 +544,13 @@ private fun StreamAutoPlayModeDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = if (isSelected || isFocused) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    color = if (isSelected || isFocused) NexioColors.Primary else NexioColors.TextPrimary,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = description,
-                                    color = NuvioColors.TextSecondary,
+                                    color = NexioColors.TextSecondary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -558,7 +558,7 @@ private fun StreamAutoPlayModeDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary,
+                                    tint = NexioColors.Primary,
                                     modifier = Modifier.height(20.dp)
                                 )
                             }
@@ -591,7 +591,7 @@ private fun StreamReuseLastLinkCacheDurationDialog(
         focusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.autoplay_last_link_cache),
         width = 420.dp,
@@ -617,8 +617,8 @@ private fun StreamReuseLastLinkCacheDurationDialog(
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -632,7 +632,7 @@ private fun StreamReuseLastLinkCacheDurationDialog(
                             Text(
                                 text = formatReuseCacheDuration(hours),
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
                                 modifier = Modifier.weight(1f)
                             )
 
@@ -640,7 +640,7 @@ private fun StreamReuseLastLinkCacheDurationDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary,
+                                    tint = NexioColors.Primary,
                                     modifier = Modifier.height(20.dp)
                                 )
                             }
@@ -681,7 +681,7 @@ private fun StreamAutoPlaySourceDialog(
         focusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.autoplay_scope),
         width = 520.dp,
@@ -709,8 +709,8 @@ private fun StreamAutoPlaySourceDialog(
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -724,13 +724,13 @@ private fun StreamAutoPlaySourceDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = description,
-                                    color = NuvioColors.TextSecondary,
+                                    color = NexioColors.TextSecondary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -739,7 +739,7 @@ private fun StreamAutoPlaySourceDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NuvioColors.Primary,
+                                    tint = NexioColors.Primary,
                                     modifier = Modifier.height(20.dp)
                                 )
                             }
@@ -769,7 +769,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
         focusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = {
             onSelectionSaved(selected)
             onDismiss()
@@ -790,8 +790,8 @@ private fun StreamAutoPlayProviderSelectionDialog(
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
                 colors = CardDefaults.colors(
-                    containerColor = if (selected.isEmpty()) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                    focusedContainerColor = NuvioColors.FocusBackground
+                    containerColor = if (selected.isEmpty()) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                    focusedContainerColor = NexioColors.FocusBackground
                 ),
                 shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                 scale = CardDefaults.scale(focusedScale = 1f)
@@ -804,7 +804,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                 ) {
                     Text(
                         text = allLabel,
-                        color = if (selected.isEmpty()) NuvioColors.Primary else NuvioColors.TextPrimary,
+                        color = if (selected.isEmpty()) NexioColors.Primary else NexioColors.TextPrimary,
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f)
                     )
@@ -812,7 +812,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = stringResource(R.string.cd_selected),
-                            tint = NuvioColors.Primary,
+                            tint = NexioColors.Primary,
                             modifier = Modifier.height(20.dp)
                         )
                     }
@@ -823,7 +823,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                 Text(
                     text = stringResource(R.string.autoplay_no_items),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             } else {
                 LazyColumn(
@@ -846,8 +846,8 @@ private fun StreamAutoPlayProviderSelectionDialog(
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.colors(
-                                containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                focusedContainerColor = NuvioColors.FocusBackground
+                                containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                                focusedContainerColor = NexioColors.FocusBackground
                             ),
                             shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
                             scale = CardDefaults.scale(focusedScale = 1f)
@@ -860,7 +860,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                             ) {
                                 Text(
                                     text = item,
-                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
                                     style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -868,7 +868,7 @@ private fun StreamAutoPlayProviderSelectionDialog(
                                     Icon(
                                         imageVector = Icons.Default.Check,
                                         contentDescription = stringResource(R.string.cd_selected),
-                                        tint = NuvioColors.Primary,
+                                        tint = NexioColors.Primary,
                                         modifier = Modifier.height(18.dp)
                                     )
                                 }
@@ -915,7 +915,7 @@ private fun StreamRegexDialog(
         inputFocusRequester.requestFocus()
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.autoplay_regex_title),
         subtitle = stringResource(R.string.autoplay_regex_matches),
@@ -935,7 +935,7 @@ private fun StreamRegexDialog(
                 Text(
                     text = stringResource(R.string.autoplay_regex_presets),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
 
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -951,12 +951,12 @@ private fun StreamRegexDialog(
                             },
                             modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
                             colors = CardDefaults.colors(
-                                containerColor = NuvioColors.BackgroundElevated,
-                                focusedContainerColor = NuvioColors.FocusBackground
+                                containerColor = NexioColors.BackgroundElevated,
+                                focusedContainerColor = NexioColors.FocusBackground
                             ),
                             border = CardDefaults.border(
                                 focusedBorder = Border(
-                                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
                                 )
                             ),
@@ -967,7 +967,7 @@ private fun StreamRegexDialog(
                                 text = label,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = if (isFocused) NuvioColors.Primary else NuvioColors.TextPrimary
+                                color = if (isFocused) NexioColors.Primary else NexioColors.TextPrimary
                             )
                         }
                     }
@@ -979,16 +979,16 @@ private fun StreamRegexDialog(
                         .fillMaxWidth()
                         .onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
                     colors = CardDefaults.colors(
-                        containerColor = NuvioColors.BackgroundElevated,
-                        focusedContainerColor = NuvioColors.BackgroundElevated
+                        containerColor = NexioColors.BackgroundElevated,
+                        focusedContainerColor = NexioColors.BackgroundElevated
                     ),
                     border = CardDefaults.border(
                         border = Border(
-                            border = BorderStroke(1.dp, NuvioColors.Border),
+                            border = BorderStroke(1.dp, NexioColors.Border),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                         ),
                         focusedBorder = Border(
-                            border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                            border = BorderStroke(2.dp, NexioColors.FocusRing),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                         )
                     ),
@@ -1017,14 +1017,14 @@ private fun StreamRegexDialog(
                             keyboardActions = KeyboardActions(
                                 onDone = { keyboardController?.hide() }
                             ),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
-                            cursorBrush = SolidColor(if (isInputFocused) NuvioColors.Primary else Color.Transparent),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
+                            cursorBrush = SolidColor(if (isInputFocused) NexioColors.Primary else Color.Transparent),
                             decorationBox = { innerTextField ->
                                 if (regex.isBlank()) {
                                     Text(
                                         text = "4K|2160p|Remux",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = NuvioColors.TextTertiary
+                                        color = NexioColors.TextTertiary
                                     )
                                 }
                                 innerTextField()
@@ -1036,7 +1036,7 @@ private fun StreamRegexDialog(
                 if (regexError != null) {
                     Text(
                         text = regexError ?: "",
-                        color = NuvioColors.Error,
+                        color = NexioColors.Error,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -1048,10 +1048,10 @@ private fun StreamRegexDialog(
                     Button(
                         onClick = onDismiss,
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundElevated,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.BackgroundElevated,
+                            contentColor = NexioColors.TextPrimary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
@@ -1064,10 +1064,10 @@ private fun StreamRegexDialog(
                             regexError = null
                         },
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundElevated,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.BackgroundElevated,
+                            contentColor = NexioColors.TextPrimary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {
@@ -1087,10 +1087,10 @@ private fun StreamRegexDialog(
                             onSave(value)
                         },
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     ) {

@@ -61,8 +61,8 @@ import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.NextToWatch
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
@@ -189,7 +189,7 @@ fun HeroContentSection(
                     Text(
                         text = meta.name,
                         style = MaterialTheme.typography.displayMedium,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
@@ -204,7 +204,7 @@ fun HeroContentSection(
                 Text(
                     text = stringResource(R.string.hero_press_back_trailer),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -285,7 +285,7 @@ fun HeroContentSection(
                         Text(
                             text = creditLine,
                             style = MaterialTheme.typography.labelLarge,
-                            color = NuvioTheme.extendedColors.textSecondary,
+                            color = NexioTheme.extendedColors.textSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth(0.6f)
@@ -303,7 +303,7 @@ fun HeroContentSection(
                         Text(
                             text = meta.description,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = NuvioColors.TextPrimary,
+                            color = NexioColors.TextPrimary,
                             overflow = TextOverflow.Clip,
                             modifier = Modifier
                                 .fillMaxWidth(0.6f)
@@ -359,7 +359,7 @@ private fun PlayButton(
         ),
         border = ButtonDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(32.dp)
             )
         ),
@@ -401,14 +401,14 @@ private fun ActionIconButtonPainter(
             }
             .focusProperties { up = FocusRequester.Cancel },
         colors = IconButtonDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.Secondary,
-            contentColor = NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.OnSecondary
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.Secondary,
+            contentColor = NexioColors.TextPrimary,
+            focusedContentColor = NexioColors.OnSecondary
         ),
         border = IconButtonDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = CircleShape
             )
         ),
@@ -487,14 +487,14 @@ private fun ActionIconButton(
             }
             .focusProperties { up = FocusRequester.Cancel },
         colors = IconButtonDefaults.colors(
-            containerColor = if (selected) selectedContainerColor else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.Secondary,
-            contentColor = if (selected) selectedContentColor else NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.OnSecondary
+            containerColor = if (selected) selectedContainerColor else NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.Secondary,
+            contentColor = if (selected) selectedContentColor else NexioColors.TextPrimary,
+            focusedContentColor = NexioColors.OnSecondary
         ),
         border = IconButtonDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = CircleShape
             )
         ),
@@ -556,7 +556,7 @@ private fun MetaInfoRow(
                 Text(
                     text = genresText,
                     style = MaterialTheme.typography.labelLarge,
-                    color = NuvioTheme.extendedColors.textSecondary
+                    color = NexioTheme.extendedColors.textSecondary
                 )
                 MetaInfoDivider()
             }
@@ -566,7 +566,7 @@ private fun MetaInfoRow(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.labelLarge,
-                    color = NuvioTheme.extendedColors.textSecondary
+                    color = NexioTheme.extendedColors.textSecondary
                 )
                 MetaInfoDivider()
             }
@@ -575,7 +575,7 @@ private fun MetaInfoRow(
                 Text(
                     text = year,
                     style = MaterialTheme.typography.labelLarge,
-                    color = NuvioTheme.extendedColors.textSecondary
+                    color = NexioTheme.extendedColors.textSecondary
                 )
                 if (shouldShowImdbRating) {
                     MetaInfoDivider()
@@ -597,7 +597,7 @@ private fun MetaInfoRow(
                     Text(
                         text = ratingText,
                         style = MaterialTheme.typography.labelLarge,
-                        color = NuvioTheme.extendedColors.textSecondary
+                        color = NexioTheme.extendedColors.textSecondary
                     )
                 }
             }
@@ -613,7 +613,7 @@ private fun MetaInfoRow(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.labelMedium,
-                        color = NuvioTheme.extendedColors.textTertiary
+                        color = NexioTheme.extendedColors.textTertiary
                     )
                     if (index < secondaryItems.lastIndex) {
                         MetaInfoDivider()
@@ -662,7 +662,7 @@ private fun MDBListRatingsRow(ratings: MDBListRatings) {
                 Text(
                     text = formatMDBListRating(provider, resolvedRating),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
+                    color = NexioTheme.extendedColors.textSecondary
                 )
             }
         }
@@ -680,7 +680,7 @@ private fun MDBListRatingsRow(ratings: MDBListRatings) {
                 Text(
                     text = formatMDBListRating("audience", rating),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
+                    color = NexioTheme.extendedColors.textSecondary
                 )
             }
         }
@@ -698,7 +698,7 @@ private fun MDBListRatingsRow(ratings: MDBListRatings) {
                 Text(
                     text = formatMDBListRating("metacritic", rating),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioTheme.extendedColors.textSecondary
+                    color = NexioTheme.extendedColors.textSecondary
                 )
             }
         }
@@ -745,6 +745,6 @@ private fun MetaInfoDivider() {
     Text(
         text = "•",
         style = MaterialTheme.typography.labelLarge,
-        color = NuvioTheme.extendedColors.textTertiary
+        color = NexioTheme.extendedColors.textTertiary
     )
 }

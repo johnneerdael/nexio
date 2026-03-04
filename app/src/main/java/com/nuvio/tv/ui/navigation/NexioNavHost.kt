@@ -36,7 +36,7 @@ import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.cast.CastDetailScreen
 
 @Composable
-fun NuvioNavHost(
+fun NexioNavHost(
     navController: NavHostController,
     startDestination: String = Screen.Home.route,
     hideBuiltInHeaders: Boolean = false

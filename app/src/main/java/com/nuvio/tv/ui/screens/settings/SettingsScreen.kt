@@ -55,7 +55,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
 import com.nuvio.tv.ui.screens.plugin.PluginScreenContent
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
 internal enum class SettingsCategory {
@@ -249,7 +249,7 @@ fun SettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(
                 start = 32.dp,
                 end = 32.dp,

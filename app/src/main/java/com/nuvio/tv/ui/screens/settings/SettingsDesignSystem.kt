@@ -59,7 +59,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 internal val SettingsContainerRadius = 28.dp
 internal val SettingsPillRadius = 999.dp
@@ -75,7 +75,7 @@ internal fun SettingsStandaloneScaffold(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 32.dp, vertical = 24.dp)
     ) {
         SettingsWorkspaceSurface(
@@ -99,16 +99,16 @@ internal fun SettingsBrandPanel(
     modifier: Modifier = Modifier,
     showBuiltInHeader: Boolean = true
 ) {
-    val titleColor = if (showBuiltInHeader) NuvioColors.TextPrimary else Color.Transparent
-    val subtitleColor = if (showBuiltInHeader) NuvioColors.TextSecondary else Color.Transparent
+    val titleColor = if (showBuiltInHeader) NexioColors.TextPrimary else Color.Transparent
+    val subtitleColor = if (showBuiltInHeader) NexioColors.TextSecondary else Color.Transparent
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(SettingsContainerRadius))
-            .background(NuvioColors.BackgroundElevated)
+            .background(NexioColors.BackgroundElevated)
             .border(
                 width = 1.dp,
-                color = NuvioColors.Border,
+                color = NexioColors.Border,
                 shape = RoundedCornerShape(SettingsContainerRadius)
             )
             .padding(26.dp),
@@ -120,7 +120,7 @@ internal fun SettingsBrandPanel(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(NuvioColors.BackgroundCard),
+                    .background(NexioColors.BackgroundCard),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -141,7 +141,7 @@ internal fun SettingsBrandPanel(
 
         Image(
             painter = painterResource(id = R.drawable.app_logo_wordmark),
-            contentDescription = "NuvioTV",
+            contentDescription = "NEXIO",
             modifier = Modifier
                 .fillMaxWidth(0.9f)
                 .height(72.dp),
@@ -187,10 +187,10 @@ internal fun SettingsWorkspaceSurface(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(SettingsContainerRadius))
-            .background(NuvioColors.BackgroundElevated)
+            .background(NexioColors.BackgroundElevated)
             .border(
                 width = 1.dp,
-                color = NuvioColors.Border,
+                color = NexioColors.Border,
                 shape = RoundedCornerShape(SettingsContainerRadius)
             )
             .padding(20.dp),
@@ -229,16 +229,16 @@ internal fun SettingsRailButton(
                 }
             },
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.BackgroundCard else NuvioColors.Background,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = if (isSelected) NexioColors.BackgroundCard else NexioColors.Background,
+            focusedContainerColor = NexioColors.BackgroundCard
         ),
         border = CardDefaults.border(
             border = if (isSelected) Border(
-                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                border = BorderStroke(1.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             ) else Border.None,
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -269,14 +269,14 @@ internal fun SettingsRailButton(
                             modifier = Modifier.size(18.dp),
                             contentScale = ContentScale.Fit,
                             colorFilter = ColorFilter.tint(
-                                if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                                if (isSelected || isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary
                             )
                         )
                     } else if (icon != null) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+                            tint = if (isSelected || isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -289,7 +289,7 @@ internal fun SettingsRailButton(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Medium,
-                        color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+                        color = if (isSelected || isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -298,7 +298,7 @@ internal fun SettingsRailButton(
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = null,
-                    tint = NuvioColors.TextTertiary,
+                    tint = NexioColors.TextTertiary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -319,12 +319,12 @@ internal fun SettingsDetailHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineMedium,
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.TextSecondary
+            color = NexioColors.TextSecondary
         )
     }
 }
@@ -340,10 +340,10 @@ internal fun SettingsGroupCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(SettingsSecondaryCardRadius))
-            .background(NuvioColors.BackgroundCard)
+            .background(NexioColors.BackgroundCard)
             .border(
                 width = 1.dp,
-                color = NuvioColors.Border,
+                color = NexioColors.Border,
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             )
             .padding(14.dp),
@@ -353,14 +353,14 @@ internal fun SettingsGroupCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
         }
         if (!subtitle.isNullOrBlank()) {
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
         }
         content()
@@ -395,12 +395,12 @@ internal fun SettingsToggleRow(
                 }
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.Background,
-            focusedContainerColor = NuvioColors.Background
+            containerColor = NexioColors.Background,
+            focusedContainerColor = NexioColors.Background
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing.copy(alpha = contentAlpha)),
+                border = BorderStroke(2.dp, NexioColors.FocusRing.copy(alpha = contentAlpha)),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -418,7 +418,7 @@ internal fun SettingsToggleRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextPrimary.copy(alpha = contentAlpha),
+                    color = NexioColors.TextPrimary.copy(alpha = contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -427,7 +427,7 @@ internal fun SettingsToggleRow(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
+                        color = NexioColors.TextSecondary.copy(alpha = contentAlpha),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -469,12 +469,12 @@ internal fun SettingsActionRow(
                 }
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.Background,
-            focusedContainerColor = NuvioColors.Background
+            containerColor = NexioColors.Background,
+            focusedContainerColor = NexioColors.Background
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing.copy(alpha = contentAlpha)),
+                border = BorderStroke(2.dp, NexioColors.FocusRing.copy(alpha = contentAlpha)),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -491,7 +491,7 @@ internal fun SettingsActionRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = NuvioColors.TextPrimary.copy(alpha = contentAlpha),
+                    color = NexioColors.TextPrimary.copy(alpha = contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -500,7 +500,7 @@ internal fun SettingsActionRow(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
+                        color = NexioColors.TextSecondary.copy(alpha = contentAlpha),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -512,7 +512,7 @@ internal fun SettingsActionRow(
                 Text(
                     text = value,
                     style = MaterialTheme.typography.labelLarge,
-                    color = NuvioColors.TextSecondary.copy(alpha = contentAlpha),
+                    color = NexioColors.TextSecondary.copy(alpha = contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -522,7 +522,7 @@ internal fun SettingsActionRow(
             Icon(
                 imageVector = trailingIcon,
                 contentDescription = null,
-                tint = NuvioColors.TextTertiary.copy(alpha = contentAlpha),
+                tint = NexioColors.TextTertiary.copy(alpha = contentAlpha),
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -549,16 +549,16 @@ internal fun SettingsChoiceChip(
             }
         },
         colors = CardDefaults.colors(
-            containerColor = if (selected) NuvioColors.FocusRing.copy(alpha = 0.2f) else NuvioColors.Background,
-            focusedContainerColor = if (selected) NuvioColors.FocusRing.copy(alpha = 0.2f) else NuvioColors.Background
+            containerColor = if (selected) NexioColors.FocusRing.copy(alpha = 0.2f) else NexioColors.Background,
+            focusedContainerColor = if (selected) NexioColors.FocusRing.copy(alpha = 0.2f) else NexioColors.Background
         ),
         border = CardDefaults.border(
             border = if (selected) Border(
-                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                border = BorderStroke(1.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             ) else Border.None,
             focusedBorder = Border(
-                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                border = BorderStroke(1.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -568,7 +568,7 @@ internal fun SettingsChoiceChip(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (selected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+            color = if (selected || isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         )
     }
@@ -587,9 +587,9 @@ private fun SettingsTogglePill(
             .clip(RoundedCornerShape(SettingsPillRadius))
             .background(
                 if (checked) {
-                    NuvioColors.Secondary.copy(alpha = 0.35f * alpha)
+                    NexioColors.Secondary.copy(alpha = 0.35f * alpha)
                 } else {
-                    NuvioColors.Border.copy(alpha = alpha)
+                    NexioColors.Border.copy(alpha = alpha)
                 }
             )
             .padding(2.dp),

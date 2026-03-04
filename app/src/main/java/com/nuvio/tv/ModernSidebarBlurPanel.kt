@@ -52,7 +52,7 @@ import androidx.tv.material3.Text
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -95,9 +95,9 @@ internal fun ModernSidebarBlurPanel(
     } else {
         Modifier
     }
-    val bgElevated = NuvioColors.BackgroundElevated
-    val bgCard = NuvioColors.BackgroundCard
-    val borderBase = NuvioColors.Border
+    val bgElevated = NexioColors.BackgroundElevated
+    val bgCard = NexioColors.BackgroundCard
+    val borderBase = NexioColors.Border
     val panelBackgroundBrush = remember(blurEnabled, bgElevated, bgCard) {
         if (blurEnabled) {
             Brush.verticalGradient(listOf(Color(0xD64A4F59), Color(0xCC3F454F), Color(0xC640474F)))
@@ -132,7 +132,7 @@ internal fun ModernSidebarBlurPanel(
     ) {
         val headerLogoRes = if (isSidebarExpanded) R.drawable.app_logo_wordmark else R.drawable.app_logo_mark
         val headerLogoHeight = if (isSidebarExpanded) 42.dp else 34.dp
-        val headerLogoContentDescription = if (isSidebarExpanded) "NuvioTV" else "Nuvio"
+        val headerLogoContentDescription = "NEXIO"
 
         Image(
             painter = painterResource(id = headerLogoRes),

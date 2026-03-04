@@ -36,8 +36,8 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCompany
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 
 @Composable
 fun CompanyLogosSection(
@@ -54,7 +54,7 @@ fun CompanyLogosSection(
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             modifier = Modifier.padding(horizontal = 48.dp)
         )
 
@@ -103,7 +103,7 @@ private fun CompanyLogoCard(company: MetaCompany) {
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(12.dp)
             )
         ),
@@ -131,7 +131,7 @@ private fun CompanyLogoCard(company: MetaCompany) {
                 Text(
                     text = company.name,
                     style = MaterialTheme.typography.labelLarge,
-                    color = NuvioTheme.extendedColors.textSecondary,
+                    color = NexioTheme.extendedColors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 16.dp)

@@ -72,7 +72,7 @@ object NetworkModule {
             val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
             val newRequest = request.newBuilder()
                 .header("Content-Type", "application/json")
-                .header("User-Agent", "Nuvio/$version")
+                .header("User-Agent", "NEXIO/$version")
                 .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
                 .header("trakt-api-version", "2")
                 .build()
@@ -126,7 +126,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://placeholder.nuvio.tv/")
+            .baseUrl("https://placeholder.Nexio.tv/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()

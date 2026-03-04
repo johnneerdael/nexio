@@ -8,7 +8,7 @@ object RepositoryWebPage {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>NuvioTV - Manage Repositories</title>
+<title>NEXIO - Manage Repositories</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   * {
@@ -304,7 +304,7 @@ object RepositoryWebPage {
 <body>
 <div class="page">
   <div class="header">
-    <img src="/logo.png" alt="NuvioTV" class="header-logo">
+    <img src="/logo.png" alt="NEXIO" class="header-logo">
     <p>Manage your repositories</p>
   </div>
 

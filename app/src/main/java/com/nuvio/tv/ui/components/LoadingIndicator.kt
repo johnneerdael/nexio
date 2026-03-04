@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 fun LoadingIndicator(
@@ -19,7 +19,7 @@ fun LoadingIndicator(
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size(48.dp),
-            color = NuvioColors.Primary
+            color = NexioColors.Primary
         )
     }
 }

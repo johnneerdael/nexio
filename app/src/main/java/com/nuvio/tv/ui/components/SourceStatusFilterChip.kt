@@ -26,7 +26,7 @@ import androidx.tv.material3.FilterChip
 import androidx.tv.material3.FilterChipDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 enum class SourceChipStatus {
     LOADING,
@@ -80,9 +80,9 @@ fun SourceStatusFilterChip(
     }
 
     val textColor = when {
-        isError -> NuvioColors.Error
-        isFocused || isSelected -> NuvioColors.OnSecondary
-        else -> NuvioColors.TextSecondary
+        isError -> NexioColors.Error
+        isFocused || isSelected -> NexioColors.OnSecondary
+        else -> NexioColors.TextSecondary
     }
 
     FilterChip(
@@ -101,10 +101,10 @@ fun SourceStatusFilterChip(
                 }
             },
         colors = FilterChipDefaults.colors(
-            containerColor = if (shouldUseNormalColors) NuvioColors.BackgroundCard else NuvioColors.Error.copy(alpha = 0.05f),
-            focusedContainerColor = if (shouldUseNormalColors) NuvioColors.Secondary else NuvioColors.Error.copy(alpha = 0.08f),
-            selectedContainerColor = if (shouldUseNormalColors) NuvioColors.Secondary else NuvioColors.Error.copy(alpha = 0.07f),
-            focusedSelectedContainerColor = if (shouldUseNormalColors) NuvioColors.Secondary else NuvioColors.Error.copy(alpha = 0.09f),
+            containerColor = if (shouldUseNormalColors) NexioColors.BackgroundCard else NexioColors.Error.copy(alpha = 0.05f),
+            focusedContainerColor = if (shouldUseNormalColors) NexioColors.Secondary else NexioColors.Error.copy(alpha = 0.08f),
+            selectedContainerColor = if (shouldUseNormalColors) NexioColors.Secondary else NexioColors.Error.copy(alpha = 0.07f),
+            focusedSelectedContainerColor = if (shouldUseNormalColors) NexioColors.Secondary else NexioColors.Error.copy(alpha = 0.09f),
             contentColor = textColor,
             focusedContentColor = textColor,
             selectedContentColor = textColor,
@@ -112,19 +112,19 @@ fun SourceStatusFilterChip(
         ),
         border = FilterChipDefaults.border(
             border = Border(
-                border = BorderStroke(1.dp, if (isError) NuvioColors.Error.copy(alpha = 0.7f) else NuvioColors.Border),
+                border = BorderStroke(1.dp, if (isError) NexioColors.Error.copy(alpha = 0.7f) else NexioColors.Border),
                 shape = RoundedCornerShape(20.dp)
             ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, if (isError) NuvioColors.Error.copy(alpha = 0.8f) else NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, if (isError) NexioColors.Error.copy(alpha = 0.8f) else NexioColors.FocusRing),
                 shape = RoundedCornerShape(20.dp)
             ),
             selectedBorder = Border(
-                border = BorderStroke(1.dp, if (isError) NuvioColors.Error.copy(alpha = 0.75f) else NuvioColors.Primary),
+                border = BorderStroke(1.dp, if (isError) NexioColors.Error.copy(alpha = 0.75f) else NexioColors.Primary),
                 shape = RoundedCornerShape(20.dp)
             ),
             focusedSelectedBorder = Border(
-                border = BorderStroke(2.dp, if (isError) NuvioColors.Error.copy(alpha = 0.8f) else NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, if (isError) NexioColors.Error.copy(alpha = 0.8f) else NexioColors.FocusRing),
                 shape = RoundedCornerShape(20.dp)
             )
         ),
@@ -137,7 +137,7 @@ fun SourceStatusFilterChip(
             if (isLoading) {
                 MaterialCircularProgressIndicator(
                     modifier = Modifier.size(12.dp),
-                    color = if (isFocused || isSelected) NuvioColors.OnSecondary else NuvioColors.TextSecondary,
+                    color = if (isFocused || isSelected) NexioColors.OnSecondary else NexioColors.TextSecondary,
                     strokeWidth = 1.5.dp
                 )
             }

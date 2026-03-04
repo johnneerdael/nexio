@@ -45,7 +45,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCastMember
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -105,7 +105,7 @@ fun CastSection(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 modifier = Modifier.padding(horizontal = 48.dp)
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -170,7 +170,7 @@ fun CastSection(
                                 .width(1.dp)
                                 .height(72.dp)
                                 .offset(x = -deadSpace / 2)
-                                .background(NuvioColors.SurfaceVariant.copy(alpha = 0.9f))
+                                .background(NexioColors.SurfaceVariant.copy(alpha = 0.9f))
                         )
                     }
                 }
@@ -255,12 +255,12 @@ private fun CastMemberItem(
                 shape = CircleShape
             ),
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.SurfaceVariant,
-                focusedContainerColor = NuvioColors.FocusBackground
+                containerColor = NexioColors.SurfaceVariant,
+                focusedContainerColor = NexioColors.FocusBackground
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = androidx.compose.foundation.BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = CircleShape
                 )
             )
@@ -282,7 +282,7 @@ private fun CastMemberItem(
                     Text(
                         text = member.name.firstOrNull()?.uppercase() ?: "?",
                         style = MaterialTheme.typography.titleLarge,
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
                 }
             }
@@ -293,7 +293,7 @@ private fun CastMemberItem(
         Text(
             text = member.name,
             style = MaterialTheme.typography.labelMedium,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -310,7 +310,7 @@ private fun CastMemberItem(
             Text(
                 text = displayCharacter,
                 style = MaterialTheme.typography.labelSmall,
-                color = NuvioColors.TextTertiary,
+                color = NexioColors.TextTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

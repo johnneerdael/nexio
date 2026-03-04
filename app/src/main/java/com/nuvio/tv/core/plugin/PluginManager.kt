@@ -467,7 +467,7 @@ class PluginManager @Inject constructor(
         try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "NuvioTV/1.0")
+                .header("User-Agent", "NEXIO/1.0")
                 .build()
             
             httpClient.newCall(request).execute().use { response ->
@@ -520,7 +520,7 @@ class PluginManager @Inject constructor(
                 // Download code
                 val codeRequest = Request.Builder()
                     .url(codeUrl)
-                    .header("User-Agent", "NuvioTV/1.0")
+                    .header("User-Agent", "NEXIO/1.0")
                     .build()
                 
                 val code = httpClient.newCall(codeRequest).execute().use { codeResponse ->

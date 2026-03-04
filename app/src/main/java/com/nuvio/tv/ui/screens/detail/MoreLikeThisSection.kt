@@ -22,7 +22,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.GridContentCard
 import com.nuvio.tv.ui.components.PosterCardStyle
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -107,7 +107,7 @@ fun MoreLikeThisSection(
                         Text(
                             text = year,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextTertiary,
+                            color = NexioColors.TextTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier

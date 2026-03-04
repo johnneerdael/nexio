@@ -35,7 +35,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -53,14 +53,14 @@ fun SyncCodeGenerateScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background),
+            .background(NexioColors.Background),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.5f)
                 .background(
-                    color = NuvioColors.BackgroundElevated,
+                    color = NexioColors.BackgroundElevated,
                     shape = RoundedCornerShape(20.dp)
                 )
                 .padding(32.dp),
@@ -69,7 +69,7 @@ fun SyncCodeGenerateScreen(
             Text(
                 text = stringResource(R.string.sync_generate_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontWeight = FontWeight.SemiBold
             )
 
@@ -78,7 +78,7 @@ fun SyncCodeGenerateScreen(
             Text(
                 text = stringResource(R.string.sync_generate_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 textAlign = TextAlign.Center
             )
 
@@ -89,14 +89,14 @@ fun SyncCodeGenerateScreen(
                 Text(
                     text = stringResource(R.string.sync_generate_code_label),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            color = NuvioColors.Secondary.copy(alpha = 0.1f),
+                            color = NexioColors.Secondary.copy(alpha = 0.1f),
                             shape = RoundedCornerShape(12.dp)
                         )
                         .padding(20.dp),
@@ -108,7 +108,7 @@ fun SyncCodeGenerateScreen(
                             letterSpacing = 1.sp,
                             fontWeight = FontWeight.Bold
                         ),
-                        color = NuvioColors.Secondary,
+                        color = NexioColors.Secondary,
                         textAlign = TextAlign.Center,
                         maxLines = 1
                     )
@@ -117,7 +117,7 @@ fun SyncCodeGenerateScreen(
                 Text(
                     text = stringResource(R.string.sync_generate_instruction),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextTertiary,
+                    color = NexioColors.TextTertiary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
@@ -127,10 +127,10 @@ fun SyncCodeGenerateScreen(
                         onBackPress()
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Secondary,
-                        focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = NuvioColors.OnSecondary,
-                        focusedContentColor = NuvioColors.OnSecondaryVariant
+                        containerColor = NexioColors.Secondary,
+                        focusedContainerColor = NexioColors.SecondaryVariant,
+                        contentColor = NexioColors.OnSecondary,
+                        focusedContentColor = NexioColors.OnSecondaryVariant
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()
@@ -142,7 +142,7 @@ fun SyncCodeGenerateScreen(
                 Text(
                     text = stringResource(R.string.sync_generate_pin_label),
                     style = MaterialTheme.typography.labelMedium,
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -174,10 +174,10 @@ fun SyncCodeGenerateScreen(
                     onClick = { viewModel.generateSyncCode(pin) },
                     enabled = !uiState.isLoading && pin.length >= 4,
                     colors = ButtonDefaults.colors(
-                        containerColor = NuvioColors.Secondary,
-                        focusedContainerColor = NuvioColors.SecondaryVariant,
-                        contentColor = NuvioColors.OnSecondary,
-                        focusedContentColor = NuvioColors.OnSecondaryVariant
+                        containerColor = NexioColors.Secondary,
+                        focusedContainerColor = NexioColors.SecondaryVariant,
+                        contentColor = NexioColors.OnSecondary,
+                        focusedContentColor = NexioColors.OnSecondaryVariant
                     ),
                     shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                     modifier = Modifier.fillMaxWidth()

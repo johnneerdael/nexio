@@ -426,7 +426,7 @@
     <string name="trakt_stat_watched_hours">Ore di visione</string>
     <string name="trakt_disconnect">Disconnetti</string>
     <string name="trakt_disconnect_title">Disconnettere Trakt?</string>
-    <string name="trakt_disconnect_subtitle">Questo disconnetterà il tuo account Trakt da Nuvio.</string>
+    <string name="trakt_disconnect_subtitle">Questo disconnetterà il tuo account Trakt da NEXIO.</string>
     <string name="trakt_login">Accedi</string>
     <string name="trakt_retry">Riprova</string>
     <string name="trakt_back">Indietro</string>
@@ -733,7 +733,7 @@
     <string name="catalog_see_all_empty_subtitle">Prova un catalogo diverso o ricontrolla più tardi</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Benvenuto su Nuvio</string>
+    <string name="layout_selection_welcome">Benvenuto su NEXIO</string>
     <string name="layout_selection_subtitle">Scegli il layout della tua schermata home</string>
     <string name="layout_selection_continue">Continua</string>
 

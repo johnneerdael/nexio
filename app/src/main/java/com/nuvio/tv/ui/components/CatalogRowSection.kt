@@ -49,7 +49,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.MetaPreview
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -153,7 +153,7 @@ fun CatalogRowSection(
                 Text(
                     text = catalogTitle,
                     style = MaterialTheme.typography.headlineMedium,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 3,
                     overflow = TextOverflow.Clip
                 )
@@ -161,7 +161,7 @@ fun CatalogRowSection(
                     Text(
                         text = stringResource(R.string.catalog_from_addon, catalogRow.addonName),
                         style = MaterialTheme.typography.labelMedium,
-                        color = NuvioColors.TextTertiary
+                        color = NexioColors.TextTertiary
                     )
                 }
             }
@@ -237,12 +237,12 @@ fun CatalogRowSection(
                             .then(directionalFocusModifier),
                         shape = CardDefaults.shape(shape = seeAllCardShape),
                         colors = CardDefaults.colors(
-                            containerColor = NuvioColors.BackgroundCard,
-                            focusedContainerColor = NuvioColors.BackgroundCard
+                            containerColor = NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.BackgroundCard
                         ),
                         border = CardDefaults.border(
                             focusedBorder = Border(
-                                border = BorderStroke(posterCardStyle.focusedBorderWidth, NuvioColors.FocusRing),
+                                border = BorderStroke(posterCardStyle.focusedBorderWidth, NexioColors.FocusRing),
                                 shape = seeAllCardShape
                             )
                         ),
@@ -260,13 +260,13 @@ fun CatalogRowSection(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = stringResource(R.string.action_see_all),
                                     modifier = Modifier.size(32.dp),
-                                    tint = NuvioColors.TextSecondary
+                                    tint = NexioColors.TextSecondary
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = stringResource(R.string.action_see_all),
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = NuvioColors.TextSecondary
+                                    color = NexioColors.TextSecondary
                                 )
                             }
                         }

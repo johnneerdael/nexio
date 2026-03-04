@@ -46,7 +46,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.AuthState
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 private const val SHOW_SYNC_CODE_FEATURES = false
 
@@ -71,7 +71,7 @@ fun AccountScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
             .padding(horizontal = 48.dp),
         contentPadding = PaddingValues(vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -80,7 +80,7 @@ fun AccountScreen(
             Text(
                 text = stringResource(R.string.account_title),
                 style = MaterialTheme.typography.headlineMedium,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -96,7 +96,7 @@ fun AccountScreen(
                         Text(
                             text = stringResource(R.string.account_loading),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = NuvioColors.TextSecondary
+                            color = NexioColors.TextSecondary
                         )
                     }
                 }
@@ -107,7 +107,7 @@ fun AccountScreen(
                     Text(
                         text = stringResource(R.string.account_sign_in_description),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
                 item {
@@ -124,14 +124,14 @@ fun AccountScreen(
                         Text(
                             text = stringResource(R.string.account_sync_code_title),
                             style = MaterialTheme.typography.titleLarge,
-                            color = NuvioColors.TextPrimary,
+                            color = NexioColors.TextPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = stringResource(R.string.account_sync_code_description),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = NuvioColors.TextSecondary
+                            color = NexioColors.TextSecondary
                         )
                     }
                     item {
@@ -195,10 +195,10 @@ private fun AccountActionCard(
     Button(
         onClick = onClick,
         colors = ButtonDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground,
-            contentColor = NuvioColors.TextPrimary,
-            focusedContentColor = NuvioColors.TextPrimary
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground,
+            contentColor = NexioColors.TextPrimary,
+            focusedContentColor = NexioColors.TextPrimary
         ),
         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
     ) {
@@ -212,20 +212,20 @@ private fun AccountActionCard(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(28.dp),
-                tint = NuvioColors.Secondary
+                tint = NexioColors.Secondary
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
         }
@@ -238,7 +238,7 @@ private fun AccountInfoCard(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.BackgroundCard,
+                color = NexioColors.BackgroundCard,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(16.dp)
@@ -247,13 +247,13 @@ private fun AccountInfoCard(label: String, value: String) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
-                color = NuvioColors.TextTertiary
+                color = NexioColors.TextTertiary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyLarge,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -271,13 +271,13 @@ private fun LinkedDevicesSection(
                 imageVector = Icons.Default.Devices,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = NuvioColors.TextSecondary
+                tint = NexioColors.TextSecondary
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = stringResource(R.string.account_linked_devices, devices.size),
                 style = MaterialTheme.typography.titleMedium,
-                color = NuvioColors.TextPrimary,
+                color = NexioColors.TextPrimary,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -286,7 +286,7 @@ private fun LinkedDevicesSection(
             Text(
                 text = stringResource(R.string.account_no_linked_devices),
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextTertiary
+                color = NexioColors.TextTertiary
             )
         } else {
             devices.forEach { device ->
@@ -294,7 +294,7 @@ private fun LinkedDevicesSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            color = NuvioColors.BackgroundCard,
+                            color = NexioColors.BackgroundCard,
                             shape = RoundedCornerShape(8.dp)
                         )
                         .padding(12.dp),
@@ -304,7 +304,7 @@ private fun LinkedDevicesSection(
                     Text(
                         text = device.deviceName ?: "Unknown Device",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     Button(

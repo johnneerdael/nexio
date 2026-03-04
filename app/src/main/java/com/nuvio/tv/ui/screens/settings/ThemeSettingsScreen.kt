@@ -57,8 +57,8 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.ui.theme.ThemeColors
 import com.nuvio.tv.ui.theme.getFontFamily
 import kotlinx.coroutines.delay
@@ -194,7 +194,7 @@ fun ThemeSettingsContent(
     if (showFontDialog) {
         val fontFocusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) { fontFocusRequester.requestFocus() }
-        NuvioDialog(
+        NexioDialog(
             onDismiss = { showFontDialog = false },
             title = stringResource(R.string.appearance_font_dialog_title),
             width = 400.dp,
@@ -224,8 +224,8 @@ fun ThemeSettingsContent(
                                     .fillMaxWidth()
                                     .then(if (index == 0) Modifier.focusRequester(fontFocusRequester) else Modifier),
                                 colors = ButtonDefaults.colors(
-                                    containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                    contentColor = NuvioColors.TextPrimary
+                                    containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                                    contentColor = NexioColors.TextPrimary
                                 )
                             ) {
                                 Text(
@@ -243,7 +243,7 @@ fun ThemeSettingsContent(
     if (showLanguageDialog) {
         val firstFocusRequester = remember { FocusRequester() }
         LaunchedEffect(Unit) { firstFocusRequester.requestFocus() }
-        NuvioDialog(
+        NexioDialog(
             onDismiss = { showLanguageDialog = false },
             title = stringResource(R.string.appearance_language_dialog_title),
             width = 400.dp,
@@ -278,8 +278,8 @@ fun ThemeSettingsContent(
                                     .fillMaxWidth()
                                     .then(if (index == 0) Modifier.focusRequester(firstFocusRequester) else Modifier),
                                 colors = ButtonDefaults.colors(
-                                    containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
-                                    contentColor = NuvioColors.TextPrimary
+                                    containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                                    contentColor = NexioColors.TextPrimary
                                 )
                             ) {
                                 Text(name)
@@ -319,16 +319,16 @@ private fun ThemeCard(
                 }
             },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.Background,
-            focusedContainerColor = NuvioColors.Background
+            containerColor = NexioColors.Background,
+            focusedContainerColor = NexioColors.Background
         ),
         border = CardDefaults.border(
             border = if (isSelected) Border(
-                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                border = BorderStroke(1.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ) else Border.None,
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             )
         ),
@@ -363,7 +363,7 @@ private fun ThemeCard(
             Text(
                 text = theme.displayName,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (isFocused || isSelected) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                color = if (isFocused || isSelected) NexioColors.TextPrimary else NexioColors.TextSecondary
             )
 
             Spacer(modifier = Modifier.height(7.dp))

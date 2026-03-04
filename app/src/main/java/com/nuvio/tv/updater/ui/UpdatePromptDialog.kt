@@ -42,7 +42,7 @@ import androidx.tv.material3.Text
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.updater.UpdateUiState
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
@@ -87,15 +87,15 @@ fun UpdatePromptDialog(
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .background(NuvioColors.BackgroundCard, shape)
-                .border(BorderStroke(2.dp, NuvioColors.FocusRing), shape)
+                .background(NexioColors.BackgroundCard, shape)
+                .border(BorderStroke(2.dp, NexioColors.FocusRing), shape)
                 .padding(32.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     text = stringResource(R.string.update_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
 
                 val subtitle = when {
@@ -111,7 +111,7 @@ fun UpdatePromptDialog(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary,
+                        color = NexioColors.TextSecondary,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -138,7 +138,7 @@ fun UpdatePromptDialog(
                         Markdown(
                             content = displayNotes,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = markdownColor(text = NuvioColors.TextSecondary),
+                            colors = markdownColor(text = NexioColors.TextSecondary),
                             typography = markdownTypography(
                                 paragraph = MaterialTheme.typography.bodySmall,
                                 h1 = MaterialTheme.typography.titleMedium,
@@ -169,12 +169,12 @@ fun UpdatePromptDialog(
                             Text(
                                 text = stringResource(R.string.update_downloading),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextSecondary
+                                color = NexioColors.TextSecondary
                             )
                             Text(
                                 text = String.format("%3d%%", pct),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextSecondary
+                                color = NexioColors.TextSecondary
                             )
                         }
 
@@ -187,7 +187,7 @@ fun UpdatePromptDialog(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .background(
-                                        color = NuvioColors.Background.copy(alpha = 0.7f),
+                                        color = NexioColors.Background.copy(alpha = 0.7f),
                                         shape = RoundedCornerShape(999.dp)
                                     )
                             )
@@ -196,7 +196,7 @@ fun UpdatePromptDialog(
                                     .fillMaxHeight()
                                     .fillMaxWidth(animatedProgress)
                                     .background(
-                                        color = NuvioColors.Primary,
+                                        color = NexioColors.Primary,
                                         shape = RoundedCornerShape(999.dp)
                                     )
                             )
@@ -208,7 +208,7 @@ fun UpdatePromptDialog(
                     Text(
                         text = stringResource(R.string.update_unknown_sources),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
 
@@ -220,10 +220,10 @@ fun UpdatePromptDialog(
                         onClick = onDismiss,
                         modifier = Modifier.focusRequester(closeFocusRequester),
                         colors = ButtonDefaults.colors(
-                            containerColor = NuvioColors.Background,
-                            contentColor = NuvioColors.TextPrimary,
-                            focusedContainerColor = NuvioColors.FocusBackground,
-                            focusedContentColor = NuvioColors.Primary
+                            containerColor = NexioColors.Background,
+                            contentColor = NexioColors.TextPrimary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
@@ -235,10 +235,10 @@ fun UpdatePromptDialog(
                             onClick = onOpenUnknownSources,
                             modifier = Modifier.focusRequester(primaryFocusRequester),
                             colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                containerColor = NexioColors.BackgroundCard,
+                                contentColor = NexioColors.TextPrimary,
+                                focusedContainerColor = NexioColors.FocusBackground,
+                                focusedContentColor = NexioColors.Primary
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
@@ -250,10 +250,10 @@ fun UpdatePromptDialog(
                             enabled = installButtonEnabled,
                             modifier = Modifier.focusRequester(primaryFocusRequester),
                             colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                containerColor = NexioColors.BackgroundCard,
+                                contentColor = NexioColors.TextPrimary,
+                                focusedContainerColor = NexioColors.FocusBackground,
+                                focusedContentColor = NexioColors.Primary
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
@@ -265,10 +265,10 @@ fun UpdatePromptDialog(
                             enabled = !state.isDownloading,
                             modifier = Modifier.focusRequester(primaryFocusRequester),
                             colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.BackgroundCard,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                containerColor = NexioColors.BackgroundCard,
+                                contentColor = NexioColors.TextPrimary,
+                                focusedContainerColor = NexioColors.FocusBackground,
+                                focusedContentColor = NexioColors.Primary
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {
@@ -278,10 +278,10 @@ fun UpdatePromptDialog(
                         Button(
                             onClick = onIgnore,
                             colors = ButtonDefaults.colors(
-                                containerColor = NuvioColors.Background,
-                                contentColor = NuvioColors.TextPrimary,
-                                focusedContainerColor = NuvioColors.FocusBackground,
-                                focusedContentColor = NuvioColors.Primary
+                                containerColor = NexioColors.Background,
+                                contentColor = NexioColors.TextPrimary,
+                                focusedContainerColor = NexioColors.FocusBackground,
+                                focusedContentColor = NexioColors.Primary
                             ),
                             shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                         ) {

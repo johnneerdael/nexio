@@ -43,8 +43,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.components.NuvioDialog
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.components.NexioDialog
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 fun AnimeSkipSettingsContent(
@@ -128,7 +128,7 @@ private fun AnimeSkipClientIdDialog(
         }
     }
 
-    NuvioDialog(
+    NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.animeskip_dialog_title),
         subtitle = stringResource(R.string.animeskip_dialog_subtitle),
@@ -138,16 +138,16 @@ private fun AnimeSkipClientIdDialog(
             onClick = { inputFocusRequester.requestFocus() },
             modifier = Modifier.fillMaxWidth().onFocusChanged { isInputFocused = it.isFocused || it.hasFocus },
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundElevated,
-                focusedContainerColor = NuvioColors.BackgroundElevated
+                containerColor = NexioColors.BackgroundElevated,
+                focusedContainerColor = NexioColors.BackgroundElevated
             ),
             border = CardDefaults.border(
                 border = Border(
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NuvioColors.Border),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NexioColors.Border),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                 ),
                 focusedBorder = Border(
-                    border = androidx.compose.foundation.BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                 )
             ),
@@ -167,9 +167,9 @@ private fun AnimeSkipClientIdDialog(
                         },
                     singleLine = true,
                     keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NuvioColors.TextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
                     cursorBrush = SolidColor(
-                        if (isInputFocused) NuvioColors.Primary
+                        if (isInputFocused) NexioColors.Primary
                         else androidx.compose.ui.graphics.Color.Transparent
                     ),
                     decorationBox = { innerTextField ->
@@ -177,7 +177,7 @@ private fun AnimeSkipClientIdDialog(
                             Text(
                                 text = stringResource(R.string.animeskip_dialog_placeholder),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = NuvioColors.TextTertiary
+                                color = NexioColors.TextTertiary
                             )
                         }
                         innerTextField()
@@ -190,24 +190,24 @@ private fun AnimeSkipClientIdDialog(
             Button(
                 onClick = onDismiss,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundElevated,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) { Text(stringResource(R.string.action_cancel)) }
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = onClear,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundElevated,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundElevated,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) { Text(stringResource(R.string.action_clear)) }
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = { if (!validating) viewModel.validateAndSave(value, onSaved) },
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioColors.BackgroundCard,
-                    contentColor = NuvioColors.TextPrimary
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
                 )
             ) {
                 Text(if (validating) stringResource(R.string.action_saving) else stringResource(R.string.action_save))

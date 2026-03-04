@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
 @HiltAndroidApp
-class NuvioApplication : Application(), ImageLoaderFactory {
+class NexioApplication : Application(), ImageLoaderFactory {
 
     @Inject lateinit var startupSyncService: StartupSyncService
 

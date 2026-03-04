@@ -15,7 +15,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -37,7 +37,7 @@ fun EmptyScreenState(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
-                tint = NuvioColors.TextTertiary
+                tint = NexioColors.TextTertiary
             )
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -45,7 +45,7 @@ fun EmptyScreenState(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
-            color = NuvioColors.TextPrimary
+            color = NexioColors.TextPrimary
         )
 
         if (subtitle != null) {
@@ -53,7 +53,7 @@ fun EmptyScreenState(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = NuvioColors.TextSecondary
+                color = NexioColors.TextSecondary
             )
         }
     }

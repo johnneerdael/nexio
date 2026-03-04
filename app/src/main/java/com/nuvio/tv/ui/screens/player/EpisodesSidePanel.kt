@@ -57,8 +57,8 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
-import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioColors
+import com.nuvio.tv.ui.theme.NexioTheme
 import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.screens.detail.formatReleaseDate
 import androidx.compose.material.icons.Icons
@@ -117,7 +117,7 @@ internal fun EpisodesSidePanel(
             .fillMaxHeight()
             .width(520.dp)
             .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-            .background(NuvioColors.BackgroundElevated)
+            .background(NexioColors.BackgroundElevated)
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
                 Row(
@@ -128,7 +128,7 @@ internal fun EpisodesSidePanel(
                     Text(
                         text = if (uiState.showEpisodeStreams) stringResource(R.string.episodes_panel_streams_title) else stringResource(R.string.episodes_panel_title),
                         style = MaterialTheme.typography.headlineSmall,
-                        color = NuvioColors.TextPrimary
+                        color = NexioColors.TextPrimary
                     )
 
                     DialogButton(
@@ -199,7 +199,7 @@ private fun EpisodeStreamsView(
                 }
             },
             style = MaterialTheme.typography.bodyLarge,
-            color = NuvioTheme.extendedColors.textSecondary,
+            color = NexioTheme.extendedColors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -418,16 +418,16 @@ private fun EpisodesSeasonTabs(
                     .onFocusChanged { isFocused = it.isFocused },
                 shape = CardDefaults.shape(shape = RoundedCornerShape(24.dp)),
                 colors = CardDefaults.colors(
-                    containerColor = if (isSelected) Color(0xFFF5F5F5) else NuvioColors.BackgroundCard,
-                    focusedContainerColor = if (isSelected) Color.White else NuvioColors.Secondary
+                    containerColor = if (isSelected) Color(0xFFF5F5F5) else NexioColors.BackgroundCard,
+                    focusedContainerColor = if (isSelected) Color.White else NexioColors.Secondary
                 ),
                 border = CardDefaults.border(
                     border = Border(
-                        border = BorderStroke(1.dp, if (isSelected) Color.Transparent else NuvioColors.Border),
+                        border = BorderStroke(1.dp, if (isSelected) Color.Transparent else NexioColors.Border),
                         shape = RoundedCornerShape(24.dp)
                     ),
                     focusedBorder = Border(
-                        border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                        border = BorderStroke(2.dp, NexioColors.FocusRing),
                         shape = RoundedCornerShape(24.dp)
                     )
                 ),
@@ -438,8 +438,8 @@ private fun EpisodesSeasonTabs(
                     style = MaterialTheme.typography.labelLarge,
                     color = when {
                         isSelected -> Color.Black
-                        isFocused -> NuvioColors.OnSecondary
-                        else -> NuvioTheme.extendedColors.textSecondary
+                        isFocused -> NexioColors.OnSecondary
+                        else -> NexioTheme.extendedColors.textSecondary
                     },
                     modifier = Modifier.padding(vertical = 10.dp, horizontal = 20.dp)
                 )
@@ -478,12 +478,12 @@ private fun EpisodeItem(
             .fillMaxWidth()
             .then(if (requestInitialFocus) Modifier.focusRequester(focusRequester) else Modifier),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(16.dp)
             )
         ),
@@ -503,7 +503,7 @@ private fun EpisodeItem(
                     .width(130.dp)
                     .height(90.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(NuvioColors.SurfaceVariant)
+                    .background(NexioColors.SurfaceVariant)
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
@@ -544,7 +544,7 @@ private fun EpisodeItem(
                             .padding(6.dp)
                             .size(22.dp)
                             .clip(RoundedCornerShape(11.dp))
-                            .background(NuvioColors.Primary),
+                            .background(NexioColors.Primary),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -565,7 +565,7 @@ private fun EpisodeItem(
                 Text(
                     text = episode.title.ifBlank { stringResource(R.string.episodes_episode) },
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -574,7 +574,7 @@ private fun EpisodeItem(
                     Text(
                         text = formattedDate,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioTheme.extendedColors.textTertiary
+                        color = NexioTheme.extendedColors.textTertiary
                     )
                 }
 
@@ -582,7 +582,7 @@ private fun EpisodeItem(
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioTheme.extendedColors.textSecondary,
+                        color = NexioTheme.extendedColors.textSecondary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )

@@ -104,7 +104,7 @@ import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.core.player.ExternalPlayerLauncher
 import com.nuvio.tv.ui.components.LoadingIndicator
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import android.text.format.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -1454,7 +1454,7 @@ private fun ProgressBar(
                 .fillMaxHeight()
                 .fillMaxWidth(animatedProgress)
                 .clip(RoundedCornerShape(3.dp))
-                .background(NuvioColors.Secondary)
+                .background(NexioColors.Secondary)
         )
     }
 }
@@ -1765,7 +1765,7 @@ private fun SpeedSelectionDialog(
             modifier = Modifier
                 .width(300.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated)
+                .background(NexioColors.BackgroundElevated)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp)
@@ -1773,7 +1773,7 @@ private fun SpeedSelectionDialog(
                 Text(
                     text = stringResource(R.string.player_speed_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
@@ -1806,7 +1806,7 @@ private fun MoreActionsDialog(
             modifier = Modifier
                 .width(360.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundElevated)
+                .background(NexioColors.BackgroundElevated)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -1815,7 +1815,7 @@ private fun MoreActionsDialog(
                 Text(
                     text = stringResource(R.string.player_more_actions_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
@@ -1849,15 +1849,15 @@ private fun MoreActionItem(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp))
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyLarge,
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
         )
     }
@@ -1877,8 +1877,8 @@ private fun SpeedItem(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) NuvioColors.Secondary.copy(alpha = 0.2f) else NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = if (isSelected) NexioColors.Secondary.copy(alpha = 0.2f) else NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp))
     ) {
@@ -1892,14 +1892,14 @@ private fun SpeedItem(
             Text(
                 text = if (speed == 1f) stringResource(R.string.player_speed_normal) else "${speed}x",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary
+                color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary
             )
 
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = NuvioColors.Secondary,
+                    tint = NexioColors.Secondary,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -1920,15 +1920,15 @@ internal fun DialogButton(
         onClick = onClick,
         modifier = modifier.onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = if (isPrimary) NuvioColors.Secondary else NuvioColors.BackgroundCard,
-            focusedContainerColor = if (isPrimary) NuvioColors.Secondary else NuvioColors.FocusBackground
+            containerColor = if (isPrimary) NexioColors.Secondary else NexioColors.BackgroundCard,
+            focusedContainerColor = if (isPrimary) NexioColors.Secondary else NexioColors.FocusBackground
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp))
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = if (isPrimary) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
+            color = if (isPrimary) NexioColors.OnSecondary else NexioColors.TextPrimary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }

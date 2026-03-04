@@ -46,7 +46,7 @@ import com.nuvio.tv.domain.model.PROFILE_AVATAR_COLORS
 import com.nuvio.tv.domain.model.UserProfile
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.screens.account.InputField
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.R
 
 private enum class ProfileSettingsMode {
@@ -155,12 +155,12 @@ private fun ProfileListItem(
             .fillMaxWidth()
             .heightIn(min = 62.dp),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundElevated,
-            focusedContainerColor = NuvioColors.BackgroundElevated
+            containerColor = NexioColors.BackgroundElevated,
+            focusedContainerColor = NexioColors.BackgroundElevated
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -184,14 +184,14 @@ private fun ProfileListItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = profile.name,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
                 if (profile.isPrimary) {
                     Text(
                         text = stringResource(R.string.profile_primary_label),
-                        color = NuvioColors.TextSecondary,
+                        color = NexioColors.TextSecondary,
                         fontSize = 12.sp
                     )
                 } else {
@@ -202,7 +202,7 @@ private fun ProfileListItem(
                     if (sharing.isNotEmpty()) {
                         Text(
                             text = stringResource(R.string.profile_shares_primary, sharing.joinToString(" & ")),
-                            color = NuvioColors.TextSecondary,
+                            color = NexioColors.TextSecondary,
                             fontSize = 12.sp
                         )
                     }
@@ -211,7 +211,7 @@ private fun ProfileListItem(
 
             Text(
                 text = stringResource(R.string.profile_edit_label),
-                color = NuvioColors.TextSecondary,
+                color = NexioColors.TextSecondary,
                 fontSize = 14.sp
             )
         }
@@ -228,16 +228,16 @@ private fun AddProfileButton(
             .fillMaxWidth()
             .height(56.dp),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.Background,
-            focusedContainerColor = NuvioColors.Background
+            containerColor = NexioColors.Background,
+            focusedContainerColor = NexioColors.Background
         ),
         border = CardDefaults.border(
             border = Border(
-                border = BorderStroke(1.dp, NuvioColors.Border),
+                border = BorderStroke(1.dp, NexioColors.Border),
                 shape = RoundedCornerShape(SettingsPillRadius)
             ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -256,14 +256,14 @@ private fun AddProfileButton(
             ) {
                 Text(
                     text = "+",
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Light
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = stringResource(R.string.profile_add),
-                    color = NuvioColors.TextSecondary,
+                    color = NexioColors.TextSecondary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -296,7 +296,7 @@ private fun ProfileCreateForm(
     ) {
         Text(
             text = stringResource(R.string.profile_create_title),
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -309,7 +309,7 @@ private fun ProfileCreateForm(
 
         Text(
             text = stringResource(R.string.profile_avatar_color),
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             fontSize = 14.sp
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -370,7 +370,7 @@ private fun ProfileEditForm(
     ) {
         Text(
             text = stringResource(R.string.profile_edit_title_id, profile.id),
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -383,7 +383,7 @@ private fun ProfileEditForm(
 
         Text(
             text = stringResource(R.string.profile_avatar_color),
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             fontSize = 14.sp
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -487,14 +487,14 @@ private fun ProfileFormButton(
     isDestructive: Boolean = false
 ) {
     val containerColor = when {
-        !enabled -> NuvioColors.Border
+        !enabled -> NexioColors.Border
         isDestructive -> Color(0xFF5D1F1F)
-        else -> NuvioColors.BackgroundElevated
+        else -> NexioColors.BackgroundElevated
     }
     val focusedColor = when {
-        !enabled -> NuvioColors.Border
+        !enabled -> NexioColors.Border
         isDestructive -> Color(0xFFD32F2F)
-        else -> NuvioColors.FocusBackground
+        else -> NexioColors.FocusBackground
     }
 
     Card(
@@ -506,7 +506,7 @@ private fun ProfileFormButton(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, if (isDestructive) Color(0xFFD32F2F) else NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, if (isDestructive) Color(0xFFD32F2F) else NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsPillRadius)
             )
         ),
@@ -519,7 +519,7 @@ private fun ProfileFormButton(
         ) {
             Text(
                 text = text,
-                color = if (enabled) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
+                color = if (enabled) NexioColors.TextPrimary else NexioColors.TextSecondary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )

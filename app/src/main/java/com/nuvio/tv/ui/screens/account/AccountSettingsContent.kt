@@ -45,7 +45,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.AuthState
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 
@@ -66,7 +66,7 @@ fun AccountSettingsContent(
                     Text(
                         text = stringResource(R.string.account_loading),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
             }
@@ -76,7 +76,7 @@ fun AccountSettingsContent(
                     Text(
                         text = stringResource(R.string.account_sync_description),
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextSecondary
+                        color = NexioColors.TextSecondary
                     )
                 }
                 item(key = "account_sign_in_qr") {
@@ -114,7 +114,7 @@ private fun SyncOverviewCard(overview: SyncOverview) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.BackgroundCard,
+                color = NexioColors.BackgroundCard,
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(10.dp)
@@ -125,7 +125,7 @@ private fun SyncOverviewCard(overview: SyncOverview) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = NuvioColors.BackgroundElevated,
+                        color = NexioColors.BackgroundElevated,
                         shape = RoundedCornerShape(6.dp)
                     )
                     .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -134,7 +134,7 @@ private fun SyncOverviewCard(overview: SyncOverview) {
                 Text(
                     text = stringResource(R.string.account_total_label),
                     style = MaterialTheme.typography.bodySmall,
-                    color = NuvioColors.Secondary,
+                    color = NexioColors.Secondary,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.width(100.dp)
                 )
@@ -166,13 +166,13 @@ private fun SyncStatChip(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            color = NuvioColors.Secondary,
+            color = NexioColors.Secondary,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = label,
             fontSize = 9.sp,
-            color = NuvioColors.TextTertiary
+            color = NexioColors.TextTertiary
         )
     }
 }
@@ -186,7 +186,7 @@ private fun ProfileSyncRow(profile: ProfileSyncStats) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.BackgroundElevated,
+                color = NexioColors.BackgroundElevated,
                 shape = RoundedCornerShape(6.dp)
             )
             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -212,7 +212,7 @@ private fun ProfileSyncRow(profile: ProfileSyncStats) {
         Text(
             text = profile.profileName,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.width(70.dp)
         )
@@ -236,13 +236,13 @@ private fun ProfileStatValue(count: Int, label: String) {
         Text(
             text = count.toString(),
             fontSize = 12.sp,
-            color = if (count > 0) NuvioColors.TextPrimary else NuvioColors.TextTertiary,
+            color = if (count > 0) NexioColors.TextPrimary else NexioColors.TextTertiary,
             fontWeight = FontWeight.Medium
         )
         Text(
             text = label,
             fontSize = 8.sp,
-            color = NuvioColors.TextTertiary
+            color = NexioColors.TextTertiary
         )
     }
 }
@@ -253,7 +253,7 @@ private fun SyncOverviewLoadingCard() {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.BackgroundCard,
+                color = NexioColors.BackgroundCard,
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(10.dp),
@@ -262,7 +262,7 @@ private fun SyncOverviewLoadingCard() {
         Text(
             text = stringResource(R.string.account_loading_sync),
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary
+            color = NexioColors.TextSecondary
         )
     }
 }
@@ -282,12 +282,12 @@ private fun SettingsActionButton(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.FocusBackground
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(8.dp)
             )
         ),
@@ -304,20 +304,20 @@ private fun SettingsActionButton(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
-                tint = if (isFocused) NuvioColors.Primary else NuvioColors.TextSecondary
+                tint = if (isFocused) NexioColors.Primary else NexioColors.TextSecondary
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = subtitle,
                     fontSize = 11.sp,
-                    color = NuvioColors.TextSecondary
+                    color = NexioColors.TextSecondary
                 )
             }
         }
@@ -330,7 +330,7 @@ private fun StatusCard(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = NuvioColors.Secondary.copy(alpha = 0.1f),
+                color = NexioColors.Secondary.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -340,18 +340,18 @@ private fun StatusCard(label: String, value: String) {
             imageVector = Icons.Default.CheckCircle,
             contentDescription = null,
             modifier = Modifier.size(16.dp),
-            tint = NuvioColors.Secondary
+            tint = NexioColors.Secondary
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "$label  ",
             style = MaterialTheme.typography.labelSmall,
-            color = NuvioColors.TextTertiary
+            color = NexioColors.TextTertiary
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextPrimary,
+            color = NexioColors.TextPrimary,
             fontWeight = FontWeight.Medium
         )
     }

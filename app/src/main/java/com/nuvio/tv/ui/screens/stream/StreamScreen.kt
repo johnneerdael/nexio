@@ -78,10 +78,10 @@ import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
 import com.nuvio.tv.ui.components.SourceStatusFilterChip
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import com.nuvio.tv.ui.components.StreamsSkeletonList
 import com.nuvio.tv.ui.screens.player.LoadingOverlay
-import com.nuvio.tv.ui.theme.NuvioTheme
+import com.nuvio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay as coroutineDelay
@@ -180,7 +180,7 @@ fun StreamScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
+            .background(NexioColors.Background)
     ) {
         // Full screen backdrop
         StreamBackdrop(
@@ -294,7 +294,7 @@ private fun StreamBackdrop(
     isLoading: Boolean
 ) {
     val context = LocalContext.current
-    val backgroundColor = NuvioColors.Background
+    val backgroundColor = NexioColors.Background
     val backdropModel = remember(context, backdrop) {
         backdrop?.let { image ->
             ImageRequest.Builder(context)
@@ -348,7 +348,7 @@ private fun StreamBackdrop(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(NuvioColors.Background.copy(alpha = alpha))
+                .background(NexioColors.Background.copy(alpha = alpha))
         )
 
         // Left gradient for text readability
@@ -417,7 +417,7 @@ private fun LeftContentSection(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.displaySmall,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
@@ -430,7 +430,7 @@ private fun LeftContentSection(
                 Text(
                     text = "S$season E$episode",
                     style = MaterialTheme.typography.titleLarge,
-                    color = NuvioTheme.extendedColors.textSecondary,
+                    color = NexioTheme.extendedColors.textSecondary,
                     textAlign = TextAlign.Center
                 )
                 if (episodeName != null) {
@@ -438,7 +438,7 @@ private fun LeftContentSection(
                     Text(
                         text = episodeName,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioColors.TextPrimary,
+                        color = NexioColors.TextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center
@@ -449,7 +449,7 @@ private fun LeftContentSection(
                     Text(
                         text = "${runtime}m",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioTheme.extendedColors.textSecondary,
+                        color = NexioTheme.extendedColors.textSecondary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -459,7 +459,7 @@ private fun LeftContentSection(
                     Text(
                         text = infoText,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = NuvioTheme.extendedColors.textSecondary,
+                        color = NexioTheme.extendedColors.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center
@@ -564,7 +564,7 @@ private fun RightStreamSection(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(NuvioColors.BackgroundCard.copy(alpha = 0.5f)),
+                    .background(NexioColors.BackgroundCard.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 when {
@@ -684,7 +684,7 @@ private fun ErrorState(
             imageVector = Icons.Default.Warning,
             contentDescription = null,
             modifier = Modifier.size(48.dp),
-            tint = NuvioColors.Error
+            tint = NexioColors.Error
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -692,7 +692,7 @@ private fun ErrorState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodyLarge,
-            color = NuvioTheme.extendedColors.textSecondary,
+            color = NexioTheme.extendedColors.textSecondary,
             textAlign = TextAlign.Center
         )
 
@@ -703,12 +703,12 @@ private fun ErrorState(
             onClick = onRetry,
             modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
             colors = CardDefaults.colors(
-                containerColor = NuvioColors.BackgroundCard,
-                focusedContainerColor = NuvioColors.Secondary
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.Secondary
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(8.dp)
                 )
             ),
@@ -718,7 +718,7 @@ private fun ErrorState(
             Text(
                 text = stringResource(R.string.stream_retry),
                 style = MaterialTheme.typography.labelLarge,
-                color = if (isFocused) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
+                color = if (isFocused) NexioColors.OnSecondary else NexioColors.TextPrimary,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
             )
         }
@@ -735,7 +735,7 @@ private fun EmptyState() {
         Text(
             text = stringResource(R.string.stream_no_streams),
             style = MaterialTheme.typography.bodyLarge,
-            color = NuvioTheme.extendedColors.textSecondary,
+            color = NexioTheme.extendedColors.textSecondary,
             textAlign = TextAlign.Center
         )
 
@@ -744,7 +744,7 @@ private fun EmptyState() {
         Text(
             text = stringResource(R.string.stream_no_streams_hint),
             style = MaterialTheme.typography.bodyMedium,
-            color = NuvioTheme.extendedColors.textSecondary,
+            color = NexioTheme.extendedColors.textSecondary,
             textAlign = TextAlign.Center
         )
     }
@@ -874,8 +874,8 @@ private fun StreamCard(
                 } else false
             } else Modifier),
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.BackgroundElevated,
-            focusedContainerColor = NuvioColors.BackgroundElevated
+            containerColor = NexioColors.BackgroundElevated,
+            focusedContainerColor = NexioColors.BackgroundElevated
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
         scale = CardDefaults.scale(focusedScale = 1.08f)
@@ -894,7 +894,7 @@ private fun StreamCard(
                 Text(
                     text = streamName,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NuvioColors.TextPrimary
+                    color = NexioColors.TextPrimary
                 )
 
                 streamDescription?.let { description ->
@@ -902,7 +902,7 @@ private fun StreamCard(
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.extendedColors.textSecondary
+                            color = NexioTheme.extendedColors.textSecondary
                         )
                     }
                 }
@@ -911,13 +911,13 @@ private fun StreamCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (stream.isTorrent()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NuvioColors.Secondary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NexioColors.Secondary)
                     }
                     if (stream.isYouTube()) {
                         StreamTypeChip(text = stringResource(R.string.stream_type_youtube), color = Color(0xFFFF0000))
                     }
                     if (stream.isExternal()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NuvioColors.Primary)
+                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NexioColors.Primary)
                     }
                 }
             }
@@ -941,7 +941,7 @@ private fun StreamCard(
                 Text(
                     text = stream.addonName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = NuvioTheme.extendedColors.textTertiary,
+                    color = NexioTheme.extendedColors.textTertiary,
                     maxLines = 1
                 )
             }
@@ -984,7 +984,7 @@ private fun PlayerChoiceDialog(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
-                .background(NuvioColors.BackgroundCard)
+                .background(NexioColors.BackgroundCard)
         ) {
             Column(
                 modifier = Modifier
@@ -995,7 +995,7 @@ private fun PlayerChoiceDialog(
                 Text(
                     text = stringResource(R.string.stream_player_picker_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    color = NuvioColors.TextPrimary,
+                    color = NexioColors.TextPrimary,
                     textAlign = TextAlign.Center
                 )
 
@@ -1013,12 +1013,12 @@ private fun PlayerChoiceDialog(
                             .focusRequester(focusRequester)
                             .onFocusChanged { internalFocused = it.isFocused },
                         colors = CardDefaults.colors(
-                            containerColor = NuvioColors.BackgroundElevated,
-                            focusedContainerColor = NuvioColors.Secondary
+                            containerColor = NexioColors.BackgroundElevated,
+                            focusedContainerColor = NexioColors.Secondary
                         ),
                         border = CardDefaults.border(
                             focusedBorder = Border(
-                                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                border = BorderStroke(2.dp, NexioColors.FocusRing),
                                 shape = RoundedCornerShape(12.dp)
                             )
                         ),
@@ -1028,7 +1028,7 @@ private fun PlayerChoiceDialog(
                         Text(
                             text = stringResource(R.string.stream_player_internal),
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (internalFocused) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
+                            color = if (internalFocused) NexioColors.OnSecondary else NexioColors.TextPrimary,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                                 .fillMaxWidth(),
@@ -1043,12 +1043,12 @@ private fun PlayerChoiceDialog(
                             .weight(1f)
                             .onFocusChanged { externalFocused = it.isFocused },
                         colors = CardDefaults.colors(
-                            containerColor = NuvioColors.BackgroundElevated,
-                            focusedContainerColor = NuvioColors.Secondary
+                            containerColor = NexioColors.BackgroundElevated,
+                            focusedContainerColor = NexioColors.Secondary
                         ),
                         border = CardDefaults.border(
                             focusedBorder = Border(
-                                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                                border = BorderStroke(2.dp, NexioColors.FocusRing),
                                 shape = RoundedCornerShape(12.dp)
                             )
                         ),
@@ -1058,7 +1058,7 @@ private fun PlayerChoiceDialog(
                         Text(
                             text = stringResource(R.string.stream_player_external),
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (externalFocused) NuvioColors.OnSecondary else NuvioColors.TextPrimary,
+                            color = if (externalFocused) NexioColors.OnSecondary else NexioColors.TextPrimary,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                                 .fillMaxWidth(),

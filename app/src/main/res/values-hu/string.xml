@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio</string>
+    <string name="app_name">NEXIO</string>
     <string name="type_movie">Film</string>
     <string name="type_series">Sorozat</string>
     <string name="type_unknown">Ismeretlen</string>
@@ -446,7 +446,7 @@
     <string name="trakt_stat_watched_hours">Nézett órák</string>
     <string name="trakt_disconnect">Leválasztás</string>
     <string name="trakt_disconnect_title">Lecsatlakozol a Trakt-ról?</string>
-    <string name="trakt_disconnect_subtitle">Ez megszünteti a kapcsolatot a Trakt fiókod és a Nuvio között.</string>
+    <string name="trakt_disconnect_subtitle">Ez megszünteti a kapcsolatot a Trakt fiókod és a NEXIO között.</string>
     <string name="trakt_login">Bejelentkezés</string>
     <string name="trakt_retry">Újra</string>
     <string name="trakt_back">Vissza</string>
@@ -774,7 +774,7 @@
     <string name="catalog_see_all_empty_subtitle">Próbálkozz másik katalógussal, vagy térj vissza később</string>
 
     <!-- LayoutSelectionScreen -->
-    <string name="layout_selection_welcome">Üdvözöl a Nuvio</string>
+    <string name="layout_selection_welcome">Üdvözöl a NEXIO</string>
     <string name="layout_selection_subtitle">Válaszd ki a kezdőképernyő elrendezését</string>
     <string name="layout_selection_continue">Folytatás</string>
 

@@ -58,7 +58,7 @@ import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.ui.components.ClassicLayoutPreview
 import com.nuvio.tv.ui.components.GridLayoutPreview
 import com.nuvio.tv.ui.components.ModernLayoutPreview
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 fun LayoutSettingsScreen(
@@ -227,12 +227,12 @@ fun LayoutSettingsContent(
                         Text(
                             text = stringResource(R.string.layout_hero_catalogs),
                             style = MaterialTheme.typography.labelLarge,
-                            color = NuvioColors.TextSecondary
+                            color = NexioColors.TextSecondary
                         )
                         Text(
                             text = stringResource(R.string.layout_hero_catalogs_sub),
                             style = MaterialTheme.typography.bodySmall,
-                            color = NuvioColors.TextTertiary
+                            color = NexioColors.TextTertiary
                         )
                         LazyRow(
                             contentPadding = PaddingValues(end = 8.dp),
@@ -626,12 +626,12 @@ private fun ModernTrailerPlaybackTargetRow(
     Text(
         text = stringResource(R.string.layout_trailer_location),
         style = MaterialTheme.typography.labelLarge,
-        color = NuvioColors.TextSecondary
+        color = NexioColors.TextSecondary
     )
     Text(
         text = stringResource(R.string.layout_trailer_location_sub),
         style = MaterialTheme.typography.bodySmall,
-        color = NuvioColors.TextTertiary
+        color = NexioColors.TextTertiary
     )
     LazyRow(
         contentPadding = PaddingValues(end = 8.dp),
@@ -681,16 +681,16 @@ private fun LayoutCard(
             }
         },
         colors = CardDefaults.colors(
-            containerColor = NuvioColors.Background,
-            focusedContainerColor = NuvioColors.Background
+            containerColor = NexioColors.Background,
+            focusedContainerColor = NexioColors.Background
         ),
         border = CardDefaults.border(
             border = if (isSelected) Border(
-                border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                border = BorderStroke(1.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             ) else Border.None,
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(SettingsSecondaryCardRadius)
             )
         ),
@@ -729,7 +729,7 @@ private fun LayoutCard(
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = stringResource(R.string.cd_selected),
-                        tint = NuvioColors.FocusRing,
+                        tint = NexioColors.FocusRing,
                         modifier = Modifier
                             .size(16.dp)
                             .padding(end = 6.dp)
@@ -742,7 +742,7 @@ private fun LayoutCard(
                         HomeLayout.MODERN -> stringResource(R.string.layout_modern)
                     },
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected || isFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary
+                    color = if (isSelected || isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary
                 )
             }
         }
@@ -756,7 +756,7 @@ private fun LayoutPreviewPlaceholder() {
             .fillMaxWidth()
             .height(112.dp)
             .background(
-                color = NuvioColors.BackgroundCard,
+                color = NexioColors.BackgroundCard,
                 shape = RoundedCornerShape(12.dp)
             )
             .padding(10.dp),
@@ -766,13 +766,13 @@ private fun LayoutPreviewPlaceholder() {
             modifier = Modifier
                 .fillMaxWidth(0.7f)
                 .height(10.dp)
-                .background(NuvioColors.Border, RoundedCornerShape(999.dp))
+                .background(NexioColors.Border, RoundedCornerShape(999.dp))
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(NuvioColors.BackgroundElevated, RoundedCornerShape(10.dp))
+                .background(NexioColors.BackgroundElevated, RoundedCornerShape(10.dp))
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(3) {
@@ -780,7 +780,7 @@ private fun LayoutPreviewPlaceholder() {
                     modifier = Modifier
                         .weight(1f)
                         .height(10.dp)
-                        .background(NuvioColors.Border, RoundedCornerShape(999.dp))
+                        .background(NexioColors.Border, RoundedCornerShape(999.dp))
                 )
             }
         }
@@ -853,12 +853,12 @@ private fun PosterCardStyleControls(
             },
             shape = ButtonDefaults.shape(shape = RoundedCornerShape(SettingsPillRadius)),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.Background,
-                focusedContainerColor = NuvioColors.Background
+                containerColor = NexioColors.Background,
+                focusedContainerColor = NexioColors.Background
             ),
             border = ButtonDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(2.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(SettingsPillRadius)
                 )
             )
@@ -866,7 +866,7 @@ private fun PosterCardStyleControls(
             Text(
                 text = stringResource(R.string.layout_reset_default),
                 style = MaterialTheme.typography.labelLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
         }
     }
@@ -885,7 +885,7 @@ private fun OptionRow(
     Text(
         text = "$title ($selectedLabel)",
         style = MaterialTheme.typography.labelLarge,
-        color = NuvioColors.TextSecondary
+        color = NexioColors.TextSecondary
     )
 
     LazyRow(

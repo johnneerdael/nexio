@@ -90,8 +90,8 @@ android {
         }
 
         // In-app updater (GitHub Releases)
-        buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
-        buildConfigField("String", "GITHUB_REPO", "\"NuvioTV\"")
+        buildConfigField("String", "GITHUB_OWNER", "\"johnneerdael\"")
+        buildConfigField("String", "GITHUB_REPO", "\"NEXIO\"")
     }
 
     if (enableDoviNative) {

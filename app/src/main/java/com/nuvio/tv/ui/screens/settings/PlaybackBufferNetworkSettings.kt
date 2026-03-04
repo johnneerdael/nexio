@@ -27,7 +27,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.VodCacheSizeMode
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 import kotlin.math.min
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -51,7 +51,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         Text(
             text = "Buffer",
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
         )
     }
@@ -168,12 +168,12 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             onClick = onResetToDefaults,
             shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.Background,
-                focusedContainerColor = NuvioColors.Background
+                containerColor = NexioColors.Background,
+                focusedContainerColor = NexioColors.Background
             ),
             border = ButtonDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(1.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(10.dp)
                 )
             )
@@ -181,7 +181,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             Text(
                 text = "Reset to Default",
                 style = MaterialTheme.typography.labelLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
         }
     }
@@ -190,7 +190,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         Text(
             text = "Disk Cache",
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
         )
     }
@@ -249,7 +249,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         Text(
             text = infoText,
             style = MaterialTheme.typography.bodySmall,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
     }
@@ -258,7 +258,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         Text(
             text = "Network",
             style = MaterialTheme.typography.titleMedium,
-            color = NuvioColors.TextSecondary,
+            color = NexioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
         )
     }
@@ -311,12 +311,12 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             onClick = onResetNetworkToDefaults,
             shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
             colors = ButtonDefaults.colors(
-                containerColor = NuvioColors.Background,
-                focusedContainerColor = NuvioColors.Background
+                containerColor = NexioColors.Background,
+                focusedContainerColor = NexioColors.Background
             ),
             border = ButtonDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(1.dp, NuvioColors.FocusRing),
+                    border = BorderStroke(1.dp, NexioColors.FocusRing),
                     shape = RoundedCornerShape(10.dp)
                 )
             )
@@ -324,7 +324,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             Text(
                 text = "Reset to Default",
                 style = MaterialTheme.typography.labelLarge,
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             )
         }
     }

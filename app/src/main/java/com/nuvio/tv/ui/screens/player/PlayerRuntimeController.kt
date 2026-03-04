@@ -56,7 +56,7 @@ class PlayerRuntimeController(
         internal const val TRACK_FRAME_RATE_GRACE_MS = 1500L
         internal const val FIRST_FRAME_TIMEOUT_MS = 12_000L
         internal const val MAX_TIMEOUT_RECOVERY_ATTEMPTS = 2
-        internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "nuvio-addon-sub:"
+        internal const val ADDON_SUBTITLE_TRACK_ID_PREFIX = "Nexio-addon-sub:"
         internal val PORTUGUESE_BRAZILIAN_TAGS = listOf(
             "pt-br", "pt_br", "pob", "brazilian", "brazil", "brasil"
         )

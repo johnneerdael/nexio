@@ -32,7 +32,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import com.nuvio.tv.ui.theme.NuvioColors
+import com.nuvio.tv.ui.theme.NexioColors
 
 @Composable
 internal fun InputField(
@@ -58,16 +58,16 @@ internal fun InputField(
     Surface(
         onClick = { isEditing = true },
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = NuvioColors.BackgroundCard,
-            focusedContainerColor = NuvioColors.BackgroundCard
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.BackgroundCard
         ),
         border = ClickableSurfaceDefaults.border(
             border = Border(
-                border = BorderStroke(1.dp, NuvioColors.Border),
+                border = BorderStroke(1.dp, NexioColors.Border),
                 shape = RoundedCornerShape(12.dp)
             ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, NuvioColors.FocusRing),
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(12.dp)
             )
         ),
@@ -105,16 +105,16 @@ internal fun InputField(
                 }
             ),
             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = NuvioColors.TextPrimary
+                color = NexioColors.TextPrimary
             ),
-            cursorBrush = SolidColor(if (isEditing) NuvioColors.Secondary else Color.Transparent),
+            cursorBrush = SolidColor(if (isEditing) NexioColors.Secondary else Color.Transparent),
             visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
                     Text(
                         text = placeholder,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = NuvioColors.TextTertiary
+                        color = NexioColors.TextTertiary
                     )
                 }
                 innerTextField()
