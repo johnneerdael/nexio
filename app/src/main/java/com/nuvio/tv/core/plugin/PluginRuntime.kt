@@ -39,7 +39,10 @@ import javax.inject.Singleton
 
 private const val TAG = "PluginRuntime"
 private const val PLUGIN_TIMEOUT_MS = 60_000L
-private const val MAX_FETCH_RESPONSE_BYTES = 2 * 1024 * 1024
+private const val MAX_FETCH_RESPONSE_BYTES = 256 * 1024
+private const val MAX_FETCH_BODY_CHARS = 256 * 1024
+private const val MAX_FETCH_HEADER_VALUE_CHARS = 8 * 1024
+private const val FETCH_TRUNCATION_SUFFIX = "\n...[truncated]"
 
 @Singleton
 class PluginRuntime @Inject constructor() {
@@ -447,10 +450,10 @@ class PluginRuntime @Inject constructor() {
                 response.use { httpResponse ->
                     val bodyContentType = httpResponse.body?.contentType()
                     val contentEncoding = httpResponse.header("Content-Encoding")?.lowercase()?.trim()
-                    val decodedBytes = try {
+                    val decodedRead = try {
                         val stream = httpResponse.body?.byteStream()
                         if (stream == null) {
-                            ByteArray(0)
+                            BoundedReadResult(ByteArray(0), false)
                         } else {
                             val decodeStream: InputStream = when (contentEncoding) {
                                 "gzip" -> GZIPInputStream(stream)
@@ -463,18 +466,14 @@ class PluginRuntime @Inject constructor() {
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to read/decode response body for $url: ${e.message}")
-                        ByteArray(0)
+                        BoundedReadResult(ByteArray(0), false)
                     }
 
                     val charset = bodyContentType?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
-                    val responseBody = try {
-                        String(decodedBytes, charset)
-                    } catch (e: Exception) {
-                        String(decodedBytes, Charsets.UTF_8)
-                    }
+                    val responseBody = decodeBodyToSafeString(decodedRead.bytes, charset)
                     val responseHeaders = mutableMapOf<String, String>()
                     httpResponse.headers.forEach { (name, value) ->
-                        responseHeaders[name.lowercase()] = value
+                        responseHeaders[name.lowercase()] = truncateString(value, MAX_FETCH_HEADER_VALUE_CHARS)
                     }
 
                     val result = mapOf(
@@ -483,7 +482,8 @@ class PluginRuntime @Inject constructor() {
                         "statusText" to httpResponse.message,
                         "url" to httpResponse.request.url.toString(),
                         "body" to responseBody,
-                        "headers" to responseHeaders
+                        "headers" to responseHeaders,
+                        "truncated" to decodedRead.truncated
                     )
 
                     Log.d(TAG, "Fetch result: ${httpResponse.code} ${httpResponse.message} url=$url bodyLen=${responseBody.length} bodyPreview=${responseBody.take(300)}")
@@ -505,10 +505,32 @@ class PluginRuntime @Inject constructor() {
         }
     }
 
-    private fun readAtMostBytes(stream: InputStream, maxBytes: Int): ByteArray {
+    private data class BoundedReadResult(
+        val bytes: ByteArray,
+        val truncated: Boolean
+    )
+
+    private fun truncateString(value: String, maxChars: Int): String {
+        if (value.length <= maxChars) return value
+        val end = maxChars - FETCH_TRUNCATION_SUFFIX.length
+        if (end <= 0) return FETCH_TRUNCATION_SUFFIX.take(maxChars)
+        return value.substring(0, end) + FETCH_TRUNCATION_SUFFIX
+    }
+
+    private fun decodeBodyToSafeString(bytes: ByteArray, charset: java.nio.charset.Charset): String {
+        val decoded = try {
+            String(bytes, charset)
+        } catch (e: Exception) {
+            String(bytes, Charsets.UTF_8)
+        }
+        return truncateString(decoded, MAX_FETCH_BODY_CHARS)
+    }
+
+    private fun readAtMostBytes(stream: InputStream, maxBytes: Int): BoundedReadResult {
         val out = ByteArrayOutputStream(minOf(maxBytes, 16 * 1024))
         val buffer = ByteArray(8 * 1024)
         var remaining = maxBytes
+        var truncated = false
 
         while (remaining > 0) {
             val read = stream.read(buffer, 0, minOf(buffer.size, remaining))
@@ -516,7 +538,10 @@ class PluginRuntime @Inject constructor() {
             out.write(buffer, 0, read)
             remaining -= read
         }
-        return out.toByteArray()
+        if (remaining == 0) {
+            truncated = stream.read() != -1
+        }
+        return BoundedReadResult(out.toByteArray(), truncated)
     }
 
     private fun parseUrl(urlString: String): String {
@@ -604,10 +629,15 @@ class PluginRuntime @Inject constructor() {
                         return Promise.resolve(parsed.body);
                     },
                     json: function() {
+                        
                         try {
+                            if (parsed.body === null || parsed.body === undefined || parsed.body === '') {
+                                return Promise.resolve(null);
+                            }
                             return Promise.resolve(JSON.parse(parsed.body));
                         } catch (e) {
-                            return Promise.reject(new Error('JSON parse error: ' + e.message));
+                            console.error('fetch.json parse error:', e && e.message ? e.message : e);
+                            return Promise.resolve(null);
                         }
                     }
                 };
