@@ -39,6 +39,8 @@ object MatroskaDolbyVisionHookInstaller {
     fun maybeInstall(
         extractorsFactory: DefaultExtractorsFactory,
         enabled: Boolean,
+        allowDv5Conversion: Boolean,
+        preserveMappingEnabled: Boolean,
         streamUrl: String
     ): Boolean {
         if (!enabled) {
@@ -52,7 +54,11 @@ object MatroskaDolbyVisionHookInstaller {
         }
 
         return runCatching {
-            val handler = createInvocationHandler(streamUrl.safeHost())
+            val handler = createInvocationHandler(
+                host = streamUrl.safeHost(),
+                allowDv5Conversion = allowDv5Conversion,
+                preserveMappingEnabled = preserveMappingEnabled
+            )
             val matroskaInstalled = installHook(
                 extractorsFactory = extractorsFactory,
                 transformerClassName = MATROSKA_TRANSFORMER_CLASS_NAME,
@@ -115,7 +121,11 @@ object MatroskaDolbyVisionHookInstaller {
         DolbyVisionCompatibility.setTsDolbyVisionNalTransformer(null)
     }
 
-    private fun createInvocationHandler(host: String): InvocationHandler {
+    private fun createInvocationHandler(
+        host: String,
+        allowDv5Conversion: Boolean,
+        preserveMappingEnabled: Boolean
+    ): InvocationHandler {
         val lastDetectedProfile = AtomicReference<Int?>(null)
         val nonDv7ProfileLogged = AtomicBoolean(false)
 
@@ -131,13 +141,21 @@ object MatroskaDolbyVisionHookInstaller {
             if (resolvedProfile == 7) {
                 return true
             }
+            if (resolvedProfile == 5 && allowDv5Conversion) {
+                return true
+            }
             if (resolvedProfile != null && nonDv7ProfileLogged.compareAndSet(false, true)) {
                 Log.i(
                     TAG,
-                    "Skipping experimental DV conversion for non-DV7 profile=$resolvedProfile host=$host"
+                    "Skipping experimental DV conversion for unsupported profile=$resolvedProfile host=$host"
                 )
             }
             return false
+        }
+
+        fun selectedConversionMode(profile: Int?): Int {
+            val resolvedProfile = rememberProfile(profile)
+            return if (resolvedProfile == 7 && preserveMappingEnabled) 5 else 2
         }
 
         return InvocationHandler { proxy, method, args ->
@@ -145,10 +163,14 @@ object MatroskaDolbyVisionHookInstaller {
                 "onDolbyVisionBlockAdditionalData" -> {
                     val blockAdditionalData = args?.getOrNull(0) as? ByteArray ?: return@InvocationHandler null
                     val dolbyVisionConfigBytes = args.getOrNull(2) as? ByteArray
-                    if (!shouldAllowConversion(resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes))) {
+                    val profile = resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes)
+                    if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
-                    DoviBridge.convertDv7RpuToDv81(blockAdditionalData, mode = 2)
+                    DoviBridge.convertDv7RpuToDv81(
+                        blockAdditionalData,
+                        mode = selectedConversionMode(profile)
+                    )
                         ?.takeIf { it.isNotEmpty() }
                 }
 
@@ -174,23 +196,28 @@ object MatroskaDolbyVisionHookInstaller {
                     val blockAdditionalData = thirdArg as? ByteArray
                     val codecs = thirdArg as? String
                     val dolbyVisionConfigBytes = args.getOrNull(3) as? ByteArray
-                    if (!shouldAllowConversion(
-                            resolveDolbyVisionProfile(
-                                codecs = codecs,
-                                configBytes = dolbyVisionConfigBytes
-                            )
-                        )
-                    ) {
+                    val profile = resolveDolbyVisionProfile(
+                        codecs = codecs,
+                        configBytes = dolbyVisionConfigBytes
+                    )
+                    if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
                     val rewrittenSample =
-                        rewriteMp4HevcSample(sampleLengthDelimited, nalUnitLengthFieldLength)
+                        rewriteMp4HevcSample(
+                            sampleLengthDelimited,
+                            nalUnitLengthFieldLength,
+                            selectedConversionMode(profile)
+                        )
                             ?: sampleLengthDelimited
                     if (blockAdditionalData == null) {
                         if (rewrittenSample !== sampleLengthDelimited) rewrittenSample else null
                     } else {
                         val convertedBlockAdditional =
-                            DoviBridge.convertDv7RpuToDv81(blockAdditionalData, mode = 2)
+                            DoviBridge.convertDv7RpuToDv81(
+                                blockAdditionalData,
+                                mode = selectedConversionMode(profile)
+                            )
                                 ?.takeIf { it.isNotEmpty() }
                                 ?: blockAdditionalData
                         appendLengthDelimitedNal(
@@ -203,10 +230,11 @@ object MatroskaDolbyVisionHookInstaller {
                 "transformDolbyVisionRpuNal" -> {
                     val nalPayload = args?.getOrNull(0) as? ByteArray ?: return@InvocationHandler null
                     val codecs = args?.getOrNull(1) as? String
-                    if (!shouldAllowConversion(resolveDolbyVisionProfile(codecs = codecs))) {
+                    val profile = resolveDolbyVisionProfile(codecs = codecs)
+                    if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
-                    maybeConvertDolbyVisionRpuNal(nalPayload)
+                    maybeConvertDolbyVisionRpuNal(nalPayload, selectedConversionMode(profile))
                 }
                 "equals" -> proxy === args?.getOrNull(0)
                 "hashCode" -> System.identityHashCode(proxy)
@@ -218,7 +246,8 @@ object MatroskaDolbyVisionHookInstaller {
 
     private fun rewriteMp4HevcSample(
         sampleLengthDelimited: ByteArray,
-        nalUnitLengthFieldLength: Int
+        nalUnitLengthFieldLength: Int,
+        conversionMode: Int
     ): ByteArray? {
         if (nalUnitLengthFieldLength !in 1..4) return null
         var offset = 0
@@ -230,7 +259,7 @@ object MatroskaDolbyVisionHookInstaller {
             offset += nalUnitLengthFieldLength
             if (offset + nalSize > sampleLengthDelimited.size) return null
             val originalNal = sampleLengthDelimited.copyOfRange(offset, offset + nalSize)
-            val convertedNal = transformNalForCompatibility(originalNal)
+            val convertedNal = transformNalForCompatibility(originalNal, conversionMode)
             if (convertedNal == null) {
                 changed = true
                 offset += nalSize
@@ -251,7 +280,10 @@ object MatroskaDolbyVisionHookInstaller {
         return out.toByteArray()
     }
 
-    private fun transformNalForCompatibility(nalPayload: ByteArray): ByteArray? {
+    private fun transformNalForCompatibility(
+        nalPayload: ByteArray,
+        conversionMode: Int
+    ): ByteArray? {
         if (nalPayload.isEmpty()) return nalPayload
         val nalType = getNalUnitType(nalPayload)
         val layerId = getNuhLayerId(nalPayload)
@@ -262,17 +294,20 @@ object MatroskaDolbyVisionHookInstaller {
         if (nalType != NAL_TYPE_UNSPEC62) {
             return nalPayload
         }
-        val converted = DoviBridge.convertDv7RpuToDv81(nalPayload, mode = 2)
+        val converted = DoviBridge.convertDv7RpuToDv81(nalPayload, mode = conversionMode)
             ?.takeIf { it.isNotEmpty() }
             ?: nalPayload
         return normalizeNuhLayerIdToZero(converted)
     }
 
-    private fun maybeConvertDolbyVisionRpuNal(nalPayload: ByteArray): ByteArray {
+    private fun maybeConvertDolbyVisionRpuNal(
+        nalPayload: ByteArray,
+        conversionMode: Int
+    ): ByteArray {
         if (nalPayload.isEmpty()) return nalPayload
         val nalType = getNalUnitType(nalPayload)
         if (nalType != NAL_TYPE_UNSPEC62) return nalPayload
-        val converted = DoviBridge.convertDv7RpuToDv81(nalPayload, mode = 2)
+        val converted = DoviBridge.convertDv7RpuToDv81(nalPayload, mode = conversionMode)
             ?.takeIf { it.isNotEmpty() }
             ?: nalPayload
         return normalizeNuhLayerIdToZero(converted)
@@ -335,7 +370,7 @@ object MatroskaDolbyVisionHookInstaller {
         val prefix = parts[0].lowercase()
         if (prefix != "dvhe" && prefix != "dvh1") return null
         val profileValue = parts[1].toIntOrNull() ?: return null
-        if (profileValue != 7) return null
+        if (profileValue != 5 && profileValue != 7) return null
         val width = parts[1].length.coerceAtLeast(2)
         parts[1] = "8".padStart(width, '0')
         return parts.joinToString(".")

@@ -116,6 +116,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             Log.i(
                 PlayerRuntimeController.TAG,
                 "DV7_DOVI: setting=${playerSettings.experimentalDv7ToDv81Enabled} " +
+                    "dv5Compat=${playerSettings.experimentalDv5ToDv81Enabled} " +
+                    "preserveMapping=${playerSettings.experimentalDv7ToDv81PreserveMappingEnabled} " +
                     "buildNative=${DoviBridge.isNativeEnabledInBuild} " +
                     "libraryLoaded=${DoviBridge.isLibraryLoaded} " +
                     "extractorHookReady=${dv7ToDv81Probe.extractorHookReady} " +
@@ -234,6 +236,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val dolbyVisionHookInstalled = MatroskaDolbyVisionHookInstaller.maybeInstall(
                 extractorsFactory = extractorsFactory,
                 enabled = playerSettings.experimentalDv7ToDv81Enabled,
+                allowDv5Conversion = playerSettings.experimentalDv5ToDv81Enabled,
+                preserveMappingEnabled = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
                 streamUrl = url
             )
             if (dolbyVisionHookInstalled) {

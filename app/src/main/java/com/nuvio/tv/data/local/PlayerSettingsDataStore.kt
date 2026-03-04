@@ -147,6 +147,10 @@ data class PlayerSettings(
     val experimentalDv7ToDv81Enabled: Boolean = false,
     // Experimental: enable Fire OS audio-path quirks (DTS core fallback, capability routing, etc).
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
+    // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
+    val experimentalDv5ToDv81Enabled: Boolean = false,
+    // Experimental: preserve mapping metadata when converting DV7 -> DV8.1.
+    val experimentalDv7ToDv81PreserveMappingEnabled: Boolean = false,
     // Display settings
     val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
     val resolutionMatchingEnabled: Boolean = false,
@@ -282,6 +286,10 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
     private val experimentalDtsIecPassthroughEnabledKey =
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
+    private val experimentalDv5ToDv81EnabledKey =
+        booleanPreferencesKey("experimental_dv5_to_dv81_enabled")
+    private val experimentalDv7ToDv81PreserveMappingEnabledKey =
+        booleanPreferencesKey("experimental_dv7_to_dv81_preserve_mapping_enabled")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
     private val frameRateMatchingModeKey = stringPreferencesKey("frame_rate_matching_mode")
     private val resolutionMatchingEnabledKey = booleanPreferencesKey("resolution_matching_enabled")
@@ -480,6 +488,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: false,
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
+                experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
+                experimentalDv7ToDv81PreserveMappingEnabled =
+                    prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false,
                 frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
                     runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
                 } ?: if (prefs[frameRateMatchingKey] == true) {
@@ -839,6 +850,18 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDtsIecPassthroughEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDtsIecPassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv5ToDv81EnabledKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDv7ToDv81PreserveMappingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] = enabled
         }
     }
 
