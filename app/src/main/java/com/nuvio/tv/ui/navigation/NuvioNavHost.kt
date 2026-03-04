@@ -610,7 +610,7 @@ fun NuvioNavHost(
                             returnToDetailOnBack = returnToDetailOnBack
                         )
                         navController.navigate(route) {
-                            popUpTo(Screen.Player.route) { inclusive = true }
+                            popUpTo(Screen.Stream.route) { inclusive = true }
                             launchSingleTop = true
                         }
                     } else if (contentId.isNotBlank() && contentType.isNotBlank()) {
@@ -620,11 +620,11 @@ fun NuvioNavHost(
                                 itemType = contentType
                             )
                         ) {
-                            popUpTo(Screen.Player.route) { inclusive = true }
+                            popUpTo(Screen.Stream.route) { inclusive = true }
                             launchSingleTop = true
                         }
                     } else {
-                        navController.popBackStack(Screen.Player.route, inclusive = true)
+                        navController.popBackStack(Screen.Stream.route, inclusive = true)
                     }
                 },
                 onPlaybackErrorBack = {
