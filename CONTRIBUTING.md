@@ -13,7 +13,7 @@ To keep issues fixable, bug reports should include:
 
 - App version (release version or commit hash)
 - Platform + device model + Android version
-- Install method (Play Store / release APK / CI / built from source)
+- Install method (release APK / CI / built from source)
 - Steps to reproduce (exact steps)
 - Expected vs actual behavior
 - Frequency (always/sometimes/once)
