@@ -631,10 +631,10 @@
   <string name="tmdb_collections_title">Collections</string>
   <string name="audio_dv_experimental_preserve_mapping_sub">Conversion DV8.1 expérimentale à plus haute fidélité qui préserve les métadonnées de mapping. Peut être moins compatible que le chemin DV7 par défaut.</string>
   <string name="animeskip_client_id_title">Client ID</string>
-  <string name="appearance_font">Police de l'application</string>
-  <string name="playback_resolution_matching_sub">Autoriser les changements de mode d'affichage pour correspondre à la résolution vidéo.</string>
+  <string name="appearance_font">Police de l\'application</string>
+  <string name="playback_resolution_matching_sub">Autoriser les changements de mode d\'affichage pour correspondre à la résolution vidéo.</string>
   <string name="trakt_catalogs_updated">Paramètres des catalogues Trakt mis à jour</string>
-  <string name="trakt_popular_lists_subtitle">Sélectionnez des listes à ajouter comme catalogues Trakt personnalisés sur l'accueil.</string>
+  <string name="trakt_popular_lists_subtitle">Sélectionnez des listes à ajouter comme catalogues Trakt personnalisés sur l\'accueil.</string>
   <string name="appearance_font_dialog_title">Choisir une police</string>
   <string name="tmdb_dialog_placeholder">Entrez la clé API TMDB</string>
   <string name="poster_ratings_top_api_key_subtitle">Requise lorsque TOPPosters est activé</string>
@@ -654,14 +654,14 @@
   <string name="action_sync_now">Synchroniser maintenant</string>
   <string name="sub_startup_mode_all">Tous les sous-titres</string>
   <string name="mdblist_personal_lists_title">Mes listes</string>
-  <string name="trakt_catalogs_subtitle">Choisissez les rails Trakt affichés sur l'accueil.</string>
+  <string name="trakt_catalogs_subtitle">Choisissez les rails Trakt affichés sur l\'accueil.</string>
   <string name="trakt_catalog_recommended_movies_subtitle">Recommandations de films personnalisées de Trakt.</string>
   <string name="animeskip_invalid_client_id">Client ID invalide</string>
   <string name="trakt_catalog_calendar">Calendrier (7 prochains jours)</string>
   <string name="mdblist_catalogs_subtitle">Gérer les rails personnels et top-lists MDBList</string>
   <string name="poster_ratings_rpdb_invalid_api_key">Clé API RPDB invalide</string>
   <string name="trakt_catalog_trending_movies_subtitle">Films avec la plus forte activité actuelle des spectateurs.</string>
-  <string name="mdblist_catalogs_dialog_subtitle">Activez/désactivez les listes affichées sur l'accueil.</string>
+  <string name="mdblist_catalogs_dialog_subtitle">Activez/désactivez les listes affichées sur l\'accueil.</string>
   <string name="poster_ratings_rpdb_title">RatingPostersDB (RPDB)</string>
   <string name="trakt_watching_now_label">En cours de visionnage</string>
   <string name="poster_ratings_top_dialog_title">Clé API TOPPosters</string>
@@ -669,7 +669,7 @@
   <string name="animeskip_enable_subtitle">Récupérer les horodatages de saut depuis anime-skip.com</string>
   <string name="mdblist_top_lists_search_hint">Rechercher des top-lists</string>
   <string name="trakt_catalog_popular_shows">Séries populaires</string>
-  <string name="settings_catalogs_subtitle">Personnalisez l'ordre et la visibilité des catalogues sur l'accueil.</string>
+  <string name="settings_catalogs_subtitle">Personnalisez l\'ordre et la visibilité des catalogues sur l\'accueil.</string>
   <string name="poster_ratings_rpdb_api_key_subtitle">Requise lorsque RPDB est activé</string>
   <string name="poster_ratings_top_subtitle">Affiches notées de TOPPosters (exclusif avec RPDB)</string>
   <string name="action_close">Fermer</string>
@@ -681,7 +681,7 @@
   <string name="trakt_catalog_trending_movies">Films tendances</string>
   <string name="trakt_catalog_popular_movies">Films populaires</string>
   <string name="mdblist_invalid_api_key">Clé API MDBList invalide</string>
-  <string name="audio_dv5_compatibility_sub">Permet aux flux DV5 d'utiliser le chemin de compatibilité DV8.1. Peut corriger des problèmes de couleur/signalisation sur certains appareils, mais régresser sur d'autres.</string>
+  <string name="audio_dv5_compatibility_sub">Permet aux flux DV5 d\'utiliser le chemin de compatibilité DV8.1. Peut corriger des problèmes de couleur/signalisation sur certains appareils, mais régresser sur d\'autres.</string>
   <string name="tmdb_dialog_title">Clé API TMDB</string>
   <string name="sub_startup_mode_title">Mode de démarrage des sous-titres</string>
   <string name="audio_dts_iec_experimental_sub">Chemin expérimental de compatibilité audio Fire OS. Active la couche de compatibilité Fire TV dans Media3, y compris le fallback DTS core et les particularités de routage des capacités. Désactivé par défaut car cela peut dégrader les appareils non Fire.</string>
@@ -693,7 +693,7 @@
   <string name="trakt_catalog_up_next">À suivre</string>
   <string name="mdblist_top_lists_title">Top Lists</string>
   <string name="mdblist_personal_list_badge">Liste personnelle</string>
-  <string name="trakt_waiting_approval">En attente d'approbation…</string>
+  <string name="trakt_waiting_approval">En attente d\'approbation…</string>
   <string name="trakt_move_down">Descendre</string>
   <string name="audio_dv_experimental_title">DV7 - DV8.1 expérimental</string>
   <string name="trakt_unaired_now_shown">Les épisodes non diffusés sont maintenant affichés</string>
@@ -716,7 +716,7 @@
   <string name="trakt_catalog_calendar_subtitle">Épisodes à venir de votre calendrier Trakt.</string>
   <string name="poster_ratings_top_dialog_placeholder">Entrez la clé API TOPPosters</string>
   <string name="trakt_popular_lists_title">Listes populaires</string>
-  <string name="tmdb_api_key_subtitle">Requise pour activer l'intégration TMDB</string>
+  <string name="tmdb_api_key_subtitle">Requise pour activer l\'intégration TMDB</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - Compatibilité audio expérimentale</string>
   <string name="animeskip_dialog_subtitle">Créez votre Client ID sur anime-skip.com/account/settings</string>
 </resources>
