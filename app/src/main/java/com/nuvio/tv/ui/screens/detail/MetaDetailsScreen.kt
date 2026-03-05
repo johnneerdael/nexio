@@ -49,7 +49,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -877,12 +879,6 @@ private fun MetaDetailsContent(
     }
 
     // Backdrop alpha for crossfade
-    val backdropAlpha by animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0f else 1f,
-        animationSpec = tween(durationMillis = 800),
-        label = "backdropFade"
-    )
-
     val backgroundColor = NuvioColors.Background
 
     // Pre-compute gradient brushes once
@@ -980,68 +976,27 @@ private fun MetaDetailsContent(
     }
 
     // Animated gradient alpha (moved outside subcomposition scope)
-    val gradientAlpha by animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0f else 1f,
-        animationSpec = tween(durationMillis = 800),
-        label = "gradientFade"
-    )
 
     // Always-composed bottom gradient alpha (avoids add/remove during scroll)
-    val bottomGradientAlpha by animateFloatAsState(
-        targetValue = if (isScrolledPastHero) 1f else 0f,
-        animationSpec = tween(durationMillis = 300),
-        label = "bottomGradientFade"
-    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Sticky background — backdrop or trailer
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Backdrop image (fades out when trailer plays)
-            AsyncImage(
-                model = backdropRequest,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = backdropAlpha },
-                contentScale = ContentScale.Crop
-            )
-
-            // Trailer video (fades in when trailer plays)
-            TrailerPlayer(
-                trailerUrl = trailerUrl,
-                trailerAudioUrl = trailerAudioUrl,
-                isPlaying = isTrailerPlaying,
-                seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
-                seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
-                onRemoteKey = onTrailerControlKey,
-                onProgressChanged = onTrailerProgressChanged,
-                onEnded = onTrailerEnded,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Light global dim so text remains readable
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(dimColor)
-            )
-
-            // Left side gradient fade for text readability (fades out during trailer)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = gradientAlpha }
-                    .background(leftGradient)
-            )
-
-            // Bottom gradient — always composed, alpha-controlled to avoid layout churn
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = bottomGradientAlpha }
-                    .background(bottomGradient)
-            )
-        }
+        BackdropLayer(
+            backdropRequest = backdropRequest,
+            trailerUrl = trailerUrl,
+            trailerAudioUrl = trailerAudioUrl,
+            isTrailerPlaying = isTrailerPlaying,
+            showTrailerControls = showTrailerControls,
+            trailerSeekToken = trailerSeekToken,
+            trailerSeekDeltaMs = trailerSeekDeltaMs,
+            onTrailerControlKey = onTrailerControlKey,
+            onTrailerProgressChanged = onTrailerProgressChanged,
+            onTrailerEnded = onTrailerEnded,
+            isScrolledPastHero = isScrolledPastHero,
+            dimColor = dimColor,
+            leftGradient = leftGradient,
+            bottomGradient = bottomGradient,
+        )
 
         // Single scrollable column with hero + content
         LazyColumn(
@@ -1297,6 +1252,70 @@ private fun MetaDetailsContent(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun BackdropLayer(
+    backdropRequest: ImageRequest,
+    trailerUrl: String?,
+    trailerAudioUrl: String?,
+    isTrailerPlaying: Boolean,
+    showTrailerControls: Boolean,
+    trailerSeekToken: Int,
+    trailerSeekDeltaMs: Long,
+    onTrailerControlKey: (keyCode: Int, action: Int, repeatCount: Int) -> Boolean,
+    onTrailerProgressChanged: (Long, Long) -> Unit,
+    onTrailerEnded: () -> Unit,
+    isScrolledPastHero: Boolean,
+    dimColor: Color,
+    leftGradient: Brush,
+    bottomGradient: Brush,
+) {
+    val backdropAlpha by animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "backdropFade"
+    )
+    val gradientAlphaState = animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "gradientFade"
+    )
+    val bottomGradientAlphaState = animateFloatAsState(
+        targetValue = if (isScrolledPastHero) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "bottomGradientFade"
+    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        AsyncImage(
+            model = backdropRequest,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize().graphicsLayer { alpha = backdropAlpha },
+            contentScale = ContentScale.Crop
+        )
+        TrailerPlayer(
+            trailerUrl = trailerUrl,
+            trailerAudioUrl = trailerAudioUrl,
+            isPlaying = isTrailerPlaying,
+            seekRequestToken = if (showTrailerControls) trailerSeekToken else 0,
+            seekDeltaMs = if (showTrailerControls) trailerSeekDeltaMs else 0L,
+            onRemoteKey = onTrailerControlKey,
+            onProgressChanged = onTrailerProgressChanged,
+            onEnded = onTrailerEnded,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawWithCache {
+                    onDrawBehind {
+                        drawRect(color = dimColor)
+                        drawRect(brush = leftGradient, alpha = gradientAlphaState.value)
+                        drawRect(brush = bottomGradient, alpha = bottomGradientAlphaState.value)
+                    }
+                }
+        )
     }
 }
 

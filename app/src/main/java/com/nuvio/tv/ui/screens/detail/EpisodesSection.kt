@@ -1,8 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
 import android.view.KeyEvent as AndroidKeyEvent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -220,6 +218,13 @@ fun EpisodesRow(
     val lazyListState = rememberLazyListState(prefetchStrategy = rowPrefetchStrategy)
     var lastHorizontalKeyRepeatTime by remember { mutableStateOf(0L) }
     val episodeIds = remember(episodes) { episodes.mapTo(mutableSetOf()) { it.id } }
+    val context = LocalContext.current
+    val imdbLogoRequest = remember(context) {
+        ImageRequest.Builder(context)
+            .data(R.raw.imdb_logo_2016)
+            .crossfade(false)
+            .build()
+    }
 
     LaunchedEffect(episodeIds, episodeFocusRequesters) {
         episodeFocusRequesters.keys.retainAll(episodeIds)
@@ -286,7 +291,7 @@ fun EpisodesRow(
                     watchedEpisodes.contains(s to e)
                 }
             } ?: false
-            val episodeFocusRequester = episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() }
+            val episodeFocusRequester = remember(episode.id) { episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() } }
             EpisodeCard(
                 episode = episode,
                 watchProgress = progress,
@@ -298,6 +303,7 @@ fun EpisodesRow(
                 onLongPress = { optionsEpisode = episode },
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
+                imdbLogoRequest = imdbLogoRequest,
                 focusRequester = episodeFocusRequester,
                 onFocused = {
                     onEpisodeFocused(episode.id)
@@ -360,6 +366,7 @@ private fun EpisodeCard(
     isMarkedWatched: Boolean = false,
     blurUnwatched: Boolean = false,
     cardMetrics: EpisodeCardMetrics,
+    imdbLogoRequest: ImageRequest,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
@@ -389,11 +396,7 @@ private fun EpisodeCard(
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val shape = remember(cardMetrics.cornerRadius) { RoundedCornerShape(cardMetrics.cornerRadius) }
-    val overlayAlpha by animateFloatAsState(
-        targetValue = if (isFocused) 1f else 0.94f,
-        animationSpec = tween(durationMillis = 180),
-        label = "episodeOverlayAlpha"
-    )
+    val overlayAlpha = if (isFocused) 1f else 0.94f
     val thumbnailWidthPx = remember(cardMetrics.cardWidth, density) {
         with(density) { cardMetrics.cardWidth.roundToPx() }
     }
@@ -421,12 +424,6 @@ private fun EpisodeCard(
                     transformations(com.nuvio.tv.ui.util.BlurTransformation())
                 }
             }
-            .build()
-    }
-    val imdbLogoRequest = remember(context) {
-        ImageRequest.Builder(context)
-            .data(R.raw.imdb_logo_2016)
-            .crossfade(false)
             .build()
     }
     val strEpisode = stringResource(R.string.episodes_episode)
@@ -691,6 +688,7 @@ private fun EpisodeCard(
                     )
                 }
             } else if (showNotStartedBadge) {
+                val dashEffect = remember { PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f) }
                 Canvas(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -704,7 +702,7 @@ private fun EpisodeCard(
                         color = NuvioColors.TextSecondary.copy(alpha = 0.9f),
                         style = Stroke(
                             width = 2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
+                            pathEffect = dashEffect
                         )
                     )
                 }

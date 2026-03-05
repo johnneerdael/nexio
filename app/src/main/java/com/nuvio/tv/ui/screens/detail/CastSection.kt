@@ -136,7 +136,7 @@ fun CastSection(
                     val focusRequester = when {
                         isRestoreTarget -> restoreFocusRequester
                         isFirstItem -> firstItemFocusRequester
-                        else -> itemFocusRequesters.getOrPut(focusKey) { FocusRequester() }
+                        else -> remember(focusKey) { itemFocusRequesters.getOrPut(focusKey) { FocusRequester() } }
                     }
 
                     Box(modifier = Modifier.padding(end = endPadding)) {
@@ -188,7 +188,7 @@ fun CastSection(
                 val focusRequester = when {
                     isRestoreTarget -> restoreFocusRequester
                     isFirstCastItem -> firstItemFocusRequester
-                    else -> itemFocusRequesters.getOrPut(focusKey) { FocusRequester() }
+                    else -> remember(focusKey) { itemFocusRequesters.getOrPut(focusKey) { FocusRequester() } }
                 }
 
                 Box(modifier = Modifier.padding(end = standardGap)) {
