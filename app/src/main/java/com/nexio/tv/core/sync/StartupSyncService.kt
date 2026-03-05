@@ -2,7 +2,6 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.data.local.LibraryPreferences
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchProgressPreferences
@@ -26,12 +25,10 @@ private const val TAG = "StartupSyncService"
 @Singleton
 class StartupSyncService @Inject constructor(
     private val authManager: AuthManager,
-    private val pluginSyncService: PluginSyncService,
     private val addonSyncService: AddonSyncService,
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
     private val watchedItemsSyncService: WatchedItemsSyncService,
-    private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
@@ -133,20 +130,6 @@ class StartupSyncService @Inject constructor(
             val profileId = 1
             Log.d(TAG, "Pulling remote data for profile $profileId")
 
-            pluginManager.isSyncingFromRemote = true
-            try {
-                val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
-                pluginManager.reconcileWithRemoteRepoUrls(
-                    remoteUrls = remotePluginUrls,
-                    removeMissingLocal = true
-                )
-                Log.d(TAG, "Pulled ${remotePluginUrls.size} plugin repos from remote for profile $profileId")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to pull plugins from remote, keeping local cache", e)
-            } finally {
-                pluginManager.isSyncingFromRemote = false
-            }
-
             addonRepository.isSyncingFromRemote = true
             try {
                 val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
@@ -208,7 +191,6 @@ class StartupSyncService @Inject constructor(
             }
             return Result.success(Unit)
         } catch (e: Exception) {
-            pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
             watchProgressRepository.isSyncingFromRemote = false
             libraryRepository.isSyncingFromRemote = false

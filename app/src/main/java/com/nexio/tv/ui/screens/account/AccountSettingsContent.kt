@@ -143,7 +143,6 @@ private fun SyncOverviewCard(overview: SyncOverview) {
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     ProfileStatValue(overview.totalAddons, stringResource(R.string.account_stat_addons))
-                    ProfileStatValue(overview.totalPlugins, stringResource(R.string.account_stat_plugins))
                     ProfileStatValue(overview.totalLibrary, stringResource(R.string.account_stat_library))
                     ProfileStatValue(overview.totalWatchProgress, stringResource(R.string.account_stat_progress))
                     ProfileStatValue(overview.totalWatchedItems, stringResource(R.string.account_stat_watched))
@@ -222,7 +221,6 @@ private fun ProfileSyncRow(profile: ProfileSyncStats) {
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             ProfileStatValue(profile.addons, stringResource(R.string.account_stat_addons))
-            ProfileStatValue(profile.plugins, stringResource(R.string.account_stat_plugins))
             ProfileStatValue(profile.library, stringResource(R.string.account_stat_library))
             ProfileStatValue(profile.watchProgress, stringResource(R.string.account_stat_progress))
             ProfileStatValue(profile.watchedItems, stringResource(R.string.account_stat_watched))

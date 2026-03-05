@@ -6,7 +6,6 @@ import com.nexio.tv.domain.model.AuthState
 
 data class AccountConnectedStats(
     val addons: Int = 0,
-    val plugins: Int = 0,
     val library: Int = 0,
     val watchProgress: Int = 0
 )
@@ -16,7 +15,6 @@ data class ProfileSyncStats(
     val profileName: String,
     val avatarColorHex: String,
     val addons: Int = 0,
-    val plugins: Int = 0,
     val library: Int = 0,
     val watchProgress: Int = 0,
     val watchedItems: Int = 0
@@ -25,7 +23,6 @@ data class ProfileSyncStats(
 data class SyncOverview(
     val profileCount: Int = 0,
     val totalAddons: Int = 0,
-    val totalPlugins: Int = 0,
     val totalLibrary: Int = 0,
     val totalWatchProgress: Int = 0,
     val totalWatchedItems: Int = 0,

@@ -130,8 +130,6 @@
     <string name="settings_profiles_subtitle">Manage user profiles.</string>
     <string name="settings_layout">Layout</string>
     <string name="settings_layout_subtitle">Home structure and poster styles.</string>
-    <string name="settings_plugins">Plugins</string>
-    <string name="settings_plugins_subtitle">Repositories and providers.</string>
     <string name="settings_integration">Integration</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_playback_subtitle">Player, subtitles, and auto-play.</string>
@@ -139,10 +137,8 @@
     <string name="settings_about_subtitle">Version and policies.</string>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_subtitle">Developer tools and feature flags.</string>
-    <string name="settings_plugins_section_subtitle">Manage repositories, providers, and plugin states.</string>
     <string name="settings_account_section_subtitle">Account and sync status.</string>
     <string name="account_stat_addons">addons</string>
-    <string name="account_stat_plugins">plugins</string>
     <string name="account_stat_library">library</string>
     <string name="account_stat_progress">progress</string>
     <string name="account_stat_watched">watched</string>
@@ -307,21 +303,17 @@
     <string name="autoplay_threshold_min_sub">Fallback when no outro timestamp exists.</string>
     <string name="autoplay_scope_all">All sources</string>
     <string name="autoplay_scope_addons">Installed addons only</string>
-    <string name="autoplay_scope_plugins">Enabled plugins only</string>
     <string name="autoplay_scope">Auto-play Source Scope</string>
     <string name="autoplay_allowed_addons">Allowed Addons</string>
     <string name="autoplay_all_addons">All installed addons</string>
-    <string name="autoplay_allowed_plugins">Allowed Plugins</string>
-    <string name="autoplay_all_plugins">All enabled plugins</string>
     <string name="autoplay_regex_placeholder">No pattern set. Example: 4K|2160p|Remux</string>
     <string name="autoplay_regex_title">Regex Pattern</string>
     <string name="autoplay_no_items">No items available</string>
     <string name="autoplay_mode_manual_desc">Always show source list and let me choose.</string>
     <string name="autoplay_mode_first_desc">Play the first available source automatically.</string>
     <string name="autoplay_mode_regex_desc">Play first source whose text matches your regex pattern.</string>
-    <string name="autoplay_scope_all_desc">Auto-play can use both installed addons and enabled plugins.</string>
+    <string name="autoplay_scope_all_desc">Auto-play can use all available addon sources.</string>
     <string name="autoplay_scope_addons_desc">Auto-play only considers streams coming from your installed addons.</string>
-    <string name="autoplay_scope_plugins_desc">Auto-play only considers streams coming from enabled plugins.</string>
     <string name="autoplay_threshold_pct_desc">Show by playback percent when no outro timestamp is available.</string>
     <string name="autoplay_threshold_min_desc">Show this many minutes before episode end when no outro timestamp is available.</string>
     <string name="autoplay_regex_matches">Matches against stream name/title/description/addon/url. Example: 4K|2160p|Remux</string>
@@ -585,13 +577,11 @@
     <string name="profile_name_placeholder">Profile name</string>
     <string name="profile_avatar_color">Avatar Color</string>
     <string name="profile_use_primary_addons">Use primary profile\'s addons</string>
-    <string name="profile_use_primary_plugins">Use primary profile\'s plugins</string>
     <string name="profile_creating">Creating\u2026</string>
     <string name="profile_create_btn">Create</string>
     <string name="profile_confirm">Confirm</string>
     <string name="profile_delete">Delete</string>
     <string name="profile_addons">addons</string>
-    <string name="profile_plugins">plugins</string>
 
 
     <!-- AddonManagerScreen -->
@@ -790,7 +780,7 @@
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Loading\u2026</string>
-    <string name="account_sync_description">Sync your library, watch progress, addons, and plugins across devices.</string>
+    <string name="account_sync_description">Sync your library, watch progress, and addons across devices.</string>
     <string name="account_signin_qr_title">Sign In with QR</string>
     <string name="account_signin_qr_subtitle">Scan a QR code and complete email login on your phone</string>
     <string name="account_signed_in_label">Signed in</string>
@@ -834,36 +824,12 @@
     <!-- SyncCodeClaimScreen -->
     <string name="sync_claim_title">Link Device</string>
     <string name="sync_claim_subtitle">Enter the sync code and PIN from your other device to link this device.</string>
-    <string name="sync_claim_success">Device linked successfully! Your addons and plugins will now sync.</string>
+    <string name="sync_claim_success">Device linked successfully! Your addons will now sync.</string>
     <string name="sync_claim_done">Done</string>
     <string name="sync_claim_code_label">Sync Code</string>
     <string name="sync_claim_code_placeholder">XXXX-XXXX-XXXX-XXXX-XXXX</string>
     <string name="sync_claim_pin_label">PIN</string>
     <string name="sync_claim_pin_placeholder">Enter PIN</string>
-
-    <!-- PluginScreen -->
-    <string name="plugin_readonly_notice">Using primary profile\'s plugins and can\'t be changed</string>
-    <string name="plugin_repositories_section">Repositories (%1$d)</string>
-    <string name="plugin_providers_section">Providers (%1$d)</string>
-    <string name="plugin_title">Plugins</string>
-    <string name="plugin_subtitle">Manage local scrapers and providers</string>
-    <string name="plugin_add_repository">Add repository</string>
-    <string name="plugin_add_btn">Add</string>
-    <string name="plugin_manage_from_phone_title">Manage from phone</string>
-    <string name="plugin_manage_from_phone_subtitle">Scan a QR code to add or remove repositories from your phone</string>
-    <string name="plugin_qr_instruction">Scan with your phone to manage repositories</string>
-    <string name="plugin_qr_close">Close</string>
-    <string name="plugin_confirm_title">Confirm repository changes</string>
-    <string name="plugin_confirm_subtitle">The following changes were made from your phone:</string>
-    <string name="plugin_confirm_added">Added:</string>
-    <string name="plugin_confirm_removed">Removed:</string>
-    <string name="plugin_confirm_no_changes">No changes detected</string>
-    <string name="plugin_confirm_total">Total repositories: %1$d</string>
-    <string name="plugin_confirm_reject">Reject</string>
-    <string name="plugin_confirm_confirm">Confirm</string>
-    <string name="plugin_updated_format">Updated: %1$s</string>
-    <string name="plugin_test_btn">Test</string>
-    <string name="plugin_test_results">Test Results (%1$d streams)</string>
 
     <!-- ProfileSelectionScreen -->
     <string name="profile_selection_title">Who\'s watching?</string>
@@ -893,7 +859,7 @@
     <string name="update_unknown_sources">Allow installs from unknown sources to continue.</string>
     <!-- AccountScreen -->
     <string name="account_title">Account</string>
-    <string name="account_sign_in_description">Sign in to sync your library, watch progress, addons, and plugins across devices. Library and watch progress sync only when Trakt is not connected.</string>
+    <string name="account_sign_in_description">Sign in to sync your library, watch progress, and addons across devices. Library and watch progress sync only when Trakt is not connected.</string>
     <string name="account_sync_code_title">Sync Code</string>
     <string name="account_sync_code_description">Sync across devices without creating an account.</string>
     <string name="account_linked_devices">Linked Devices (%1$d)</string>
@@ -923,13 +889,6 @@
     <string name="addon_confirm_total_addons">Total addons: %1$d</string>
     <string name="addon_confirm_total_catalogs">Total catalogs: %1$d</string>
     <string name="addon_catalogs_types">Catalogs: %1$d - Types: %2$s</string>
-
-    <!-- PluginScreen -->
-    <string name="plugin_and_more">... and %1$d more</string>
-    <string name="plugin_providers_count">%1$d providers</string>
-    <string name="plugin_enabled">Enabled</string>
-    <string name="plugin_disabled">Disabled</string>
-    <string name="plugin_no_repos">No repositories added yet.\nAdd a repository to get started.</string>
 
     <!-- ProfileSettingsContent -->
     <string name="profile_edit_title_id">Edit Profile %1$d</string>

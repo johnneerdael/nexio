@@ -108,7 +108,6 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Image
 
 @Composable
@@ -133,7 +132,6 @@ fun PlaybackSettingsContent(
 ) {
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
-    val enabledPluginNames by viewModel.enabledPluginNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
     var memoryUsageTrigger by remember { mutableStateOf(0) }
     var showMemoryUsage by remember { mutableStateOf(false) }
@@ -152,7 +150,6 @@ fun PlaybackSettingsContent(
     var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlaySourceDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
-    var showStreamAutoPlayPluginSelectionDialog by remember { mutableStateOf(false) }
     var showStreamRegexDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
@@ -172,7 +169,6 @@ fun PlaybackSettingsContent(
         showStreamAutoPlayModeDialog = false
         showStreamAutoPlaySourceDialog = false
         showStreamAutoPlayAddonSelectionDialog = false
-        showStreamAutoPlayPluginSelectionDialog = false
         showStreamRegexDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
@@ -222,7 +218,6 @@ fun PlaybackSettingsContent(
                 onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
                 onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
                 onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
-                onShowStreamAutoPlayPluginSelectionDialog = { openDialog { showStreamAutoPlayPluginSelectionDialog = true } },
                 onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
@@ -363,7 +358,6 @@ fun PlaybackSettingsContent(
     PlaybackSettingsDialogsHost(
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
-        enabledPluginNames = enabledPluginNames,
         showPlayerPreferenceDialog = showPlayerPreferenceDialog,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
@@ -378,7 +372,6 @@ fun PlaybackSettingsContent(
         showStreamAutoPlayModeDialog = showStreamAutoPlayModeDialog,
         showStreamAutoPlaySourceDialog = showStreamAutoPlaySourceDialog,
         showStreamAutoPlayAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
-        showStreamAutoPlayPluginSelectionDialog = showStreamAutoPlayPluginSelectionDialog,
         showStreamRegexDialog = showStreamRegexDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
@@ -431,9 +424,6 @@ fun PlaybackSettingsContent(
         onSetStreamAutoPlaySelectedAddons = { selected ->
             coroutineScope.launch { viewModel.setStreamAutoPlaySelectedAddons(selected) }
         },
-        onSetStreamAutoPlaySelectedPlugins = { selected ->
-            coroutineScope.launch { viewModel.setStreamAutoPlaySelectedPlugins(selected) }
-        },
         onSetReuseLastLinkCacheHours = { hours ->
             coroutineScope.launch { viewModel.setStreamReuseLastLinkCacheHours(hours) }
         },
@@ -451,7 +441,6 @@ fun PlaybackSettingsContent(
         onDismissStreamAutoPlaySourceDialog = ::dismissAllDialogs,
         onDismissStreamRegexDialog = ::dismissAllDialogs,
         onDismissStreamAutoPlayAddonSelectionDialog = ::dismissAllDialogs,
-        onDismissStreamAutoPlayPluginSelectionDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )

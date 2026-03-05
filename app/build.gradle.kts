@@ -297,16 +297,11 @@ dependencies {
         exclude(group = "org.jetbrains.compose.foundation")
     }
 
-    // Local Plugin System
-    implementation(libs.quickjs.kt)
-    implementation(libs.jsoup)
     implementation(libs.gson)
 
     // Markdown rendering
     implementation(libs.markdown.renderer.m3)
 
-    // Bundle real crypto-js (JS) for QuickJS plugins
-    implementation(libs.crypto.js)
     // QR code + local server for addon management
     implementation(libs.nanohttpd)
     implementation(libs.zxing.core)
@@ -323,9 +318,6 @@ dependencies {
     // Performance profiling
     implementation("androidx.metrics:metrics-performance:1.0.0-beta01")  // JankStats
     implementation("androidx.compose.runtime:runtime-tracing")           // Compose function names in Perfetto
-
-    // Bundle real crypto-js (JS) for QuickJS plugins
-    implementation("org.webjars.npm:crypto-js:4.2.0")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

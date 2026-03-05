@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
@@ -53,7 +52,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
-import com.nexio.tv.ui.screens.plugin.PluginScreenContent
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
@@ -61,7 +59,6 @@ internal enum class SettingsCategory {
     ACCOUNT,
     APPEARANCE,
     LAYOUT,
-    PLUGINS,
     INTEGRATION,
     PLAYBACK,
     TRAKT,
@@ -116,13 +113,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
         title = stringResource(R.string.settings_layout),
         icon = Icons.Default.GridView,
         subtitle = stringResource(R.string.settings_layout_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.PLUGINS,
-        title = stringResource(R.string.settings_plugins),
-        icon = Icons.Default.Build,
-        subtitle = stringResource(R.string.settings_plugins_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
@@ -390,7 +380,6 @@ fun SettingsScreen(
                                 null
                             }
                         )
-                        SettingsCategory.PLUGINS -> PluginsSettingsContent()
                         SettingsCategory.ACCOUNT -> AccountSettingsInline(
                             onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
                         )
@@ -398,36 +387,6 @@ fun SettingsScreen(
                         SettingsCategory.TRAKT -> Unit
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PluginsSettingsContent() {
-    val pluginViewModel: com.nexio.tv.ui.screens.plugin.PluginViewModel = hiltViewModel()
-    val pluginUiState by pluginViewModel.uiState.collectAsStateWithLifecycle()
-
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        SettingsDetailHeader(
-            title = stringResource(R.string.settings_plugins),
-            subtitle = stringResource(R.string.settings_plugins_section_subtitle)
-        )
-        SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.TopStart
-            ) {
-                PluginScreenContent(
-                    uiState = pluginUiState,
-                    viewModel = pluginViewModel,
-                    showHeader = false
-                )
             }
         }
     }

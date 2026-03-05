@@ -24,7 +24,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -73,7 +72,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onShowModeDialog: () -> Unit,
     onShowSourceDialog: () -> Unit,
     onShowAddonSelectionDialog: () -> Unit,
-    onShowPluginSelectionDialog: () -> Unit,
     onShowRegexDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
@@ -197,7 +195,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
             val sourceLabel = when (playerSettings.streamAutoPlaySource) {
                 StreamAutoPlaySource.ALL_SOURCES -> stringResource(R.string.autoplay_scope_all)
                 StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> stringResource(R.string.autoplay_scope_addons)
-                StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> stringResource(R.string.autoplay_scope_plugins)
             }
             NavigationSettingsItem(
                 icon = Icons.Default.Tune,
@@ -208,38 +205,19 @@ internal fun LazyListScope.autoPlaySettingsItems(
             )
         }
 
-        if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.ENABLED_PLUGINS_ONLY) {
-            item(key = "autoplay_allowed_addons") {
-                val addonSubtitle = if (playerSettings.streamAutoPlaySelectedAddons.isEmpty()) {
-                    stringResource(R.string.autoplay_all_addons)
-                } else {
-                    "${playerSettings.streamAutoPlaySelectedAddons.size} selected"
-                }
-                NavigationSettingsItem(
-                    icon = Icons.Default.Language,
-                    title = stringResource(R.string.autoplay_allowed_addons),
-                    subtitle = addonSubtitle,
-                    onClick = onShowAddonSelectionDialog,
-                    onFocused = onItemFocused
-                )
+        item(key = "autoplay_allowed_addons") {
+            val addonSubtitle = if (playerSettings.streamAutoPlaySelectedAddons.isEmpty()) {
+                stringResource(R.string.autoplay_all_addons)
+            } else {
+                "${playerSettings.streamAutoPlaySelectedAddons.size} selected"
             }
-        }
-
-        if (playerSettings.streamAutoPlaySource != StreamAutoPlaySource.INSTALLED_ADDONS_ONLY) {
-            item(key = "autoplay_allowed_plugins") {
-                val pluginSubtitle = if (playerSettings.streamAutoPlaySelectedPlugins.isEmpty()) {
-                    stringResource(R.string.autoplay_all_plugins)
-                } else {
-                    "${playerSettings.streamAutoPlaySelectedPlugins.size} selected"
-                }
-                NavigationSettingsItem(
-                    icon = Icons.Default.Extension,
-                    title = stringResource(R.string.autoplay_allowed_plugins),
-                    subtitle = pluginSubtitle,
-                    onClick = onShowPluginSelectionDialog,
-                    onFocused = onItemFocused
-                )
-            }
+            NavigationSettingsItem(
+                icon = Icons.Default.Language,
+                title = stringResource(R.string.autoplay_allowed_addons),
+                subtitle = addonSubtitle,
+                onClick = onShowAddonSelectionDialog,
+                onFocused = onItemFocused
+            )
         }
     }
 
@@ -274,24 +252,20 @@ internal fun AutoPlaySettingsDialogs(
     showSourceDialog: Boolean,
     showRegexDialog: Boolean,
     showAddonSelectionDialog: Boolean,
-    showPluginSelectionDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
-    enabledPluginNames: List<String>,
     onSetMode: (StreamAutoPlayMode) -> Unit,
     onSetSource: (StreamAutoPlaySource) -> Unit,
     onSetNextEpisodeThresholdMode: (NextEpisodeThresholdMode) -> Unit,
     onSetRegex: (String) -> Unit,
     onSetSelectedAddons: (Set<String>) -> Unit,
-    onSetSelectedPlugins: (Set<String>) -> Unit,
     onSetReuseLastLinkCacheHours: (Int) -> Unit,
     onDismissModeDialog: () -> Unit,
     onDismissSourceDialog: () -> Unit,
     onDismissRegexDialog: () -> Unit,
     onDismissAddonSelectionDialog: () -> Unit,
-    onDismissPluginSelectionDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
@@ -347,17 +321,6 @@ internal fun AutoPlaySettingsDialogs(
             selectedItems = playerSettings.streamAutoPlaySelectedAddons,
             onSelectionSaved = onSetSelectedAddons,
             onDismiss = onDismissAddonSelectionDialog
-        )
-    }
-
-    if (showPluginSelectionDialog) {
-        StreamAutoPlayProviderSelectionDialog(
-            title = stringResource(R.string.autoplay_allowed_plugins),
-            allLabel = stringResource(R.string.autoplay_all_plugins),
-            items = enabledPluginNames,
-            selectedItems = playerSettings.streamAutoPlaySelectedPlugins,
-            onSelectionSaved = onSetSelectedPlugins,
-            onDismiss = onDismissPluginSelectionDialog
         )
     }
 
@@ -669,11 +632,6 @@ private fun StreamAutoPlaySourceDialog(
             StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,
             stringResource(R.string.autoplay_scope_addons),
             stringResource(R.string.autoplay_scope_addons_desc)
-        ),
-        Triple(
-            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY,
-            stringResource(R.string.autoplay_scope_plugins),
-            stringResource(R.string.autoplay_scope_plugins_desc)
         )
     )
 

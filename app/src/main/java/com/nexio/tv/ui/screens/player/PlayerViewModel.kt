@@ -5,7 +5,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
-import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.repository.SkipIntroRepository
@@ -26,7 +25,6 @@ class PlayerViewModel @Inject constructor(
     private val metaRepository: MetaRepository,
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
-    private val pluginManager: PluginManager,
     private val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
@@ -43,7 +41,6 @@ class PlayerViewModel @Inject constructor(
         metaRepository = metaRepository,
         streamRepository = streamRepository,
         addonRepository = addonRepository,
-        pluginManager = pluginManager,
         subtitleRepository = subtitleRepository,
         traktScrobbleService = traktScrobbleService,
         skipIntroRepository = skipIntroRepository,
