@@ -49,14 +49,12 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nuvio.tv.data.local.AudioLanguageOption
 import com.nuvio.tv.data.local.PlayerSettings
 import com.nuvio.tv.data.local.TrailerSettings
 import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
 
 internal fun LazyListScope.trailerAndAudioSettingsItems(
     playerSettings: PlayerSettings,
@@ -295,7 +293,6 @@ private fun AudioLanguageSelectionDialog(
     onDismiss: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
-    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
     val specialOptions = listOf(
         AudioLanguageOption.DEFAULT to stringResource(R.string.audio_lang_default),
         AudioLanguageOption.DEVICE to stringResource(R.string.audio_lang_device)
@@ -337,8 +334,8 @@ private fun AudioLanguageSelectionDialog(
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier)
                             .onFocusChanged { isFocused = it.isFocused },
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) selectedAccent.copy(alpha = 0.22f) else NuvioColors.BackgroundCard,
-                            focusedContainerColor = if (isSelected) selectedAccent.copy(alpha = 0.28f) else NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+                            focusedContainerColor = NuvioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -352,7 +349,7 @@ private fun AudioLanguageSelectionDialog(
                             Text(
                                 text = name,
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = NuvioColors.TextPrimary,
+                                color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
                                 modifier = Modifier.weight(1f)
                             )
                             if (isSelected) {
@@ -360,7 +357,7 @@ private fun AudioLanguageSelectionDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = selectedAccent,
+                                    tint = NuvioColors.Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -379,7 +376,6 @@ private fun DecoderPriorityDialog(
     onDismiss: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
-    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) Color.White else NuvioColors.Secondary
     val options = listOf(
         Triple(0, stringResource(R.string.audio_decoder_device_only), stringResource(R.string.audio_decoder_device_only_desc)),
         Triple(1, stringResource(R.string.audio_decoder_prefer_device), stringResource(R.string.audio_decoder_prefer_device_desc)),
@@ -419,8 +415,8 @@ private fun DecoderPriorityDialog(
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                         colors = CardDefaults.colors(
-                            containerColor = if (isSelected) selectedAccent.copy(alpha = 0.22f) else NuvioColors.BackgroundCard,
-                            focusedContainerColor = if (isSelected) selectedAccent.copy(alpha = 0.28f) else NuvioColors.FocusBackground
+                            containerColor = if (isSelected) NuvioColors.FocusBackground else NuvioColors.BackgroundCard,
+                            focusedContainerColor = NuvioColors.FocusBackground
                         ),
                         shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
                         scale = CardDefaults.scale(focusedScale = 1f)
@@ -434,7 +430,7 @@ private fun DecoderPriorityDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = NuvioColors.TextPrimary,
+                                    color = if (isSelected) NuvioColors.Primary else NuvioColors.TextPrimary,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -449,7 +445,7 @@ private fun DecoderPriorityDialog(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = stringResource(R.string.cd_selected),
-                                    tint = selectedAccent,
+                                    tint = NuvioColors.Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

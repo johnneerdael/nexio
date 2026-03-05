@@ -127,7 +127,6 @@
     <string name="settings_profiles_subtitle">Manage user profiles.</string>
     <string name="settings_layout">Layout</string>
     <string name="settings_layout_subtitle">Home structure and poster styles.</string>
-    <string name="settings_addons_subtitle">Addon installation and catalog sources.</string>
     <string name="settings_plugins">Plugins</string>
     <string name="settings_plugins_subtitle">Repositories and providers.</string>
     <string name="settings_integration">Integration</string>
@@ -137,7 +136,6 @@
     <string name="settings_about_subtitle">Version and policies.</string>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_subtitle">Developer tools and feature flags.</string>
-    <string name="settings_addons_section_subtitle">Manage addon installation, updates, and catalog order.</string>
     <string name="settings_plugins_section_subtitle">Manage repositories, providers, and plugin states.</string>
     <string name="settings_account_section_subtitle">Account and sync status.</string>
     <string name="account_stat_addons">addons</string>

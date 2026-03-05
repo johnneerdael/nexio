@@ -26,9 +26,7 @@ import androidx.tv.material3.FilterChip
 import androidx.tv.material3.FilterChipDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.ui.theme.NuvioColors
-import com.nuvio.tv.ui.theme.NuvioTheme
 
 enum class SourceChipStatus {
     LOADING,
@@ -56,7 +54,6 @@ fun SourceStatusFilterChip(
     val isError = status == SourceChipStatus.ERROR
     val isLoading = status == SourceChipStatus.LOADING
     val shouldUseNormalColors = !isError
-    val selectedAccent = if (NuvioTheme.currentTheme == AppTheme.WHITE) androidx.compose.ui.graphics.Color.White else NuvioColors.Secondary
     val shakeOffsetPx = remember { Animatable(0f) }
     val alphaPulse = remember { Animatable(1f) }
 
@@ -105,9 +102,9 @@ fun SourceStatusFilterChip(
             },
         colors = FilterChipDefaults.colors(
             containerColor = if (shouldUseNormalColors) NuvioColors.BackgroundCard else NuvioColors.Error.copy(alpha = 0.05f),
-            focusedContainerColor = if (shouldUseNormalColors) selectedAccent else NuvioColors.Error.copy(alpha = 0.08f),
-            selectedContainerColor = if (shouldUseNormalColors) selectedAccent else NuvioColors.Error.copy(alpha = 0.07f),
-            focusedSelectedContainerColor = if (shouldUseNormalColors) selectedAccent else NuvioColors.Error.copy(alpha = 0.09f),
+            focusedContainerColor = if (shouldUseNormalColors) NuvioColors.Secondary else NuvioColors.Error.copy(alpha = 0.08f),
+            selectedContainerColor = if (shouldUseNormalColors) NuvioColors.Secondary else NuvioColors.Error.copy(alpha = 0.07f),
+            focusedSelectedContainerColor = if (shouldUseNormalColors) NuvioColors.Secondary else NuvioColors.Error.copy(alpha = 0.09f),
             contentColor = textColor,
             focusedContentColor = textColor,
             selectedContentColor = textColor,

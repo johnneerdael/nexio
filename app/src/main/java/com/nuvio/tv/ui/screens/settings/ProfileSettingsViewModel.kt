@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -27,13 +26,6 @@ class ProfileSettingsViewModel @Inject constructor(
     val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
-
-    val activeProfile: StateFlow<UserProfile?> = combine(
-        profileManager.activeProfileId,
-        profileManager.profiles
-    ) { activeId, profiles ->
-        profiles.firstOrNull { it.id == activeId }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, profileManager.activeProfile)
 
     val canAddProfile: Boolean
         get() = profileManager.profiles.value.size < 4
