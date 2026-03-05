@@ -115,6 +115,39 @@ Copy to dev file if needed:
 cp local.properties local.dev.properties
 ```
 
+## 5.1 Release signing keystore (required for release builds)
+
+`release` signing is configured in `app/build.gradle.kts` and currently expects:
+
+- Keystore path: `../nexio.jks` (relative to `app/`, so at repo root: `NuvioTV/nexio.jks`)
+- Alias: `nexio`
+
+Important:
+
+- `debug` builds do **not** require this keystore anymore.
+- `release` builds will fail if `nexio.jks` is missing or alias/password does not match Gradle config.
+- Do not commit keystore files to git.
+
+If you need to create a new keystore:
+
+```bash
+cd /homeassistant/NuvioTV
+keytool -genkeypair \
+  -v \
+  -keystore nexio.jks \
+  -alias nexio \
+  -keyalg RSA \
+  -keysize 4096 \
+  -validity 10000
+```
+
+Validate keystore/alias:
+
+```bash
+ls -l /homeassistant/NuvioTV/nexio.jks
+keytool -list -v -keystore /homeassistant/NuvioTV/nexio.jks -alias nexio
+```
+
 ## 6. Gradle build commands
 
 Use a project-local Gradle cache:
@@ -243,4 +276,9 @@ adb -s <ip>:5555 install -r --streaming app/build/outputs/apk_from_bundle/debug/
 - Clean rebuild:
   ```bash
   ./gradlew :app:clean :app:packageDebugUniversalApk --no-daemon --max-workers=4 --console=plain
+  ```
+- If release signing fails:
+  ```bash
+  ls -l ./nexio.jks
+  keytool -list -v -keystore ./nexio.jks -alias nexio
   ```
