@@ -211,11 +211,14 @@ fun PlayerScreen(
     // Frame rate matching lifecycle.
     val activity = LocalContext.current as? android.app.Activity
     LaunchedEffect(activity) {
+        com.nexio.tv.core.player.FrameRateUtils.setBlockDisplayModeChangesOutsideMainPlayer(true)
+        com.nexio.tv.core.player.FrameRateUtils.setMainPlayerDisplayModeSessionActive(activity != null)
         viewModel.attachHostActivity(activity)
         viewModel.startInitialPlaybackIfNeeded()
     }
     DisposableEffect(activity) {
         onDispose {
+            com.nexio.tv.core.player.FrameRateUtils.setMainPlayerDisplayModeSessionActive(false)
             viewModel.attachHostActivity(null)
         }
     }

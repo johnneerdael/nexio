@@ -29,6 +29,7 @@ object FrameRateUtils {
     private const val TAG = "FrameRateUtils"
     private const val SWITCH_TIMEOUT_MS = 4000L
     private const val REFRESH_MATCH_MIN_TOLERANCE_HZ = 0.08f
+    private const val UI_BASELINE_REFRESH_HZ = 60f
     private const val NTSC_FILM_FPS = 24000f / 1001f
     private const val CINEMA_24_FPS = 24f
     private const val MIN_VALID_VIDEO_FPS = 10f
@@ -38,6 +39,10 @@ object FrameRateUtils {
     private const val MKV_EXTENSION = ".mkv"
     private const val SWITCH_POLL_INTERVAL_MS = 60L
     private const val SWITCH_REQUIRED_STABLE_POLLS = 2
+    @Volatile
+    private var mainPlayerDisplayModeSessionActive: Boolean = false
+    @Volatile
+    private var blockDisplayModeChangesOutsideMainPlayer: Boolean = true
 
     data class DisplayModeSwitchResult(
         val appliedMode: Display.Mode
@@ -55,6 +60,25 @@ object FrameRateUtils {
     private fun matchesTargetRefresh(refreshRate: Float, target: Float): Boolean {
         val tolerance = max(REFRESH_MATCH_MIN_TOLERANCE_HZ, target * 0.003f)
         return abs(refreshRate - target) <= tolerance
+    }
+
+    /**
+     * Guardrail: when enabled, display mode switching is only allowed while the main player
+     * session is active. This prevents AFR/display-mode mutations from non-player screens.
+     */
+    fun setBlockDisplayModeChangesOutsideMainPlayer(enabled: Boolean) {
+        blockDisplayModeChangesOutsideMainPlayer = enabled
+    }
+
+    /**
+     * Marks whether the main player is currently allowed to control display mode switching.
+     */
+    fun setMainPlayerDisplayModeSessionActive(active: Boolean) {
+        mainPlayerDisplayModeSessionActive = active
+    }
+
+    private fun canChangeDisplayModeForPlayback(): Boolean {
+        return !blockDisplayModeChangesOutsideMainPlayer || mainPlayerDisplayModeSessionActive
     }
 
     private fun pickBestForTarget(modes: List<Display.Mode>, target: Float): Display.Mode? {
@@ -175,6 +199,10 @@ object FrameRateUtils {
     ): DisplayModeSwitchResult? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         if (frameRate <= 0f) return null
+        if (!canChangeDisplayModeForPlayback()) {
+            Log.d(TAG, "Display mode switch blocked outside main player session")
+            return null
+        }
 
         val switchPlan = withContext(Dispatchers.Main) {
             val window = activity.window ?: return@withContext null
@@ -283,6 +311,10 @@ object FrameRateUtils {
 
     fun restoreOriginalDisplayMode(activity: Activity): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        if (!canChangeDisplayModeForPlayback()) {
+            Log.d(TAG, "Display mode restore blocked outside main player session")
+            return false
+        }
         val targetModeId = originalModeId ?: return false
 
         return try {
@@ -301,6 +333,35 @@ object FrameRateUtils {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore display mode", e)
+            false
+        }
+    }
+
+    /**
+     * Forces UI screens (e.g. Home/Details) back to a 60Hz baseline.
+     * This path is intentionally allowed outside main player session.
+     */
+    fun enforceUiBaselineRefreshRate(activity: Activity): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        return try {
+            val window = activity.window ?: return false
+            val display = window.decorView.display ?: return false
+            val activeMode = display.mode
+            val sameSizeModes = display.supportedModes.filter {
+                it.physicalWidth == activeMode.physicalWidth &&
+                    it.physicalHeight == activeMode.physicalHeight
+            }
+            val candidates = if (sameSizeModes.isNotEmpty()) sameSizeModes else display.supportedModes.toList()
+            val target = candidates.minByOrNull { abs(it.refreshRate - UI_BASELINE_REFRESH_HZ) } ?: return false
+
+            if (activeMode.modeId == target.modeId) return true
+            val layoutParams = window.attributes
+            layoutParams.preferredDisplayModeId = target.modeId
+            window.attributes = layoutParams
+            Log.d(TAG, "UI baseline refresh set to ${target.refreshRate}Hz (modeId=${target.modeId})")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to enforce UI baseline refresh rate", e)
             false
         }
     }

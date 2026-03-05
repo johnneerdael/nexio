@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -34,6 +35,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -78,6 +80,7 @@ fun HomeScreen(
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val activity = LocalContext.current as? android.app.Activity
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
     var hasEnteredCatalogContent by rememberSaveable { mutableStateOf(false) }
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
@@ -86,6 +89,14 @@ fun HomeScreen(
     LaunchedEffect(hasCatalogContent) {
         if (hasCatalogContent) {
             hasEnteredCatalogContent = true
+        }
+    }
+
+    LaunchedEffect(activity) {
+        if (activity != null) {
+            FrameRateUtils.setBlockDisplayModeChangesOutsideMainPlayer(true)
+            FrameRateUtils.setMainPlayerDisplayModeSessionActive(false)
+            FrameRateUtils.enforceUiBaselineRefreshRate(activity)
         }
     }
 
