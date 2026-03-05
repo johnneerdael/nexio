@@ -648,22 +648,19 @@ private suspend fun HomeViewModel.resolveNextUpArtworkFallback(
     episode: Int
 ): NextUpArtworkFallback? {
     val tmdbId = resolveTmdbIdForNextUp(progress, meta) ?: return null
-    val language = currentTmdbSettings.language
 
     val episodeMeta = runCatching {
         tmdbMetadataService
             .fetchEpisodeEnrichment(
                 tmdbId = tmdbId,
-                seasonNumbers = listOf(season),
-                language = language
+                seasonNumbers = listOf(season)
             )[season to episode]
     }.getOrNull()
 
     val showMeta = runCatching {
         tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId,
-            contentType = ContentType.SERIES,
-            language = language
+            contentType = ContentType.SERIES
         )
     }.getOrNull()
 
