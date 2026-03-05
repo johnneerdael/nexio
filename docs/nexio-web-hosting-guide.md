@@ -32,17 +32,18 @@ Recommended minimal stack:
 ## Required Environment Variables
 Set these on the server:
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `TRAKT_CLIENT_ID`
-- `TRAKT_CLIENT_SECRET`
+- `NUXT_SUPABASE_URL`
+- `NUXT_SUPABASE_ANON_KEY`
+- `NUXT_SUPABASE_SERVICE_ROLE_KEY`
+- `NUXT_TRAKT_CLIENT_ID`
+- `NUXT_TRAKT_CLIENT_SECRET`
 - `NUXT_PUBLIC_TV_LOGIN_BASE_URL`
 
 Notes:
-- `SUPABASE_SERVICE_ROLE_KEY` is server-only.
+- `NUXT_SUPABASE_SERVICE_ROLE_KEY` is server-only.
 - Never expose it to the browser.
 - `NUXT_PUBLIC_TV_LOGIN_BASE_URL` should be your public site URL, for example `https://nexioapp.org`.
+- These names must use the `NUXT_` prefix because `nexio-web` reads them through Nuxt runtime config in production.
 
 ## Build And Run
 From the repo root:
@@ -97,11 +98,11 @@ Type=simple
 WorkingDirectory=/srv/nexio/NuvioTV/nexio-web
 Environment=PORT=3000
 Environment=HOST=127.0.0.1
-Environment=SUPABASE_URL=...
-Environment=SUPABASE_ANON_KEY=...
-Environment=SUPABASE_SERVICE_ROLE_KEY=...
-Environment=TRAKT_CLIENT_ID=...
-Environment=TRAKT_CLIENT_SECRET=...
+Environment=NUXT_SUPABASE_URL=...
+Environment=NUXT_SUPABASE_ANON_KEY=...
+Environment=NUXT_SUPABASE_SERVICE_ROLE_KEY=...
+Environment=NUXT_TRAKT_CLIENT_ID=...
+Environment=NUXT_TRAKT_CLIENT_SECRET=...
 Environment=NUXT_PUBLIC_TV_LOGIN_BASE_URL=https://nexioapp.org
 ExecStart=/usr/bin/node .output/server/index.mjs
 Restart=always

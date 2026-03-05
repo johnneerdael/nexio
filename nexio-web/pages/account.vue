@@ -1,7 +1,13 @@
 <template>
   <PortalShell :signed-in="signedIn" @sign-out="signOut">
     <template v-if="!signedIn">
-      <AuthPanel :busy="state.loading" :error="state.error" @sign-in="handleSignIn" @sign-up="handleSignUp" />
+      <AuthPanel
+        :busy="state.loading"
+        :error="state.error"
+        @sign-in="handleSignIn"
+        @sign-up="handleSignUp"
+        @google="handleGoogle"
+      />
     </template>
 
     <template v-else>
@@ -150,6 +156,7 @@ const {
   bootstrap,
   signIn,
   signUp,
+  startGoogleSignIn,
   signOut,
   signedIn,
   repositories,
@@ -204,6 +211,10 @@ async function handleSignIn(email: string, password: string) {
 
 async function handleSignUp(email: string, password: string) {
   await signUp(email, password)
+}
+
+function handleGoogle() {
+  startGoogleSignIn(route.fullPath)
 }
 
 onMounted(() => {

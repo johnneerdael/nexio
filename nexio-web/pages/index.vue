@@ -11,7 +11,6 @@
         </p>
         <div class="landing-actions">
           <NuxtLink class="primary-btn" to="/account">Open account portal</NuxtLink>
-          <NuxtLink class="secondary-btn" to="/approve">Approve TV QR login</NuxtLink>
         </div>
 
         <div class="landing-metrics">
@@ -206,7 +205,6 @@
       </div>
       <div class="landing-actions">
         <NuxtLink class="primary-btn" to="/account">Launch portal</NuxtLink>
-        <NuxtLink class="secondary-btn" to="/approve">TV approval page</NuxtLink>
       </div>
     </section>
     </div>

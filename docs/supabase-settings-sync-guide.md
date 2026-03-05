@@ -56,7 +56,7 @@ Store these through the secret channel immediately:
    - Enable Anonymous Sign-Ins.
    - Recommended for the current portal UX: disable mandatory email confirmation unless you plan to rewrite the sign-up flow.
 4. Create a server-side secret key for the web portal.
-   - Use this as `SUPABASE_SERVICE_ROLE_KEY` in `nexio-web`.
+   - Use this as `NUXT_SUPABASE_SERVICE_ROLE_KEY` in `nexio-web`.
 
 ## Required Auth Settings
 ### Email
@@ -69,6 +69,15 @@ Recommended for now:
 - disable required email confirmation
 
 If you want mandatory email confirmation later, the web sign-up flow needs to be changed accordingly.
+
+### Google OAuth
+If you enable Google auth for the portal:
+- add your public callback URL to Supabase Auth redirect URLs
+- for production this should include:
+  - `https://nexioapp.org/auth/callback`
+- for local development also add your local callback, for example:
+  - `http://localhost:3000/auth/callback`
+  - `http://localhost:3100/auth/callback`
 
 ### Anonymous Sign-Ins
 Enable Anonymous Sign-Ins.
@@ -126,16 +135,17 @@ This setup relies on:
 ## Environment Variables
 ### `nexio-web`
 Set these runtime variables:
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `TRAKT_CLIENT_ID`
-- `TRAKT_CLIENT_SECRET`
+- `NUXT_SUPABASE_URL`
+- `NUXT_SUPABASE_ANON_KEY`
+- `NUXT_SUPABASE_SERVICE_ROLE_KEY`
+- `NUXT_TRAKT_CLIENT_ID`
+- `NUXT_TRAKT_CLIENT_SECRET`
 
 Notes:
-- `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
+- `NUXT_SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
 - The portal server uses it for secret set/delete/resolve RPCs.
 - Clients should never receive the service key.
+- `nexio-web` reads these through Nuxt runtime config, so the `NUXT_` prefix is required in production.
 
 ## Public Table Model
 ### `linked_devices`
@@ -285,6 +295,13 @@ supabase secrets set SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
 supabase functions deploy tv-logins-exchange
 ```
 
+Important:
+- the Supabase Edge Function uses plain function secrets:
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- this is different from `nexio-web`, which expects `NUXT_*` env names
+
 If you prefer the dashboard:
 - create a function named `tv-logins-exchange`
 - paste the source from `supabase/functions/tv-logins-exchange/index.ts`
@@ -385,7 +402,7 @@ After applying the SQL and setting runtime env vars, verify:
 
 ## Operational Notes
 - Never log request bodies for secret endpoints.
-- Never send `SUPABASE_SERVICE_ROLE_KEY` to the client.
+- Never send `NUXT_SUPABASE_SERVICE_ROLE_KEY` to the client.
 - Keep addon URLs scrubbed before logging or analytics.
 - Show only masked previews like `Stored ••••abcd` in the UI.
 - Rotate provider credentials by overwriting the Vault secret and incrementing the metadata version.

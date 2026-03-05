@@ -12,7 +12,6 @@
         <nav style="display:flex; gap:0.55rem; flex-wrap:wrap; align-items:center;">
           <NuxtLink class="secondary-btn" to="/">Home</NuxtLink>
           <NuxtLink class="secondary-btn" to="/account">Account</NuxtLink>
-          <NuxtLink class="secondary-btn" to="/approve">Approve TV</NuxtLink>
           <button v-if="signedIn" class="ghost-btn" @click="$emit('sign-out')">Sign out</button>
         </nav>
       </header>

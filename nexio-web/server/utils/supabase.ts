@@ -11,6 +11,29 @@ export type SupabaseConfig = {
   serviceRoleKey: string
 }
 
+function errorMessageFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const record = payload as Record<string, unknown>
+  const candidates = [
+    record.message,
+    record.statusMessage,
+    record.error_description,
+    record.msg,
+    record.error
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+
+  return null
+}
+
 export async function readJsonBody<T>(event: H3Event): Promise<T> {
   return await readBody<T>(event)
 }
@@ -66,10 +89,18 @@ export async function supabaseFetch<T>(
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const rawBody = await response.text()
+    let message = rawBody || response.statusText
+
+    try {
+      message = errorMessageFromPayload(JSON.parse(rawBody)) || message
+    } catch {
+      // Keep plain text bodies unchanged.
+    }
+
     throw createError({
       statusCode: response.status,
-      statusMessage: message || response.statusText
+      statusMessage: message
     })
   }
 

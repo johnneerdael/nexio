@@ -199,8 +199,29 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
   })
 
   if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `${response.status} ${response.statusText}`)
+    const rawBody = await response.text()
+    let message = rawBody || `${response.status} ${response.statusText}`
+
+    try {
+      const payload = JSON.parse(rawBody) as Record<string, unknown>
+      const candidates = [
+        payload.message,
+        payload.statusMessage,
+        payload.error_description,
+        payload.error
+      ]
+
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          message = candidate.trim()
+          break
+        }
+      }
+    } catch {
+      // Keep plain text responses intact.
+    }
+
+    throw new Error(message)
   }
 
   if (response.status === 204) {
@@ -523,6 +544,32 @@ export function usePortalStore() {
       ...normalizeSnapshot(readLocalState()),
       bootstrapped: true
     }
+  }
+
+  async function completeOAuthSession(session: PortalSession) {
+    state.value.loading = true
+    state.value.error = null
+
+    try {
+      state.value.session = session
+      writeSession(session)
+      state.value.bootstrapped = false
+      await bootstrap()
+    } catch (error) {
+      state.value.error = error instanceof Error ? error.message : 'Unable to complete sign in.'
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  function startGoogleSignIn(nextPath = '/account') {
+    if (!process.client) {
+      return
+    }
+
+    const next = nextPath.startsWith('/') ? nextPath : '/account'
+    window.location.assign(`/api/auth/google?next=${encodeURIComponent(next)}`)
   }
 
   function updateSetting(path: string, nextValue: unknown) {
@@ -1021,6 +1068,8 @@ export function usePortalStore() {
     bootstrap,
     signIn,
     signUp,
+    completeOAuthSession,
+    startGoogleSignIn,
     signOut,
     updateSetting,
     addAddon,
