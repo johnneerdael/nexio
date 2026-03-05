@@ -134,15 +134,8 @@ internal fun PlaybackSettingsSections(
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetParallelConnectionCount: (Int) -> Unit,
     onSetParallelChunkSizeMb: (Int) -> Unit,
-    onSetBufferMinBufferMs: (Int) -> Unit,
-    onSetBufferMaxBufferMs: (Int) -> Unit,
-    onSetBufferForPlaybackMs: (Int) -> Unit,
-    onSetBufferForPlaybackAfterRebufferMs: (Int) -> Unit,
-    onSetBufferTargetSizeMb: (Int) -> Unit,
-    onSetBufferBackBufferDurationMs: (Int) -> Unit,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
-    onResetBufferSettingsToDefaults: () -> Unit,
     onResetNetworkSettingsToDefaults: () -> Unit
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
@@ -398,8 +391,8 @@ internal fun PlaybackSettingsSections(
 
         playbackCollapsibleSection(
             keyPrefix = "buffer_network",
-            title = "Buffer & Network",
-            description = "How much content to keep in memory and how to fetch streams.",
+            title = "Network & Cache",
+            description = "Configure disk VOD cache and progressive stream transfer settings.",
             expanded = bufferAndNetworkExpanded,
             onToggle = { bufferAndNetworkExpanded = !bufferAndNetworkExpanded },
             focusRequester = bufferAndNetworkHeaderFocus,
@@ -407,15 +400,8 @@ internal fun PlaybackSettingsSections(
         ) {
             bufferAndNetworkSettingsItems(
                 playerSettings = playerSettings,
-                onSetBufferMinBufferMs = onSetBufferMinBufferMs,
-                onSetBufferMaxBufferMs = onSetBufferMaxBufferMs,
-                onSetBufferForPlaybackMs = onSetBufferForPlaybackMs,
-                onSetBufferForPlaybackAfterRebufferMs = onSetBufferForPlaybackAfterRebufferMs,
-                onSetBufferTargetSizeMb = onSetBufferTargetSizeMb,
-                onSetBufferBackBufferDurationMs = onSetBufferBackBufferDurationMs,
                 onSetVodCacheSizeMode = onSetVodCacheSizeMode,
                 onSetVodCacheSizeMb = onSetVodCacheSizeMb,
-                onResetToDefaults = onResetBufferSettingsToDefaults,
                 onSetUseParallelConnections = onSetUseParallelConnections,
                 onSetParallelConnectionCount = onSetParallelConnectionCount,
                 onSetParallelChunkSizeMb = onSetParallelChunkSizeMb,

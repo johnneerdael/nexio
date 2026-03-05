@@ -5,6 +5,7 @@ import android.media.audiofx.AudioEffect
 
 internal fun PlayerRuntimeController.releasePlayer() {
     flushPlaybackSnapshotForSwitchOrExit()
+    mediaSourceFactory.stopVodWarmAhead()
 
     notifyAudioSessionUpdate(false)
 

@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.net.SocketTimeoutException
-import kotlin.math.min
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
@@ -125,29 +124,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "bridge=${dv7ToDv81Probe.bridgeVersion ?: "n/a"} " +
                     "host=${url.safeHost()}"
             )
-            val bufferSettings = playerSettings.bufferSettings
-            val targetBufferBytes = if (bufferSettings.targetBufferSizeMb <= 0) {
-                C.LENGTH_UNSET
-            } else {
-                min(
-                    Int.MAX_VALUE.toLong(),
-                    bufferSettings.targetBufferSizeMb.toLong() * 1024L * 1024L
-                ).toInt()
-            }
-            val loadControl = DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    bufferSettings.minBufferMs,
-                    bufferSettings.maxBufferMs,
-                    bufferSettings.bufferForPlaybackMs,
-                    bufferSettings.bufferForPlaybackAfterRebufferMs
-                )
-                .setTargetBufferBytes(targetBufferBytes)
-                .setBackBuffer(
-                    bufferSettings.backBufferDurationMs,
-                    bufferSettings.retainBackBufferFromKeyframe
-                )
-                .setPrioritizeTimeOverSizeThresholds(false)
-                .build()
+            val loadControl = DefaultLoadControl.Builder().build()
 
             mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
             mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount

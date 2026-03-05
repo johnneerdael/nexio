@@ -187,7 +187,7 @@ data class PlayerSettings(
         const val DEFAULT_VOD_CACHE_SIZE_MB = 500
         const val MIN_VOD_CACHE_SIZE_MB = 100
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
-        val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.AUTO
+        val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
         const val DEFAULT_USE_PARALLEL_CONNECTIONS = false
         const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
         const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
@@ -210,8 +210,8 @@ enum class StreamAutoPlaySource {
 }
 
 enum class VodCacheSizeMode {
-    AUTO,
-    MANUAL
+    OFF,
+    ON
 }
 
 enum class FrameRateMatchingMode {
@@ -437,9 +437,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     }
                 }
                 prefs[vodCacheSizeModeKey]?.let { raw ->
-                    val normalized = runCatching { VodCacheSizeMode.valueOf(raw) }
-                        .getOrDefault(PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE)
-                        .name
+                    val normalized = parseVodCacheSizeMode(raw).name
                     if (normalized != raw) {
                         prefs[vodCacheSizeModeKey] = normalized
                     }
@@ -558,10 +556,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
-                vodCacheSizeMode = prefs[vodCacheSizeModeKey]?.let {
-                    runCatching { VodCacheSizeMode.valueOf(it) }
-                        .getOrDefault(PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE)
-                } ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE,
+                vodCacheSizeMode = parseVodCacheSizeMode(prefs[vodCacheSizeModeKey]),
                 vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
                     .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
                 useParallelConnections = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
@@ -828,6 +823,14 @@ class PlayerSettingsDataStore @Inject constructor(
             "PREFERRED_ONLY" -> AddonSubtitleStartupMode.PREFERRED_ONLY
             "FAST_STARTUP" -> AddonSubtitleStartupMode.FAST_STARTUP
             else -> AddonSubtitleStartupMode.ALL_SUBTITLES
+        }
+    }
+
+    private fun parseVodCacheSizeMode(value: String?): VodCacheSizeMode {
+        return when (value?.trim()?.uppercase()) {
+            "ON", "AUTO", "MANUAL" -> VodCacheSizeMode.ON
+            "OFF" -> VodCacheSizeMode.OFF
+            else -> PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
         }
     }
 

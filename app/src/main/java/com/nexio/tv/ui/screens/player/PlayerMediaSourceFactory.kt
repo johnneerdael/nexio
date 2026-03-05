@@ -7,8 +7,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -28,10 +30,12 @@ import okhttp3.OkHttpClient
 import java.io.File
 import java.net.SocketTimeoutException
 import java.net.URLDecoder
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.Executors
-import kotlin.math.abs
+import kotlin.io.deleteRecursively
 
 internal class PlayerMediaSourceFactory(private val context: Context) {
     private var okHttpClient: OkHttpClient? = null
@@ -39,11 +43,26 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     @Volatile private var currentVodCacheUrl: String? = null
     @Volatile private var currentVodCacheResolvedUrl: String? = null
     @Volatile private var currentVodCacheActive: Boolean = false
+    @Volatile private var currentProgressiveUpstreamFactory: DataSource.Factory? = null
+    @Volatile private var currentProgressiveIsEligibleForWarmAhead: Boolean = false
     private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
+    private val activeReadBytePosition = AtomicLong(0L)
+    private val prefetchStop = AtomicBoolean(false)
+    private var prefetchFuture: Future<*>? = null
+    private var activePrefetchWriter: CacheWriter? = null
+    private val prefetchExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "Nexio-vod-prefetch").apply { isDaemon = true }
+    }
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
     var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
     var vodCacheSizeMode: VodCacheSizeMode = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
+        set(value) {
+            field = value
+            if (value != VodCacheSizeMode.ON) {
+                stopVodWarmAhead()
+            }
+        }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
 
     fun createMediaSource(
@@ -51,6 +70,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         headers: Map<String, String>,
         subtitleConfigurations: List<MediaItem.SubtitleConfiguration> = emptyList()
     ): MediaSource {
+        stopVodWarmAhead()
         val sanitizedHeaders = sanitizeHeaders(headers)
         val okHttpFactory = OkHttpDataSource.Factory(getOrCreateOkHttpClient()).apply {
             setDefaultRequestProperties(sanitizedHeaders)
@@ -80,6 +100,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         val mediaItem = mediaItemBuilder.build()
         parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
+        activeReadBytePosition.set(0L)
         val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
             ParallelRangeDataSource.Factory(
                 okHttpFactory,
@@ -88,16 +109,27 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
                 onResolvedUri = { resolved ->
                     currentVodCacheResolvedUrl = resolved?.toString()
+                },
+                onReadPositionAdvanced = { position ->
+                    activeReadBytePosition.accumulateAndGet(position) { current, next ->
+                        if (next > current) next else current
+                    }
                 }
             )
         } else {
             okHttpFactory
         }
-        val useVodCache = ENABLE_VOD_CACHE && !isHls && !isDash && shouldUseVodCache(url)
+        val useVodCache = ENABLE_VOD_CACHE &&
+            vodCacheSizeMode == VodCacheSizeMode.ON &&
+            !isHls &&
+            !isDash &&
+            shouldUseVodCache(url)
         val previousVodCacheActive = currentVodCacheActive
         currentVodCacheUrl = url
         currentVodCacheResolvedUrl = null
         currentVodCacheActive = false
+        currentProgressiveUpstreamFactory = progressiveUpstreamFactory
+        currentProgressiveIsEligibleForWarmAhead = useVodCache
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         if (useVodCache && !isVodCacheDisabled) {
             maybeApplyLiveVodCacheCapIncrease(
@@ -148,6 +180,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
         } else {
             currentVodCacheActive = false
+            currentProgressiveIsEligibleForWarmAhead = false
             progressiveUpstreamFactory
         }
         val defaultProgressiveFactory = DefaultMediaSourceFactory(progressiveFactory)
@@ -168,6 +201,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     fun shutdown() {
+        stopVodWarmAhead()
         okHttpClient?.let { client ->
             Thread {
                 client.connectionPool.evictAll()
@@ -175,6 +209,12 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }.start()
             okHttpClient = null
         }
+        prefetchExecutor.shutdownNow()
+    }
+
+    fun clearVodCache() {
+        stopVodWarmAhead()
+        clearVodCacheInternal(context)
     }
 
     private fun getOrCreateOkHttpClient(): OkHttpClient {
@@ -197,16 +237,18 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     fun warmupVodCacheAsync() {
-        if (!ENABLE_VOD_CACHE || isVodCacheDisabled) return
+        if (!ENABLE_VOD_CACHE || isVodCacheDisabled || vodCacheSizeMode != VodCacheSizeMode.ON) return
         startVodCacheInitialization(context, resolveVodCacheMaxBytes(context))
     }
 
     fun notifyPlaybackFirstFrameRendered() {
         parallelStartupPrefetchUnlocked.set(true)
+        startVodWarmAheadIfEligible()
     }
 
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
         if (!ENABLE_VOD_CACHE) return "vod=off"
+        if (vodCacheSizeMode != VodCacheSizeMode.ON) return "vod=off"
         if (isVodCacheDisabled) return "vod=disabled"
 
         val usedBytes = runCatching { getAnySimpleCache()?.cacheSpace ?: 0L }.getOrDefault(0L)
@@ -234,25 +276,173 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             configuredVodCacheMaxBytes > 0L -> configuredVodCacheMaxBytes
             else -> resolveVodCacheMaxBytes(context)
         }
-        val mode = if (vodCacheSizeMode == VodCacheSizeMode.AUTO) "auto" else "manual"
+        val mode = if (vodCacheSizeMode == VodCacheSizeMode.ON) "on" else "off"
         val isActiveForCurrentStream =
             streamUrl != null && streamUrl == currentVodCacheUrl && currentVodCacheActive
         return "vod=$mode total=${bytesToMb(usedBytes)}/${bytesToMb(capBytes)}MB " +
             "stream=${bytesToMb(streamBytes)}MB active=$isActiveForCurrentStream"
     }
 
+    private fun startVodWarmAheadIfEligible() {
+        if (!ENABLE_VOD_CACHE || isVodCacheDisabled) return
+        if (vodCacheSizeMode != VodCacheSizeMode.ON) return
+        if (!currentProgressiveIsEligibleForWarmAhead || !currentVodCacheActive) return
+        val streamUrl = currentVodCacheUrl ?: return
+        val upstreamFactory = currentProgressiveUpstreamFactory ?: return
+        val capBytes = resolveVodCacheMaxBytes(context)
+        val cache = getAnySimpleCache() ?: return
+
+        stopVodWarmAhead()
+        prefetchStop.set(false)
+        prefetchFuture = prefetchExecutor.submit {
+            runWarmAheadLoop(
+                streamUrl = streamUrl,
+                upstreamFactory = upstreamFactory,
+                cache = cache,
+                capBytes = capBytes
+            )
+        }
+    }
+
+    internal fun stopVodWarmAhead() {
+        prefetchStop.set(true)
+        activePrefetchWriter?.cancel()
+        prefetchFuture?.cancel(true)
+        prefetchFuture = null
+        activePrefetchWriter = null
+    }
+
+    private fun runWarmAheadLoop(
+        streamUrl: String,
+        upstreamFactory: DataSource.Factory,
+        cache: SimpleCache,
+        capBytes: Long
+    ) {
+        val effectiveCapBytes = capBytes.coerceAtLeast(0L)
+        if (effectiveCapBytes <= 0L) return
+        var cursor = 0L
+        var idleCycles = 0
+        while (!prefetchStop.get() && !Thread.currentThread().isInterrupted) {
+            val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
+            val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
+            val cacheKey = prefetchUri.toString()
+            val cachedFrontier = contiguousCachedPrefix(cache, cacheKey, effectiveCapBytes)
+            if (cachedFrontier > activeReadBytePosition.get()) {
+                activeReadBytePosition.set(cachedFrontier)
+            }
+            if (cursor >= effectiveCapBytes) {
+                break
+            }
+            val hole = findNextUncachedHole(
+                cache = cache,
+                cacheKey = cacheKey,
+                start = cursor,
+                endExclusive = effectiveCapBytes
+            )
+            if (hole == null) {
+                idleCycles++
+                if (idleCycles > PREFETCH_MAX_IDLE_CYCLES) break
+                Thread.sleep(PREFETCH_IDLE_SLEEP_MS)
+                continue
+            }
+            idleCycles = 0
+
+            var holeStart = hole.first
+            val holeLength = hole.second
+            val activeGuardEnd = activeReadBytePosition.get().coerceAtLeast(0L) + PREFETCH_ACTIVE_GUARD_BYTES
+            if (holeStart < activeGuardEnd) {
+                cursor = activeGuardEnd.coerceAtMost(effectiveCapBytes)
+                Thread.sleep(PREFETCH_REBASE_SLEEP_MS)
+                continue
+            }
+
+            val writeLength = minOf(
+                PREFETCH_BLOCK_BYTES,
+                holeLength,
+                effectiveCapBytes - holeStart
+            )
+            if (writeLength <= 0L) {
+                cursor = (holeStart + 1L).coerceAtMost(effectiveCapBytes)
+                continue
+            }
+
+            val dataSpec = DataSpec.Builder()
+                .setUri(prefetchUri)
+                .setPosition(holeStart)
+                .setLength(writeLength)
+                .build()
+            val prefetchFactory = buildVodCacheDataSourceFactory(
+                upstreamFactory = upstreamFactory,
+                cache = cache,
+                blockOnCache = true
+            )
+            val writer = CacheWriter(prefetchFactory.createDataSource() as CacheDataSource, dataSpec, null, null)
+            activePrefetchWriter = writer
+            runCatching {
+                writer.cache()
+            }.onFailure { error ->
+                if (!prefetchStop.get()) {
+                    Log.w(
+                        TAG,
+                        "VOD warm-ahead failed at offset=${holeStart / 1024L / 1024L}MB len=${writeLength / 1024L / 1024L}MB",
+                        error
+                    )
+                }
+            }
+            activePrefetchWriter = null
+            cursor = (holeStart + writeLength).coerceAtMost(effectiveCapBytes)
+        }
+    }
+
+    private fun findNextUncachedHole(
+        cache: SimpleCache,
+        cacheKey: String,
+        start: Long,
+        endExclusive: Long
+    ): Pair<Long, Long>? {
+        var position = start.coerceAtLeast(0L)
+        val upperBound = endExclusive.coerceAtLeast(position)
+        while (position < upperBound) {
+            val remaining = upperBound - position
+            val cachedLength = cache.getCachedLength(cacheKey, position, remaining)
+            if (cachedLength > 0L) {
+                position += cachedLength
+                continue
+            }
+            val holeLength = (-cachedLength).coerceAtLeast(1L).coerceAtMost(remaining)
+            return position to holeLength
+        }
+        return null
+    }
+
+    private fun contiguousCachedPrefix(cache: SimpleCache, cacheKey: String, limit: Long): Long {
+        var position = 0L
+        val end = limit.coerceAtLeast(0L)
+        while (position < end) {
+            val cachedLength = cache.getCachedLength(cacheKey, position, end - position)
+            if (cachedLength <= 0L) break
+            position += cachedLength
+        }
+        return position
+    }
+
     private fun buildVodCacheDataSourceFactory(
         upstreamFactory: DataSource.Factory,
-        cache: SimpleCache
+        cache: SimpleCache,
+        blockOnCache: Boolean = false
     ): DataSource.Factory {
         val dataSinkFactory = CacheDataSink.Factory()
             .setCache(cache)
             .setFragmentSize(2L * 1024L * 1024L)
+        var flags = CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
+        if (blockOnCache) {
+            flags = flags or CacheDataSource.FLAG_BLOCK_ON_CACHE
+        }
         return CacheDataSource.Factory()
             .setCache(cache)
             .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .setFlags(flags)
     }
 
     private fun shouldUseVodCache(url: String): Boolean {
@@ -261,45 +451,20 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     private fun resolveVodCacheMaxBytes(context: Context): Long {
-        val minBytes = PlayerSettings.MIN_VOD_CACHE_SIZE_MB.toLong() * 1024L * 1024L
         val maxBytes = PlayerSettings.MAX_VOD_CACHE_SIZE_MB.toLong() * 1024L * 1024L
         val runtimeMaxBytes = resolveRuntimeVodCacheUpperBoundBytes(context, maxBytes)
-        val manualBytes = vodCacheSizeMb
+        val requestedBytes = vodCacheSizeMb
             .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB)
             .toLong() * 1024L * 1024L
-        val resolvedManualBytes = manualBytes.coerceAtMost(runtimeMaxBytes)
-        if (vodCacheSizeMode == VodCacheSizeMode.MANUAL) {
-            lastResolvedAutoCacheMaxBytes = -1L
-            if (resolvedManualBytes < manualBytes) {
-                Log.w(
-                    TAG,
-                    "Manual VOD cache cap clamped from ${manualBytes / 1024L / 1024L}MB " +
-                        "to ${resolvedManualBytes / 1024L / 1024L}MB due to free-space headroom"
-                )
-            }
-            return resolvedManualBytes
+        val resolvedBytes = requestedBytes.coerceAtMost(runtimeMaxBytes)
+        if (resolvedBytes < requestedBytes) {
+            Log.w(
+                TAG,
+                "VOD cache cap clamped from ${requestedBytes / 1024L / 1024L}MB " +
+                    "to ${resolvedBytes / 1024L / 1024L}MB due to free-space headroom"
+            )
         }
-
-        val freeSpaceBytes = context.cacheDir.usableSpace
-        if (freeSpaceBytes <= 0L) return resolvedManualBytes
-        if (runtimeMaxBytes < minBytes) {
-            lastResolvedAutoCacheMaxBytes = runtimeMaxBytes
-            return runtimeMaxBytes
-        }
-        val autoBytes = freeSpaceBytes / 10L
-        val quantizedAutoBytes = ((autoBytes.coerceIn(minBytes, runtimeMaxBytes) / AUTO_CACHE_STEP_BYTES)
-            * AUTO_CACHE_STEP_BYTES).coerceIn(minBytes, runtimeMaxBytes)
-        val previous = lastResolvedAutoCacheMaxBytes
-        val resolved = if (previous > 0L &&
-            abs(quantizedAutoBytes - previous) < AUTO_CACHE_RECONFIGURE_DELTA_BYTES
-        ) {
-            previous
-        } else {
-            quantizedAutoBytes
-        }
-        val boundedResolved = resolved.coerceAtMost(runtimeMaxBytes).coerceAtLeast(minBytes)
-        lastResolvedAutoCacheMaxBytes = boundedResolved
-        return boundedResolved
+        return resolvedBytes
     }
 
     private fun resolveRuntimeVodCacheUpperBoundBytes(context: Context, hardMaxBytes: Long): Long {
@@ -319,14 +484,16 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_DIR = "player_vod_cache"
-        private const val AUTO_CACHE_STEP_BYTES = 64L * 1024L * 1024L
-        private const val AUTO_CACHE_RECONFIGURE_DELTA_BYTES = 256L * 1024L * 1024L
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
+        private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L
+        private const val PREFETCH_ACTIVE_GUARD_BYTES = 8L * 1024L * 1024L
+        private const val PREFETCH_REBASE_SLEEP_MS = 100L
+        private const val PREFETCH_IDLE_SLEEP_MS = 250L
+        private const val PREFETCH_MAX_IDLE_CYCLES = 20
         @Volatile private var sharedSimpleCache: SimpleCache? = null
         @Volatile private var cacheDatabaseProvider: DatabaseProvider? = null
         @Volatile private var configuredVodCacheMaxBytes: Long = -1L
-        @Volatile private var lastResolvedAutoCacheMaxBytes: Long = -1L
         @Volatile private var lastDeferredReconfigureTargetBytes: Long = -1L
         @Volatile private var isVodCacheDisabled: Boolean = false
         @Volatile private var hasLoggedVodCacheNotReady: Boolean = false
@@ -376,6 +543,26 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private fun getAnySimpleCache(): SimpleCache? = sharedSimpleCache
 
         private fun bytesToMb(bytes: Long): Long = bytes / (1024L * 1024L)
+
+        private fun clearVodCacheInternal(context: Context) {
+            synchronized(this) {
+                runCatching { sharedSimpleCache?.release() }
+                    .onFailure { Log.w(TAG, "Failed to release VOD cache before clear", it) }
+                sharedSimpleCache = null
+                configuredVodCacheMaxBytes = -1L
+                lastDeferredReconfigureTargetBytes = -1L
+                hasLoggedVodCacheNotReady = false
+                cacheDatabaseProvider = null
+
+                val cacheDir = File(context.cacheDir, VOD_CACHE_DIR)
+                runCatching {
+                    if (cacheDir.exists()) {
+                        cacheDir.deleteRecursively()
+                    }
+                }.onFailure { Log.w(TAG, "Failed to delete VOD cache directory", it) }
+            }
+            Log.i(TAG, "Cleared VOD cache contents on playback stop")
+        }
 
         private fun getOrCreateSimpleCache(context: Context, maxBytes: Long): SimpleCache {
             sharedSimpleCache?.let {

@@ -100,6 +100,7 @@ class PlayerRuntimeController(
 
     fun stopAndRelease() {
         releasePlayer()
+        mediaSourceFactory.clearVodCache()
     }
 
     internal var currentVideoId: String? = videoId
