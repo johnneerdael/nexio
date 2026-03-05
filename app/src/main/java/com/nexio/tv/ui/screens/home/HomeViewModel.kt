@@ -5,9 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.Addon
@@ -44,8 +47,10 @@ class HomeViewModel @Inject constructor(
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
+    internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
+    internal val mdbListDiscoveryService: MDBListDiscoveryService,
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService
 ) : ViewModel() {
@@ -97,6 +102,9 @@ class HomeViewModel @Inject constructor(
     internal var traktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     internal var traktCatalogPreferences: TraktCatalogPreferences = TraktCatalogPreferences()
+    internal var mdbListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
+        com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+    internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
@@ -121,6 +129,8 @@ class HomeViewModel @Inject constructor(
         observeTmdbSettings()
         observeTraktCatalogPreferences()
         observeTraktDiscovery()
+        observeMDBListCatalogPreferences()
+        observeMDBListDiscovery()
         loadContinueWatching()
         observeInstalledAddons()
         viewModelScope.launch {
@@ -144,6 +154,10 @@ class HomeViewModel @Inject constructor(
     private fun observeTraktCatalogPreferences() = observeTraktCatalogPreferencesPipeline()
 
     private fun observeTraktDiscovery() = observeTraktDiscoveryPipeline()
+
+    private fun observeMDBListCatalogPreferences() = observeMDBListCatalogPreferencesPipeline()
+
+    private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
 
     fun onEvent(event: HomeEvent) {
         when (event) {

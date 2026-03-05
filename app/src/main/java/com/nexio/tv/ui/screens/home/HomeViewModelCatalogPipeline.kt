@@ -1,10 +1,12 @@
 package com.nexio.tv.ui.screens.home
 
 import android.util.Log
+import com.nexio.tv.data.local.MDBListCatalogPreferences
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -46,6 +48,10 @@ private const val TRAKT_ROW_NAME_RECOMMENDED_MOVIES = "Trakt Recommended Movies"
 private const val TRAKT_ROW_NAME_RECOMMENDED_SHOWS = "Trakt Recommended Shows"
 private const val TRAKT_ROW_NAME_CALENDAR = "Trakt Calendar (Next 7 Days)"
 
+private const val MDBLIST_RAIL_ADDON_ID = "mdblist"
+private const val MDBLIST_RAIL_ADDON_NAME = "MDBList"
+private const val MDBLIST_RAIL_ADDON_BASE_URL = "https://api.mdblist.com"
+
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
@@ -61,6 +67,26 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             if (prefs == traktCatalogPreferences) return@collectLatest
             traktCatalogPreferences = prefs
             traktDiscoveryService.ensureFresh(force = true)
+            scheduleUpdateCatalogRows()
+        }
+    }
+}
+
+internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
+    viewModelScope.launch {
+        mdbListDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+            mdbListDiscoverySnapshot = snapshot
+            scheduleUpdateCatalogRows()
+        }
+    }
+}
+
+internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
+    viewModelScope.launch {
+        mdbListSettingsDataStore.catalogPreferences.collectLatest { prefs ->
+            if (prefs == mdbListCatalogPreferences) return@collectLatest
+            mdbListCatalogPreferences = prefs
+            mdbListDiscoveryService.ensureFresh(force = true)
             scheduleUpdateCatalogRows()
         }
     }
@@ -331,6 +357,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val hideUnreleased = _uiState.value.hideUnreleasedContent
     val traktSnapshot = traktDiscoverySnapshot
     val traktPrefs = traktCatalogPreferences
+    val mdbListSnapshot = mdbListDiscoverySnapshot
+    val mdbListPrefs = mdbListCatalogPreferences
     val traktUpNextItems = continueWatchingItems
         .filterIsInstance<ContinueWatchingItem.NextUp>()
         .take(20)
@@ -340,11 +368,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         upNextItems = traktUpNextItems,
         snapshot = traktSnapshot
     )
+    val syntheticMDBListRows = buildSyntheticMDBListRows(
+        prefs = mdbListPrefs,
+        snapshot = mdbListSnapshot
+    )
     val recommendationRefMap = traktSnapshot.recommendationRefsByStatusKey
 
     val (displayRows, baseHeroItems, baseGridItems, fullRowsFiltered) = withContext(Dispatchers.Default) {
         val rawRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
-        val combinedRows = syntheticTraktRows + rawRows
+        val combinedRows = syntheticTraktRows + syntheticMDBListRows + rawRows
         val orderedRows = if (hideUnreleased) {
             val today = LocalDate.now()
             combinedRows.map { row ->
@@ -521,6 +553,38 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     schedulePosterStatusReconcilePipeline(displayRows)
 }
 
+private fun buildSyntheticMDBListRows(
+    prefs: MDBListCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+): List<CatalogRow> {
+    if (snapshot.customListCatalogs.isEmpty()) return emptyList()
+
+    val availableKeys = buildSet {
+        addAll(
+            snapshot.personalLists
+                .filter { prefs.isPersonalListEnabled(it.key) }
+                .map { it.key }
+        )
+        addAll(
+            snapshot.topLists
+                .filter { prefs.isTopListSelected(it.key) }
+                .map { it.key }
+        )
+    }
+    if (availableKeys.isEmpty()) return emptyList()
+
+    val orderedKeys = if (prefs.catalogOrder.isEmpty()) {
+        availableKeys.toList()
+    } else {
+        prefs.catalogOrder.filter { it in availableKeys } + availableKeys.filterNot { it in prefs.catalogOrder }
+    }
+
+    val groupedByKey = snapshot.customListCatalogs.groupBy { it.key }
+    return orderedKeys.flatMap { key ->
+        groupedByKey[key].orEmpty().mapNotNull { custom -> custom.toCatalogRow() }
+    }
+}
+
 private fun buildSyntheticTraktRows(
     prefs: TraktCatalogPreferences,
     upNextItems: List<MetaPreview>,
@@ -620,6 +684,22 @@ private fun buildTraktCatalogRow(
         addonId = TRAKT_RAIL_ADDON_ID,
         addonName = TRAKT_RAIL_ADDON_NAME,
         addonBaseUrl = TRAKT_RAIL_ADDON_BASE_URL,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items,
+        isLoading = false,
+        hasMore = false,
+        supportsSkip = false
+    )
+}
+
+private fun MDBListCustomCatalog.toCatalogRow(): CatalogRow? {
+    if (items.isEmpty()) return null
+    return CatalogRow(
+        addonId = MDBLIST_RAIL_ADDON_ID,
+        addonName = MDBLIST_RAIL_ADDON_NAME,
+        addonBaseUrl = MDBLIST_RAIL_ADDON_BASE_URL,
         catalogId = catalogId,
         catalogName = catalogName,
         type = type,
