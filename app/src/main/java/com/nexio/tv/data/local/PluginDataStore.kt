@@ -169,8 +169,7 @@ class PluginDataStore @Inject constructor(
             }
         } ?: emptyMap()
 
-        @Suppress("UNCHECKED_CAST")
-        return allSettings[scraperId] as? Map<String, Any> ?: emptyMap()
+        return allSettings[scraperId] ?: emptyMap()
     }
 
     suspend fun setScraperSettings(scraperId: String, settings: Map<String, Any>) {
@@ -193,3 +192,4 @@ class PluginDataStore @Inject constructor(
         }
     }
 }
+

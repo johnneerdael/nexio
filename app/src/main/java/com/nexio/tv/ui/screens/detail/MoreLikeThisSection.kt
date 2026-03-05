@@ -70,7 +70,7 @@ fun MoreLikeThisSection(
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRestorer { firstItemFocusRequester },
+                .focusRestorer(firstItemFocusRequester),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

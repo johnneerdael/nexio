@@ -62,6 +62,8 @@ fun EpisodeRatingsSection(
     val seasonFocusRequesters = remember(seasonNumbers) {
         seasonNumbers.associateWith { FocusRequester() }
     }
+    val seasonTabsRestoreRequester = remember { FocusRequester() }
+    val ratingsRestoreRequester = remember { FocusRequester() }
     val defaultSeason = remember(seasonNumbers) {
         seasonNumbers.firstOrNull { it > 0 } ?: seasonNumbers.firstOrNull() ?: 0
     }
@@ -149,7 +151,7 @@ fun EpisodeRatingsSection(
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRestorer(),
+                        .focusRestorer(ratingsRestoreRequester),
                     contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -207,7 +209,7 @@ fun EpisodeRatingsSection(
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRestorer(),
+                        .focusRestorer(seasonTabsRestoreRequester),
                     contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -285,3 +287,4 @@ private data class EpisodeRatingChipUi(
     val chipColor: Color,
     val chipTextColor: Color
 )
+

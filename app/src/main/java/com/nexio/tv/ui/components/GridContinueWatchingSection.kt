@@ -84,14 +84,19 @@ fun GridContinueWatchingSection(
             }
         }
 
+        val restoreRequester = remember(lastFocusedIndex, focusRequesters) {
+            val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size) {
+                lastFocusedIndex
+            } else {
+                0
+            }
+            focusRequesters.getOrNull(idx) ?: FocusRequester.Default
+        }
+
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRestorer {
-                    val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size)
-                        lastFocusedIndex else 0
-                    focusRequesters.getOrNull(idx) ?: FocusRequester.Default
-                },
+                .focusRestorer(restoreRequester),
             contentPadding = PaddingValues(horizontal = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

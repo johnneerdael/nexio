@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -305,7 +305,7 @@ private fun CastDetailView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
                 tint = NexioColors.TextSecondary,
                 modifier = Modifier.size(24.dp)
@@ -350,7 +350,7 @@ private fun CastDetailView(
 
                 if (!member.character.isNullOrBlank()) {
                     Text(
-                        text = stringResource(R.string.pause_as_character, member.character ?: ""),
+                        text = stringResource(R.string.pause_as_character, member.character),
                         style = MaterialTheme.typography.bodyLarge,
                         color = NexioColors.TextSecondary,
                         modifier = Modifier.padding(top = 8.dp),
@@ -362,3 +362,5 @@ private fun CastDetailView(
         }
     }
 }
+
+

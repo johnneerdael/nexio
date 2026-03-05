@@ -162,6 +162,29 @@ fun CatalogRowSection(
             }
         }
 
+        val rowRestoreRequester = remember(
+            enableRowFocusRestorer,
+            focusedItemIndex,
+            catalogRow.items,
+            listState.firstVisibleItemIndex,
+            itemFocusRequestersByKey,
+            resolvedRowFocusRequester
+        ) {
+            if (!enableRowFocusRestorer || focusedItemIndex >= 0 || catalogRow.items.isEmpty()) {
+                resolvedRowFocusRequester
+            } else {
+                val fallbackIndex = listState.firstVisibleItemIndex
+                    .coerceIn(0, (catalogRow.items.size - 1).coerceAtLeast(0))
+                val fallbackItem = catalogRow.items.getOrNull(fallbackIndex)
+                if (fallbackItem != null) {
+                    val fallbackItemKey = rowItemFocusKey(fallbackIndex, fallbackItem)
+                    itemFocusRequestersByKey.getOrPut(fallbackItemKey) { FocusRequester() }
+                } else {
+                    resolvedRowFocusRequester
+                }
+            }
+        }
+
         LazyRow(
             state = listState,
             modifier = Modifier
@@ -169,17 +192,7 @@ fun CatalogRowSection(
                 .focusRequester(resolvedRowFocusRequester)
                 .then(
                     if (enableRowFocusRestorer && focusedItemIndex < 0 && catalogRow.items.isNotEmpty()) {
-                        Modifier.focusRestorer {
-                            val fallbackIndex = listState.firstVisibleItemIndex
-                                .coerceIn(0, (catalogRow.items.size - 1).coerceAtLeast(0))
-                            val fallbackItem = catalogRow.items.getOrNull(fallbackIndex)
-                            if (fallbackItem != null) {
-                                val fallbackItemKey = rowItemFocusKey(fallbackIndex, fallbackItem)
-                                itemFocusRequestersByKey.getOrPut(fallbackItemKey) { FocusRequester() }
-                            } else {
-                                resolvedRowFocusRequester
-                            }
-                        }
+                        Modifier.focusRestorer(rowRestoreRequester)
                     } else {
                         Modifier
                     }

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -627,7 +627,7 @@ private fun HomeLibraryListPickerDialog(
             }
         }
 
-        Divider(color = NexioColors.Border, thickness = 1.dp)
+        HorizontalDivider(color = NexioColors.Border, thickness = 1.dp)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
@@ -643,3 +643,4 @@ private fun HomeLibraryListPickerDialog(
         }
     }
 }
+

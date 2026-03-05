@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,7 +105,7 @@ fun AboutSettingsContent(
                 SettingsActionRow(
                     title = stringResource(R.string.about_check_updates),
                     subtitle = stringResource(R.string.about_check_updates_subtitle),
-                    trailingIcon = Icons.Default.OpenInNew,
+                    trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                     modifier = if (initialFocusRequester != null) {
                         Modifier.focusRequester(initialFocusRequester)
                     } else {
@@ -119,7 +119,7 @@ fun AboutSettingsContent(
                 SettingsActionRow(
                     title = stringResource(R.string.about_privacy_policy),
                     subtitle = stringResource(R.string.about_privacy_policy_subtitle),
-                    trailingIcon = Icons.Default.OpenInNew,
+                    trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                     onClick = {
                         val intent = Intent(
                             Intent.ACTION_VIEW,
@@ -132,3 +132,4 @@ fun AboutSettingsContent(
         }
     }
 }
+

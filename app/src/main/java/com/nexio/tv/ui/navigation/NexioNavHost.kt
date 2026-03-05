@@ -56,7 +56,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = targetState.arguments
-                ?.getString("autoPlayNav")
+                .getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 EnterTransition.None
@@ -68,7 +68,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = targetState.arguments
-                ?.getString("autoPlayNav")
+                .getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 ExitTransition.None
@@ -80,7 +80,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = initialState.arguments
-                ?.getString("autoPlayNav")
+                .getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 EnterTransition.None
@@ -92,7 +92,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = initialState.arguments
-                ?.getString("autoPlayNav")
+                .getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 ExitTransition.None
@@ -224,10 +224,10 @@ fun NexioNavHost(
                 }
             )
         ) { backStackEntry ->
-            val detailArgs = backStackEntry.arguments
+            val detailArgs = requireNotNull(backStackEntry.arguments)
             MetaDetailsScreen(
-                returnFocusSeason = detailArgs?.getString("returnFocusSeason")?.toIntOrNull(),
-                returnFocusEpisode = detailArgs?.getString("returnFocusEpisode")?.toIntOrNull(),
+                returnFocusSeason = detailArgs.getString("returnFocusSeason")?.toIntOrNull(),
+                returnFocusEpisode = detailArgs.getString("returnFocusEpisode")?.toIntOrNull(),
                 onBackPress = { navController.popBackStack() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
@@ -336,17 +336,17 @@ fun NexioNavHost(
                 }
             )
         ) { backStackEntry ->
-            val streamArgs = backStackEntry.arguments
+            val streamArgs = requireNotNull(backStackEntry.arguments)
             val returnToDetailOnBack = streamArgs
-                ?.getString("returnToDetailOnBack")
+                .getString("returnToDetailOnBack")
                 ?.toBooleanStrictOrNull() == true
             val startFromBeginning = streamArgs
-                ?.getString("startFromBeginning")
+                .getString("startFromBeginning")
                 ?.toBooleanStrictOrNull() == true
             StreamScreen(
                 onBackPress = {
-                    val streamContentType = streamArgs?.getString("contentType").orEmpty()
-                    val streamContentId = streamArgs?.getString("contentId").orEmpty()
+                    val streamContentType = streamArgs.getString("contentType").orEmpty()
+                    val streamContentId = streamArgs.getString("contentId").orEmpty()
                     if (
                         returnToDetailOnBack &&
                         streamContentType.equals("series", ignoreCase = true) &&
@@ -357,8 +357,8 @@ fun NexioNavHost(
                                 itemId = streamContentId,
                                 itemType = streamContentType,
                                 addonBaseUrl = null,
-                                returnFocusSeason = streamArgs?.getString("season")?.toIntOrNull(),
-                                returnFocusEpisode = streamArgs?.getString("episode")?.toIntOrNull()
+                                returnFocusSeason = streamArgs.getString("season")?.toIntOrNull(),
+                                returnFocusEpisode = streamArgs.getString("episode")?.toIntOrNull()
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -558,11 +558,11 @@ fun NexioNavHost(
                 onBackPress = {
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
                     if (!returnedToStream) {
-                        val args = backStackEntry.arguments
-                        val returnToDetailOnBack = args?.getString("returnToDetailOnBack")
+                        val args = requireNotNull(backStackEntry.arguments)
+                        val returnToDetailOnBack = args.getString("returnToDetailOnBack")
                             ?.toBooleanStrictOrNull() == true
-                        val contentType = args?.getString("contentType").orEmpty()
-                        val contentId = args?.getString("contentId").orEmpty()
+                        val contentType = args.getString("contentType").orEmpty()
+                        val contentId = args.getString("contentId").orEmpty()
                         if (
                             returnToDetailOnBack &&
                             contentType.equals("series", ignoreCase = true) &&
@@ -573,8 +573,8 @@ fun NexioNavHost(
                                     itemId = contentId,
                                     itemType = contentType,
                                     addonBaseUrl = null,
-                                    returnFocusSeason = args?.getString("season")?.toIntOrNull(),
-                                    returnFocusEpisode = args?.getString("episode")?.toIntOrNull()
+                                    returnFocusSeason = args.getString("season")?.toIntOrNull(),
+                                    returnFocusEpisode = args.getString("episode")?.toIntOrNull()
                                 )
                             ) {
                                 popUpTo(Screen.Player.route) { inclusive = true }
@@ -586,26 +586,26 @@ fun NexioNavHost(
                     }
                 },
                 onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode ->
-                    val args = backStackEntry.arguments
-                    val contentType = args?.getString("contentType").orEmpty()
-                    val contentId = args?.getString("contentId").orEmpty()
-                    val returnToDetailOnBack = args?.getString("returnToDetailOnBack")
+                    val args = requireNotNull(backStackEntry.arguments)
+                    val contentType = args.getString("contentType").orEmpty()
+                    val contentId = args.getString("contentId").orEmpty()
+                    val returnToDetailOnBack = args.getString("returnToDetailOnBack")
                         ?.toBooleanStrictOrNull() == true
                     if (nextVideoId != null && nextSeason != null && nextEpisode != null) {
                         val route = Screen.Stream.createRoute(
                             videoId = nextVideoId,
                             contentType = contentType,
-                            title = args?.getString("title").orEmpty(),
-                            poster = args?.getString("poster"),
-                            backdrop = args?.getString("backdrop"),
-                            logo = args?.getString("logo"),
+                            title = args.getString("title").orEmpty(),
+                            poster = args.getString("poster"),
+                            backdrop = args.getString("backdrop"),
+                            logo = args.getString("logo"),
                             season = nextSeason,
                             episode = nextEpisode,
                             episodeName = null,
                             genres = null,
-                            year = args?.getString("year"),
+                            year = args.getString("year"),
                             contentId = contentId.takeIf { it.isNotBlank() },
-                            contentName = args?.getString("contentName"),
+                            contentName = args.getString("contentName"),
                             runtime = null,
                             returnToDetailOnBack = returnToDetailOnBack
                         )
@@ -630,10 +630,10 @@ fun NexioNavHost(
                 onPlaybackErrorBack = {
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
                     if (!returnedToStream) {
-                        val args = backStackEntry.arguments
-                        val videoId = args?.getString("videoId").orEmpty()
-                        val contentType = args?.getString("contentType").orEmpty()
-                        val title = args?.getString("title").orEmpty()
+                        val args = requireNotNull(backStackEntry.arguments)
+                        val videoId = args.getString("videoId").orEmpty()
+                        val contentType = args.getString("contentType").orEmpty()
+                        val title = args.getString("title").orEmpty()
 
                         if (videoId.isBlank() || contentType.isBlank() || title.isBlank()) {
                             navController.popBackStack()
@@ -642,19 +642,19 @@ fun NexioNavHost(
                                 videoId = videoId,
                                 contentType = contentType,
                                 title = title,
-                                poster = args?.getString("poster"),
-                                backdrop = args?.getString("backdrop"),
-                                logo = args?.getString("logo"),
-                                season = args?.getString("season")?.toIntOrNull(),
-                                episode = args?.getString("episode")?.toIntOrNull(),
-                                episodeName = args?.getString("episodeTitle"),
+                                poster = args.getString("poster"),
+                                backdrop = args.getString("backdrop"),
+                                logo = args.getString("logo"),
+                                season = args.getString("season")?.toIntOrNull(),
+                                episode = args.getString("episode")?.toIntOrNull(),
+                                episodeName = args.getString("episodeTitle"),
                                 genres = null,
-                                year = args?.getString("year"),
-                                contentId = args?.getString("contentId"),
-                                contentName = args?.getString("contentName"),
+                                year = args.getString("year"),
+                                contentId = args.getString("contentId"),
+                                contentName = args.getString("contentName"),
                                 runtime = null,
                                 manualSelection = true,
-                                returnToDetailOnBack = args?.getString("returnToDetailOnBack")
+                                returnToDetailOnBack = args.getString("returnToDetailOnBack")
                                     ?.toBooleanStrictOrNull() == true
                             )
 
@@ -788,9 +788,10 @@ fun NexioNavHost(
                 navArgument("type") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val catalogId = backStackEntry.arguments?.getString("catalogId") ?: ""
-            val addonId = backStackEntry.arguments?.getString("addonId") ?: ""
-            val type = backStackEntry.arguments?.getString("type") ?: ""
+            val args = requireNotNull(backStackEntry.arguments)
+            val catalogId = args.getString("catalogId").orEmpty()
+            val addonId = args.getString("addonId").orEmpty()
+            val type = args.getString("type").orEmpty()
             CatalogSeeAllScreen(
                 catalogId = catalogId,
                 addonId = addonId,

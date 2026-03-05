@@ -22,7 +22,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -171,7 +171,7 @@ internal fun LazyListScope.trailerAndAudioSettingsItems(
 
     item(key = "audio_tunneled_playback") {
         ToggleSettingsItem(
-            icon = Icons.Default.VolumeUp,
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
             title = stringResource(R.string.audio_tunneled),
             subtitle = stringResource(R.string.audio_tunneled_sub),
             isChecked = playerSettings.tunnelingEnabled,
@@ -463,3 +463,4 @@ private fun DecoderPriorityDialog(
         }
     }
 }
+

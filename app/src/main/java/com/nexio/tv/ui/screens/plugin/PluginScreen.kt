@@ -272,15 +272,14 @@ fun PluginScreenContent(
     }
 
     // Confirmation dialog overlay
-    if (uiState.pendingRepoChange != null) {
+    val pendingRepoChange = uiState.pendingRepoChange
+    if (pendingRepoChange != null) {
         Popup(properties = PopupProperties(focusable = true)) {
-            uiState.pendingRepoChange?.let { pending ->
-                ConfirmRepoChangesDialog(
-                    pendingChange = pending,
-                    onConfirm = { viewModel.onEvent(PluginUiEvent.ConfirmPendingRepoChange) },
-                    onReject = { viewModel.onEvent(PluginUiEvent.RejectPendingRepoChange) }
-                )
-            }
+            ConfirmRepoChangesDialog(
+                pendingChange = pendingRepoChange,
+                onConfirm = { viewModel.onEvent(PluginUiEvent.ConfirmPendingRepoChange) },
+                onReject = { viewModel.onEvent(PluginUiEvent.RejectPendingRepoChange) }
+            )
         }
     }
     }

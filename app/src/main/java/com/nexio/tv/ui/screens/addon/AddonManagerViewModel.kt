@@ -86,7 +86,7 @@ class AddonManagerViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isInstalling = false,
-                            error = result.message ?: "Unable to install addon"
+                            error = result.message
                         )
                     }
                 }
@@ -522,3 +522,4 @@ class AddonManagerViewModel @Inject constructor(
         val isDisabled: Boolean = false
     )
 }
+

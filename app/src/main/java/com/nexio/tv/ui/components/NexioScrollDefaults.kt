@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
 object NexioScrollDefaults {
     val smoothScrollSpec = object : BringIntoViewSpec {
         @Suppress("DEPRECATION")
+        @Deprecated("Overrides deprecated BringIntoViewSpec.scrollAnimationSpec.")
         override val scrollAnimationSpec: AnimationSpec<Float> = spring(
             dampingRatio = 0.95f,
             stiffness = 180f

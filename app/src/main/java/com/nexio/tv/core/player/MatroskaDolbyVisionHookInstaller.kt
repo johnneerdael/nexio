@@ -166,14 +166,15 @@ object MatroskaDolbyVisionHookInstaller {
             val mode = if (resolvedProfile == 7 && preserveMappingEnabled) 5 else 2
             lastSelectedConversionMode.set(mode)
             return mode
-            return if (resolvedProfile == 7 && preserveMappingEnabled) 5 else 2
         }
 
         return InvocationHandler { proxy, method, args ->
+            val invocationArgs = args ?: emptyArray()
             when (method.name) {
                 "onDolbyVisionBlockAdditionalData" -> {
-                    val blockAdditionalData = args?.getOrNull(0) as? ByteArray ?: return@InvocationHandler null
-                    val dolbyVisionConfigBytes = args.getOrNull(2) as? ByteArray
+                    val blockAdditionalData = invocationArgs.getOrNull(0) as? ByteArray
+                        ?: return@InvocationHandler null
+                    val dolbyVisionConfigBytes = invocationArgs.getOrNull(2) as? ByteArray
                     val profile = resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes)
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
@@ -187,8 +188,8 @@ object MatroskaDolbyVisionHookInstaller {
 
                 "onHevcSample" -> null
                 "onDolbyVisionCodecString" -> {
-                    val codecs = args?.getOrNull(0) as? String
-                    val dolbyVisionConfigBytes = args?.getOrNull(1) as? ByteArray
+                    val codecs = invocationArgs.getOrNull(0) as? String
+                    val dolbyVisionConfigBytes = invocationArgs.getOrNull(1) as? ByteArray
                     val profile = resolveDolbyVisionProfile(codecs = codecs, configBytes = dolbyVisionConfigBytes)
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
@@ -200,13 +201,14 @@ object MatroskaDolbyVisionHookInstaller {
                     normalized
                 }
                 "transformHevcSample" -> {
-                    val sampleLengthDelimited = args?.getOrNull(0) as? ByteArray ?: return@InvocationHandler null
+                    val sampleLengthDelimited = invocationArgs.getOrNull(0) as? ByteArray
+                        ?: return@InvocationHandler null
                     val nalUnitLengthFieldLength =
-                        (args.getOrNull(1) as? Number)?.toInt() ?: return@InvocationHandler null
-                    val thirdArg = args.getOrNull(2)
+                        (invocationArgs.getOrNull(1) as? Number)?.toInt() ?: return@InvocationHandler null
+                    val thirdArg = invocationArgs.getOrNull(2)
                     val blockAdditionalData = thirdArg as? ByteArray
                     val codecs = thirdArg as? String
-                    val dolbyVisionConfigBytes = args.getOrNull(3) as? ByteArray
+                    val dolbyVisionConfigBytes = invocationArgs.getOrNull(3) as? ByteArray
                     val profile = resolveDolbyVisionProfile(
                         codecs = codecs,
                         configBytes = dolbyVisionConfigBytes
@@ -239,15 +241,16 @@ object MatroskaDolbyVisionHookInstaller {
                     }
                 }
                 "transformDolbyVisionRpuNal" -> {
-                    val nalPayload = args?.getOrNull(0) as? ByteArray ?: return@InvocationHandler null
-                    val codecs = args?.getOrNull(1) as? String
+                    val nalPayload = invocationArgs.getOrNull(0) as? ByteArray
+                        ?: return@InvocationHandler null
+                    val codecs = invocationArgs.getOrNull(1) as? String
                     val profile = resolveDolbyVisionProfile(codecs = codecs)
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
                     maybeConvertDolbyVisionRpuNal(nalPayload, selectedConversionMode(profile))
                 }
-                "equals" -> proxy === args?.getOrNull(0)
+                "equals" -> proxy === invocationArgs.getOrNull(0)
                 "hashCode" -> System.identityHashCode(proxy)
                 "toString" -> "NEXIODv7MatroskaTransformerProxy(host=$host)"
                 else -> null
@@ -449,3 +452,4 @@ object MatroskaDolbyVisionHookInstaller {
         return runCatching { Uri.parse(this).host ?: "unknown" }.getOrDefault("unknown")
     }
 }
+

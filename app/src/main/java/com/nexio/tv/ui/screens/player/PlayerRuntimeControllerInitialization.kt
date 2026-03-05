@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.res.Resources
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
-import android.os.Build
 import android.util.Log
 import android.view.accessibility.CaptioningManager
 import androidx.media3.common.AudioAttributes
@@ -55,7 +54,6 @@ internal data class StartupSubtitlePreparation(
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
-@OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<String, String>) {
     if (url.isEmpty()) {
         _uiState.update { it.copy(error = "No stream URL provided", showLoadingOverlay = false) }
@@ -195,12 +193,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     )
                 }
 
-                val deviceLanguages = if (Build.VERSION.SDK_INT >= 24) {
-                    val localeList = Resources.getSystem().configuration.locales
-                    List(localeList.size()) { localeList[it].isO3Language }
-                } else {
-                    listOf(Resources.getSystem().configuration.locale.isO3Language)
-                }
+                val localeList = Resources.getSystem().configuration.locales
+                val deviceLanguages = List(localeList.size()) { localeList[it].isO3Language }
                 val preferredAudioLanguages = resolvePreferredAudioLanguages(
                     preferredAudioLanguage = playerSettings.preferredAudioLanguage,
                     secondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage,
@@ -880,6 +874,7 @@ private class SubtitleOffsetRenderersFactory(
     private val safeAudioModeEnabled: Boolean
 ) : DefaultRenderersFactory(context) {
 
+    @Suppress("DEPRECATION")
     override fun buildAudioSink(
         context: Context,
         enableFloatOutput: Boolean,
@@ -1046,6 +1041,7 @@ private fun DefaultRenderersFactory.applyMapDv7ToHevcIfSupported(
     }.getOrElse { this }
 }
 
+@Suppress("DEPRECATION")
 private fun buildStableAudioCapabilities(context: Context): AudioCapabilities {
     val detected = AudioCapabilities.getCapabilities(context, AudioAttributes.DEFAULT, null)
     val supportedEncodings = mutableListOf<Int>()
