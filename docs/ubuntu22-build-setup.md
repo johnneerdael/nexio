@@ -123,6 +123,12 @@ Use a project-local Gradle cache:
 export GRADLE_USER_HOME="$PWD/.gradle-user"
 ```
 
+Daemon guidance:
+
+- `--no-daemon` is the safest default for reproducible builds and avoids stale daemon/native lock issues.
+- For day-to-day local development on a stable machine, you can omit `--no-daemon` for faster incremental builds.
+- If builds hang/crash/lock, run `./gradlew --stop` and retry with `--no-daemon`.
+
 Debug universal APK:
 
 ```bash
@@ -238,4 +244,3 @@ adb -s <ip>:5555 install -r --streaming app/build/outputs/apk_from_bundle/debug/
   ```bash
   ./gradlew :app:clean :app:packageDebugUniversalApk --no-daemon --max-workers=4 --console=plain
   ```
-
