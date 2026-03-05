@@ -407,6 +407,18 @@
     <string name="mdblist_dialog_placeholder">Enter MDBList API key</string>
     <string name="mdblist_not_set">Not set</string>
     <string name="mdblist_invalid_api_key">Invalid MDBList API key</string>
+    <string name="mdblist_catalogs_title">Catalogs</string>
+    <string name="mdblist_catalogs_subtitle">Manage MDBList personal and top-list rails</string>
+    <string name="mdblist_catalogs_dialog_subtitle">Toggle lists and order how they appear on home</string>
+    <string name="mdblist_catalogs_enabled_count">%1$d active</string>
+    <string name="mdblist_catalog_order_title">Active Catalog Order</string>
+    <string name="mdblist_personal_lists_title">My Lists</string>
+    <string name="mdblist_top_lists_title">Top Lists</string>
+    <string name="mdblist_top_lists_subtitle">Search public top lists and enable them as custom rails</string>
+    <string name="mdblist_top_lists_search_hint">Search top lists</string>
+    <string name="mdblist_personal_list_badge">Personal list</string>
+    <string name="mdblist_top_list_badge">Top list</string>
+    <string name="mdblist_list_item_count_subtitle">%1$d items</string>
 
     <!-- Anime-Skip -->
     <string name="animeskip_title">Anime Skip</string>

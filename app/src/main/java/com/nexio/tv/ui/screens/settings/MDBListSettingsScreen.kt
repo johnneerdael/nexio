@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
@@ -53,6 +55,7 @@ fun MDBListSettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showCatalogDialog by remember { mutableStateOf(false) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -92,6 +95,20 @@ fun MDBListSettingsContent(
                         value = maskApiKey(uiState.apiKey, stringResource(R.string.mdblist_not_set)),
                         onClick = { showApiKeyDialog = true },
                         enabled = uiState.enabled
+                    )
+                }
+
+                item(key = "mdblist_catalogs") {
+                    val activeCount = uiState.activeCatalogKeys().size
+                    SettingsActionRow(
+                        title = stringResource(R.string.mdblist_catalogs_title),
+                        subtitle = stringResource(R.string.mdblist_catalogs_subtitle),
+                        value = stringResource(R.string.mdblist_catalogs_enabled_count, activeCount),
+                        onClick = {
+                            viewModel.onEvent(MDBListSettingsEvent.CatalogManagementOpened)
+                            showCatalogDialog = true
+                        },
+                        enabled = uiState.enabled && uiState.apiKey.isNotBlank()
                     )
                 }
 
@@ -166,6 +183,216 @@ fun MDBListSettingsContent(
             onClear = { viewModel.validateAndSaveApiKey("") {}; showApiKeyDialog = false },
             onDismiss = { showApiKeyDialog = false }
         )
+    }
+
+    if (showCatalogDialog && uiState.enabled && uiState.apiKey.isNotBlank()) {
+        var topListSearch by remember { mutableStateOf("") }
+        val activeKeys = uiState.activeCatalogKeys()
+        val orderedActiveKeys = remember(
+            uiState.catalogPreferences.catalogOrder,
+            activeKeys
+        ) {
+            val ordered = uiState.catalogPreferences.catalogOrder.filter { it in activeKeys }
+            ordered + activeKeys.filterNot { it in ordered }
+        }
+        val listByKey = remember(uiState.personalLists, uiState.topLists) {
+            (uiState.personalLists + uiState.topLists).associateBy { it.key }
+        }
+        val filteredTopLists = remember(uiState.topLists, topListSearch) {
+            val query = topListSearch.trim().lowercase()
+            if (query.isBlank()) {
+                uiState.topLists
+            } else {
+                uiState.topLists.filter { option ->
+                    option.title.lowercase().contains(query) ||
+                        option.owner.lowercase().contains(query) ||
+                        option.listId.lowercase().contains(query)
+                }
+            }
+        }
+
+        NexioDialog(
+            onDismiss = { showCatalogDialog = false },
+            title = stringResource(R.string.mdblist_catalogs_title),
+            subtitle = stringResource(R.string.mdblist_catalogs_dialog_subtitle),
+            width = 940.dp,
+            suppressFirstKeyUp = false
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 540.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item(key = "active_order_header") {
+                        Text(
+                            text = stringResource(R.string.mdblist_catalog_order_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = NexioColors.TextPrimary
+                        )
+                    }
+
+                    items(items = orderedActiveKeys, key = { it }) { key ->
+                        val option = listByKey[key] ?: return@items
+                        SettingsGroupCard {
+                            Text(
+                                text = option.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = NexioColors.TextPrimary
+                            )
+                            Text(
+                                text = if (option.isPersonal) {
+                                    stringResource(R.string.mdblist_personal_list_badge)
+                                } else {
+                                    stringResource(R.string.mdblist_top_list_badge)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NexioColors.TextSecondary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.onEvent(MDBListSettingsEvent.MoveCatalogUp(key)) },
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = NexioColors.BackgroundCard,
+                                        contentColor = NexioColors.TextPrimary
+                                    )
+                                ) { Text(stringResource(R.string.trakt_move_up)) }
+                                Button(
+                                    onClick = { viewModel.onEvent(MDBListSettingsEvent.MoveCatalogDown(key)) },
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = NexioColors.BackgroundCard,
+                                        contentColor = NexioColors.TextPrimary
+                                    )
+                                ) { Text(stringResource(R.string.trakt_move_down)) }
+                            }
+                        }
+                    }
+
+                    item(key = "personal_header") {
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = stringResource(R.string.mdblist_personal_lists_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = NexioColors.TextPrimary
+                        )
+                    }
+
+                    items(items = uiState.personalLists, key = { it.key }) { option ->
+                        val enabled = uiState.catalogPreferences.isPersonalListEnabled(option.key)
+                        SettingsToggleRow(
+                            title = option.title,
+                            subtitle = stringResource(
+                                R.string.mdblist_list_item_count_subtitle,
+                                option.itemCount
+                            ),
+                            checked = enabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    MDBListSettingsEvent.TogglePersonalList(
+                                        listKey = option.key,
+                                        enabled = !enabled
+                                    )
+                                )
+                            }
+                        )
+                    }
+
+                    item(key = "top_header") {
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = stringResource(R.string.mdblist_top_lists_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = NexioColors.TextPrimary
+                        )
+                        Text(
+                            text = stringResource(R.string.mdblist_top_lists_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NexioColors.TextSecondary
+                        )
+                        Card(
+                            onClick = {},
+                            colors = CardDefaults.colors(
+                                containerColor = NexioColors.BackgroundElevated,
+                                focusedContainerColor = NexioColors.BackgroundElevated
+                            ),
+                            border = CardDefaults.border(
+                                border = Border(
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NexioColors.Border),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                                ),
+                                focusedBorder = Border(
+                                    border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                BasicTextField(
+                                    value = topListSearch,
+                                    onValueChange = { topListSearch = it },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
+                                    cursorBrush = SolidColor(NexioColors.Primary),
+                                    singleLine = true,
+                                    decorationBox = { inner ->
+                                        if (topListSearch.isBlank()) {
+                                            Text(
+                                                text = stringResource(R.string.mdblist_top_lists_search_hint),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = NexioColors.TextTertiary
+                                            )
+                                        }
+                                        inner()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+
+                    items(items = filteredTopLists, key = { it.key }) { option ->
+                        val selected = uiState.catalogPreferences.isTopListSelected(option.key)
+                        SettingsToggleRow(
+                            title = option.title,
+                            subtitle = stringResource(
+                                R.string.mdblist_list_item_count_subtitle,
+                                option.itemCount
+                            ),
+                            checked = selected,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    MDBListSettingsEvent.ToggleTopList(
+                                        listKey = option.key,
+                                        enabled = !selected
+                                    )
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { showCatalogDialog = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
+                        )
+                    ) {
+                        Text(stringResource(R.string.action_close))
+                    }
+                }
+            }
+        }
     }
 }
 
