@@ -13,7 +13,7 @@
     <string name="action_retry">Opnieuw proberen</string>
 
     <!-- ContinueWatchingSection -->
-    <string name="continue_watching">Ga door met kijken</string>
+    <string name="continue_watching">Kijk verder</string>
     <string name="cw_upcoming">Aankomend</string>
     <string name="cw_next_up">Volgende aflevering</string>
     <string name="cw_resume">Hervatten</string>
@@ -488,7 +488,7 @@
 <string name="trakt_days_format">%1$d dagen</string>
 
 <!-- DebugSettingsScreen -->
-<string name="debug_title">Debug</string>
+<string name="debug_title">Foutopsporing</string>
 <string name="debug_subtitle">Ontwikkelaarstools en feature flags (alleen debug-builds)</string>
 <string name="debug_section_popup">Popup / Dialoog testen</string>
 <string name="debug_playback_error_title">Afspeelfout-scherm</string>
