@@ -127,7 +127,7 @@
     <string name="settings_profiles_subtitle">Gerenciar perfis de usuário.</string>
     <string name="settings_layout">Interface</string>
     <string name="settings_layout_subtitle">Estrutura da home e estilo dos pôsteres.</string>
-    <string name="settings_plugins">Addons</string>
+    <string name="settings_plugins">Plugins</string>
     <string name="settings_plugins_subtitle">Repositórios e provedores.</string>
     <string name="settings_integration">Integrações</string>
     <string name="settings_playback">Reprodução</string>
