@@ -375,8 +375,37 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val recommendationRefMap = traktSnapshot.recommendationRefsByStatusKey
 
     val (displayRows, baseHeroItems, baseGridItems, fullRowsFiltered) = withContext(Dispatchers.Default) {
-        val rawRows = orderedKeys.mapNotNull { key -> catalogSnapshot[key] }
-        val combinedRows = syntheticTraktRows + syntheticMDBListRows + rawRows
+        val rawRowsByKey = orderedKeys
+            .mapNotNull { key ->
+                catalogSnapshot[key]?.let { row ->
+                    homeCatalogGlobalKey(row) to row
+                }
+            }
+            .toMap(linkedMapOf())
+
+        val syntheticRows = syntheticTraktRows + syntheticMDBListRows
+        val syntheticRowsByKey = syntheticRows
+            .associateByTo(linkedMapOf()) { row -> homeCatalogGlobalKey(row) }
+
+        val combinedRowsByKey = linkedMapOf<String, CatalogRow>().apply {
+            putAll(syntheticRowsByKey)
+            putAll(rawRowsByKey)
+        }
+
+        val defaultOrderKeys = buildList {
+            addAll(syntheticRows.map { row -> homeCatalogGlobalKey(row) })
+            addAll(rawRowsByKey.keys)
+        }.distinct()
+
+        val savedOrderKeys = homeCatalogOrderKeys
+            .asSequence()
+            .filter { it in combinedRowsByKey }
+            .distinct()
+            .toList()
+
+        val savedOrderSet = savedOrderKeys.toSet()
+        val effectiveOrderKeys = savedOrderKeys + defaultOrderKeys.filterNot { it in savedOrderSet }
+        val combinedRows = effectiveOrderKeys.mapNotNull { combinedRowsByKey[it] }
         val orderedRows = if (hideUnreleased) {
             val today = LocalDate.now()
             combinedRows.map { row ->

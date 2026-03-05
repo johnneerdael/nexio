@@ -490,9 +490,7 @@ fun TraktScreen(
                             enabled = enabled,
                             onToggle = {
                                 viewModel.onCatalogEnabledChanged(catalogId, !enabled)
-                            },
-                            onMoveUp = { viewModel.onMoveCatalogUp(catalogId) },
-                            onMoveDown = { viewModel.onMoveCatalogDown(catalogId) }
+                            }
                         )
                     }
 
@@ -678,9 +676,7 @@ private fun TraktStatItem(
 private fun TraktCatalogToggleCard(
     catalogId: String,
     enabled: Boolean,
-    onToggle: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onToggle: () -> Unit
 ) {
     SettingsGroupCard {
         SettingsToggleRow(
@@ -689,29 +685,6 @@ private fun TraktCatalogToggleCard(
             checked = enabled,
             onToggle = onToggle
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Button(
-                onClick = onMoveUp,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.trakt_move_up))
-            }
-            Button(
-                onClick = onMoveDown,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
-            ) {
-                Text(stringResource(R.string.trakt_move_down))
-            }
-        }
     }
 }
 

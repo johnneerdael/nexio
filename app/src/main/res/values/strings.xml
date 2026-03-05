@@ -131,6 +131,8 @@
     <string name="settings_layout">Layout</string>
     <string name="settings_layout_subtitle">Home structure and poster styles.</string>
     <string name="settings_integration">Integration</string>
+    <string name="settings_catalogs">Catalogs</string>
+    <string name="settings_catalogs_subtitle">Customize Home catalog order and visibility.</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_playback_subtitle">Player, subtitles, and auto-play.</string>
     <string name="settings_trakt_subtitle">Open Trakt connection screen.</string>
@@ -418,7 +420,7 @@
     <string name="mdblist_invalid_api_key">Invalid MDBList API key</string>
     <string name="mdblist_catalogs_title">Catalogs</string>
     <string name="mdblist_catalogs_subtitle">Manage MDBList personal and top-list rails</string>
-    <string name="mdblist_catalogs_dialog_subtitle">Toggle lists and order how they appear on home</string>
+    <string name="mdblist_catalogs_dialog_subtitle">Toggle lists that appear on Home.</string>
     <string name="mdblist_catalogs_enabled_count">%1$d active</string>
     <string name="mdblist_catalog_order_title">Active Catalog Order</string>
     <string name="mdblist_personal_lists_title">My Lists</string>
@@ -501,9 +503,10 @@
     <string name="trakt_auth_status_title">Authentication</string>
     <string name="trakt_auth_status_subtitle">Current Trakt connection state</string>
     <string name="trakt_auth_status_authenticated">Authenticated</string>
+    <string name="trakt_auth_status_disconnected">Disconnected</string>
     <string name="trakt_catalogs_title">Trakt Catalogs</string>
-    <string name="trakt_catalogs_subtitle">Choose which Trakt rails appear on Home and reorder them</string>
-    <string name="trakt_catalogs_dialog_subtitle">Enable, disable, and reorder built-in Trakt catalogs. Select popular lists to add custom rails.</string>
+    <string name="trakt_catalogs_subtitle">Choose which Trakt rails appear on Home.</string>
+    <string name="trakt_catalogs_dialog_subtitle">Enable or disable built-in Trakt catalogs. Select popular lists to add custom rails.</string>
     <string name="trakt_catalogs_enabled_count">%1$d enabled</string>
     <string name="trakt_catalogs_updated">Trakt catalog settings updated</string>
     <string name="trakt_move_up">Move Up</string>
@@ -531,6 +534,8 @@
     <string name="trakt_disconnect_subtitle">This will disconnect your Trakt account from NEXIO.</string>
     <string name="trakt_login">Login</string>
     <string name="trakt_retry">Retry</string>
+    <string name="action_sync_now">Sync now</string>
+    <string name="trakt_sync_now_subtitle">Refresh Trakt stats and discovery rails now.</string>
     <string name="trakt_back">Back</string>
     <string name="trakt_cw_window_title">Continue Watching Window</string>
     <string name="trakt_cw_window_subtitle">Choose how much Trakt activity should appear in continue watching.</string>

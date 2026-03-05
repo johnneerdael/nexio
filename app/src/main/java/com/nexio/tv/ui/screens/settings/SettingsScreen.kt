@@ -61,13 +61,14 @@ internal enum class SettingsCategory {
     LAYOUT,
     INTEGRATION,
     PLAYBACK,
-    TRAKT,
+    CATALOGS,
     ABOUT,
     DEBUG
 }
 
 private enum class IntegrationSettingsSection {
     Hub,
+    Trakt,
     Tmdb,
     MdbList,
     AnimeSkip,
@@ -130,10 +131,10 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
-        category = SettingsCategory.TRAKT,
-        title = "Trakt",
-        rawIconRes = R.raw.trakt_tv_glyph,
-        subtitle = stringResource(R.string.settings_trakt_subtitle),
+        category = SettingsCategory.CATALOGS,
+        title = stringResource(R.string.settings_catalogs),
+        icon = Icons.Default.GridView,
+        subtitle = stringResource(R.string.settings_catalogs_subtitle),
         destination = SettingsSectionDestination.External
     ),
     SettingsSectionSpec(
@@ -155,7 +156,7 @@ private fun rememberSettingsSectionSpecs() = listOf(
 @Composable
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
-    onNavigateToTrakt: () -> Unit = {},
+    onNavigateToCatalogs: () -> Unit = {},
     onNavigateToAuthQrSignIn: () -> Unit = {}
 ) {
     val allSectionSpecs = rememberSettingsSectionSpecs()
@@ -164,7 +165,7 @@ fun SettingsScreen(
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
                 SettingsCategory.ACCOUNT -> true
-                SettingsCategory.TRAKT -> true
+                SettingsCategory.CATALOGS -> true
                 else -> true
             }
         }
@@ -189,6 +190,7 @@ fun SettingsScreen(
     }
     val railContainerFocusRequester = remember { FocusRequester() }
     val integrationHubFocusRequester = remember { FocusRequester() }
+    val integrationTraktFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
@@ -290,7 +292,7 @@ fun SettingsScreen(
                                 if (section.destination == SettingsSectionDestination.External) {
                                     when (section.category) {
                                         SettingsCategory.ACCOUNT -> onNavigateToAuthQrSignIn()
-                                        SettingsCategory.TRAKT -> onNavigateToTrakt()
+                                        SettingsCategory.CATALOGS -> onNavigateToCatalogs()
                                         else -> Unit
                                     }
                                 } else {
@@ -367,6 +369,7 @@ fun SettingsScreen(
                                 null
                             },
                             hubFocusRequester = integrationHubFocusRequester,
+                            traktFocusRequester = integrationTraktFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
@@ -384,7 +387,7 @@ fun SettingsScreen(
                             onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
                         )
                         SettingsCategory.DEBUG -> DebugSettingsContent()
-                        SettingsCategory.TRAKT -> Unit
+                        SettingsCategory.CATALOGS -> Unit
                     }
                 }
             }
@@ -423,6 +426,7 @@ private fun IntegrationSettingsContent(
     onSelectSection: (IntegrationSettingsSection) -> Unit,
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
+    traktFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
@@ -438,6 +442,7 @@ private fun IntegrationSettingsContent(
         if (!autoFocusEnabled) return@LaunchedEffect
         val requester = when (selectedSection) {
             IntegrationSettingsSection.Hub -> hubEntryFocusRequester
+            IntegrationSettingsSection.Trakt -> traktFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
@@ -465,12 +470,19 @@ private fun IntegrationSettingsContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        item(key = "integration_hub_trakt") {
+                            SettingsActionRow(
+                                title = "Trakt",
+                                subtitle = stringResource(R.string.settings_trakt_subtitle),
+                                onClick = { onSelectSection(IntegrationSettingsSection.Trakt) },
+                                modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                            )
+                        }
                         item(key = "integration_hub_tmdb") {
                             SettingsActionRow(
                                 title = "TMDB",
                                 subtitle = stringResource(R.string.settings_tmdb_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) },
-                                modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                                onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
                             )
                         }
                         item(key = "integration_hub_mdblist") {
@@ -497,6 +509,12 @@ private fun IntegrationSettingsContent(
                     }
                 }
             }
+        }
+
+        IntegrationSettingsSection.Trakt -> {
+            TraktSettingsContent(
+                initialFocusRequester = traktFocusRequester
+            )
         }
 
         IntegrationSettingsSection.Tmdb -> {

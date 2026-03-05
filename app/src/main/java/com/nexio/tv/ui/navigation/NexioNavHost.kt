@@ -699,8 +699,14 @@ fun NexioNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
-                onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
+                onNavigateToCatalogs = { navController.navigate(Screen.Catalogs.route) },
                 onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) }
+            )
+        }
+
+        composable(Screen.Catalogs.route) {
+            CatalogOrderScreen(
+                onBackPress = { navController.popBackStack() }
             )
         }
 
