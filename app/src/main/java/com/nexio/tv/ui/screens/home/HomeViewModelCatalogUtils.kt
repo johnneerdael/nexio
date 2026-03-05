@@ -2,11 +2,25 @@ package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import kotlinx.coroutines.Job
 
+internal const val TRAKT_HOME_ADDON_ID = "trakt"
+internal const val MDBLIST_HOME_ADDON_ID = "mdblist"
+private const val TRAKT_HOME_KEY_PREFIX = "trakt_"
+private const val MDBLIST_HOME_KEY_PREFIX = "mdblist_"
+
 internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: String): String {
     return "${addonId}_${type}_${catalogId}"
+}
+
+internal fun homeCatalogGlobalKey(row: CatalogRow): String {
+    return when (row.addonId) {
+        TRAKT_HOME_ADDON_ID -> "$TRAKT_HOME_KEY_PREFIX${row.catalogId}"
+        MDBLIST_HOME_ADDON_ID -> "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
+        else -> "${row.addonId}_${row.apiType}_${row.catalogId}"
+    }
 }
 
 internal fun HomeViewModel.buildHomeCatalogLoadSignature(addons: List<Addon>): String {

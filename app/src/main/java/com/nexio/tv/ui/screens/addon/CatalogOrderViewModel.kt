@@ -2,7 +2,16 @@ package com.nexio.tv.ui.screens.addon
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.TraktCatalogIds
+import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.repository.MDBListDiscoveryService
+import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.TraktDiscoveryService
+import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.repository.AddonRepository
@@ -19,7 +28,11 @@ import javax.inject.Inject
 @HiltViewModel
 class CatalogOrderViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val traktDiscoveryService: TraktDiscoveryService,
+    private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val mdbListDiscoveryService: MDBListDiscoveryService,
+    private val mdbListSettingsDataStore: MDBListSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CatalogOrderUiState())
@@ -38,7 +51,8 @@ class CatalogOrderViewModel @Inject constructor(
         moveCatalog(key, 1)
     }
 
-    fun toggleCatalogEnabled(disableKey: String) {
+    fun toggleCatalogEnabled(disableKey: String?) {
+        if (disableKey.isNullOrBlank()) return
         val updatedDisabled = disabledKeysCache.toMutableSet().apply {
             if (disableKey in this) remove(disableKey) else add(disableKey)
         }
@@ -67,15 +81,35 @@ class CatalogOrderViewModel @Inject constructor(
 
     private fun observeCatalogs() {
         viewModelScope.launch {
-            combine(
+            val baseInputsFlow = combine(
                 addonRepository.getInstalledAddons(),
                 layoutPreferenceDataStore.homeCatalogOrderKeys,
-                layoutPreferenceDataStore.disabledHomeCatalogKeys
-            ) { addons, savedOrderKeys, disabledKeys ->
-                buildOrderedCatalogItems(
+                layoutPreferenceDataStore.disabledHomeCatalogKeys,
+                traktDiscoveryService.observeSnapshot(),
+                traktSettingsDataStore.catalogPreferences
+            ) { addons, savedOrderKeys, disabledKeys, traktSnapshot, traktPrefs ->
+                BaseCatalogOrderInputs(
                     addons = addons,
                     savedOrderKeys = savedOrderKeys,
-                    disabledKeys = disabledKeys.toSet()
+                    disabledKeys = disabledKeys.toSet(),
+                    traktSnapshot = traktSnapshot,
+                    traktPrefs = traktPrefs
+                )
+            }
+
+            combine(
+                baseInputsFlow,
+                mdbListDiscoveryService.observeSnapshot(),
+                mdbListSettingsDataStore.catalogPreferences
+            ) { base, mdbListSnapshot, mdbListPrefs ->
+                buildOrderedCatalogItems(
+                    addons = base.addons,
+                    savedOrderKeys = base.savedOrderKeys,
+                    disabledKeys = base.disabledKeys,
+                    traktSnapshot = base.traktSnapshot,
+                    traktPrefs = base.traktPrefs,
+                    mdbListSnapshot = mdbListSnapshot,
+                    mdbListPrefs = mdbListPrefs
                 )
             }.collectLatest { orderedItems ->
                 disabledKeysCache = orderedItems.filter { it.isDisabled }.map { it.disableKey }.toSet()
@@ -92,9 +126,15 @@ class CatalogOrderViewModel @Inject constructor(
     private fun buildOrderedCatalogItems(
         addons: List<Addon>,
         savedOrderKeys: List<String>,
-        disabledKeys: Set<String>
+        disabledKeys: Set<String>,
+        traktSnapshot: TraktDiscoverySnapshot,
+        traktPrefs: TraktCatalogPreferences,
+        mdbListSnapshot: MDBListDiscoverySnapshot,
+        mdbListPrefs: MDBListCatalogPreferences
     ): List<CatalogOrderItem> {
         val defaultEntries = buildDefaultCatalogEntries(addons)
+            .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs))
+            .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs))
         val availableMap = defaultEntries.associateBy { it.key }
         val defaultOrderKeys = defaultEntries.map { it.key }
 
@@ -116,6 +156,7 @@ class CatalogOrderViewModel @Inject constructor(
                 catalogName = entry.catalogName,
                 addonName = entry.addonName,
                 typeLabel = entry.typeLabel,
+                isToggleable = entry.isToggleable,
                 isDisabled = entry.disableKey in disabledKeys,
                 canMoveUp = index > 0,
                 canMoveDown = index < effectiveOrder.lastIndex
@@ -148,7 +189,8 @@ class CatalogOrderViewModel @Inject constructor(
                                 ),
                                 catalogName = catalog.name,
                                 addonName = addon.displayName,
-                                typeLabel = catalog.apiType
+                                typeLabel = catalog.apiType,
+                                isToggleable = true
                             )
                         )
                     }
@@ -158,8 +200,105 @@ class CatalogOrderViewModel @Inject constructor(
         return entries
     }
 
+    private fun buildActiveTraktCatalogEntries(
+        snapshot: TraktDiscoverySnapshot,
+        prefs: TraktCatalogPreferences
+    ): List<CatalogOrderEntry> {
+        val entries = mutableListOf<CatalogOrderEntry>()
+
+        fun addBuiltIn(catalogId: String, catalogName: String, typeLabel: String) {
+            if (catalogId !in prefs.enabledCatalogs) return
+            entries += CatalogOrderEntry(
+                key = syntheticKey(addonId = "trakt", type = typeLabel, catalogId = catalogId),
+                disableKey = "",
+                catalogName = catalogName,
+                addonName = "Trakt",
+                typeLabel = typeLabel,
+                isToggleable = false
+            )
+        }
+
+        addBuiltIn(TraktCatalogIds.UP_NEXT, "Trakt Up Next", "series")
+        addBuiltIn(TraktCatalogIds.TRENDING_MOVIES, "Trakt Trending Movies", "movie")
+        addBuiltIn(TraktCatalogIds.TRENDING_SHOWS, "Trakt Trending Shows", "series")
+        addBuiltIn(TraktCatalogIds.POPULAR_MOVIES, "Trakt Popular Movies", "movie")
+        addBuiltIn(TraktCatalogIds.POPULAR_SHOWS, "Trakt Popular Shows", "series")
+        addBuiltIn(TraktCatalogIds.RECOMMENDED_MOVIES, "Trakt Recommended Movies", "movie")
+        addBuiltIn(TraktCatalogIds.RECOMMENDED_SHOWS, "Trakt Recommended Shows", "series")
+        addBuiltIn(TraktCatalogIds.CALENDAR, "Trakt Calendar (Next 7 Days)", "series")
+
+        snapshot.customListCatalogs.forEach { custom ->
+            entries += CatalogOrderEntry(
+                key = syntheticKey(
+                    addonId = "trakt",
+                    type = custom.type.toApiString(),
+                    catalogId = custom.catalogId
+                ),
+                disableKey = "",
+                catalogName = custom.catalogName,
+                addonName = "Trakt",
+                typeLabel = custom.type.toApiString(),
+                isToggleable = false
+            )
+        }
+        return entries
+    }
+
+    private fun buildActiveMdbListCatalogEntries(
+        snapshot: MDBListDiscoverySnapshot,
+        prefs: MDBListCatalogPreferences
+    ): List<CatalogOrderEntry> {
+        if (snapshot.customListCatalogs.isEmpty()) return emptyList()
+
+        val availableKeys = buildSet {
+            addAll(
+                snapshot.personalLists
+                    .filter { prefs.isPersonalListEnabled(it.key) }
+                    .map { it.key }
+            )
+            addAll(
+                snapshot.topLists
+                    .filter { prefs.isTopListSelected(it.key) }
+                    .map { it.key }
+            )
+        }
+        if (availableKeys.isEmpty()) return emptyList()
+
+        val orderedKeys = if (prefs.catalogOrder.isEmpty()) {
+            availableKeys.toList()
+        } else {
+            prefs.catalogOrder.filter { it in availableKeys } + availableKeys.filterNot { it in prefs.catalogOrder }
+        }
+        val groupedByKey = snapshot.customListCatalogs.groupBy { it.key }
+
+        return orderedKeys.flatMap { key ->
+            groupedByKey[key].orEmpty().map { custom ->
+                CatalogOrderEntry(
+                    key = syntheticKey(
+                        addonId = "mdblist",
+                        type = custom.type.toApiString(),
+                        catalogId = custom.catalogId
+                    ),
+                    disableKey = "",
+                    catalogName = custom.catalogName,
+                    addonName = "MDBList",
+                    typeLabel = custom.type.toApiString(),
+                    isToggleable = false
+                )
+            }
+        }
+    }
+
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {
         return "${addonId}_${type}_${catalogId}"
+    }
+
+    private fun syntheticKey(addonId: String, type: String, catalogId: String): String {
+        return when (addonId.lowercase()) {
+            "trakt" -> "trakt_$catalogId"
+            "mdblist" -> "mdblist_$catalogId"
+            else -> "${addonId}_${type}_$catalogId"
+        }
     }
 
     private fun disableKey(
@@ -187,6 +326,7 @@ data class CatalogOrderItem(
     val catalogName: String,
     val addonName: String,
     val typeLabel: String,
+    val isToggleable: Boolean,
     val isDisabled: Boolean,
     val canMoveUp: Boolean,
     val canMoveDown: Boolean
@@ -197,5 +337,14 @@ private data class CatalogOrderEntry(
     val disableKey: String,
     val catalogName: String,
     val addonName: String,
-    val typeLabel: String
+    val typeLabel: String,
+    val isToggleable: Boolean
+)
+
+private data class BaseCatalogOrderInputs(
+    val addons: List<Addon>,
+    val savedOrderKeys: List<String>,
+    val disabledKeys: Set<String>,
+    val traktSnapshot: TraktDiscoverySnapshot,
+    val traktPrefs: TraktCatalogPreferences
 )

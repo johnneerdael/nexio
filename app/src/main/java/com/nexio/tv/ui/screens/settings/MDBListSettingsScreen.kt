@@ -187,17 +187,6 @@ fun MDBListSettingsContent(
 
     if (showCatalogDialog && uiState.enabled && uiState.apiKey.isNotBlank()) {
         var topListSearch by remember { mutableStateOf("") }
-        val activeKeys = uiState.activeCatalogKeys()
-        val orderedActiveKeys = remember(
-            uiState.catalogPreferences.catalogOrder,
-            activeKeys
-        ) {
-            val ordered = uiState.catalogPreferences.catalogOrder.filter { it in activeKeys }
-            ordered + activeKeys.filterNot { it in ordered }
-        }
-        val listByKey = remember(uiState.personalLists, uiState.topLists) {
-            (uiState.personalLists + uiState.topLists).associateBy { it.key }
-        }
         val filteredTopLists = remember(uiState.topLists, topListSearch) {
             val query = topListSearch.trim().lowercase()
             if (query.isBlank()) {
@@ -225,53 +214,6 @@ fun MDBListSettingsContent(
                         .heightIn(max = 540.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    item(key = "active_order_header") {
-                        Text(
-                            text = stringResource(R.string.mdblist_catalog_order_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = NexioColors.TextPrimary
-                        )
-                    }
-
-                    items(items = orderedActiveKeys, key = { it }) { key ->
-                        val option = listByKey[key] ?: return@items
-                        SettingsGroupCard {
-                            Text(
-                                text = option.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = NexioColors.TextPrimary
-                            )
-                            Text(
-                                text = if (option.isPersonal) {
-                                    stringResource(R.string.mdblist_personal_list_badge)
-                                } else {
-                                    stringResource(R.string.mdblist_top_list_badge)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = NexioColors.TextSecondary
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Button(
-                                    onClick = { viewModel.onEvent(MDBListSettingsEvent.MoveCatalogUp(key)) },
-                                    colors = ButtonDefaults.colors(
-                                        containerColor = NexioColors.BackgroundCard,
-                                        contentColor = NexioColors.TextPrimary
-                                    )
-                                ) { Text(stringResource(R.string.trakt_move_up)) }
-                                Button(
-                                    onClick = { viewModel.onEvent(MDBListSettingsEvent.MoveCatalogDown(key)) },
-                                    colors = ButtonDefaults.colors(
-                                        containerColor = NexioColors.BackgroundCard,
-                                        contentColor = NexioColors.TextPrimary
-                                    )
-                                ) { Text(stringResource(R.string.trakt_move_down)) }
-                            }
-                        }
-                    }
-
                     item(key = "personal_header") {
                         Spacer(modifier = Modifier.width(2.dp))
                         Text(

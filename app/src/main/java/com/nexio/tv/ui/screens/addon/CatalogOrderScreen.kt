@@ -169,7 +169,7 @@ private fun CatalogOrderCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = NexioColors.TextSecondary
                 )
-                if (item.isDisabled) {
+                if (item.isToggleable && item.isDisabled) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.catalog_order_disabled_on_home),
@@ -229,23 +229,25 @@ private fun CatalogOrderCard(
                     )
                 }
 
-                Button(
-                    onClick = onToggleEnabled,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NexioColors.BackgroundCard,
-                        contentColor = if (item.isDisabled) NexioColors.Success else NexioColors.TextSecondary,
-                        focusedContainerColor = NexioColors.FocusBackground,
-                        focusedContentColor = if (item.isDisabled) NexioColors.Success else NexioColors.Error
-                    ),
-                    border = ButtonDefaults.border(
-                        focusedBorder = Border(
-                            border = BorderStroke(2.dp, NexioColors.FocusRing),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    ),
-                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
-                ) {
-                    Text(text = if (item.isDisabled) stringResource(R.string.catalog_order_enable) else stringResource(R.string.catalog_order_disable))
+                if (item.isToggleable) {
+                    Button(
+                        onClick = onToggleEnabled,
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = if (item.isDisabled) NexioColors.Success else NexioColors.TextSecondary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = if (item.isDisabled) NexioColors.Success else NexioColors.Error
+                        ),
+                        border = ButtonDefaults.border(
+                            focusedBorder = Border(
+                                border = BorderStroke(2.dp, NexioColors.FocusRing),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Text(text = if (item.isDisabled) stringResource(R.string.catalog_order_enable) else stringResource(R.string.catalog_order_disable))
+                    }
                 }
             }
         }
