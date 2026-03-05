@@ -1,5 +1,6 @@
 import { createError } from 'h3'
-import { okJson, readJsonBody } from '~/server/utils/supabase'
+import { bearerToken, okJson, readJsonBody, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
+import { secretRefs } from '~/server/utils/account-secrets'
 
 type DeviceTokenBody = {
   deviceCode?: string
@@ -32,6 +33,8 @@ function traktHeaders(clientId: string, accessToken?: string): HeadersInit {
 }
 
 export default defineEventHandler(async (event) => {
+  bearerToken(event)
+  const user = await supabaseUser(event)
   const body = await readJsonBody<DeviceTokenBody>(event)
   const deviceCode = body.deviceCode?.trim()
   if (!deviceCode) {
@@ -73,6 +76,40 @@ export default defineEventHandler(async (event) => {
   }
 
   const userSettings = await userSettingsResponse.json() as UserSettingsResponse
+
+  await supabaseFetch('/rest/v1/rpc/service_set_account_secret', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_user_id: user.id,
+      p_secret_type: 'trakt_access_token',
+      p_secret_ref: secretRefs.trakt,
+      p_secret_payload: {
+        accessToken: tokenPayload.access_token,
+        tokenType: tokenPayload.token_type,
+        createdAt: tokenPayload.created_at,
+        expiresIn: tokenPayload.expires_in
+      },
+      p_masked_preview: `Connected ••••${tokenPayload.access_token.slice(-4)}`,
+      p_status: 'configured',
+      p_source: 'web-trakt'
+    })
+  }, undefined, true)
+
+  await supabaseFetch('/rest/v1/rpc/service_set_account_secret', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_user_id: user.id,
+      p_secret_type: 'trakt_refresh_token',
+      p_secret_ref: secretRefs.trakt,
+      p_secret_payload: {
+        refreshToken: tokenPayload.refresh_token
+      },
+      p_masked_preview: `Stored ••••${tokenPayload.refresh_token.slice(-4)}`,
+      p_status: 'configured',
+      p_source: 'web-trakt'
+    })
+  }, undefined, true)
+
   return okJson({
     status: 200,
     pending: false,
@@ -82,12 +119,7 @@ export default defineEventHandler(async (event) => {
       username: userSettings.user?.username ?? '',
       userSlug: userSettings.user?.ids?.slug ?? '',
       connectedAt: new Date().toISOString(),
-      pending: false,
-      accessToken: tokenPayload.access_token,
-      refreshToken: tokenPayload.refresh_token,
-      tokenType: tokenPayload.token_type,
-      createdAt: tokenPayload.created_at,
-      expiresIn: tokenPayload.expires_in
+      pending: false
     }
   })
 })

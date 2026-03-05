@@ -40,6 +40,9 @@
               <div>
                 <strong>{{ addon.name }}</strong>
                 <p>{{ addon.url }}</p>
+                <p v-if="addon.secretRef && secretStatuses[addon.secretRef]">
+                  {{ secretStatuses[addon.secretRef].maskedPreview || 'Secret configured' }}
+                </p>
                 <p v-if="addon.description">{{ addon.description }}</p>
               </div>
               <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
@@ -89,6 +92,7 @@ import type { AddonRecord, PluginRepository } from '~/types/portal'
 defineProps<{
   addons: AddonRecord[]
   repositories: PluginRepository[]
+  secretStatuses: Record<string, { maskedPreview?: string | null }>
 }>()
 
 const emit = defineEmits<{

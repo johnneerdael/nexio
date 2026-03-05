@@ -29,6 +29,7 @@
         v-if="activeView === 'addons'"
         :addons="state.addons"
         :repositories="repositories"
+        :secret-statuses="secretStatusMap"
         @persist="persistSnapshot"
         @add-addon="addAddon"
         @remove-addon="removeAddon"
@@ -50,6 +51,8 @@
         subtitle="Brand, typography, and locale settings that should feel identical across every TV."
         :groups="accountGroups.appearance"
         :settings="state.settings"
+        :secret-statuses="secretStatusMap"
+        :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
         @persist="persistSnapshot"
         @update="updateSetting"
@@ -61,6 +64,8 @@
         subtitle="Tune the home screen presentation, hero strategy, and catalog choreography."
         :groups="accountGroups.layout"
         :settings="state.settings"
+        :secret-statuses="secretStatusMap"
+        :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
         @persist="persistSnapshot"
         @update="updateSetting"
@@ -72,6 +77,8 @@
         subtitle="TMDB, MDBList, Anime Skip, poster providers, and Trakt account state belong to the account, not a single TV."
         :groups="accountGroups.integrations"
         :settings="state.settings"
+        :secret-statuses="secretStatusMap"
+        :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
         :trakt-popular-lists="state.traktDiscovery.popularLists"
         :mdblist-personal-lists="state.mdblistDiscovery.personalLists"
@@ -87,6 +94,9 @@
         @refresh-trakt-lists="refreshTraktPopularLists"
         @disconnect-trakt="disconnectTrakt"
         @toggle-trakt-list="toggleTraktPopularList"
+        @update-secret-draft="setSecretDraft"
+        @save-secret="saveDraftSecret"
+        @delete-secret="deleteSecret"
         @validate-mdblist="validateMDBList"
         @toggle-mdblist-personal-list="(key, currentlyHidden) => setMDBListPersonalListEnabled(key, currentlyHidden)"
         @toggle-mdblist-top-list="(key, shouldSelect) => setMDBListTopListSelected(key, shouldSelect)"
@@ -98,6 +108,8 @@
         subtitle="Everything that should feel identical across devices, minus the device-specific playback exclusions."
         :groups="accountGroups.playback"
         :settings="state.settings"
+        :secret-statuses="secretStatusMap"
+        :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
         @persist="persistSnapshot"
         @update="updateSetting"
@@ -109,6 +121,8 @@
         subtitle="Migration and developer controls while the new Supabase contract rolls out."
         :groups="accountGroups.debug"
         :settings="state.settings"
+        :secret-statuses="secretStatusMap"
+        :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
         @persist="persistSnapshot"
         @update="updateSetting"
@@ -139,6 +153,7 @@ const {
   signOut,
   signedIn,
   repositories,
+  secretStatusMap,
   catalogInventory,
   syncScopeLabel,
   defaultSyncExclusions,
@@ -151,6 +166,9 @@ const {
   removeRepository,
   setRepositoryScrapers,
   persistSnapshot,
+  setSecretDraft,
+  saveDraftSecret,
+  deleteSecret,
   validateMDBList,
   setMDBListPersonalListEnabled,
   setMDBListTopListSelected,

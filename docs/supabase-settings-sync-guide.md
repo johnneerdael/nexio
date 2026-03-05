@@ -1,190 +1,267 @@
-# Supabase Settings Sync Integration Guide
+# Supabase Clean Setup Guide For Nexio
 
-## Scope
-The redesigned portal syncs only these account-owned domains:
-- Settings payload
-- Addon stack and repository controls
-- Linked-device awareness
-- TV QR approval flow
+This guide is for a brand new, empty Supabase project.
 
-Not part of this redesign:
-- Library sync
-- Watch progress sync
-- Watched-items sync
+It does **not** assume any legacy tables, no data migration, and no backfill.
+The target is the hardened Supabase-only model where:
+- public account settings sync stays in normal tables
+- public addon inventory stays in normal tables
+- user secrets are stored through Supabase Vault and only exposed through server-side routes/RPCs
 
-Those legacy paths still exist in the repo in a few places, but they are intentionally outside the new portal contract.
+## Security Boundary
+This setup protects against:
+- plaintext secrets in public sync payloads
+- accidental exposure through app tables and exports
+- overbroad client reads
+- most logging and operational mistakes
 
-## Implementation Status
-Current repo state as of March 5, 2026:
-- `nexio-web` now boots against the account snapshot RPCs.
-- Empty accounts are auto-seeded from the web bootstrap route with Android-aligned default settings plus the built-in Cinemeta and OpenSubtitles addons.
-- Web persistence now writes only through `sync_push_account_settings(...)` and `sync_push_account_addons(...)`.
-- Trakt device auth is now represented inside the synced settings payload under `integrations.traktAuth`.
-- MDBList API validation and addon manifest inspection are now handled by server routes in `nexio-web`.
-- Android startup/full settings sync work has started in the app codebase, but Android compilation and realtime subscription wiring are still pending validation.
+This setup does **not** protect against:
+- a fully trusted Supabase project admin
+- a database maintainer with full project control
 
-## Current Repo Reality
-Relevant existing assets in this repo:
-- `supabase/db.sql`: legacy schema snapshot with `linked_devices`, `addons`, `tv_login_sessions`, and older sync tables.
-- `supabase/edge_function.ts`: QR session exchange function for `tv_login_sessions`.
-- `app/src/main/java/com/nexio/tv/core/sync/AddonSyncService.kt`: current addon push/pull pattern.
-- `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt`: current startup addon pull pattern.
-- `nexio-web`: new account portal scaffold that now expects account-level `settings` and `addons` snapshot endpoints.
+Supabase project admins remain in the trust boundary.
 
-## Target Behavior
-1. Web changes to synced settings or addons write immediately to Supabase.
-2. App startup immediately pulls the account snapshot from Supabase.
-3. Running TVs subscribe to an account sync event stream and pull again when settings or addons change.
-4. Device-specific playback tuning stays local and is never written to the account snapshot.
+## What Gets Synced
+Public sync payload:
+- appearance settings
+- layout settings
+- playback settings, excluding device-specific values
+- plugin repositories
+- Trakt catalog preferences
+- MDBList catalog preferences
+- addon enablement, ordering, and public metadata
 
-## Device-Specific Exclusions
-Do not sync these keys into the account snapshot:
-- `playback.audioTrailer.mapDV7ToHevc`
-- `playback.audioTrailer.experimentalDv7ToDv81Enabled`
-- `playback.audioTrailer.experimentalDv7ToDv81PreserveMappingEnabled`
-- `playback.audioTrailer.experimentalDv5ToDv81Enabled`
-- `playback.audioTrailer.experimentalDtsIecPassthroughEnabled`
-- `playback.bufferNetwork.vodCacheSizeMode`
-- `playback.bufferNetwork.vodCacheSizeMb`
-- `playback.bufferNetwork.useParallelConnections`
-- `playback.bufferNetwork.parallelConnectionCount`
-- `playback.bufferNetwork.parallelChunkSizeMb`
+Not synced:
+- library
+- watch progress
+- watched items
+- device-specific playback tuning
+- plaintext API keys or OAuth tokens
+- credential-bearing addon URLs
 
-## Recommended Schema
-Apply `supabase/account_settings_sync.sql` as the basis for the new contract. It introduces:
-- `account_settings`
-  - One row per account owner.
-  - Holds the synced settings JSON payload.
-  - Carries a monotonic `sync_revision` and `updated_at`.
-- `account_addons`
-  - Ordered addon list for the account owner.
-  - Keeps `enabled`, `sort_order`, and metadata useful to the portal.
+## What Is Stored As Secrets
+Store these through the secret channel immediately:
+- addon credentials embedded in addon URLs
+- MDBList API key
+- RPDB API key
+- TOP Posters API key
+- Trakt access token
+- Trakt refresh token
+
+## Prerequisites
+1. Create a new Supabase project.
+2. Enable `Automatic RLS` during project creation.
+3. Configure your auth provider.
+   - Email/password is enough for the current portal flow.
+4. Create a server-side secret key for the web portal.
+   - Use this as `SUPABASE_SERVICE_ROLE_KEY` in `nexio-web`.
+
+## SQL Setup
+Run the clean install SQL from:
+- `supabase/account_settings_sync.sql`
+
+Apply it in the Supabase SQL editor against the empty project.
+
+What it creates:
+- `account_settings_public`
+- `account_addons_public`
+- `account_secrets`
+- `account_secret_audit`
 - `account_sync_events`
-  - Small realtime event stream.
-  - Running TVs subscribe to inserts here and then re-pull the snapshot.
+- owner-resolution helpers for linked devices
+- public snapshot/persist RPCs
+- service-role-only secret RPCs
+- realtime publication for `account_sync_events`
+- Supabase Vault extension usage for secret payload storage
 
-Existing tables reused as-is:
-- `linked_devices`
-- `tv_login_sessions`
+## Supabase Features Used
+This setup relies on:
+- Auth
+- Row Level Security
+- Realtime publication for `account_sync_events`
+- Supabase Vault (`supabase_vault` extension)
 
-## Migration Sequence
-1. Keep `linked_devices` and QR login RPCs in place.
-2. Add the new account tables and functions from `supabase/account_settings_sync.sql`.
-3. Enable Supabase Realtime for `account_sync_events`.
-4. Optional: backfill one `account_settings` row per current owner if you want a pre-seeded state before first web login.
-5. Do not seed device-specific keys, library data, watch progress, or watched markers.
-6. Empty accounts that are not backfilled will be seeded automatically by `GET /api/account/bootstrap` on first authenticated web load.
-5. Stop extending the old library/watch/watched sync functions. They are legacy only.
-
-## RPC Contract
-New RPCs to expose to the app/web stack:
-- `sync_pull_account_snapshot()`
-  - Returns one JSON snapshot containing `settings`, `addons`, `revision`, and `updated_at`.
-  - Uses the linked-device owner relationship automatically.
-- `sync_push_account_settings(p_settings_payload jsonb, p_source text)`
-  - Upserts the owner settings row.
-  - Emits a `settings` event into `account_sync_events`.
-- `sync_push_account_addons(p_addons jsonb, p_source text)`
-  - Replaces the owner addon list.
-  - Emits an `addons` event into `account_sync_events`.
-
-## Web Portal Integration
-The new `nexio-web` portal now expects this account model:
-- `GET /api/account/bootstrap`
-  - Reads the signed-in account snapshot via `sync_pull_account_snapshot()`.
-  - If the snapshot is empty, seeds default settings plus the built-in addons using `p_source = 'web-bootstrap'`.
-- `POST /api/account/persist`
-  - Pushes the full settings payload through `sync_push_account_settings(..., 'web')`.
-  - Replaces the ordered addon list through `sync_push_account_addons(..., 'web')`.
-- `POST /api/account/approve-tv-login`
-  - Calls the existing `approve_tv_login_session` RPC.
-
-Additional server routes now used by the portal:
-- `POST /api/addons/inspect`
-  - Fetches addon manifests and derives catalogs/resources/types for the web catalog inventory.
-- `POST /api/integrations/mdblist/validate`
-  - Validates the MDBList API key and returns personal/top list options.
-- `POST /api/integrations/trakt/device-code`
-  - Starts Trakt device authentication.
-- `POST /api/integrations/trakt/device-token`
-  - Polls Trakt device auth completion and returns tokens/profile fields for `integrations.traktAuth`.
-- `POST /api/integrations/trakt/popular-lists`
-  - Loads Trakt popular-list options for catalog configuration.
-
-Runtime env required by Nuxt:
+## Environment Variables
+### `nexio-web`
+Set these runtime variables:
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TRAKT_CLIENT_ID`
 - `TRAKT_CLIENT_SECRET`
 
-## Android Integration
-### Startup pull
-Replace the old startup-only addon pull with a full account snapshot pull:
-1. On authenticated startup, call `sync_pull_account_snapshot()`.
-2. Apply `settings` into local stores.
-3. Apply `addons` through the existing addon reconciliation path.
-4. Do not overwrite excluded device-specific settings.
+Notes:
+- `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
+- The portal server uses it for secret set/delete/resolve RPCs.
+- Clients should never receive the service key.
 
-### Immediate push
-Whenever a synced setting changes locally:
-1. Rebuild the synced settings payload.
-2. Strip excluded keys.
-3. Call `sync_push_account_settings(..., 'app')`.
+## Public Table Model
+### `account_settings_public`
+One row per account owner.
 
-Whenever addons change locally:
-1. Rebuild the ordered addon payload.
-2. Call `sync_push_account_addons(..., 'app')`.
+Contains:
+- scrubbed settings JSON only
+- sync revision
+- timestamps
+- source label
 
-### Running-device instant sync
-1. Subscribe to `account_sync_events` filtered by `sync_owner_id()`.
-2. On each inserted row:
-   - Ignore events originating from the same device if you add a device identifier later.
-   - Call `sync_pull_account_snapshot()`.
-   - Re-apply settings and addon state.
+No secrets are stored in this payload.
 
-This is the cleanest pattern because realtime carries only a tiny event row, not the full JSON payload.
+### `account_addons_public`
+One row per synced addon entry.
 
-## Settings Payload Mapping
-Recommended source-of-truth mapping from current Android stores:
-- `ThemeDataStore` -> `appearance`
-- `LayoutPreferenceDataStore` -> `layout`
-- `TmdbSettingsDataStore` -> `integrations.tmdb`
-- `MDBListSettingsDataStore` -> `integrations.mdblist`
-- `AnimeSkipSettingsDataStore` -> `integrations.animeSkip`
-- `PosterRatingsSettingsDataStore` -> `integrations.posterRatings`
-- `TraktSettingsDataStore` -> `trakt` and `integrations.traktAuth`
-- `DebugSettingsDataStore` -> `debug`
-- `PlayerSettingsDataStore` -> synced portions of `playback`
-- `AppLocaleResolver` shared prefs -> `appearance.localeTag`
+Contains:
+- public base URL
+- public manifest URL
+- display metadata
+- enabled state
+- sort order
+- non-secret query params
+- optional `secret_ref`
 
-## Default Account Bootstrap
-When a newly created Supabase user has no `account_settings` row and no `account_addons` rows:
-- The portal starts with Android-aligned defaults from `nexio-web/utils/portal-defaults.ts`.
-- The portal writes those defaults immediately to Supabase through the account RPCs.
-- The default addon set is:
+Do not store credential-bearing addon URLs here.
+
+### `account_secrets`
+Metadata table only.
+
+Contains:
+- secret identity
+- secret reference
+- Vault secret id
+- masked preview
+- status
+- version
+- timestamps
+
+Plaintext secret material is not stored in this table.
+The actual secret payload is stored in Supabase Vault.
+
+## RPC Contract
+### Authenticated RPCs
+These are called with the user JWT:
+- `sync_pull_account_snapshot()`
+- `sync_push_account_settings(p_settings_payload jsonb, p_source text)`
+- `sync_push_account_addons(p_addons jsonb, p_source text)`
+
+### Service-role-only RPCs
+These are called by server-side code only:
+- `service_set_account_secret(...)`
+- `service_delete_account_secret(...)`
+- `service_resolve_account_secret(...)`
+- `service_get_account_addon_transport(...)`
+
+Do not expose these directly to clients.
+
+## Web Portal Contract
+### Public bootstrap and persist
+The portal now uses:
+- `GET /api/account/bootstrap`
+  - loads public settings snapshot
+  - loads public addons snapshot
+  - loads secret metadata rows
+  - seeds default public rows for new accounts
+- `POST /api/account/persist`
+  - writes scrubbed public settings
+  - writes public addon inventory
+
+### Secret endpoints
+The portal also uses:
+- `GET /api/account/secrets/status`
+- `POST /api/account/secrets/set`
+- `POST /api/account/secrets/delete`
+- `POST /api/account/addons/resolve`
+
+### Integration routes
+- `POST /api/integrations/mdblist/validate`
+  - validates a draft key or the stored secret
+- `POST /api/integrations/trakt/device-code`
+  - starts device auth
+- `POST /api/integrations/trakt/device-token`
+  - stores Trakt tokens as secrets
+  - returns only public Trakt profile state
+- `POST /api/integrations/trakt/popular-lists`
+  - resolves the stored Trakt access token server-side
+- `POST /api/addons/inspect`
+  - resolves credentialed addon manifests server-side when needed
+
+## Default Bootstrap Behavior
+For a newly created Supabase user with no account rows yet:
+- `GET /api/account/bootstrap` seeds default public settings
+- `GET /api/account/bootstrap` seeds default public addons
+- default addons are:
   - Cinemeta
   - OpenSubtitles
-- This means first-run web accounts begin from the same baseline expected by the Android app instead of an empty account snapshot.
+- no secrets are seeded by default
 
-## Trakt Notes
-Current implementation:
-- The web portal completes Trakt device auth server-side.
-- The resulting Trakt profile and token fields are stored in `settings_payload.integrations.traktAuth`.
-- Trakt catalog preferences remain in the top-level `trakt` section of the synced settings payload.
+## Addon Secret Rules
+When a user pastes a tokenized addon install URL:
+1. extract sensitive query params from the URL
+2. store the public base URL in `account_addons_public`
+3. store the secret query params in Vault through `service_set_account_secret`
+4. store only the `secret_ref` in the addon row
+5. resolve the final authenticated manifest URL only in controlled server code
 
-Operational note:
-- These tokens now live inside JSON synced through `account_settings`.
-- If you want stronger separation later, migrate them into a dedicated encrypted table and keep only connection state in `settings_payload`.
-- The current SQL migration does not require a schema change for this because the tokens are stored inside the existing JSON payload.
+This prevents secret leakage through:
+- public tables
+- sync payloads
+- logs
+- analytics
+- debug dumps
 
-## Recommended Rollout
-1. Apply the new SQL.
-2. Confirm `account_sync_events` is included in the `supabase_realtime` publication.
-3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TRAKT_CLIENT_ID`, and `TRAKT_CLIENT_SECRET` for `nexio-web`.
-4. Verify first-login bootstrap seeds defaults for a new Supabase user.
-5. Ship Android startup pull for the full account snapshot.
-6. Ship Android instant push for synced settings.
-7. Add Realtime subscription to `account_sync_events`.
-8. After that is stable, delete or archive the unused legacy sync paths.
+## Android Expectations
+Current direction for the addon:
+1. pull only the public snapshot on startup
+2. do not expect remote plaintext keys or tokens
+3. do not wipe local secrets when public snapshot values are missing
+4. resolve secrets through controlled endpoints when secret-backed integrations are fully wired
 
+Important tradeoff:
+- if fully offline use is required for a secret-backed integration, the Android app will still need secure local storage for that secret on-device
+
+## Clean Install Verification Checklist
+After applying the SQL and setting runtime env vars, verify:
+1. new user signup works
+2. first portal bootstrap creates:
+   - one `account_settings_public` row
+   - default `account_addons_public` rows
+3. changing a normal setting updates only public tables
+4. saving an MDBList key creates:
+   - one `account_secrets` metadata row
+   - one Vault secret
+5. saving a tokenized addon URL stores:
+   - public base URL in `account_addons_public`
+   - masked secret metadata in `account_secrets`
+   - no plaintext credential in public addon fields
+6. Trakt connect stores tokens as secrets and only public profile state in settings
+7. `account_sync_events` receives inserts for public and secret changes
+8. no plaintext secrets appear in public snapshot responses
+
+## Operational Notes
+- Never log request bodies for secret endpoints.
+- Never send `SUPABASE_SERVICE_ROLE_KEY` to the client.
+- Keep addon URLs scrubbed before logging or analytics.
+- Show only masked previews like `Stored ••••abcd` in the UI.
+- Rotate provider credentials by overwriting the Vault secret and incrementing the metadata version.
+
+## Recommended Rollout Order
+1. apply `supabase/account_settings_sync.sql`
+2. set `nexio-web` runtime env vars
+3. deploy the updated portal server routes
+4. verify clean bootstrap for a new account
+5. verify secret save/delete flows
+6. verify tokenized addon handling
+7. finish Android secret-resolution wiring
+
+## Source Files In This Repo
+Main files for this setup:
+- `supabase/account_settings_sync.sql`
+- `docs/supabase-settings-sync-guide.md`
+- `nexio-web/server/api/account/bootstrap.get.ts`
+- `nexio-web/server/api/account/persist.post.ts`
+- `nexio-web/server/api/account/secrets/set.post.ts`
+- `nexio-web/server/api/account/secrets/delete.post.ts`
+- `nexio-web/server/api/account/addons/resolve.post.ts`
+- `nexio-web/server/api/integrations/mdblist/validate.post.ts`
+- `nexio-web/server/api/integrations/trakt/device-code.post.ts`
+- `nexio-web/server/api/integrations/trakt/device-token.post.ts`
+- `nexio-web/server/api/integrations/trakt/popular-lists.post.ts`

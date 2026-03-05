@@ -25,6 +25,9 @@ data class AccountAddonPayload(
     val name: String? = null,
     val description: String? = null,
     val enabled: Boolean = true,
+    @SerialName("public_query_params") val publicQueryParams: Map<String, String> = emptyMap(),
+    @SerialName("install_kind") val installKind: String = "manifest",
+    @SerialName("secret_ref") val secretRef: String? = null,
     @SerialName("sort_order") val sortOrder: Int = 0
 )
 
@@ -111,7 +114,6 @@ data class TmdbSyncSettings(
 @Serializable
 data class MDBListSyncSettings(
     val enabled: Boolean = false,
-    val apiKey: String = "",
     val showTrakt: Boolean = true,
     val showImdb: Boolean = true,
     val showTmdb: Boolean = true,
@@ -133,9 +135,7 @@ data class AnimeSkipSyncSettings(
 @Serializable
 data class PosterRatingsSyncSettings(
     val rpdbEnabled: Boolean = false,
-    val rpdbApiKey: String = "",
-    val topPostersEnabled: Boolean = false,
-    val topPostersApiKey: String = ""
+    val topPostersEnabled: Boolean = false
 )
 
 @Serializable
@@ -144,12 +144,7 @@ data class TraktAuthSyncSettings(
     val username: String = "",
     val userSlug: String = "",
     val connectedAt: String? = null,
-    val pending: Boolean = false,
-    val accessToken: String = "",
-    val refreshToken: String = "",
-    val tokenType: String = "",
-    val createdAt: Long? = null,
-    val expiresIn: Int? = null
+    val pending: Boolean = false
 )
 
 @Serializable

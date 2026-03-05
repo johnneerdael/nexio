@@ -56,7 +56,8 @@ export async function supabaseFetch<T>(
   if (authToken) {
     headers.set('Authorization', `Bearer ${authToken}`)
   } else if (useServiceRole && config.serviceRoleKey) {
-    headers.set('Authorization', `Bearer ${config.serviceRoleKey}`)
+    // Supabase secret keys must match the apikey header exactly.
+    headers.set('Authorization', config.serviceRoleKey)
   }
 
   const response = await fetch(`${config.url}${path}`, {

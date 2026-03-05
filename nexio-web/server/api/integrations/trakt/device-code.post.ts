@@ -1,5 +1,5 @@
 import { createError } from 'h3'
-import { okJson } from '~/server/utils/supabase'
+import { bearerToken, okJson, supabaseUser } from '~/server/utils/supabase'
 
 type DeviceCodeResponse = {
   device_code: string
@@ -10,7 +10,10 @@ type DeviceCodeResponse = {
   interval: number
 }
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  bearerToken(event)
+  await supabaseUser(event)
+
   const config = useRuntimeConfig()
   const clientId = String(config.traktClientId || '').trim()
 

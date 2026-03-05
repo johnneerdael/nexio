@@ -20,6 +20,16 @@ export type CatalogId =
   | 'trakt_recommended_shows'
   | 'trakt_calendar_next_7_days'
 
+export type SecretType =
+  | 'addon_credential'
+  | 'mdblist_api_key'
+  | 'rpdb_api_key'
+  | 'top_posters_api_key'
+  | 'trakt_access_token'
+  | 'trakt_refresh_token'
+
+export type SecretStatus = 'configured' | 'missing' | 'error'
+
 export type AddonRecord = {
   id: string
   url: string
@@ -29,6 +39,9 @@ export type AddonRecord = {
   description?: string
   logo?: string
   transportUrl?: string
+  installKind?: 'manifest' | 'configured'
+  publicQueryParams?: Record<string, string>
+  secretRef?: string | null
   sortOrder: number
 }
 
@@ -92,6 +105,16 @@ export type TraktPopularListOption = {
   catalogIdBase: string
   title: string
   itemCount: number
+}
+
+export type SecretMetadata = {
+  id: string
+  secretType: SecretType
+  secretRef: string
+  maskedPreview: string | null
+  status: SecretStatus
+  version: number
+  updatedAt: string | null
 }
 
 export type MDBListListOption = {
@@ -161,7 +184,6 @@ export type PortalSettings = {
     }
     mdblist: {
       enabled: boolean
-      apiKey: string
       showTrakt: boolean
       showImdb: boolean
       showTmdb: boolean
@@ -179,9 +201,7 @@ export type PortalSettings = {
     }
     posterRatings: {
       rpdbEnabled: boolean
-      rpdbApiKey: string
       topPostersEnabled: boolean
-      topPostersApiKey: string
     }
     traktAuth: {
       connected: boolean
@@ -189,11 +209,6 @@ export type PortalSettings = {
       userSlug: string
       connectedAt: string | null
       pending: boolean
-      accessToken: string
-      refreshToken: string
-      tokenType: string
-      createdAt: number | null
-      expiresIn: number | null
     }
   }
   playback: {
@@ -272,6 +287,7 @@ export type SyncExclusion = {
 export type PortalSnapshot = {
   settings: PortalSettings
   addons: AddonRecord[]
+  secretStatuses: SecretMetadata[]
   linkedDevices: LinkedDevice[]
   syncRevision: number
   lastSyncedAt: string | null

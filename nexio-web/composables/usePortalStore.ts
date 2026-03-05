@@ -1,4 +1,5 @@
 import { computed, watch } from 'vue'
+import { parseAddonInstallUrl, secretRefs } from '~/utils/account-secrets'
 import {
   defaultAccountAddons,
   defaultSettings,
@@ -15,6 +16,8 @@ import type {
   PluginRepository,
   PortalSession,
   PortalSettings,
+  SecretMetadata,
+  SecretType,
   TraktDeviceFlow,
   TraktPopularListOption
 } from '~/types/portal'
@@ -22,6 +25,12 @@ import type {
 type PersistPayload = {
   settings: PortalSettings
   addons: AddonRecord[]
+}
+
+type SecretSetPayload = {
+  secretType: SecretType
+  secretRef: string
+  secretPayload: Record<string, unknown>
 }
 
 type MDBListDiscoveryState = {
@@ -49,6 +58,8 @@ type StoreState = {
   session: PortalSession | null
   settings: PortalSettings
   addons: AddonRecord[]
+  secretStatuses: SecretMetadata[]
+  secretDrafts: Record<string, string>
   linkedDevices: LinkedDevice[]
   traktFlow: TraktDeviceFlow | null
   addonInspections: Record<string, AddonManifestInspection>
@@ -143,6 +154,8 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
     session: source.session ?? readSession(),
     settings: clone(source.settings ?? defaultSettings()),
     addons: clone(source.addons ?? defaultAccountAddons()),
+    secretStatuses: clone(source.secretStatuses ?? []),
+    secretDrafts: {},
     linkedDevices: clone(source.linkedDevices ?? demoDevices()),
     traktFlow: null,
     addonInspections: clone(source.addonInspections ?? {}),
@@ -167,6 +180,10 @@ function useInternalStore() {
 
 function accessToken(session: PortalSession | null): string | null {
   return session?.accessToken ?? null
+}
+
+function secretKey(secretType: SecretType, secretRef: string) {
+  return `${secretType}:${secretRef}`
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}, token?: string | null): Promise<T> {
@@ -315,6 +332,32 @@ function mdblistCatalogs(
 export function usePortalStore() {
   const state = useInternalStore()
 
+  function secretStatus(secretRef: string, secretType?: SecretType) {
+    return state.value.secretStatuses.find((entry) =>
+      entry.secretRef === secretRef && (!secretType || entry.secretType === secretType)
+    ) ?? null
+  }
+
+  function upsertSecretStatus(secret: SecretMetadata) {
+    const key = secretKey(secret.secretType, secret.secretRef)
+    const next = new Map(state.value.secretStatuses.map((entry) => [secretKey(entry.secretType, entry.secretRef), entry]))
+    next.set(key, secret)
+    state.value.secretStatuses = [...next.values()]
+  }
+
+  function removeSecretStatus(secretType: SecretType, secretRef: string) {
+    state.value.secretStatuses = state.value.secretStatuses.filter((entry) =>
+      !(entry.secretType === secretType && entry.secretRef === secretRef)
+    )
+  }
+
+  function setSecretDraft(secretRef: string, value: string) {
+    state.value.secretDrafts = {
+      ...state.value.secretDrafts,
+      [secretRef]: value
+    }
+  }
+
   async function inspectAddons() {
     if (state.value.addons.length === 0) {
       state.value.addonInspections = {}
@@ -325,7 +368,7 @@ export function usePortalStore() {
       const response = await apiFetch<{ inspections: AddonManifestInspection[] }>('/api/addons/inspect', {
         method: 'POST',
         body: JSON.stringify({ addons: state.value.addons })
-      })
+      }, accessToken(state.value.session))
 
       const nextInspections = { ...state.value.addonInspections }
       response.inspections.forEach((inspection) => {
@@ -378,6 +421,7 @@ export function usePortalStore() {
       state.value.session = payload.session ?? session
       state.value.settings = clone(payload.snapshot.settings)
       state.value.addons = clone(payload.snapshot.addons)
+      state.value.secretStatuses = clone(payload.snapshot.secretStatuses)
       state.value.linkedDevices = clone(payload.snapshot.linkedDevices)
       state.value.syncRevision = payload.snapshot.syncRevision
       state.value.lastSyncedAt = payload.snapshot.lastSyncedAt
@@ -386,11 +430,11 @@ export function usePortalStore() {
 
       await inspectAddons()
 
-      if (state.value.settings.integrations.mdblist.enabled && state.value.settings.integrations.mdblist.apiKey) {
+      if (state.value.settings.integrations.mdblist.enabled && secretStatus(secretRefs.mdblist)?.status === 'configured') {
         await validateMDBList().catch(() => undefined)
       }
 
-      if (state.value.settings.integrations.traktAuth.connected && state.value.settings.integrations.traktAuth.accessToken) {
+      if (state.value.settings.integrations.traktAuth.connected) {
         await refreshTraktPopularLists().catch(() => undefined)
       }
     } catch (error) {
@@ -460,6 +504,7 @@ export function usePortalStore() {
     state.value.bootstrapped = false
     state.value.traktFlow = null
     state.value.addonInspections = {}
+    state.value.secretDrafts = {}
     state.value.mdblistDiscovery = {
       validating: false,
       valid: false,
@@ -516,26 +561,29 @@ export function usePortalStore() {
   }
 
   async function addAddon(url: string) {
-    const cleanUrl = normalizeAddonUrl(url)
-    if (!cleanUrl) {
-      return
+    const parsed = parseAddonInstallUrl(url)
+    if (parsed.secretType && !state.value.session) {
+      throw new Error('Sign in before adding credentialed addons.')
     }
-
-    if (state.value.addons.some((addon) => normalizeAddonUrl(addon.url) === cleanUrl)) {
+    if (state.value.addons.some((addon) => normalizeAddonUrl(addon.url) === parsed.addon.url)) {
       return
     }
 
     state.value.addons = [
       ...state.value.addons,
       {
-        id: crypto.randomUUID(),
-        url: cleanUrl,
-        manifestUrl: `${cleanUrl}/manifest.json`,
-        name: new URL(cleanUrl).hostname.replace(/^www\./, ''),
-        enabled: true,
+        ...parsed.addon,
         sortOrder: state.value.addons.length
       }
     ]
+
+    if (parsed.secretType && parsed.secretRef && parsed.secretPayload) {
+      await saveSecret({
+        secretType: parsed.secretType,
+        secretRef: parsed.secretRef,
+        secretPayload: parsed.secretPayload
+      })
+    }
 
     await inspectAddons()
   }
@@ -544,6 +592,9 @@ export function usePortalStore() {
     const addon = state.value.addons.find((entry) => entry.id === id)
     if (addon) {
       delete state.value.addonInspections[normalizeAddonUrl(addon.url)]
+      if (addon.secretRef) {
+        deleteSecret('addon_credential', addon.secretRef).catch(() => undefined)
+      }
     }
 
     state.value.addons = state.value.addons
@@ -650,6 +701,37 @@ export function usePortalStore() {
     }
   }
 
+  async function saveSecret(payload: SecretSetPayload) {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before saving account secrets.')
+    }
+
+    const response = await apiFetch<{ secret: SecretMetadata }>('/api/account/secrets/set', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }, token)
+
+    upsertSecretStatus(response.secret)
+    setSecretDraft(payload.secretRef, '')
+    state.value.lastSyncedAt = response.secret.updatedAt
+  }
+
+  async function deleteSecret(secretType: SecretType, secretRef: string) {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before deleting account secrets.')
+    }
+
+    await apiFetch('/api/account/secrets/delete', {
+      method: 'POST',
+      body: JSON.stringify({ secretType, secretRef })
+    }, token)
+
+    removeSecretStatus(secretType, secretRef)
+    setSecretDraft(secretRef, '')
+  }
+
   async function approveTvLogin(code: string, nonce: string) {
     const token = accessToken(state.value.session)
     if (!token) {
@@ -663,22 +745,16 @@ export function usePortalStore() {
   }
 
   async function validateMDBList() {
-    const apiKey = state.value.settings.integrations.mdblist.apiKey.trim()
-    if (!apiKey) {
-      state.value.mdblistDiscovery = {
-        validating: false,
-        valid: false,
-        error: 'Enter an MDBList API key first.',
-        personalLists: [],
-        topLists: []
-      }
-      return
-    }
-
     state.value.mdblistDiscovery.validating = true
     state.value.mdblistDiscovery.error = null
 
     try {
+      const token = accessToken(state.value.session)
+      if (!token) {
+        throw new Error('Sign in before validating MDBList.')
+      }
+
+      const apiKey = state.value.secretDrafts[secretRefs.mdblist]?.trim() || undefined
       const response = await apiFetch<{
         valid: boolean
         personalLists: MDBListListOption[]
@@ -686,7 +762,7 @@ export function usePortalStore() {
       }>('/api/integrations/mdblist/validate', {
         method: 'POST',
         body: JSON.stringify({ apiKey })
-      })
+      }, token)
 
       state.value.mdblistDiscovery = {
         validating: false,
@@ -727,12 +803,29 @@ export function usePortalStore() {
     state.value.settings.integrations.mdblist.selectedTopListKeys = [...next]
   }
 
+  async function saveDraftSecret(secretType: SecretType, secretRef: string, payloadFactory?: (value: string) => Record<string, unknown>) {
+    const value = state.value.secretDrafts[secretRef]?.trim() ?? ''
+    if (!value) {
+      throw new Error('Enter a value before saving this secret.')
+    }
+
+    await saveSecret({
+      secretType,
+      secretRef,
+      secretPayload: payloadFactory ? payloadFactory(value) : { apiKey: value }
+    })
+  }
+
   async function startTraktDeviceFlow() {
     state.value.error = null
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before starting Trakt authentication.')
+    }
     const flow = await apiFetch<TraktDeviceFlow>('/api/integrations/trakt/device-code', {
       method: 'POST',
       body: JSON.stringify({})
-    })
+    }, token)
     state.value.traktFlow = flow
     state.value.settings.integrations.traktAuth.pending = true
   }
@@ -750,7 +843,7 @@ export function usePortalStore() {
     }>('/api/integrations/trakt/device-token', {
       method: 'POST',
       body: JSON.stringify({ deviceCode })
-    })
+    }, accessToken(state.value.session))
 
     if (response.approved && response.traktAuth) {
       state.value.settings.integrations.traktAuth = response.traktAuth
@@ -763,8 +856,8 @@ export function usePortalStore() {
   }
 
   async function refreshTraktPopularLists() {
-    const accessTokenValue = state.value.settings.integrations.traktAuth.accessToken.trim()
-    if (!accessTokenValue) {
+    const token = accessToken(state.value.session)
+    if (!token || !state.value.settings.integrations.traktAuth.connected) {
       state.value.traktDiscovery = {
         loading: false,
         error: null,
@@ -778,8 +871,8 @@ export function usePortalStore() {
     try {
       const response = await apiFetch<{ lists: TraktPopularListOption[] }>('/api/integrations/trakt/popular-lists', {
         method: 'POST',
-        body: JSON.stringify({ accessToken: accessTokenValue })
-      })
+        body: JSON.stringify({})
+      }, token)
 
       state.value.traktDiscovery = {
         loading: false,
@@ -807,17 +900,14 @@ export function usePortalStore() {
   }
 
   function disconnectTrakt() {
+    deleteSecret('trakt_access_token', secretRefs.trakt).catch(() => undefined)
+    deleteSecret('trakt_refresh_token', secretRefs.trakt).catch(() => undefined)
     state.value.settings.integrations.traktAuth = {
       connected: false,
       username: '',
       userSlug: '',
       connectedAt: null,
-      pending: false,
-      accessToken: '',
-      refreshToken: '',
-      tokenType: '',
-      createdAt: null,
-      expiresIn: null
+      pending: false
     }
     state.value.traktFlow = null
     state.value.traktDiscovery = {
@@ -836,6 +926,7 @@ export function usePortalStore() {
           JSON.stringify({
             settings: state.value.settings,
             addons: state.value.addons,
+            secretStatuses: state.value.secretStatuses,
             linkedDevices: state.value.linkedDevices,
             syncRevision: state.value.syncRevision,
             lastSyncedAt: state.value.lastSyncedAt,
@@ -875,6 +966,9 @@ export function usePortalStore() {
   const syncScopeLabel = computed(() => `${state.value.addons.length} addons, ${defaultSyncExclusions.length} device-only exclusions`)
   const signedIn = computed(() => Boolean(state.value.session))
   const repositories = computed<PluginRepository[]>(() => state.value.settings.plugins.repositories)
+  const secretStatusMap = computed<Record<string, SecretMetadata>>(() =>
+    Object.fromEntries(state.value.secretStatuses.map((entry) => [entry.secretRef, entry]))
+  )
   const catalogInventory = computed<AddonCatalogRecord[]>(() => {
     const disabled = new Set(state.value.settings.layout.disabledHomeCatalogKeys)
     const addonCatalogs = Object.values(state.value.addonInspections)
@@ -921,6 +1015,7 @@ export function usePortalStore() {
     syncScopeLabel,
     signedIn,
     repositories,
+    secretStatusMap,
     catalogInventory,
     defaultSyncExclusions,
     bootstrap,
@@ -936,6 +1031,10 @@ export function usePortalStore() {
     removeRepository,
     setRepositoryScrapers,
     persistSnapshot,
+    secretStatus,
+    setSecretDraft,
+    saveDraftSecret,
+    deleteSecret,
     approveTvLogin,
     validateMDBList,
     setMDBListPersonalListEnabled,

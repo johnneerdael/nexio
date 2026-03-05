@@ -28,14 +28,7 @@
       </template>
       
       <div v-if="settings.integrations.mdblist.enabled">
-        <SettingRow label="API Key" description="Your personal MDBList API key.">
-          <input
-            v-model="settings.integrations.mdblist.apiKey"
-            type="password"
-            placeholder="mdblist_..."
-            class="block w-full max-w-xs rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
-        </SettingRow>
+        <SettingRow label="Secret Storage" description="MDBList API keys now live in the account secret channel, not the public settings payload." />
 
         <SettingRow label="Show Trakt Ratings">
           <BaseToggle v-model="settings.integrations.mdblist.showTrakt" />
@@ -67,27 +60,13 @@
         <BaseToggle v-model="settings.integrations.posterRatings.rpdbEnabled" />
       </SettingRow>
       
-      <SettingRow v-if="settings.integrations.posterRatings.rpdbEnabled" label="RPDB API Key">
-        <input
-          v-model="settings.integrations.posterRatings.rpdbApiKey"
-          type="password"
-          placeholder="rpdb_..."
-          class="block w-full max-w-xs rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-      </SettingRow>
+      <SettingRow v-if="settings.integrations.posterRatings.rpdbEnabled" label="RPDB Key" description="Stored through the account secret channel." />
       
       <SettingRow label="TOPPosters Enabled" description="Use TOPPosters Database. Mutually exclusive with RPDB.">
         <BaseToggle v-model="settings.integrations.posterRatings.topPostersEnabled" />
       </SettingRow>
 
-      <SettingRow v-if="settings.integrations.posterRatings.topPostersEnabled" label="TOPPosters API Key">
-        <input
-          v-model="settings.integrations.posterRatings.topPostersApiKey"
-          type="password"
-          placeholder="top_..."
-          class="block w-full max-w-xs rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-      </SettingRow>
+      <SettingRow v-if="settings.integrations.posterRatings.topPostersEnabled" label="TOPPosters Key" description="Stored through the account secret channel." />
     </SettingsSection>
   </div>
 </template>
