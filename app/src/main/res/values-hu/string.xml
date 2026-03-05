@@ -13,7 +13,7 @@
     <string name="action_retry">Próbáld újra</string>
 
     <!-- ContinueWatchingSection -->
-    <string name="continue_watching">Nézés folytatása</string>
+    <string name="continue_watching">Megtekintés folytatása</string>
     <string name="cw_upcoming">Hamarosan</string>
     <string name="cw_next_up">Következő</string>
     <string name="cw_resume">Folytatás</string>
@@ -99,6 +99,11 @@
     <string name="appearance_language_system">Rendszer alapértelmezett</string>
     <string name="appearance_language_dialog_title">Nyelv kiválasztása</string>
     <string name="appearance_language_restart_hint">Indítsd újra az alkalmazást a nyelvi beállítások érvényesítéséhez.</string>
+    
+	<!-- Font -->
+    <string name="appearance_font">Alkalmazás betűtípusa</string>
+    <string name="appearance_font_subtitle">Válaszd ki a kívánt betűtípust</string>
+    <string name="appearance_font_dialog_title">Betűtípus kiválasztása</string>
 
     <!-- ThemeSettingsScreen -->
     <string name="appearance_title">Megjelenés</string>
@@ -142,6 +147,7 @@
     <string name="settings_integrations_section_subtitle">TMDB vagy MDBList beállítások</string>
     <string name="settings_tmdb_subtitle">Metaadat-bővítési beállítások</string>
     <string name="settings_mdblist_subtitle">Külső értékelési szolgáltatók</string>
+    <string name="settings_animeskip_subtitle">Anime intro/outro átugrási időbélyegek</string>
 
     <!-- PlaybackSettingsScreen -->
     <string name="playback_title">Lejátszási beállítások</string>
@@ -181,7 +187,9 @@
     <string name="playback_afr_on_start_sub">Váltás a lejátszás megkezdésekor.</string>
     <string name="playback_afr_on_start_stop">Indításkor/leállításkor</string>
     <string name="playback_afr_on_start_stop_sub">Váltás indításkor, visszaállítás leállításkor.</string>
-    <string name="playback_player_external_desc">Streamek megnyitása mindig külső alkalmazásban.</string>
+    <string name="playback_resolution_matching">Felbontás egyeztetése</string>
+    <string name="playback_resolution_matching_sub">Megjelenítési mód módosításának engedélyezése a videó felbontásához igazodva.</string>   
+	<string name="playback_player_external_desc">Streamek megnyitása mindig külső alkalmazásban.</string>
     <string name="playback_player_ask_desc">Lejátszó kiválasztása minden alkalommal.</string>	
 
     <!-- PlaybackAudioSettings -->
@@ -244,6 +252,13 @@
     <string name="sub_org_none_desc">A kiegészítők által küldött eredeti sorrend használata.</string>
     <string name="sub_org_by_lang_desc">Feliratok csoportosítása nyelv szerint.</string>
     <string name="sub_org_by_addon_desc">Feliratok csoportosítása forrás (kiegészítő) szerint.</string>
+    <string name="sub_startup_mode_title">Kiegészítő feliratok betöltése</string>
+    <string name="sub_startup_mode_fast">Gyors indítás</string>
+    <string name="sub_startup_mode_preferred">Preferált nyelvek</string>
+    <string name="sub_startup_mode_all">Összes kiegészítő felirat</string>
+    <string name="sub_startup_mode_fast_desc">A lejátszás azonnali indítása. Az kiegészítő feliratok kiválasztása egyszer újraindíthatja a lejátszót.</string>
+    <string name="sub_startup_mode_preferred_desc">Kiegészítő feliratok előtöltése lejátszás előtt, az elsődleges és másodlagos nyelvi sávok csatolásával.</string>
+    <string name="sub_startup_mode_all_desc">Az összes kiegészítő felirat előtöltése és csatolása lejátszás előtt. Ez a leglassabb indítási mód.</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Utolsó link újrafelhasználása</string>
@@ -255,6 +270,8 @@
     <string name="autoplay_stream_selection">Automatikus forrás választás</string>
     <string name="autoplay_next_episode">Következő epizód automatikus lejátszása</string>
     <string name="autoplay_next_episode_sub">Következő epizód automatikus indítása a felugró ablak megjelenésekor.</string>
+    <string name="autoplay_prefer_binge_group">Binge-csoport előnyben részesítése (Következő epizód)</string>
+    <string name="autoplay_prefer_binge_group_sub">Először ugyanazzal a forrásprofillal próbálkozzon (azonos addon/minőségi csoport), mielőtt a normál automatikus lejátszási szabályokat alkalmazná.</string>    
     <string name="autoplay_threshold_pct">Százalék</string>
     <string name="autoplay_threshold_min">Perc a vége előtt</string>
     <string name="autoplay_threshold_mode">Következő epizód küszöbérték módja</string>
@@ -395,6 +412,19 @@
     <string name="mdblist_not_set">Nincs beállítva</string>
     <string name="action_clear">Törlés</string>
 
+    <!-- Anime-Skip -->
+    <string name="animeskip_title">Anime-kihagyás</string>
+    <string name="animeskip_subtitle">Ügyfél-azonosító (Client ID) beállítása a főcímek és stáblisták átugrásához</string>
+    <string name="animeskip_enable_title">Anime-kihagyás engedélyezése</string>
+    <string name="animeskip_enable_subtitle">Időbélyegek lekérése az anime-skip.com oldalról</string>
+    <string name="animeskip_client_id_title">Ügyfél-azonosító</string>
+    <string name="animeskip_client_id_subtitle">Az időbélyegek lekéréséhez szükséges az anime-skip.com-ról</string>
+    <string name="animeskip_dialog_title">Ügyfél-azonosító (Client ID)</string>
+    <string name="animeskip_dialog_subtitle">Hozd létre saját azonosítódat az anime-skip.com/account/settings oldalon</string>
+    <string name="animeskip_dialog_placeholder">Írd be az azonosítót</string>
+    <string name="animeskip_invalid_client_id">Érvénytelen azonosító</string>
+    <string name="action_clear">Törlés</string>
+
     <!-- TmdbSettingsScreen -->
     <string name="tmdb_title">TMDB adatbővítés</string>
     <string name="tmdb_subtitle">Válaszd ki, mely metaadat-mezők származzanak a TMDB-ről</string>
@@ -418,6 +448,9 @@
     <string name="tmdb_episodes_subtitle">Epizódcímek, leírások, miniatűrök és hosszak a TMDB-ről</string>
     <string name="tmdb_more_like_this_title">Hasonlóak</string>
     <string name="tmdb_more_like_this_subtitle">TMDB ajánlások a részletek oldalon</string>
+	<string name="tmdb_collections_title">Gyűjtemények</string>
+    <string name="tmdb_collections_subtitle">TMDB filmgyűjtemények megjelenési sorrendben</string>
+	
     <string name="tmdb_language_dialog_title">TMDB nyelv</string>
 
     <!-- TraktScreen -->
@@ -440,6 +473,8 @@
     <string name="trakt_unaired_shown">Látható</string>
     <string name="trakt_unaired_hidden">Rejtett</string>
     <string name="trakt_cached_label">Gyorsítótárazva</string>
+	<string name="trakt_unaired_now_shown">A még nem vetített következő epizódok mostantól láthatók</string>
+    <string name="trakt_unaired_now_hidden">A még nem vetített következő epizódok mostantól rejtettek</string>
     <string name="trakt_stat_movies">Film</string>
     <string name="trakt_stat_shows">Sorozat</string>
     <string name="trakt_stat_episodes">Epizód</string>
@@ -450,10 +485,10 @@
     <string name="trakt_login">Bejelentkezés</string>
     <string name="trakt_retry">Újra</string>
     <string name="trakt_back">Vissza</string>
-    <string name="trakt_cw_window_title">Folytatási időablak</string>
-    <string name="trakt_cw_window_subtitle">Válaszd ki, mennyi Trakt aktivitás jelenjen meg a folytatási listában.</string>
+    <string name="trakt_cw_window_title">Megtekintés folytatása ablak</string>
+    <string name="trakt_cw_window_subtitle">Válaszd ki, mennyi Trakt aktivitás jelenjen meg a megtekintés folytatása listában.</string>
     <string name="trakt_unaired_dialog_title">Még nem vetített epizódok</string>
-    <string name="trakt_unaired_dialog_subtitle">Add meg, hogy a Folytatás tartalmazza-e a premier előtti epizódokat.</string>
+    <string name="trakt_unaired_dialog_subtitle">Válaszd ki, hogy a megtekintés folytatása tartalmazza-e a még nem vetített epizódokat.</string>
     <string name="trakt_show_unaired">Még nem vetített epizódok megjelenítése</string>
     <string name="trakt_hide_unaired">Még nem vetített epizódok elrejtése</string>
     <string name="trakt_all_history">Teljes előzmény</string>
@@ -540,17 +575,28 @@
 
     <!-- StreamScreen -->
     <string name="stream_retry">Újra</string>
-    <string name="stream_no_streams">Nem található forrás</string>
-    <string name="stream_no_streams_hint">További forrásokhoz próbálj meg több bővítményt telepíteni</string>
-    <string name="stream_finding_source">Stream forrás keresése</string>
+    <string name="stream_no_streams">Nem találhatók források</string>
+    <string name="stream_no_streams_hint">Próbálj meg több bővítményt telepíteni a források kereséséhez</string>
+    <string name="stream_finding_source">Forrás keresése</string>
     <string name="stream_type_torrent">Torrent</string>
     <string name="stream_type_youtube">YouTube</string>
     <string name="stream_type_external">Külső</string>
-    <string name="stream_player_picker_title">Melyik lejátszót használod?</string>
-    <string name="stream_player_internal">Beépített</string>
+    <string name="stream_player_picker_title">Melyik lejátszót használjuk?</string>
+    <string name="stream_player_internal">Belső</string>
     <string name="stream_player_external">Külső</string>
 
     <!-- PlayerScreen -->
+    <string name="player_no_external_player">Nem található külső lejátszó</string>
+
+    <!-- ParentalGuideOverlay -->
+    <string name="parental_nudity">Meztelenség</string>
+    <string name="parental_violence">Erőszak</string>
+    <string name="parental_profanity">Káromkodás</string>
+    <string name="parental_alcohol">Alkohol/Drogok</string>
+    <string name="parental_frightening">Félelemkeltés</string>
+    <string name="parental_severity_severe">Súlyos</string>
+    <string name="parental_severity_moderate">Mérsékelt</string>
+    <string name="parental_severity_mild">Enyhe</string>
     <string name="player_ends_at">Befejezés: %1$s</string>
     <string name="player_via">forrás: %1$s</string>
     <string name="player_subtitle_delay">Felirat késleltetése</string>
@@ -602,8 +648,8 @@
     <string name="subtitle_tab_delay">Késleltetés</string>
     <string name="subtitle_none">Nincs</string>
     <string name="subtitle_all">Mind</string>
-    <string name="subtitle_section_core">Alap</string>
-    <string name="subtitle_section_advanced">Speciális</string>
+    <string name="subtitle_section_core">Alapvető</string>
+    <string name="subtitle_section_advanced">Haladó</string>
     <string name="subtitle_font_size">Betűméret</string>
     <string name="subtitle_bold">Félkövér</string>
     <string name="subtitle_outline">Körvonal</string>
@@ -617,7 +663,7 @@
     <string name="subtitle_style_bold">Félkövér</string>
     <string name="subtitle_style_text_color">Szöveg színe</string>
     <string name="subtitle_style_outline">Körvonal</string>
-    <string name="subtitle_style_bottom_offset">Alsó margó</string>
+    <string name="subtitle_style_bottom_offset">Alsó eltolás</string>
     <string name="subtitle_style_defaults">Alapértelmezett</string>
     <string name="subtitle_style_on">Be</string>
     <string name="subtitle_style_off">Ki</string>
@@ -626,7 +672,7 @@
 
     <!-- PauseOverlay -->
     <string name="pause_you_are_watching">Most nézed</string>
-    <string name="pause_cast_label">Stáb</string>
+    <string name="pause_cast_label">Szereplők</string>
     <string name="pause_back_to_details">Vissza a részletekhez</string>
     <string name="pause_as_character">mint %1$s</string>
 
@@ -635,7 +681,8 @@
     <string name="next_episode_finding_source">Forrás keresése…</string>
     <string name="next_episode_playing_via">Lejátszás (%1$s) %2$ds múlva</string>
     <string name="next_episode_play">Lejátszás</string>
-    <string name="next_episode_unaired">Még nem sugárzott</string>
+    <string name="next_episode_unaired">Még nem vetített</string>
+    <string name="next_episode_not_aired_yet">A következő epizód még nem került vetítésre</string>
     <string name="skip_intro">Bevezető átugrása</string>
     <string name="skip_ending">Stáblista átugrása</string>
     <string name="skip_recap">Összefoglaló átugrása</string>
@@ -650,6 +697,10 @@
     <string name="search_start_title">Kezdj el keresni</string>
     <string name="search_start_subtitle">Adj meg legalább 2 karaktert</string>
     <string name="search_start_subtitle_no_discover">A felfedezés ki van kapcsolva. Adj meg legalább 2 karaktert</string>
+    <string name="search_voice_no_speech">Nem észleltem beszédet. Próbáld újra.</string>
+    <string name="search_voice_mic_permission">A hangalapú kereséshez mikrofonengedély szükséges.</string>
+    <string name="search_voice_failed">A hangfelismerés nem sikerült. Próbáld újra.</string>
+    <string name="search_voice_unavailable">A hangalapú keresés nem érhető el ezen az eszközön.</string>
 
     <!-- LibraryScreen -->
     <string name="library_syncing">Trakt könyvtár szinkronizálása\u2026</string>
