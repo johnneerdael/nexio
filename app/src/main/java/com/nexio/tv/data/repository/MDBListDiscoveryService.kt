@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.remote.api.MDBListApi
@@ -47,13 +48,16 @@ data class MDBListDiscoverySnapshot(
 @OptIn(ExperimentalCoroutinesApi::class)
 class MDBListDiscoveryService @Inject constructor(
     private val mdbListApi: MDBListApi,
-    private val mdbListSettingsDataStore: MDBListSettingsDataStore
+    private val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
 ) {
     private val snapshotState = MutableStateFlow(MDBListDiscoverySnapshot())
     private val refreshMutex = Mutex()
     private var lastRefreshMs = 0L
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
+    @Volatile
+    private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
 
     fun observeSnapshot(): Flow<MDBListDiscoverySnapshot> {
         return snapshotState.onStart { ensureFresh(force = false) }
@@ -61,6 +65,7 @@ class MDBListDiscoveryService @Inject constructor(
 
     suspend fun ensureFresh(force: Boolean) {
         val settings = mdbListSettingsDataStore.settings.first()
+        activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) {
             snapshotState.value = MDBListDiscoverySnapshot()
@@ -349,7 +354,8 @@ class MDBListDiscoveryService @Inject constructor(
                 add(
                     ParsedListItem(
                         type = type,
-                        preview = MetaPreview(
+                        preview = posterRatingsUrlResolver.apply(
+                            MetaPreview(
                             id = contentId,
                             type = type,
                             rawType = if (type == ContentType.MOVIE) "movie" else "series",
@@ -362,6 +368,8 @@ class MDBListDiscoveryService @Inject constructor(
                             releaseInfo = year,
                             imdbRating = null,
                             genres = emptyList()
+                        ),
+                            activePosterProvider
                         )
                     )
                 )

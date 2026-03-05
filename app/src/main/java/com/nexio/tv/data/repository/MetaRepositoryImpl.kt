@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.mapper.toDomain
@@ -25,7 +26,8 @@ import javax.inject.Singleton
 class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
 ) : MetaRepository {
     companion object {
         private const val TAG = "MetaRepository"
@@ -41,7 +43,8 @@ class MetaRepositoryImpl @Inject constructor(
         type: String,
         id: String
     ): Flow<NetworkResult<Meta>> = flow {
-        val cacheKey = "$type:$id"
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val cacheKey = "$type:$id:${posterProviderCacheToken(activePosterProvider)}"
         metaCache[cacheKey]?.let { cached ->
             emit(NetworkResult.Success(cached))
             return@flow
@@ -56,7 +59,7 @@ class MetaRepositoryImpl @Inject constructor(
                 val metaDto = result.data.meta
                 if (metaDto != null) {
                     val episodeLabel = context.getString(R.string.episodes_episode)
-                    val meta = metaDto.toDomain(episodeLabel)
+                    val meta = posterRatingsUrlResolver.apply(metaDto.toDomain(episodeLabel), activePosterProvider)
                     metaCache[cacheKey] = meta
                     emit(NetworkResult.Success(meta))
                 } else {
@@ -72,7 +75,8 @@ class MetaRepositoryImpl @Inject constructor(
         type: String,
         id: String
     ): Flow<NetworkResult<Meta>> = flow {
-        val cacheKey = "$type:$id"
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val cacheKey = "$type:$id:${posterProviderCacheToken(activePosterProvider)}"
         addonMetaCache[cacheKey]?.let { cached ->
             emit(NetworkResult.Success(cached))
             return@flow
@@ -127,7 +131,7 @@ class MetaRepositoryImpl @Inject constructor(
                         val metaDto = result.data.meta
                         if (metaDto != null) {
                             val episodeLabel = context.getString(R.string.episodes_episode)
-                    val meta = metaDto.toDomain(episodeLabel)
+                            val meta = posterRatingsUrlResolver.apply(metaDto.toDomain(episodeLabel), activePosterProvider)
                             addonMetaCache[cacheKey] = meta
                             metaCache[cacheKey] = meta
                             emit(NetworkResult.Success(meta))
@@ -154,7 +158,7 @@ class MetaRepositoryImpl @Inject constructor(
                     val metaDto = result.data.meta
                     if (metaDto != null) {
                         val episodeLabel = context.getString(R.string.episodes_episode)
-                    val meta = metaDto.toDomain(episodeLabel)
+                        val meta = posterRatingsUrlResolver.apply(metaDto.toDomain(episodeLabel), activePosterProvider)
                         addonMetaCache[cacheKey] = meta
                         metaCache[cacheKey] = meta
                         Log.d(
@@ -225,4 +229,13 @@ class MetaRepositoryImpl @Inject constructor(
         metaCache.clear()
         addonMetaCache.clear()
     }
+
+    private fun posterProviderCacheToken(
+        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
+    ): String {
+        if (activeProvider == null) return "native"
+        return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
+    }
 }
+
+

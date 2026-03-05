@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -79,7 +80,8 @@ class TraktDiscoveryService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository,
-    private val traktSettingsDataStore: TraktSettingsDataStore
+    private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(TraktDiscoverySnapshot())
@@ -90,6 +92,8 @@ class TraktDiscoveryService @Inject constructor(
 
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
+    @Volatile
+    private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
 
     init {
         scope.launch {
@@ -133,6 +137,7 @@ class TraktDiscoveryService @Inject constructor(
             rawSnapshotState.value = TraktDiscoverySnapshot()
             return
         }
+        activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
 
         val now = System.currentTimeMillis()
         if (!force && now - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
@@ -468,7 +473,8 @@ class TraktDiscoveryService @Inject constructor(
             }
         }
 
-        return MetaPreview(
+        return posterRatingsUrlResolver.apply(
+            MetaPreview(
             id = contentId,
             type = ContentType.SERIES,
             rawType = "series",
@@ -481,6 +487,8 @@ class TraktDiscoveryService @Inject constructor(
             releaseInfo = dto.firstAired,
             imdbRating = null,
             genres = emptyList()
+        ),
+            activePosterProvider
         )
     }
 
@@ -489,7 +497,8 @@ class TraktDiscoveryService @Inject constructor(
         val contentId = normalizeContentId(ids, fallback = fallbackContentId(ids))
         if (contentId.isBlank()) return null
         val enriched = resolveMetaPreview(type = "movie", contentId = contentId)
-        return enriched ?: MetaPreview(
+        return enriched ?: posterRatingsUrlResolver.apply(
+            MetaPreview(
             id = contentId,
             type = ContentType.MOVIE,
             rawType = "movie",
@@ -502,6 +511,8 @@ class TraktDiscoveryService @Inject constructor(
             releaseInfo = movie.year?.toString(),
             imdbRating = null,
             genres = emptyList()
+        ),
+            activePosterProvider
         )
     }
 
@@ -510,7 +521,8 @@ class TraktDiscoveryService @Inject constructor(
         val contentId = normalizeContentId(ids, fallback = fallbackContentId(ids))
         if (contentId.isBlank()) return null
         val enriched = resolveMetaPreview(type = "series", contentId = contentId)
-        return enriched ?: MetaPreview(
+        return enriched ?: posterRatingsUrlResolver.apply(
+            MetaPreview(
             id = contentId,
             type = ContentType.SERIES,
             rawType = "series",
@@ -523,6 +535,8 @@ class TraktDiscoveryService @Inject constructor(
             releaseInfo = show.year?.toString(),
             imdbRating = null,
             genres = emptyList()
+        ),
+            activePosterProvider
         )
     }
 
@@ -586,7 +600,7 @@ class TraktDiscoveryService @Inject constructor(
         } ?: return null
 
         val meta = (result as? NetworkResult.Success)?.data ?: return null
-        return meta.toMetaPreview()
+        return posterRatingsUrlResolver.apply(meta.toMetaPreview(), activePosterProvider)
     }
 
     private fun Meta.toMetaPreview(): MetaPreview {

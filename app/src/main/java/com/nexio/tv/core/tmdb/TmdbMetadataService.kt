@@ -1,6 +1,7 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbImage
@@ -28,7 +29,8 @@ private const val TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"
 
 @Singleton
 class TmdbMetadataService @Inject constructor(
-    private val tmdbApi: TmdbApi
+    private val tmdbApi: TmdbApi,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
 ) {
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
@@ -43,7 +45,9 @@ class TmdbMetadataService @Inject constructor(
     ): TmdbEnrichment? =
         withContext(Dispatchers.IO) {
             val normalizedLanguage = normalizeTmdbLanguage(language)
-            val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage"
+            val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+            val providerToken = posterProviderCacheToken(activePosterProvider)
+            val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:$providerToken"
             enrichmentCache[cacheKey]?.let { return@withContext it }
 
             val numericId = tmdbId.toIntOrNull() ?: return@withContext null
@@ -132,7 +136,12 @@ class TmdbMetadataService @Inject constructor(
                             logo = buildImageUrl(network.logoPath, size = "w300")
                         )
                     }
-                val poster = buildImageUrl(details?.posterPath, size = "w500")
+                val poster = posterRatingsUrlResolver.resolvePosterUrl(
+                    originalPosterUrl = buildImageUrl(details?.posterPath, size = "w500"),
+                    contentId = "tmdb:$numericId",
+                    contentType = contentType,
+                    activeProvider = activePosterProvider
+                )
                 val backdrop = buildImageUrl(details?.backdropPath, size = "w1280")
                 
                 val collectionId = details?.belongsToCollection?.id
@@ -336,7 +345,9 @@ class TmdbMetadataService @Inject constructor(
         maxItems: Int = 12
     ): List<MetaPreview> = withContext(Dispatchers.IO) {
         val normalizedLanguage = normalizeTmdbLanguage(language)
-        val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:more_like"
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:more_like:$providerToken"
         moreLikeThisCache[cacheKey]?.let { return@withContext it }
 
         val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyList()
@@ -426,7 +437,7 @@ class TmdbMetadataService @Inject constructor(
                             rec.releaseDate?.take(4)
                         }
 
-                        MetaPreview(
+                        val basePreview = MetaPreview(
                             id = "tmdb:${rec.id}",
                             type = recContentType,
                             name = title,
@@ -439,6 +450,7 @@ class TmdbMetadataService @Inject constructor(
                             imdbRating = rec.voteAverage?.toFloat(),
                             genres = emptyList()
                         )
+                        posterRatingsUrlResolver.apply(basePreview, activePosterProvider)
                     }
                 }.awaitAll().filterNotNull()
             }
@@ -458,7 +470,9 @@ class TmdbMetadataService @Inject constructor(
         language: String = "en"
     ): List<MetaPreview> = withContext(Dispatchers.IO) {
         val normalizedLanguage = normalizeTmdbLanguage(language)
-        val cacheKey = "$collectionId:$normalizedLanguage:collection"
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        val cacheKey = "$collectionId:$normalizedLanguage:collection:$providerToken"
         collectionCache[cacheKey]?.let { return@withContext it }
 
         try {
@@ -493,7 +507,7 @@ class TmdbMetadataService @Inject constructor(
                         val fallbackPoster = buildImageUrl(part.posterPath, size = "w780")
                         val releaseInfo = part.releaseDate?.take(4)
 
-                        MetaPreview(
+                        val basePreview = MetaPreview(
                             id = "tmdb:${part.id}",
                             type = ContentType.MOVIE,
                             name = title,
@@ -506,6 +520,7 @@ class TmdbMetadataService @Inject constructor(
                             imdbRating = part.voteAverage?.toFloat(),
                             genres = emptyList()
                         )
+                        posterRatingsUrlResolver.apply(basePreview, activePosterProvider)
                     }
                 }.awaitAll().filterNotNull()
             }
@@ -537,6 +552,13 @@ class TmdbMetadataService @Inject constructor(
             ?.takeIf { it.isNotBlank() }
             ?.replace('_', '-')
             ?: "en"
+    }
+
+    private fun posterProviderCacheToken(
+        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
+    ): String {
+        if (activeProvider == null) return "native"
+        return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
     }
 
     private fun selectBestLocalizedImagePath(
