@@ -89,25 +89,9 @@ fun ThemeSettingsContent(
     var pendingLanguageRestart by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val strLanguageSystem = stringResource(R.string.appearance_language_system)
-    val supportedLocales = remember(strLanguageSystem) {
+    val supportedLocales = remember {
         listOf(
-            null to strLanguageSystem,
-            "en" to "English",
-            "es" to "Español",
-            "es-419" to "Español (Latinoamérica)",
-            "hu" to "Magyar",
-            "fr" to "Français",
-            "it" to "Italiano",
-            "pl" to "Polski",
-            "pt-PT" to "Português (Portugal)",
-            "pt-BR" to "Português (Brasil)",
-            "tr" to "Türkçe",
-            "se" to "Svenska",
-            "sk" to "Slovensky",
-            "sl" to "Slovenščina",
-            "ro" to "Română",
-            "ja" to "日本語"
+            "en" to "English"
         )
     }
     var selectedTag by remember {
@@ -116,7 +100,7 @@ fun ThemeSettingsContent(
                 .getString("locale_tag", null)?.takeIf { it.isNotEmpty() }
         )
     }
-    val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: stringResource(R.string.appearance_language_system)
+    val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: "English"
     val strRestartHint = stringResource(R.string.appearance_language_restart_hint)
 
     LaunchedEffect(pendingLanguageRestart, showLanguageDialog) {
