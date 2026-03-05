@@ -19,7 +19,6 @@ import com.nexio.tv.ui.screens.addon.AddonManagerScreen
 import com.nexio.tv.ui.screens.addon.CatalogOrderScreen
 import com.nexio.tv.ui.screens.library.LibraryScreen
 import com.nexio.tv.ui.screens.player.PlayerScreen
-import com.nexio.tv.ui.screens.plugin.PluginScreen
 import com.nexio.tv.ui.screens.search.DiscoverScreen
 import com.nexio.tv.ui.screens.search.SearchScreen
 import com.nexio.tv.ui.screens.settings.AboutScreen
@@ -56,7 +55,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = targetState.arguments
-                .getString("autoPlayNav")
+                ?.getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 EnterTransition.None
@@ -68,7 +67,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = targetState.arguments
-                .getString("autoPlayNav")
+                ?.getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isStreamToPlayer(from, to) && isAutoPlayNav) {
                 ExitTransition.None
@@ -80,7 +79,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = initialState.arguments
-                .getString("autoPlayNav")
+                ?.getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 EnterTransition.None
@@ -92,7 +91,7 @@ fun NexioNavHost(
             val from = initialState.destination.route.orEmpty()
             val to = targetState.destination.route.orEmpty()
             val isAutoPlayNav = initialState.arguments
-                .getString("autoPlayNav")
+                ?.getString("autoPlayNav")
                 ?.toBooleanStrictOrNull() == true
             if (isPlayerToStream(from, to) && isAutoPlayNav) {
                 ExitTransition.None
@@ -744,12 +743,6 @@ fun NexioNavHost(
 
         composable(Screen.CatalogOrder.route) {
             CatalogOrderScreen(
-                onBackPress = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Plugins.route) {
-            PluginScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }

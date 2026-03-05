@@ -14,9 +14,11 @@ object StreamAutoPlaySelector {
     ): List<AddonStreams> {
         if (streams.isEmpty()) return streams
 
-        val (addonEntries, pluginEntries) = streams.partition { it.addonName in installedOrder }
-        val orderedAddons = addonEntries.sortedBy { installedOrder.indexOf(it.addonName) }
-        return orderedAddons + pluginEntries
+        return streams.sortedBy { addonStreams ->
+            installedOrder.indexOf(addonStreams.addonName).let { index ->
+                if (index >= 0) index else Int.MAX_VALUE
+            }
+        }
     }
 
     private fun resolvePlayableUrl(stream: Stream): String? {
@@ -59,7 +61,6 @@ object StreamAutoPlaySelector {
         source: StreamAutoPlaySource,
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
-        selectedPlugins: Set<String>,
         preferredBingeGroup: String? = null
     ): Stream? {
         if (streams.isEmpty()) return null
@@ -67,15 +68,9 @@ object StreamAutoPlaySelector {
         val sourceScopedStreams = when (source) {
             StreamAutoPlaySource.ALL_SOURCES -> streams
             StreamAutoPlaySource.INSTALLED_ADDONS_ONLY -> streams.filter { it.addonName in installedAddonNames }
-            StreamAutoPlaySource.ENABLED_PLUGINS_ONLY -> streams.filter { it.addonName !in installedAddonNames }
         }
         val candidateStreams = sourceScopedStreams.filter { stream ->
-            val isAddonStream = stream.addonName in installedAddonNames
-            if (isAddonStream) {
-                selectedAddons.isEmpty() || stream.addonName in selectedAddons
-            } else {
-                selectedPlugins.isEmpty() || stream.addonName in selectedPlugins
-            }
+            selectedAddons.isEmpty() || stream.addonName in selectedAddons
         }
         if (candidateStreams.isEmpty()) return null
         if (mode == StreamAutoPlayMode.MANUAL) return null

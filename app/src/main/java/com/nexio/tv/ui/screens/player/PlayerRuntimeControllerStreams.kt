@@ -184,24 +184,10 @@ private suspend fun PlayerRuntimeController.updateSourceChipsForFetchStart(
     type: String,
     installedAddons: List<com.nexio.tv.domain.model.Addon>
 ) {
-    val addonNames = installedAddons
+    val ordered = installedAddons
         .filter { it.supportsStreamResourceForChip(type) }
         .map { it.displayName }
-
-    val pluginNames = try {
-        if (pluginManager.pluginsEnabled.first()) {
-            pluginManager.enabledScrapers.first()
-                .filter { it.supportsType(type) }
-                .map { it.name }
-                .distinct()
-        } else {
-            emptyList()
-        }
-    } catch (_: Exception) {
-        emptyList()
-    }
-
-    val ordered = (addonNames + pluginNames).distinct()
+        .distinct()
     _uiState.update {
         it.copy(
             sourceChips = ordered.map { name -> SourceChipItem(name, SourceChipStatus.LOADING) }
@@ -745,11 +731,6 @@ internal fun PlayerRuntimeController.playNextEpisode() {
             } else {
                 playerSettings.streamAutoPlaySelectedAddons
             }
-            val effectiveSelectedPlugins = if (shouldAutoSelectInManualMode) {
-                emptySet()
-            } else {
-                playerSettings.streamAutoPlaySelectedPlugins
-            }
             val effectiveRegex = if (shouldAutoSelectInManualMode) {
                 ""
             } else {
@@ -773,7 +754,6 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                             source = effectiveSource,
                             installedAddonNames = installedAddonOrder.toSet(),
                             selectedAddons = effectiveSelectedAddons,
-                            selectedPlugins = effectiveSelectedPlugins,
                             preferredBingeGroup = if (playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) {
                                 currentStreamBingeGroup
                             } else {

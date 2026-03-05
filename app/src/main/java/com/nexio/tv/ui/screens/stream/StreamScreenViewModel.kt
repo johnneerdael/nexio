@@ -6,7 +6,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
-import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
@@ -45,7 +44,6 @@ class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
-    private val pluginManager: PluginManager,
     private val metaRepository: MetaRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
@@ -270,8 +268,7 @@ class StreamScreenViewModel @Inject constructor(
                         regexPattern = playerSettings.streamAutoPlayRegex,
                         source = playerSettings.streamAutoPlaySource,
                         installedAddonNames = installedAddonOrder.toSet(),
-                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons,
-                        selectedPlugins = playerSettings.streamAutoPlaySelectedPlugins
+                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons
                     )
                 }
                 if (selectedAutoPlayStream != null) {
@@ -395,24 +392,10 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private suspend fun updateSourceChipsForFetchStart(installedAddons: List<com.nexio.tv.domain.model.Addon>) {
-        val addonNames = installedAddons
+        val orderedNames = installedAddons
             .filter { it.supportsStreamResourceForChip(contentType) }
             .map { it.displayName }
-
-        val pluginNames = try {
-            if (pluginManager.pluginsEnabled.first()) {
-                pluginManager.enabledScrapers.first()
-                    .filter { it.supportsType(contentType) }
-                    .map { it.name }
-                    .distinct()
-            } else {
-                emptyList()
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        val orderedNames = (addonNames + pluginNames).distinct()
+            .distinct()
         if (orderedNames.isEmpty()) {
             updateUiStateIfChanged { it.copy(sourceChips = emptyList()) }
             return

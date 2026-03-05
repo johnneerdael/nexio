@@ -10,8 +10,8 @@ interface StreamRepository {
      * Fetches streams from all installed addons for a given video ID
      * @param type The content type (movie, series, etc.)
      * @param videoId The video ID (for movies: IMDB ID, for series: IMDB_ID:season:episode)
-     * @param season Optional season number for TV shows (used by local plugins)
-     * @param episode Optional episode number for TV shows (used by local plugins)
+     * @param season Optional season number for TV shows
+     * @param episode Optional episode number for TV shows
      * @return Flow of AddonStreams grouped by addon
      */
     fun getStreamsFromAllAddons(

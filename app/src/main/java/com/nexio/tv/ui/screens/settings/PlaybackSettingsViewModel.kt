@@ -2,7 +2,6 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.util.UnstableApi
-import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -17,7 +16,6 @@ import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -25,8 +23,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
-    private val addonRepository: AddonRepository,
-    private val pluginManager: PluginManager
+    private val addonRepository: AddonRepository
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
@@ -41,17 +38,6 @@ class PlaybackSettingsViewModel @Inject constructor(
             .distinct()
             .sorted()
     }
-    val enabledPluginNames: Flow<List<String>> = combine(
-        pluginManager.pluginsEnabled,
-        pluginManager.scrapers
-    ) { pluginsEnabled, scrapers ->
-        if (!pluginsEnabled) {
-            emptyList()
-        } else {
-            scrapers.filter { it.enabled }.map { it.name }.distinct().sorted()
-        }
-    }
-
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         playerSettingsDataStore.setPlayerPreference(preference)
     }
@@ -322,10 +308,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlaySelectedAddons(addons: Set<String>) {
         playerSettingsDataStore.setStreamAutoPlaySelectedAddons(addons)
-    }
-
-    suspend fun setStreamAutoPlaySelectedPlugins(plugins: Set<String>) {
-        playerSettingsDataStore.setStreamAutoPlaySelectedPlugins(plugins)
     }
 
     suspend fun setStreamAutoPlayRegex(regex: String) {

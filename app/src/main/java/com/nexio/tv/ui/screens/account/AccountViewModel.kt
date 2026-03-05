@@ -8,11 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
 import com.nexio.tv.core.sync.LibrarySyncService
-import com.nexio.tv.core.sync.PluginSyncService
 import com.nexio.tv.core.sync.WatchProgressSyncService
 import com.nexio.tv.core.sync.WatchedItemsSyncService
 import com.nexio.tv.data.local.LibraryPreferences
@@ -46,12 +44,10 @@ import javax.inject.Inject
 class AccountViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val syncRepository: SyncRepository,
-    private val pluginSyncService: PluginSyncService,
     private val addonSyncService: AddonSyncService,
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
     private val watchedItemsSyncService: WatchedItemsSyncService,
-    private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
@@ -347,12 +343,10 @@ class AccountViewModel @Inject constructor(
 
             val stats = runCatching {
                 val addonsCount = addonRepository.getInstalledAddons().first().size
-                val pluginsCount = pluginManager.repositories.first().size
                 val libraryCount = libraryPreferences.getAllItems().size
                 val watchProgressCount = watchProgressRepository.allProgress.first().size
                 AccountConnectedStats(
                     addons = addonsCount,
-                    plugins = pluginsCount,
                     library = libraryCount,
                     watchProgress = watchProgressCount
                 )
@@ -370,7 +364,6 @@ class AccountViewModel @Inject constructor(
     @Serializable
     private data class SyncOverviewResponse(
         val addons: Map<String, Int> = emptyMap(),
-        val plugins: Map<String, Int> = emptyMap(),
         @SerialName("library_items") val libraryItems: Map<String, Int> = emptyMap(),
         @SerialName("watch_progress") val watchProgress: Map<String, Int> = emptyMap(),
         @SerialName("watched_items") val watchedItems: Map<String, Int> = emptyMap(),
@@ -391,7 +384,7 @@ class AccountViewModel @Inject constructor(
                 val response = postgrest.rpc("get_sync_overview")
                     .decodeAs<SyncOverviewResponse>()
 
-                val allProfileIds = (response.addons.keys + response.plugins.keys +
+                val allProfileIds = (response.addons.keys +
                     response.libraryItems.keys + response.watchProgress.keys +
                     response.watchedItems.keys + response.profiles.keys)
                     .mapNotNull { it.toIntOrNull() }
@@ -406,7 +399,6 @@ class AccountViewModel @Inject constructor(
                         profileName = remote?.name ?: "Profile $pid",
                         avatarColorHex = remote?.color ?: "#1E88E5",
                         addons = response.addons[pidStr] ?: 0,
-                        plugins = response.plugins[pidStr] ?: 0,
                         library = response.libraryItems[pidStr] ?: 0,
                         watchProgress = response.watchProgress[pidStr] ?: 0,
                         watchedItems = response.watchedItems[pidStr] ?: 0
@@ -416,7 +408,6 @@ class AccountViewModel @Inject constructor(
                 SyncOverview(
                     profileCount = response.profiles.size,
                     totalAddons = response.addons.values.sum(),
-                    totalPlugins = response.plugins.values.sum(),
                     totalLibrary = response.libraryItems.values.sum(),
                     totalWatchProgress = response.watchProgress.values.sum(),
                     totalWatchedItems = response.watchedItems.values.sum(),
@@ -545,7 +536,6 @@ class AccountViewModel @Inject constructor(
     }
 
     private suspend fun pushLocalDataToRemote() {
-        pluginSyncService.pushToRemote()
         addonSyncService.pushToRemote()
         watchProgressSyncService.pushToRemote()
         librarySyncService.pushToRemote()
@@ -554,14 +544,6 @@ class AccountViewModel @Inject constructor(
 
     private suspend fun pullRemoteData(): Result<Unit> {
         try {
-            pluginManager.isSyncingFromRemote = true
-            val remotePluginUrls = pluginSyncService.getRemoteRepoUrls().getOrElse { throw it }
-            pluginManager.reconcileWithRemoteRepoUrls(
-                remoteUrls = remotePluginUrls,
-                removeMissingLocal = true
-            )
-            pluginManager.isSyncingFromRemote = false
-
             addonRepository.isSyncingFromRemote = true
             val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
             addonRepository.reconcileWithRemoteAddonUrls(
@@ -600,7 +582,6 @@ class AccountViewModel @Inject constructor(
             }
             return Result.success(Unit)
         } catch (e: Exception) {
-            pluginManager.isSyncingFromRemote = false
             addonRepository.isSyncingFromRemote = false
             watchProgressRepository.isSyncingFromRemote = false
             libraryRepository.isSyncingFromRemote = false

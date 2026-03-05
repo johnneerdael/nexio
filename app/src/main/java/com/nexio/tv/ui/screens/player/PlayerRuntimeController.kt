@@ -7,7 +7,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import com.nexio.tv.core.plugin.PluginManager
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -37,7 +36,6 @@ class PlayerRuntimeController(
     internal val metaRepository: MetaRepository,
     internal val streamRepository: StreamRepository,
     internal val addonRepository: AddonRepository,
-    internal val pluginManager: PluginManager,
     internal val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val skipIntroRepository: SkipIntroRepository,

@@ -3,19 +3,14 @@ package com.nexio.tv.data.repository
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
-import com.nexio.tv.core.plugin.PluginManager
-import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonStreams
-import com.nexio.tv.domain.model.ProxyHeaders
 import com.nexio.tv.domain.model.Stream
-import com.nexio.tv.domain.model.StreamBehaviorHints
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -29,9 +24,7 @@ private const val TAG = "StreamRepositoryImpl"
 
 class StreamRepositoryImpl @Inject constructor(
     private val api: AddonApi,
-    private val addonRepository: AddonRepository,
-    private val pluginManager: PluginManager,
-    private val tmdbService: TmdbService
+    private val addonRepository: AddonRepository
 ) : StreamRepository {
 
     override fun getStreamsFromAllAddons(
@@ -50,10 +43,6 @@ class StreamRepositoryImpl @Inject constructor(
                 addon.supportsStreamResource(type)
             }
 
-            // Convert IMDB ID to TMDB ID if needed for plugins
-            val tmdbId = tmdbService.ensureTmdbId(videoId, type)
-            Log.d(TAG, "Video ID: $videoId -> TMDB ID: $tmdbId (type: $type)")
-
             // Accumulate results as they arrive
             val accumulatedResults = mutableListOf<AddonStreams>()
 
@@ -62,7 +51,7 @@ class StreamRepositoryImpl @Inject constructor(
                 val resultChannel = Channel<AddonStreams>(Channel.UNLIMITED)
                 
                 // Track number of pending jobs
-                val totalJobs = streamAddons.size + (if (tmdbId != null) 1 else 0)
+                val totalJobs = streamAddons.size
                 var completedJobs = 0
 
                 // Launch addon jobs
@@ -99,28 +88,6 @@ class StreamRepositoryImpl @Inject constructor(
                     }
                 }
 
-                // Launch plugin jobs if we have TMDB ID - each scraper sends its own result
-                if (tmdbId != null) {
-                    launch {
-                        try {
-                            // Stream plugins individually
-                            streamLocalPlugins(tmdbId, type, season, episode, resultChannel) {
-                                completedJobs++
-                                if (completedJobs >= totalJobs) {
-                                    resultChannel.close()
-                                }
-                            }
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            Log.e(TAG, "Plugin execution failed: ${e.message}")
-                            completedJobs++
-                            if (completedJobs >= totalJobs) {
-                                resultChannel.close()
-                            }
-                        }
-                    }
-                }
-
                 // Handle case where there are no jobs
                 if (totalJobs == 0) {
                     resultChannel.close()
@@ -143,108 +110,6 @@ class StreamRepositoryImpl @Inject constructor(
             Log.e(TAG, "Failed to fetch streams: ${e.message}", e)
             emit(NetworkResult.Error(e.message ?: "Failed to fetch streams"))
         }
-    }
-
-    /**
-     * Stream local plugin results - each scraper sends results individually
-     */
-    private suspend fun streamLocalPlugins(
-        tmdbId: String,
-        type: String,
-        season: Int?,
-        episode: Int?,
-        resultChannel: Channel<AddonStreams>,
-        onComplete: () -> Unit
-    ) {
-        // Check if plugins are enabled
-        if (!pluginManager.pluginsEnabled.first()) {
-            Log.d(TAG, "Plugins are disabled")
-            onComplete()
-            return
-        }
-
-        // Normalize media type for plugins
-        val mediaType = when (type.lowercase()) {
-            "series", "tv", "show" -> "tv"
-            else -> type.lowercase()
-        }
-
-        Log.d(TAG, "Streaming plugins for TMDB: $tmdbId, type: $mediaType")
-
-        try {
-            // Collect streaming results from each scraper
-            pluginManager.executeScrapersStreaming(
-                tmdbId = tmdbId,
-                mediaType = mediaType,
-                season = season,
-                episode = episode
-            ).collect { (scraperName, results) ->
-                if (results.isNotEmpty()) {
-                    val addonStreams = AddonStreams(
-                        addonName = scraperName,
-                        addonLogo = null,
-                        streams = results.map { result ->
-                            val baseTitle = result.title.takeIf { it.isNotBlank() }
-                            val baseName = result.name?.takeIf { it.isNotBlank() }
-                            val quality = result.quality?.takeIf { it.isNotBlank() }
-
-                            val displayTitle = buildString {
-                                append(baseTitle ?: baseName ?: scraperName)
-                                if (!quality.isNullOrBlank() && !(baseTitle ?: "").contains(quality)) {
-                                    append(" ").append(quality)
-                                }
-                            }.takeIf { it.isNotBlank() }
-
-                            val displayName = buildString {
-                                append(baseName ?: baseTitle ?: scraperName)
-                                if (!quality.isNullOrBlank() && !(baseName ?: "").contains(quality)) {
-                                    append(" - ").append(quality)
-                                }
-                            }.takeIf { it.isNotBlank() }
-
-                            Stream(
-                                name = displayName,
-                                title = displayTitle,
-                                url = result.url,
-                                addonName = scraperName,
-                                addonLogo = null,
-                                description = buildDescription(result),
-                                behaviorHints = result.headers?.let { headers ->
-                                    StreamBehaviorHints(
-                                        notWebReady = null,
-                                        bingeGroup = null,
-                                        countryWhitelist = null,
-                                        proxyHeaders = ProxyHeaders(request = headers, response = null)
-                                    )
-                                },
-                                infoHash = result.infoHash,
-                                fileIdx = null,
-                                ytId = null,
-                                externalUrl = null
-                            )
-                        }
-                    )
-                    resultChannel.send(addonStreams)
-                    Log.d(TAG, "Streamed ${results.size} results from $scraperName")
-                }
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.e(TAG, "Failed to stream plugins: ${e.message}", e)
-        } finally {
-            onComplete()
-        }
-    }
-
-    /**
-     * Build a description string from scraper result
-     */
-    private fun buildDescription(result: com.nexio.tv.domain.model.LocalScraperResult): String? {
-        val parts = mutableListOf<String>()
-        result.quality?.let { parts.add(it) }
-        result.size?.let { parts.add(it) }
-        result.language?.let { parts.add(it) }
-        return if (parts.isNotEmpty()) parts.joinToString(" • ") else null
     }
 
     override suspend fun getStreamsFromAddon(
