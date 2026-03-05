@@ -15,10 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +56,7 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nexio.tv.R
 import com.nexio.tv.core.qr.QrCodeGenerator
+import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.ui.components.NexioDialog
@@ -70,6 +74,7 @@ fun TraktScreen(
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     var showDaysCapDialog by remember { mutableStateOf(false) }
     var showUnairedNextUpDialog by remember { mutableStateOf(false) }
+    var showCatalogDialog by remember { mutableStateOf(false) }
     val strAllHistory = stringResource(R.string.trakt_all_history)
     val strDaysFormat = stringResource(R.string.trakt_days_format)
     val cwWindowFormatter: (Int) -> String = { days ->
@@ -278,6 +283,25 @@ fun TraktScreen(
 
             if (uiState.mode == TraktConnectionMode.CONNECTED) {
                 SettingsActionRow(
+                    title = stringResource(R.string.trakt_auth_status_title),
+                    subtitle = stringResource(R.string.trakt_auth_status_subtitle),
+                    value = stringResource(R.string.trakt_auth_status_authenticated),
+                    onClick = {},
+                    enabled = false
+                )
+                SettingsActionRow(
+                    title = stringResource(R.string.trakt_catalogs_title),
+                    subtitle = stringResource(R.string.trakt_catalogs_subtitle),
+                    value = stringResource(
+                        R.string.trakt_catalogs_enabled_count,
+                        uiState.catalogPreferences.enabledCatalogs.size
+                    ),
+                    onClick = {
+                        viewModel.onCatalogManagementOpened()
+                        showCatalogDialog = true
+                    }
+                )
+                SettingsActionRow(
                     title = stringResource(R.string.trakt_continue_watching_window),
                     subtitle = stringResource(R.string.trakt_continue_watching_subtitle),
                     value = cwWindowFormatter(uiState.continueWatchingDaysCap),
@@ -441,6 +465,86 @@ fun TraktScreen(
         }
     }
 
+    if (showCatalogDialog && uiState.mode == TraktConnectionMode.CONNECTED) {
+        NexioDialog(
+            onDismiss = { showCatalogDialog = false },
+            title = stringResource(R.string.trakt_catalogs_title),
+            subtitle = stringResource(R.string.trakt_catalogs_dialog_subtitle),
+            width = 920.dp,
+            suppressFirstKeyUp = false
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(
+                        items = uiState.catalogPreferences.catalogOrder,
+                        key = { it }
+                    ) { catalogId ->
+                        val enabled = catalogId in uiState.catalogPreferences.enabledCatalogs
+                        TraktCatalogToggleCard(
+                            catalogId = catalogId,
+                            enabled = enabled,
+                            onToggle = {
+                                viewModel.onCatalogEnabledChanged(catalogId, !enabled)
+                            },
+                            onMoveUp = { viewModel.onMoveCatalogUp(catalogId) },
+                            onMoveDown = { viewModel.onMoveCatalogDown(catalogId) }
+                        )
+                    }
+
+                    item(key = "popular_lists_header") {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.trakt_popular_lists_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = NexioColors.TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.trakt_popular_lists_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NexioColors.TextSecondary
+                        )
+                    }
+
+                    items(
+                        items = uiState.popularLists,
+                        key = { it.key }
+                    ) { option ->
+                        val selected = option.key in uiState.catalogPreferences.selectedPopularListKeys
+                        SettingsToggleRow(
+                            title = option.title,
+                            subtitle = "${option.itemCount} items",
+                            checked = selected,
+                            onToggle = {
+                                viewModel.onPopularListSelected(option.key, !selected)
+                            }
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { showCatalogDialog = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
+                        )
+                    ) {
+                        Text(stringResource(R.string.action_close))
+                    }
+                }
+            }
+        }
+    }
+
     if (showDisconnectConfirm) {
         NexioDialog(
             onDismiss = { showDisconnectConfirm = false },
@@ -567,6 +671,77 @@ private fun TraktStatItem(
             color = NexioColors.TextSecondary,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+private fun TraktCatalogToggleCard(
+    catalogId: String,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
+) {
+    SettingsGroupCard {
+        SettingsToggleRow(
+            title = traktCatalogTitle(catalogId),
+            subtitle = traktCatalogSubtitle(catalogId),
+            checked = enabled,
+            onToggle = onToggle
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = onMoveUp,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.trakt_move_up))
+            }
+            Button(
+                onClick = onMoveDown,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.trakt_move_down))
+            }
+        }
+    }
+}
+
+@Composable
+private fun traktCatalogTitle(catalogId: String): String {
+    return when (catalogId) {
+        TraktCatalogIds.UP_NEXT -> stringResource(R.string.trakt_catalog_up_next)
+        TraktCatalogIds.TRENDING_MOVIES -> stringResource(R.string.trakt_catalog_trending_movies)
+        TraktCatalogIds.TRENDING_SHOWS -> stringResource(R.string.trakt_catalog_trending_shows)
+        TraktCatalogIds.POPULAR_MOVIES -> stringResource(R.string.trakt_catalog_popular_movies)
+        TraktCatalogIds.POPULAR_SHOWS -> stringResource(R.string.trakt_catalog_popular_shows)
+        TraktCatalogIds.RECOMMENDED_MOVIES -> stringResource(R.string.trakt_catalog_recommended_movies)
+        TraktCatalogIds.RECOMMENDED_SHOWS -> stringResource(R.string.trakt_catalog_recommended_shows)
+        TraktCatalogIds.CALENDAR -> stringResource(R.string.trakt_catalog_calendar)
+        else -> catalogId
+    }
+}
+
+@Composable
+private fun traktCatalogSubtitle(catalogId: String): String {
+    return when (catalogId) {
+        TraktCatalogIds.UP_NEXT -> stringResource(R.string.trakt_catalog_up_next_subtitle)
+        TraktCatalogIds.TRENDING_MOVIES -> stringResource(R.string.trakt_catalog_trending_movies_subtitle)
+        TraktCatalogIds.TRENDING_SHOWS -> stringResource(R.string.trakt_catalog_trending_shows_subtitle)
+        TraktCatalogIds.POPULAR_MOVIES -> stringResource(R.string.trakt_catalog_popular_movies_subtitle)
+        TraktCatalogIds.POPULAR_SHOWS -> stringResource(R.string.trakt_catalog_popular_shows_subtitle)
+        TraktCatalogIds.RECOMMENDED_MOVIES -> stringResource(R.string.trakt_catalog_recommended_movies_subtitle)
+        TraktCatalogIds.RECOMMENDED_SHOWS -> stringResource(R.string.trakt_catalog_recommended_shows_subtitle)
+        TraktCatalogIds.CALENDAR -> stringResource(R.string.trakt_catalog_calendar_subtitle)
+        else -> ""
     }
 }
 
