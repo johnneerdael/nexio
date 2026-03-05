@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.mapper.toDomain
@@ -17,7 +18,8 @@ import javax.inject.Singleton
 
 @Singleton
 class CatalogRepositoryImpl @Inject constructor(
-    private val api: AddonApi
+    private val api: AddonApi,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
 ) : CatalogRepository {
     companion object {
         private const val TAG = "CatalogRepository"
@@ -37,6 +39,12 @@ class CatalogRepositoryImpl @Inject constructor(
         extraArgs: Map<String, String>,
         supportsSkip: Boolean
     ): Flow<NetworkResult<CatalogRow>> = flow {
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerCacheToken = if (activePosterProvider == null) {
+            "native"
+        } else {
+            "${activePosterProvider.provider.name}:${activePosterProvider.apiKey.hashCode()}"
+        }
         val cacheKey = buildCacheKey(
             addonBaseUrl = addonBaseUrl,
             addonId = addonId,
@@ -44,7 +52,8 @@ class CatalogRepositoryImpl @Inject constructor(
             catalogId = catalogId,
             skip = skip,
             skipStep = skipStep,
-            extraArgs = extraArgs
+            extraArgs = extraArgs,
+            providerCacheToken = providerCacheToken
         )
 
         // Emit cached data immediately if available
@@ -63,7 +72,9 @@ class CatalogRepositoryImpl @Inject constructor(
 
         when (val result = safeApiCall { api.getCatalog(url) }) {
             is NetworkResult.Success -> {
-                val items = result.data.metas.map { it.toDomain() }
+                val items = result.data.metas.map { meta ->
+                    posterRatingsUrlResolver.apply(meta.toDomain(), activePosterProvider)
+                }
                 Log.d(
                     TAG,
                     "Catalog fetch success addonId=$addonId type=$type catalogId=$catalogId items=${items.size}"
@@ -147,12 +158,13 @@ class CatalogRepositoryImpl @Inject constructor(
         catalogId: String,
         skip: Int,
         skipStep: Int,
-        extraArgs: Map<String, String>
+        extraArgs: Map<String, String>,
+        providerCacheToken: String
     ): String {
         val normalizedArgs = extraArgs.entries
             .sortedBy { it.key }
             .joinToString("&") { "${it.key}=${it.value}" }
         val normalizedBaseUrl = addonBaseUrl.trim().trimEnd('/').lowercase()
-        return "${normalizedBaseUrl}_${addonId}_${type}_${catalogId}_${skip}_${skipStep}_${normalizedArgs}"
+        return "${normalizedBaseUrl}_${addonId}_${type}_${catalogId}_${skip}_${skipStep}_${normalizedArgs}_${providerCacheToken}"
     }
 }

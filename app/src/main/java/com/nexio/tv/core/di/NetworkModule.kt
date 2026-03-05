@@ -11,6 +11,8 @@ import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.MDBListApi
+import com.nexio.tv.data.remote.api.RpdbApi
+import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -260,5 +262,37 @@ object NetworkModule {
     @Singleton
     fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
         retrofit.create(MDBListApi::class.java)
+
+    // --- Poster ratings APIs ---
+
+    @Provides
+    @Singleton
+    @Named("rpdb")
+    fun provideRpdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.ratingposterdb.com/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideRpdbApi(@Named("rpdb") retrofit: Retrofit): RpdbApi =
+        retrofit.create(RpdbApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("topPosters")
+    fun provideTopPostersRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.top-streaming.stream/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideTopPostersApi(@Named("topPosters") retrofit: Retrofit): TopPostersApi =
+        retrofit.create(TopPostersApi::class.java)
 
 }

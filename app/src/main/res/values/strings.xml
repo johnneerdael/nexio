@@ -147,10 +147,27 @@
     <string name="account_stat_progress">progress</string>
     <string name="account_stat_watched">watched</string>
     <string name="settings_integrations_section">Integrations</string>
-    <string name="settings_integrations_section_subtitle">Choose TMDB or MDBList</string>
+    <string name="settings_integrations_section_subtitle">Configure external metadata and poster integrations</string>
     <string name="settings_tmdb_subtitle">Metadata enrichment controls</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
     <string name="settings_animeskip_subtitle">Anime intro/outro skip timestamps</string>
+    <string name="poster_ratings_title">Poster Ratings</string>
+    <string name="poster_ratings_subtitle">Use RPDB or TOPPosters rated posters</string>
+    <string name="poster_ratings_api_key_title">API Key</string>
+    <string name="poster_ratings_rpdb_title">RatingPostersDB (RPDB)</string>
+    <string name="poster_ratings_rpdb_subtitle">Rated posters from RPDB (exclusive with TOPPosters)</string>
+    <string name="poster_ratings_rpdb_api_key_subtitle">Required when RPDB is enabled</string>
+    <string name="poster_ratings_top_title">TOPPosters</string>
+    <string name="poster_ratings_top_subtitle">Rated posters from TOPPosters (exclusive with RPDB)</string>
+    <string name="poster_ratings_top_api_key_subtitle">Required when TOPPosters is enabled</string>
+    <string name="poster_ratings_rpdb_dialog_title">RPDB API Key</string>
+    <string name="poster_ratings_rpdb_dialog_subtitle">Enter your RPDB API key to validate and enable rated posters</string>
+    <string name="poster_ratings_rpdb_dialog_placeholder">Enter RPDB API key</string>
+    <string name="poster_ratings_top_dialog_title">TOPPosters API Key</string>
+    <string name="poster_ratings_top_dialog_subtitle">Enter your TOPPosters API key to validate and enable rated posters</string>
+    <string name="poster_ratings_top_dialog_placeholder">Enter TOPPosters API key</string>
+    <string name="poster_ratings_rpdb_invalid_api_key">Invalid RPDB API key</string>
+    <string name="poster_ratings_top_invalid_api_key">Invalid TOPPosters API key</string>
 
     <!-- PlaybackSettingsScreen -->
     <string name="playback_title">Playback Settings</string>
