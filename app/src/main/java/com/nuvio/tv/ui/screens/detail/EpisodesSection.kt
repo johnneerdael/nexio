@@ -414,6 +414,36 @@ private fun EpisodeCard(
             )
         )
     }
+    val typography = MaterialTheme.typography
+    val episodeBadgeStyle = remember(typography, cardMetrics) {
+        typography.labelSmall.copy(
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = cardMetrics.episodeBadgeLetterSpacing,
+            color = Color.White.copy(alpha = 0.9f)
+        )
+    }
+    val titleStyle = remember(typography, cardMetrics) {
+        typography.titleMedium.copy(
+            fontWeight = FontWeight.ExtraBold,
+            lineHeight = cardMetrics.titleLineHeight
+        )
+    }
+    val descriptionStyle = remember(typography, cardMetrics) {
+        typography.bodySmall.copy(
+            color = Color.White.copy(alpha = 0.9f),
+            lineHeight = cardMetrics.descriptionLineHeight
+        )
+    }
+    val metaLabelStyle = remember(typography) {
+        typography.labelSmall.copy(color = NuvioColors.TextSecondary)
+    }
+    val ratingStyle = remember(typography) {
+        typography.labelSmall.copy(
+            color = Color(0xFFF5C518),
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+    val badgeBgColor = remember { Color.Black.copy(alpha = 0.42f) }
     val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(episode.thumbnail)
@@ -497,7 +527,6 @@ private fun EpisodeCard(
             modifier = Modifier
                 .width(cardMetrics.cardWidth)
                 .height(cardMetrics.cardHeight)
-                .clip(shape)
                 .background(NuvioColors.BackgroundCard)
                 .border(
                     width = 1.dp,
@@ -537,7 +566,7 @@ private fun EpisodeCard(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = Color.Black.copy(alpha = 0.42f),
+                            color = badgeBgColor,
                             shape = RoundedCornerShape(cardMetrics.episodeBadgeCornerRadius)
                         )
                         .padding(
@@ -547,21 +576,14 @@ private fun EpisodeCard(
                 ) {
                     Text(
                         text = episodeCode,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = cardMetrics.episodeBadgeLetterSpacing,
-                            color = Color.White.copy(alpha = 0.9f)
-                        ),
+                        style = episodeBadgeStyle,
                         maxLines = 1
                     )
                 }
 
                 Text(
                     text = episode.title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        lineHeight = cardMetrics.titleLineHeight
-                    ),
+                    style = titleStyle,
                     color = NuvioColors.TextPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -570,10 +592,7 @@ private fun EpisodeCard(
                 if (description.isNotBlank()) {
                     Text(
                         text = description,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color.White.copy(alpha = 0.9f),
-                            lineHeight = cardMetrics.descriptionLineHeight
-                        ),
+                        style = descriptionStyle,
                         maxLines = cardMetrics.descriptionMaxLines,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -598,9 +617,7 @@ private fun EpisodeCard(
                                 )
                                 Text(
                                     text = runtime,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        color = NuvioColors.TextSecondary
-                                    ),
+                                    style = metaLabelStyle,
                                     maxLines = 1
                                 )
                             }
@@ -621,10 +638,7 @@ private fun EpisodeCard(
                                 )
                                 Text(
                                     text = rating,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        color = Color(0xFFF5C518),
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
+                                    style = ratingStyle,
                                     maxLines = 1
                                 )
                             }
@@ -633,7 +647,7 @@ private fun EpisodeCard(
                         if (formattedDate.isNotBlank()) {
                             Text(
                                 text = formattedDate,
-                                style = MaterialTheme.typography.labelSmall.copy(color = NuvioColors.TextSecondary),
+                                style = metaLabelStyle,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.End,
@@ -645,6 +659,8 @@ private fun EpisodeCard(
             }
 
             if (showProgress) {
+                val progressBarRadius = cardMetrics.progressBarHeight / 2
+                val progressBgColor = remember { Color.Black.copy(alpha = 0.45f) }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -654,18 +670,21 @@ private fun EpisodeCard(
                             bottom = cardMetrics.contentPadding * 0.5f
                         )
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
                         .height(cardMetrics.progressBarHeight)
-                        .background(Color.Black.copy(alpha = 0.45f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progressPercent)
-                            .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
-                            .height(cardMetrics.progressBarHeight)
-                            .background(NuvioColors.Primary)
-                    )
-                }
+                        .drawWithCache {
+                            val r = progressBarRadius.toPx()
+                            val cr = androidx.compose.ui.geometry.CornerRadius(r)
+                            val fillWidth = size.width * progressPercent
+                            onDrawBehind {
+                                drawRoundRect(color = progressBgColor, cornerRadius = cr)
+                                drawRoundRect(
+                                    color = NuvioColors.Primary,
+                                    size = androidx.compose.ui.geometry.Size(fillWidth, size.height),
+                                    cornerRadius = cr
+                                )
+                            }
+                        }
+                )
             }
 
             if (showCompletedBadge) {
