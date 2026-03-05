@@ -1272,7 +1272,7 @@ private fun BackdropLayer(
     leftGradient: Brush,
     bottomGradient: Brush,
 ) {
-    val backdropAlpha by animateFloatAsState(
+    val backdropAlphaState = animateFloatAsState(
         targetValue = if (isTrailerPlaying) 0f else 1f,
         animationSpec = tween(durationMillis = 800),
         label = "backdropFade"
@@ -1291,7 +1291,11 @@ private fun BackdropLayer(
         AsyncImage(
             model = backdropRequest,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize().graphicsLayer { alpha = backdropAlpha },
+            modifier = if (isTrailerPlaying || backdropAlphaState.value < 1f) {
+                Modifier.fillMaxSize().graphicsLayer { alpha = backdropAlphaState.value }
+            } else {
+                Modifier.fillMaxSize()
+            },
             contentScale = ContentScale.Crop
         )
         TrailerPlayer(
