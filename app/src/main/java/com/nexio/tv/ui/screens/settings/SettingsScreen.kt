@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -60,7 +59,6 @@ import kotlinx.coroutines.delay
 
 internal enum class SettingsCategory {
     ACCOUNT,
-    PROFILES,
     APPEARANCE,
     LAYOUT,
     PLUGINS,
@@ -103,13 +101,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
         title = stringResource(R.string.settings_account),
         icon = Icons.Default.Person,
         subtitle = stringResource(R.string.settings_account_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
-        category = SettingsCategory.PROFILES,
-        title = stringResource(R.string.settings_profiles),
-        icon = Icons.Default.People,
-        subtitle = stringResource(R.string.settings_profiles_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
@@ -174,19 +165,15 @@ private fun rememberSettingsSectionSpecs() = listOf(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTrakt: () -> Unit = {},
-    onNavigateToAuthQrSignIn: () -> Unit = {},
-    profileViewModel: ProfileSettingsViewModel = hiltViewModel()
+    onNavigateToAuthQrSignIn: () -> Unit = {}
 ) {
-    val isPrimaryProfileActive by profileViewModel.isPrimaryProfileActive.collectAsStateWithLifecycle()
-
     val allSectionSpecs = rememberSettingsSectionSpecs()
-    val visibleSections = remember(isPrimaryProfileActive, allSectionSpecs) {
+    val visibleSections = remember(allSectionSpecs) {
         allSectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD
-                SettingsCategory.PROFILES -> isPrimaryProfileActive
-                SettingsCategory.ACCOUNT -> isPrimaryProfileActive
-                SettingsCategory.TRAKT -> isPrimaryProfileActive
+                SettingsCategory.ACCOUNT -> true
+                SettingsCategory.TRAKT -> true
                 else -> true
             }
         }
@@ -358,7 +345,6 @@ fun SettingsScreen(
                         }
                 ) {
                     when (selectedCategory) {
-                        SettingsCategory.PROFILES -> ProfileSettingsContent()
                         SettingsCategory.APPEARANCE -> ThemeSettingsContent(
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.APPEARANCE]

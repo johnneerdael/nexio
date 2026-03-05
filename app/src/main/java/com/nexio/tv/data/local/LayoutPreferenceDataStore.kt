@@ -1,26 +1,31 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.domain.model.HomeLayout
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.layoutPreferenceDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "layout_settings"
+)
+
 @Singleton
 class LayoutPreferenceDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
     companion object {
-        private const val FEATURE = "layout_settings"
         private const val DEFAULT_POSTER_CARD_WIDTH_DP = 126
         private const val DEFAULT_POSTER_CARD_HEIGHT_DP = 189
         private const val DEFAULT_POSTER_CARD_CORNER_RADIUS_DP = 12
@@ -28,8 +33,8 @@ class LayoutPreferenceDataStore @Inject constructor(
         private const val MIN_FOCUSED_POSTER_BACKDROP_EXPAND_DELAY_SECONDS = 0
     }
 
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.layoutPreferenceDataStore
+    private fun store() = dataStore
 
     private val gson = Gson()
 
@@ -58,10 +63,8 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
     private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
 
-    private fun <T> profileFlow(extract: (prefs: androidx.datastore.preferences.core.Preferences) -> T): Flow<T> =
-        profileManager.activeProfileId.flatMapLatest { pid ->
-            factory.get(pid, FEATURE).data.map { prefs -> extract(prefs) }
-        }
+    private fun <T> profileFlow(extract: (prefs: Preferences) -> T): Flow<T> =
+        dataStore.data.map { prefs -> extract(prefs) }
 
     val selectedLayout: Flow<HomeLayout> = profileFlow { prefs ->
         val layoutName = prefs[layoutKey] ?: HomeLayout.MODERN.name

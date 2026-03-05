@@ -1,27 +1,29 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.domain.model.TmdbSettings
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.tmdbSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "tmdb_settings"
+)
+
 @Singleton
 class TmdbSettingsDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val FEATURE = "tmdb_settings"
-    }
-
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.tmdbSettingsDataStore
+    private fun store() = dataStore
 
     private val enabledKey = booleanPreferencesKey("tmdb_enabled")
     private val languageKey = stringPreferencesKey("tmdb_language")
@@ -35,22 +37,20 @@ class TmdbSettingsDataStore @Inject constructor(
     private val useMoreLikeThisKey = booleanPreferencesKey("tmdb_use_more_like_this")
     private val useCollectionsKey = booleanPreferencesKey("tmdb_use_collections")
 
-    val settings: Flow<TmdbSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            TmdbSettings(
-                enabled = prefs[enabledKey] ?: false,
-                language = prefs[languageKey] ?: "en",
-                useArtwork = prefs[useArtworkKey] ?: true,
-                useBasicInfo = prefs[useBasicInfoKey] ?: true,
-                useDetails = prefs[useDetailsKey] ?: true,
-                useCredits = prefs[useCreditsKey] ?: true,
-                useProductions = prefs[useProductionsKey] ?: true,
-                useNetworks = prefs[useNetworksKey] ?: true,
-                useEpisodes = prefs[useEpisodesKey] ?: true,
-                useMoreLikeThis = prefs[useMoreLikeThisKey] ?: true,
-                useCollections = prefs[useCollectionsKey] ?: true
-            )
-        }
+    val settings: Flow<TmdbSettings> = dataStore.data.map { prefs ->
+        TmdbSettings(
+            enabled = prefs[enabledKey] ?: false,
+            language = prefs[languageKey] ?: "en",
+            useArtwork = prefs[useArtworkKey] ?: true,
+            useBasicInfo = prefs[useBasicInfoKey] ?: true,
+            useDetails = prefs[useDetailsKey] ?: true,
+            useCredits = prefs[useCreditsKey] ?: true,
+            useProductions = prefs[useProductionsKey] ?: true,
+            useNetworks = prefs[useNetworksKey] ?: true,
+            useEpisodes = prefs[useEpisodesKey] ?: true,
+            useMoreLikeThis = prefs[useMoreLikeThisKey] ?: true,
+            useCollections = prefs[useCollectionsKey] ?: true
+        )
     }
 
     suspend fun setEnabled(enabled: Boolean) {

@@ -1,40 +1,43 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import android.util.Log
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
 import com.google.gson.Gson
 import com.nexio.tv.domain.model.SavedLibraryItem
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.libraryPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "library_preferences"
+)
+
 @Singleton
 class LibraryPreferences @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
     companion object {
-        private const val FEATURE = "library_preferences"
         private const val TAG = "LibraryPrefs"
     }
 
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.libraryPreferencesDataStore
+    private fun store() = dataStore
 
     private val gson = Gson()
     private val libraryItemsKey = stringSetPreferencesKey("library_items")
 
-    val libraryItems: Flow<List<SavedLibraryItem>> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { preferences ->
-            val raw = preferences[libraryItemsKey] ?: emptySet()
-            raw.mapNotNull { json ->
-                runCatching { gson.fromJson(json, SavedLibraryItem::class.java) }.getOrNull()
-            }
+    val libraryItems: Flow<List<SavedLibraryItem>> = dataStore.data.map { preferences ->
+        val raw = preferences[libraryItemsKey] ?: emptySet()
+        raw.mapNotNull { json ->
+            runCatching { gson.fromJson(json, SavedLibraryItem::class.java) }.getOrNull()
         }
     }
 

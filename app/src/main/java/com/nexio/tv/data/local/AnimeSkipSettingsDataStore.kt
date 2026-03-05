@@ -1,36 +1,35 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.animeSkipSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "animeskip_settings"
+)
+
 @Singleton
 class AnimeSkipSettingsDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val FEATURE = "animeskip_settings"
-    }
-
-    private fun store() = factory.get(profileManager.activeProfileId.value, FEATURE)
+    private val dataStore = context.animeSkipSettingsDataStore
+    private fun store() = dataStore
 
     private val enabledKey = booleanPreferencesKey("animeskip_enabled")
     private val clientIdKey = stringPreferencesKey("animeskip_client_id")
 
-    val enabled: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { it[enabledKey] ?: false }
-    }
+    val enabled: Flow<Boolean> = dataStore.data.map { it[enabledKey] ?: false }
 
-    val clientId: Flow<String> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { it[clientIdKey] ?: "" }
-    }
+    val clientId: Flow<String> = dataStore.data.map { it[clientIdKey] ?: "" }
 
     suspend fun setEnabled(enabled: Boolean) {
         store().edit { it[enabledKey] = enabled }

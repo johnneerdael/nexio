@@ -94,6 +94,8 @@ android {
         externalNativeBuild {
             cmake {
                 path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+                buildStagingDirectory = file("${rootProject.projectDir}/.cxx-build")
             }
         }
     }
@@ -112,6 +114,11 @@ android {
             signingConfig = signingConfigs.getByName("release")
             isDebuggable = false
             isMinifyEnabled = false
+
+            // Keep debug native builds single-ABI for faster and more stable local iteration.
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "true")
 

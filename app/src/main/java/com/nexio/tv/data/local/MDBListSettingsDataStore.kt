@@ -1,27 +1,29 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.domain.model.MDBListSettings
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.mdbListSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "mdblist_settings"
+)
+
 @Singleton
 class MDBListSettingsDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val FEATURE = "mdblist_settings"
-    }
-
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.mdbListSettingsDataStore
+    private fun store() = dataStore
 
     private val enabledKey = booleanPreferencesKey("mdblist_enabled")
     private val apiKeyKey = stringPreferencesKey("mdblist_api_key")
@@ -33,20 +35,18 @@ class MDBListSettingsDataStore @Inject constructor(
     private val showAudienceKey = booleanPreferencesKey("mdblist_show_audience")
     private val showMetacriticKey = booleanPreferencesKey("mdblist_show_metacritic")
 
-    val settings: Flow<MDBListSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            MDBListSettings(
-                enabled = prefs[enabledKey] ?: false,
-                apiKey = prefs[apiKeyKey] ?: "",
-                showTrakt = prefs[showTraktKey] ?: true,
-                showImdb = prefs[showImdbKey] ?: true,
-                showTmdb = prefs[showTmdbKey] ?: true,
-                showLetterboxd = prefs[showLetterboxdKey] ?: true,
-                showTomatoes = prefs[showTomatoesKey] ?: true,
-                showAudience = prefs[showAudienceKey] ?: true,
-                showMetacritic = prefs[showMetacriticKey] ?: true
-            )
-        }
+    val settings: Flow<MDBListSettings> = dataStore.data.map { prefs ->
+        MDBListSettings(
+            enabled = prefs[enabledKey] ?: false,
+            apiKey = prefs[apiKeyKey] ?: "",
+            showTrakt = prefs[showTraktKey] ?: true,
+            showImdb = prefs[showImdbKey] ?: true,
+            showTmdb = prefs[showTmdbKey] ?: true,
+            showLetterboxd = prefs[showLetterboxdKey] ?: true,
+            showTomatoes = prefs[showTomatoesKey] ?: true,
+            showAudience = prefs[showAudienceKey] ?: true,
+            showMetacritic = prefs[showMetacriticKey] ?: true
+        )
     }
 
     suspend fun setEnabled(enabled: Boolean) {

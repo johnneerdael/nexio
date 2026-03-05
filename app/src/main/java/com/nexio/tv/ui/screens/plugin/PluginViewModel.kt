@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.plugin.PluginManager
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.server.DeviceIpAddress
 import com.nexio.tv.core.server.RepositoryConfigServer
@@ -23,7 +22,6 @@ import javax.inject.Inject
 @HiltViewModel
 class PluginViewModel @Inject constructor(
     private val pluginManager: PluginManager,
-    private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -31,10 +29,7 @@ class PluginViewModel @Inject constructor(
     val uiState: StateFlow<PluginUiState> = _uiState.asStateFlow()
 
     val isReadOnly: Boolean
-        get() {
-            val profile = profileManager.activeProfile ?: return false
-            return !profile.isPrimary && profile.usesPrimaryPlugins
-        }
+        get() = false
 
     private var repoServer: RepositoryConfigServer? = null
     private var logoBytes: ByteArray? = null

@@ -1,5 +1,8 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -8,17 +11,21 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private val Context.playerSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "player_settings"
+)
 
 /**
  * Available subtitle languages
@@ -252,15 +259,10 @@ enum class LibassRenderType {
 
 @Singleton
 class PlayerSettingsDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val FEATURE = "player_settings"
-    }
-
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.playerSettingsDataStore
+    private fun store() = dataStore
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -492,8 +494,7 @@ class PlayerSettingsDataStore @Inject constructor(
     /**
      * Flow of current player settings
      */
-    val playerSettings: Flow<PlayerSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
+    val playerSettings: Flow<PlayerSettings> = dataStore.data.map { prefs ->
             PlayerSettings(
                 playerPreference = prefs[playerPreferenceKey]?.let {
                     runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
@@ -609,27 +610,22 @@ class PlayerSettingsDataStore @Inject constructor(
                     retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
                 )
             )
-        }
     }
 
     /**
      * Flow for just the libass toggle
      */
-    val useLibass: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[useLibassKey] ?: false
-        }
+    val useLibass: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[useLibassKey] ?: false
     }
 
     /**
      * Flow for the libass render type
      */
-    val libassRenderType: Flow<LibassRenderType> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[libassRenderTypeKey]?.let {
-                try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
-            } ?: LibassRenderType.OVERLAY_OPEN_GL
-        }
+    val libassRenderType: Flow<LibassRenderType> = dataStore.data.map { prefs ->
+        prefs[libassRenderTypeKey]?.let {
+            try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
+        } ?: LibassRenderType.OVERLAY_OPEN_GL
     }
 
     // Player preference setter

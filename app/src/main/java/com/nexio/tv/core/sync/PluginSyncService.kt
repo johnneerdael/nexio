@@ -2,7 +2,6 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.PluginDataStore
 import com.nexio.tv.data.remote.supabase.SupabasePlugin
 import io.github.jan.supabase.postgrest.Postgrest
@@ -22,8 +21,7 @@ private const val TAG = "PluginSyncService"
 class PluginSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val authManager: AuthManager,
-    private val pluginDataStore: PluginDataStore,
-    private val profileManager: ProfileManager
+    private val pluginDataStore: PluginDataStore
 ) {
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
@@ -40,14 +38,7 @@ class PluginSyncService @Inject constructor(
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val activeProfile = profileManager.activeProfile
-            val profileId = profileManager.activeProfileId.value
-            Log.d(TAG, "pushToRemote: activeProfile=${activeProfile?.id} isPrimary=${activeProfile?.isPrimary} usesPrimaryPlugins=${activeProfile?.usesPrimaryPlugins} profileId=$profileId")
-
-            if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryPlugins) {
-                Log.d(TAG, "Profile ${activeProfile.id} uses primary plugins, skipping push")
-                return@withContext Result.success(Unit)
-            }
+            val profileId = 1
 
             val localRepos = pluginDataStore.repositories.first()
             Log.d(TAG, "pushToRemote: localRepos count=${localRepos.size} for profile $profileId")
@@ -85,9 +76,7 @@ class PluginSyncService @Inject constructor(
                     IllegalStateException("Unable to resolve sync owner for plugin sync")
                 )
 
-            val activeProfile = profileManager.activeProfile
-            val profileId = if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryPlugins) 1
-                            else profileManager.activeProfileId.value
+            val profileId = 1
 
             val remotePlugins = withJwtRefreshRetry {
                 postgrest.from("plugins")

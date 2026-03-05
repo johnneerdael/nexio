@@ -1,9 +1,12 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -22,17 +25,16 @@ data class CachedStreamLink(
     val videoSize: Long? = null
 )
 
+private val Context.streamLinkCacheDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "stream_link_cache"
+)
+
 @Singleton
 class StreamLinkCacheDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val FEATURE = "stream_link_cache"
-    }
-
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.streamLinkCacheDataStore
+    private fun store() = dataStore
 
     suspend fun save(
         contentKey: String,

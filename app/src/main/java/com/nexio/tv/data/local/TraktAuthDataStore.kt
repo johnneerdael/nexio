@@ -8,12 +8,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,8 +40,7 @@ data class TraktAuthState(
 
 @Singleton
 class TraktAuthDataStore @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
     private val accessTokenKey = stringPreferencesKey("access_token")
     private val refreshTokenKey = stringPreferencesKey("refresh_token")
@@ -79,12 +76,7 @@ class TraktAuthDataStore @Inject constructor(
 
     val isAuthenticated: Flow<Boolean> = state.map { it.isAuthenticated }
 
-    val isEffectivelyAuthenticated: Flow<Boolean> = combine(
-        isAuthenticated,
-        profileManager.activeProfileId
-    ) { authenticated, profileId ->
-        authenticated && profileId == 1
-    }
+    val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
 
     suspend fun saveToken(token: TraktTokenResponseDto) {
         context.traktAuthDataStore.edit { preferences ->
