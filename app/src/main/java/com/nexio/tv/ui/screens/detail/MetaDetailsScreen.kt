@@ -21,11 +21,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.relocation.BringIntoViewResponder
-import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -78,7 +76,6 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import com.nexio.tv.domain.model.ContentType
@@ -591,13 +588,6 @@ private fun MetaDetailsContent(
     }
     val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
     val listState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
-    // Suppress auto-scroll when hero buttons get focus
-    val heroNoScrollResponder = remember {
-        object : BringIntoViewResponder {
-            override fun calculateRectForParent(localRect: Rect): Rect = Rect.Zero
-            override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
-        }
-    }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
     val heroPlayFocusRequester = remember { FocusRequester() }
     val castTabFocusRequester = remember { FocusRequester() }
@@ -1044,7 +1034,7 @@ private fun MetaDetailsContent(
         ) {
             // Hero as first item in the lazy column
             item(key = "hero", contentType = "hero") {
-                Box(modifier = Modifier.bringIntoViewResponder(heroNoScrollResponder)) {
+                Box {
                     HeroContentSection(
                         meta = meta,
                         nextEpisode = nextEpisode,
@@ -1314,9 +1304,7 @@ private fun PeopleSectionTabs(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 20.dp, start = 48.dp, end = 48.dp)
-            .focusRestorer {
-                restorerRequester
-            },
+            .focusRestorer(restorerRequester),
         verticalAlignment = Alignment.CenterVertically
     ) {
         tabs.forEachIndexed { index, item ->
@@ -1544,7 +1532,7 @@ private fun LibraryListPickerDialog(
             }
         }
 
-        Divider(color = NexioColors.Border, thickness = 1.dp)
+        HorizontalDivider(color = NexioColors.Border, thickness = 1.dp)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
@@ -1560,3 +1548,4 @@ private fun LibraryListPickerDialog(
         }
     }
 }
+

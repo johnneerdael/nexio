@@ -527,6 +527,7 @@ fun ModernHomeContent(
             val topInsetPx = with(localDensity) { MODERN_ROW_HEADER_FOCUS_INSET.toPx() }
             object : BringIntoViewSpec {
                 @Suppress("DEPRECATION")
+                @Deprecated("Overrides deprecated BringIntoViewSpec.scrollAnimationSpec.")
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     defaultBringIntoViewSpec.scrollAnimationSpec
 
@@ -572,6 +573,28 @@ fun ModernHomeContent(
                 .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
         )
 
+        val rowRestoreRequester = remember(
+            activeRowKey,
+            activeItemIndex,
+            carouselRows,
+            uiCaches.itemFocusRequesters
+        ) {
+            val rowKey = activeRowKey
+            val itemIndex = activeItemIndex
+            if (rowKey != null) {
+                val row = carouselRows.firstOrNull { it.key == rowKey }
+                val safeIndex = itemIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
+                val itemKey = row?.items?.getOrNull(safeIndex)?.key
+                if (itemKey != null) {
+                    uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
+                } else {
+                    FocusRequester.Default
+                }
+            } else {
+                FocusRequester.Default
+            }
+        }
+
         CompositionLocalProvider(LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec) {
             LazyColumn(
                 state = verticalRowListState,
@@ -580,18 +603,7 @@ fun ModernHomeContent(
                     .fillMaxWidth()
                     .height(rowsViewportHeight)
                     .padding(bottom = catalogBottomPadding)
-                    .focusRestorer {
-                        val rowKey = activeRowKey
-                        val itemIndex = activeItemIndex
-                        if (rowKey != null) {
-                            val row = carouselRows.firstOrNull { it.key == rowKey }
-                            val safeIndex = itemIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
-                            val itemKey = row?.items?.getOrNull(safeIndex)?.key
-                            if (itemKey != null) {
-                                uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
-                            } else FocusRequester.Default
-                        } else FocusRequester.Default
-                    }
+                    .focusRestorer(rowRestoreRequester)
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {

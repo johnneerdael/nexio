@@ -30,6 +30,7 @@ import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.sync.AddonSyncService
 import javax.inject.Inject
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AddonRepositoryImpl @Inject constructor(
     private val api: AddonApi,
     private val preferences: AddonPreferences,
@@ -242,3 +243,4 @@ class AddonRepositoryImpl @Inject constructor(
         }
     }
 }
+

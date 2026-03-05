@@ -235,7 +235,7 @@ private fun EpisodeStreamsView(
 
         uiState.episodeStreamsError != null -> {
             Text(
-                text = uiState.episodeStreamsError ?: stringResource(R.string.panel_failed_load_streams),
+                text = uiState.episodeStreamsError,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.85f)
             )
@@ -320,7 +320,7 @@ private fun EpisodesListView(
 
         uiState.episodesError != null -> {
             Text(
-                text = uiState.episodesError ?: stringResource(R.string.panel_failed_load_episodes),
+                text = uiState.episodesError,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.85f)
             )
@@ -399,11 +399,12 @@ private fun EpisodesSeasonTabs(
         val specials = seasons.filter { it == 0 }
         regular + specials
     }
+    val seasonTabsRestoreRequester = remember { FocusRequester() }
 
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .focusRestorer(),
+            .focusRestorer(seasonTabsRestoreRequester),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
     ) {
@@ -591,3 +592,5 @@ private fun EpisodeItem(
         }
     }
 }
+
+

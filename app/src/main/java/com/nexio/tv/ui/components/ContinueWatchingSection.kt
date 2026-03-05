@@ -124,14 +124,19 @@ fun ContinueWatchingSection(
             )
         }
 
+        val restoreRequester = remember(lastFocusedIndex, focusRequesters) {
+            val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size) {
+                lastFocusedIndex
+            } else {
+                0
+            }
+            focusRequesters.getOrNull(idx) ?: FocusRequester.Default
+        }
+
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRestorer {
-                        val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size)
-                            lastFocusedIndex else 0
-                        focusRequesters.getOrNull(idx) ?: FocusRequester.Default
-                    },
+                .focusRestorer(restoreRequester),
             contentPadding = PaddingValues(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             state = listState

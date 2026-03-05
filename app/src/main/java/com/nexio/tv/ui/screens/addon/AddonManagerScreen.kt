@@ -85,7 +85,7 @@ import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
@@ -1005,7 +1005,7 @@ private fun AddonCardContent(
         if (!addon.description.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = addon.description ?: "",
+                text = addon.description,
                 style = MaterialTheme.typography.bodyMedium,
                 color = NexioColors.TextSecondary
             )

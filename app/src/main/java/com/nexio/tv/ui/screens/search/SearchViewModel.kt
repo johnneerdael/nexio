@@ -358,7 +358,7 @@ class SearchViewModel @Inject constructor(
                     pendingCatalogResponses = (pendingCatalogResponses - 1).coerceAtLeast(0)
                     // Ignore per-catalog errors unless we have nothing to show.
                     if (catalogsMap.isEmpty()) {
-                        _uiState.update { it.copy(error = result.message ?: "Search failed") }
+                        _uiState.update { it.copy(error = result.message) }
                     }
                     scheduleCatalogRowsUpdate()
                 }
@@ -730,3 +730,4 @@ class SearchViewModel @Inject constructor(
         return "${addonId}_${type}_${catalogId}"
     }
 }
+

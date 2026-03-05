@@ -12,6 +12,8 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.database.DatabaseProvider
+import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.dash.DashMediaSource
@@ -322,6 +324,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
         @Volatile private var sharedSimpleCache: SimpleCache? = null
+        @Volatile private var cacheDatabaseProvider: DatabaseProvider? = null
         @Volatile private var configuredVodCacheMaxBytes: Long = -1L
         @Volatile private var lastResolvedAutoCacheMaxBytes: Long = -1L
         @Volatile private var lastDeferredReconfigureTargetBytes: Long = -1L
@@ -389,9 +392,12 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     return existing
                 }
                 val cacheDir = File(context.cacheDir, VOD_CACHE_DIR).apply { mkdirs() }
+                val databaseProvider = cacheDatabaseProvider
+                    ?: StandaloneDatabaseProvider(context).also { cacheDatabaseProvider = it }
                 return SimpleCache(
                     cacheDir,
-                    LeastRecentlyUsedCacheEvictor(maxBytes)
+                    LeastRecentlyUsedCacheEvictor(maxBytes),
+                    databaseProvider
                 ).also {
                     configuredVodCacheMaxBytes = maxBytes
                     lastDeferredReconfigureTargetBytes = -1L

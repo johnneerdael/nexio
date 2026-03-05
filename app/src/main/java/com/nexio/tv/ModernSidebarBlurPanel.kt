@@ -57,6 +57,7 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 
 @Composable
+@Suppress("DEPRECATION")
 internal fun ModernSidebarBlurPanel(
     drawerItems: List<DrawerItem>,
     selectedDrawerRoute: String?,
