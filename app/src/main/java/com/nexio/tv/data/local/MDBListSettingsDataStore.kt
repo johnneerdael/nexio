@@ -124,6 +124,26 @@ class MDBListSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setCatalogPreferences(
+        hiddenPersonalListKeys: Set<String>,
+        selectedTopListKeys: Set<String>,
+        catalogOrder: List<String>
+    ) {
+        store().edit { prefs ->
+            prefs[hiddenPersonalListKeysKey] = hiddenPersonalListKeys.filter { it.isNotBlank() }.toSet()
+            prefs[selectedTopListKeysKey] = selectedTopListKeys.filter { it.isNotBlank() }.toSet()
+            val sanitizedOrder = catalogOrder
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            if (sanitizedOrder.isEmpty()) {
+                prefs.remove(catalogOrderCsvKey)
+            } else {
+                prefs[catalogOrderCsvKey] = sanitizedOrder.joinToString(",")
+            }
+        }
+    }
+
     suspend fun moveCatalog(listKey: String, direction: Int, availableKeys: Set<String>) {
         val key = listKey.trim()
         if (key.isBlank() || direction == 0 || key !in availableKeys) return

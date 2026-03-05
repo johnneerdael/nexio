@@ -1,0 +1,136 @@
+import { createError } from 'h3'
+import { readJsonBody, okJson } from '~/server/utils/supabase'
+import type { AddonManifestInspection, AddonRecord } from '~/types/portal'
+
+type InspectBody = {
+  addons?: AddonRecord[]
+}
+
+type ManifestCatalog = {
+  type?: string
+  id?: string
+  name?: string
+  extra?: Array<string | { name?: string; isRequired?: boolean }>
+}
+
+type ManifestResource = string | { name?: string }
+
+type ManifestPayload = {
+  id?: string
+  name?: string
+  version?: string
+  description?: string | null
+  logo?: string | null
+  catalogs?: ManifestCatalog[]
+  resources?: ManifestResource[]
+  types?: string[]
+}
+
+function canonicalAddonUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/manifest\.json$/i, '')
+  return trimmed.replace(/\/$/, '')
+}
+
+function manifestUrlFor(addon: AddonRecord): string {
+  const explicit = addon.manifestUrl?.trim()
+  if (explicit) {
+    return explicit
+  }
+  return `${canonicalAddonUrl(addon.url)}/manifest.json`
+}
+
+function normalizeCatalogType(value: string | undefined): string {
+  const type = String(value || '').trim().lowercase()
+  if (type === 'tv' || type === 'show') {
+    return 'series'
+  }
+  return type || 'unknown'
+}
+
+function isSearchOnlyCatalog(extra: ManifestCatalog['extra']): boolean {
+  return (extra ?? []).some((entry) => {
+    if (typeof entry === 'string') {
+      return entry.trim().toLowerCase() === 'search'
+    }
+    return entry?.name?.trim().toLowerCase() === 'search' && Boolean(entry.isRequired)
+  })
+}
+
+function catalogKey(addonId: string, type: string, catalogId: string): string {
+  return `${addonId}_${type}_${catalogId}`
+}
+
+function disableKey(addonUrl: string, type: string, catalogId: string, catalogName: string): string {
+  return `${addonUrl}_${type}_${catalogId}_${catalogName}`
+}
+
+async function inspectAddon(addon: AddonRecord): Promise<AddonManifestInspection> {
+  const addonUrl = canonicalAddonUrl(addon.url)
+  const resolvedManifestUrl = manifestUrlFor(addon)
+
+  try {
+    const response = await fetch(resolvedManifestUrl)
+    if (!response.ok) {
+      throw new Error(`Manifest returned ${response.status}`)
+    }
+
+    const manifest = (await response.json()) as ManifestPayload
+    const addonId = String(manifest.id || addon.id || addonUrl)
+    const addonName = String(manifest.name || addon.name || addonUrl)
+    const catalogs = (manifest.catalogs ?? []).map((catalog) => {
+      const type = normalizeCatalogType(catalog.type)
+      const catalogId = String(catalog.id || '')
+      const catalogName = String(catalog.name || catalogId || 'Catalog')
+      return {
+        key: catalogKey(addonId, type, catalogId),
+        disableKey: disableKey(addonUrl, type, catalogId, catalogName),
+        addonId,
+        addonName,
+        addonUrl,
+        catalogId,
+        catalogName,
+        type,
+        source: 'addon' as const,
+        isSearchOnly: isSearchOnlyCatalog(catalog.extra)
+      }
+    }).filter((catalog) => catalog.catalogId)
+
+    return {
+      addonUrl,
+      manifestUrl: resolvedManifestUrl,
+      addonId,
+      addonName,
+      description: manifest.description ?? addon.description,
+      logo: manifest.logo ?? addon.logo,
+      version: manifest.version,
+      types: (manifest.types ?? []).map((entry) => String(entry).trim()).filter(Boolean),
+      resources: (manifest.resources ?? []).map((resource) => typeof resource === 'string' ? resource : String(resource?.name || '')).filter(Boolean),
+      catalogs
+    }
+  } catch (error) {
+    return {
+      addonUrl,
+      manifestUrl: resolvedManifestUrl,
+      addonId: addon.id,
+      addonName: addon.name,
+      description: addon.description,
+      logo: addon.logo,
+      types: [],
+      resources: [],
+      catalogs: [],
+      error: error instanceof Error ? error.message : 'Manifest inspection failed.'
+    }
+  }
+}
+
+export default defineEventHandler(async (event) => {
+  const body = await readJsonBody<InspectBody>(event)
+  const addons = body.addons ?? []
+
+  if (!Array.isArray(addons)) {
+    throw createError({ statusCode: 400, statusMessage: 'Addons payload must be an array.' })
+  }
+
+  const inspections = await Promise.all(addons.map((addon) => inspectAddon(addon)))
+  return okJson({ inspections })
+})
