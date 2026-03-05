@@ -446,6 +446,8 @@ private fun EpisodeCard(
     val badgeBgColor = remember { Color.Black.copy(alpha = 0.42f) }
     val badgeShape = remember(cardMetrics.episodeBadgeCornerRadius) { RoundedCornerShape(cardMetrics.episodeBadgeCornerRadius) }
     val progressBgColor = remember { Color.Black.copy(alpha = 0.45f) }
+    val borderColor = remember { Color.White.copy(alpha = 0.14f) }
+    val notStartedBadgeColor = remember { NuvioColors.TextSecondary.copy(alpha = 0.9f) }
     val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(episode.thumbnail)
@@ -523,7 +525,7 @@ private fun EpisodeCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Box(
             modifier = Modifier
@@ -532,7 +534,7 @@ private fun EpisodeCard(
                 .background(NuvioColors.BackgroundCard)
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.14f),
+                    color = borderColor,
                     shape = shape
                 )
         ) {
@@ -719,7 +721,7 @@ private fun EpisodeCard(
                         .size(cardMetrics.statusBadgeSize)
                 ) {
                     drawCircle(
-                        color = NuvioColors.TextSecondary.copy(alpha = 0.9f),
+                        color = notStartedBadgeColor,
                         style = Stroke(
                             width = 2.dp.toPx(),
                             pathEffect = dashEffect

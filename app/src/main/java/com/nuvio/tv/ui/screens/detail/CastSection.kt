@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
@@ -31,8 +32,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -47,7 +50,7 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.domain.model.MetaCastMember
 import com.nuvio.tv.ui.theme.NuvioColors
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CastSection(
     cast: List<MetaCastMember>,
@@ -66,6 +69,8 @@ fun CastSection(
     val firstItemFocusRequester = remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
     val itemFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val castPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
+    val lazyListState = rememberLazyListState(prefetchStrategy = castPrefetchStrategy)
 
     LaunchedEffect(cast, leadingCast) {
         val validKeys = buildSet {
@@ -115,6 +120,7 @@ fun CastSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRestorer { firstItemFocusRequester },
+            state = lazyListState,
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.Start
         ) {
