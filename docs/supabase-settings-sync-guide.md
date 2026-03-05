@@ -51,10 +51,36 @@ Store these through the secret channel immediately:
 ## Prerequisites
 1. Create a new Supabase project.
 2. Enable `Automatic RLS` during project creation.
-3. Configure your auth provider.
-   - Email/password is enough for the current portal flow.
+3. Configure auth providers.
+   - Enable Email provider.
+   - Enable Anonymous Sign-Ins.
+   - Recommended for the current portal UX: disable mandatory email confirmation unless you plan to rewrite the sign-up flow.
 4. Create a server-side secret key for the web portal.
    - Use this as `SUPABASE_SERVICE_ROLE_KEY` in `nexio-web`.
+
+## Required Auth Settings
+### Email
+Current `nexio-web` account creation expects Supabase sign-up to return a session immediately.
+
+If Email Confirmation is enabled, sign-up can succeed without returning a usable session and the current portal route will treat that as an error.
+
+Recommended for now:
+- enable Email auth
+- disable required email confirmation
+
+If you want mandatory email confirmation later, the web sign-up flow needs to be changed accordingly.
+
+### Anonymous Sign-Ins
+Enable Anonymous Sign-Ins.
+
+Why:
+- the Android QR login flow currently calls `auth.signInAnonymously()` before starting `start_tv_login_session`
+- this gives the TV/device a temporary authenticated Supabase identity so it can create and poll its login session before it is attached to a real account
+- legacy device-link flows also benefit from having a temporary auth user available on unsigned-in TVs
+
+Without Anonymous Sign-Ins:
+- QR login startup on Android will fail before `start_tv_login_session`
+- device linking on unsigned-in TVs may fail depending on client path
 
 ## SQL Setup
 Run the clean install SQL from:
@@ -63,16 +89,32 @@ Run the clean install SQL from:
 Apply it in the Supabase SQL editor against the empty project.
 
 What it creates:
+- `linked_devices`
+- `sync_codes`
+- `tv_login_sessions`
 - `account_settings_public`
 - `account_addons_public`
 - `account_secrets`
 - `account_secret_audit`
 - `account_sync_events`
 - owner-resolution helpers for linked devices
+- sync-code device-linking RPCs
+- QR TV-login RPCs
 - public snapshot/persist RPCs
 - service-role-only secret RPCs
 - realtime publication for `account_sync_events`
 - Supabase Vault extension usage for secret payload storage
+
+Important:
+- this script now includes the `linked_devices` table required by `sync_owner_id()`
+- this script also recreates the current compatibility RPCs used by the Android app and QR approval flow:
+  - `generate_sync_code`
+  - `get_sync_code`
+  - `claim_sync_code`
+  - `unlink_device`
+  - `start_tv_login_session`
+  - `poll_tv_login_session`
+  - `approve_tv_login_session`
 
 ## Supabase Features Used
 This setup relies on:
@@ -96,6 +138,19 @@ Notes:
 - Clients should never receive the service key.
 
 ## Public Table Model
+### `linked_devices`
+One row per linked TV/device account.
+
+Contains:
+- owner account id
+- linked device auth user id
+- device name
+- optional model and platform labels
+- last seen timestamp
+- device status
+
+The clean install uses this table to resolve account ownership for linked device sessions.
+
 ### `account_settings_public`
 One row per account owner.
 
@@ -139,6 +194,13 @@ The actual secret payload is stored in Supabase Vault.
 ## RPC Contract
 ### Authenticated RPCs
 These are called with the user JWT:
+- `generate_sync_code(p_pin text)`
+- `get_sync_code(p_pin text)`
+- `claim_sync_code(p_code text, p_pin text, p_device_name text)`
+- `unlink_device(p_device_user_id uuid)`
+- `start_tv_login_session(p_device_nonce text, p_redirect_base_url text, p_device_name text default null)`
+- `poll_tv_login_session(p_code text, p_device_nonce text)`
+- `approve_tv_login_session(p_code text, p_device_nonce text)`
 - `sync_pull_account_snapshot()`
 - `sync_push_account_settings(p_settings_payload jsonb, p_source text)`
 - `sync_push_account_addons(p_addons jsonb, p_source text)`
@@ -159,6 +221,7 @@ The portal now uses:
   - loads public settings snapshot
   - loads public addons snapshot
   - loads secret metadata rows
+  - loads linked devices from `linked_devices`
   - seeds default public rows for new accounts
 - `POST /api/account/persist`
   - writes scrubbed public settings
@@ -183,6 +246,74 @@ The portal also uses:
   - resolves the stored Trakt access token server-side
 - `POST /api/addons/inspect`
   - resolves credentialed addon manifests server-side when needed
+
+## Edge Functions
+Current Supabase Edge Function requirement:
+- `tv-logins-exchange`
+
+This function is required by the Android QR flow after the web user approves the login request.
+
+Source in this repo:
+- `supabase/functions/tv-logins-exchange/index.ts`
+
+What it does:
+- validates the device's pending QR session
+- verifies the session was approved in `tv_login_sessions`
+- mints an owner session through the Supabase auth admin APIs
+- upserts `linked_devices`
+- marks the QR session as `used`
+
+Important:
+- the account portal secret APIs are **not** Supabase Edge Functions
+- those are Nuxt server routes inside `nexio-web`
+- only the QR exchange path currently depends on a Supabase Edge Function
+
+### Deploying the Edge Function
+Using the Supabase CLI:
+
+1. Link the local repo to your project.
+2. Set the function secrets.
+3. Deploy `tv-logins-exchange`.
+
+Example commands:
+
+```bash
+supabase link --project-ref YOUR_PROJECT_REF
+supabase secrets set SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+supabase secrets set SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+supabase functions deploy tv-logins-exchange
+```
+
+If you prefer the dashboard:
+- create a function named `tv-logins-exchange`
+- paste the source from `supabase/functions/tv-logins-exchange/index.ts`
+- add the same three secrets in the function environment
+
+### Edge Function JWT Behavior
+Keep normal JWT verification enabled.
+
+Why:
+- the app calls the function with the device's bearer token
+- the function expects an authenticated caller and resolves the current requester from that token
+- there is no reason to expose this function publicly without JWT verification
+
+## Realtime Setup
+The SQL script already adds `public.account_sync_events` to the `supabase_realtime` publication:
+- no extra SQL is required if the script completes successfully
+
+After applying SQL, verify in Supabase:
+1. Open `Database` -> `Replication`.
+2. Open the `supabase_realtime` publication.
+3. Confirm `public.account_sync_events` is listed.
+
+What Realtime is used for:
+- account settings sync notifications
+- addon inventory sync notifications
+- secret-change sync notifications
+
+The current design uses `account_sync_events` as the realtime event table.
+Clients do not need realtime on `account_settings_public` or `account_addons_public` directly.
 
 ## Default Bootstrap Behavior
 For a newly created Supabase user with no account rows yet:
@@ -218,23 +349,39 @@ Current direction for the addon:
 Important tradeoff:
 - if fully offline use is required for a secret-backed integration, the Android app will still need secure local storage for that secret on-device
 
+Current Android auth/login dependencies on Supabase:
+- anonymous auth must be enabled for QR login bootstrap
+- `start_tv_login_session` and `poll_tv_login_session` must exist
+- Edge Function `tv-logins-exchange` must be deployed
+- `approve_tv_login_session` must exist for the web approval page
+- legacy device-link support still expects:
+  - `generate_sync_code`
+  - `get_sync_code`
+  - `claim_sync_code`
+  - `unlink_device`
+
 ## Clean Install Verification Checklist
 After applying the SQL and setting runtime env vars, verify:
 1. new user signup works
-2. first portal bootstrap creates:
+2. anonymous sign-in works from the Android app
+3. first portal bootstrap creates:
    - one `account_settings_public` row
    - default `account_addons_public` rows
-3. changing a normal setting updates only public tables
-4. saving an MDBList key creates:
+4. QR login start works and creates a `tv_login_sessions` row
+5. approving the QR request through the portal updates that session to `approved`
+6. `tv-logins-exchange` returns an owner session and upserts `linked_devices`
+7. legacy sync-code linking works if you still ship that UI
+8. changing a normal setting updates only public tables
+9. saving an MDBList key creates:
    - one `account_secrets` metadata row
    - one Vault secret
-5. saving a tokenized addon URL stores:
+10. saving a tokenized addon URL stores:
    - public base URL in `account_addons_public`
    - masked secret metadata in `account_secrets`
    - no plaintext credential in public addon fields
-6. Trakt connect stores tokens as secrets and only public profile state in settings
-7. `account_sync_events` receives inserts for public and secret changes
-8. no plaintext secrets appear in public snapshot responses
+11. Trakt connect stores tokens as secrets and only public profile state in settings
+12. `account_sync_events` receives inserts for public and secret changes
+13. no plaintext secrets appear in public snapshot responses
 
 ## Operational Notes
 - Never log request bodies for secret endpoints.
@@ -255,9 +402,11 @@ After applying the SQL and setting runtime env vars, verify:
 ## Source Files In This Repo
 Main files for this setup:
 - `supabase/account_settings_sync.sql`
+- `supabase/functions/tv-logins-exchange/index.ts`
 - `docs/supabase-settings-sync-guide.md`
 - `nexio-web/server/api/account/bootstrap.get.ts`
 - `nexio-web/server/api/account/persist.post.ts`
+- `nexio-web/server/api/account/approve-tv-login.post.ts`
 - `nexio-web/server/api/account/secrets/set.post.ts`
 - `nexio-web/server/api/account/secrets/delete.post.ts`
 - `nexio-web/server/api/account/addons/resolve.post.ts`

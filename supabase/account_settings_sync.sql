@@ -6,6 +6,65 @@
 create extension if not exists pgcrypto;
 create extension if not exists supabase_vault with schema vault;
 
+create table if not exists public.linked_devices (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  device_user_id uuid not null unique references auth.users(id) on delete cascade,
+  device_name text,
+  device_model text,
+  device_platform text,
+  status text not null default 'idle' check (status in ('online', 'idle', 'offline')),
+  linked_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
+create index if not exists linked_devices_owner_idx
+  on public.linked_devices (owner_id);
+create index if not exists linked_devices_last_seen_idx
+  on public.linked_devices (owner_id, last_seen_at desc);
+
+create table if not exists public.sync_codes (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  code text not null unique,
+  pin_hash text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  claimed_at timestamptz,
+  claimed_by uuid references auth.users(id) on delete set null
+);
+
+create index if not exists sync_codes_owner_idx
+  on public.sync_codes (owner_id, expires_at desc);
+create index if not exists sync_codes_code_idx
+  on public.sync_codes (code);
+
+create table if not exists public.tv_login_sessions (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  requester_user_id uuid not null references auth.users(id) on delete cascade,
+  approved_by_user_id uuid references auth.users(id) on delete set null,
+  device_nonce text not null,
+  device_name text,
+  device_model text,
+  device_platform text,
+  redirect_base_url text not null,
+  web_url text not null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'used', 'expired', 'cancelled')),
+  poll_interval_seconds integer not null default 3,
+  created_at timestamptz not null default now(),
+  approved_at timestamptz,
+  used_at timestamptz,
+  expires_at timestamptz not null
+);
+
+create unique index if not exists tv_login_sessions_code_nonce_uidx
+  on public.tv_login_sessions (code, device_nonce);
+create index if not exists tv_login_sessions_requester_idx
+  on public.tv_login_sessions (requester_user_id, created_at desc);
+create index if not exists tv_login_sessions_approved_idx
+  on public.tv_login_sessions (approved_by_user_id, created_at desc);
+
 create table if not exists public.account_settings_public (
   user_id uuid primary key references auth.users(id) on delete cascade,
   settings_payload jsonb not null default '{}'::jsonb,
@@ -90,6 +149,9 @@ alter table public.account_addons_public enable row level security;
 alter table public.account_secrets enable row level security;
 alter table public.account_secret_audit enable row level security;
 alter table public.account_sync_events enable row level security;
+alter table public.linked_devices enable row level security;
+alter table public.sync_codes enable row level security;
+alter table public.tv_login_sessions enable row level security;
 
 create or replace function public.sync_owner_id()
 returns uuid
@@ -117,6 +179,436 @@ $$;
 
 revoke all on function public.next_sync_revision() from public;
 grant execute on function public.next_sync_revision() to authenticated;
+
+drop policy if exists linked_devices_owner_or_device_select on public.linked_devices;
+create policy linked_devices_owner_or_device_select on public.linked_devices
+for select to authenticated
+using (owner_id = auth.uid() or device_user_id = auth.uid());
+
+drop policy if exists tv_login_sessions_requester_select on public.tv_login_sessions;
+create policy tv_login_sessions_requester_select on public.tv_login_sessions
+for select to authenticated
+using (requester_user_id = auth.uid() or approved_by_user_id = auth.uid());
+
+create or replace function public.generate_human_code(p_length integer default 6)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_code text := '';
+  v_alphabet constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  v_index integer;
+  v_target_length integer := greatest(4, least(coalesce(p_length, 6), 12));
+begin
+  while char_length(v_code) < v_target_length loop
+    v_index := get_byte(gen_random_bytes(1), 0) % char_length(v_alphabet);
+    v_code := v_code || substr(v_alphabet, v_index + 1, 1);
+  end loop;
+
+  return v_code;
+end;
+$$;
+
+revoke all on function public.generate_human_code(integer) from public;
+
+create or replace function public.generate_unique_human_code(
+  p_table_name text,
+  p_column_name text,
+  p_length integer default 6
+)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_code text;
+  v_exists boolean;
+  v_sql text;
+begin
+  v_sql := format('select exists(select 1 from public.%I where %I = $1)', p_table_name, p_column_name);
+
+  loop
+    v_code := public.generate_human_code(p_length);
+    execute v_sql into v_exists using v_code;
+    exit when not v_exists;
+  end loop;
+
+  return v_code;
+end;
+$$;
+
+revoke all on function public.generate_unique_human_code(text, text, integer) from public;
+
+create or replace function public.generate_sync_code(p_pin text)
+returns table (code text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_code text;
+  v_pin text := trim(coalesce(p_pin, ''));
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if char_length(v_pin) < 4 then
+    raise exception 'Invalid pin';
+  end if;
+
+  delete from public.sync_codes
+  where owner_id = auth.uid();
+
+  v_code := public.generate_unique_human_code('sync_codes', 'code', 6);
+
+  insert into public.sync_codes (
+    owner_id,
+    code,
+    pin_hash,
+    expires_at
+  )
+  values (
+    auth.uid(),
+    v_code,
+    crypt(v_pin, gen_salt('bf')),
+    now() + interval '10 minutes'
+  );
+
+  return query select v_code;
+end;
+$$;
+
+revoke all on function public.generate_sync_code(text) from public;
+grant execute on function public.generate_sync_code(text) to authenticated;
+
+create or replace function public.get_sync_code(p_pin text)
+returns table (code text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.sync_codes%rowtype;
+  v_pin text := trim(coalesce(p_pin, ''));
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select *
+    into v_row
+  from public.sync_codes
+  where owner_id = auth.uid()
+    and claimed_at is null
+    and expires_at > now()
+  order by created_at desc
+  limit 1;
+
+  if not found then
+    raise exception 'No sync code found';
+  end if;
+
+  if v_row.pin_hash <> crypt(v_pin, v_row.pin_hash) then
+    raise exception 'Incorrect pin';
+  end if;
+
+  return query select v_row.code;
+end;
+$$;
+
+revoke all on function public.get_sync_code(text) from public;
+grant execute on function public.get_sync_code(text) to authenticated;
+
+create or replace function public.claim_sync_code(
+  p_code text,
+  p_pin text,
+  p_device_name text default null
+)
+returns table (
+  result_owner_id uuid,
+  success boolean,
+  message text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.sync_codes%rowtype;
+  v_code text := upper(trim(coalesce(p_code, '')));
+  v_pin text := trim(coalesce(p_pin, ''));
+  v_device_name text := nullif(trim(coalesce(p_device_name, '')), '');
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if v_code = '' then
+    raise exception 'Invalid sync code';
+  end if;
+
+  if exists (
+    select 1
+    from public.linked_devices
+    where device_user_id = auth.uid()
+  ) then
+    raise exception 'Device is already linked';
+  end if;
+
+  select *
+    into v_row
+  from public.sync_codes
+  where code = v_code
+  for update;
+
+  if not found then
+    raise exception 'Sync code not found';
+  end if;
+
+  if v_row.expires_at <= now() then
+    delete from public.sync_codes where id = v_row.id;
+    raise exception 'Sync code has expired';
+  end if;
+
+  if v_row.claimed_at is not null then
+    raise exception 'Sync code already claimed';
+  end if;
+
+  if v_row.pin_hash <> crypt(v_pin, v_row.pin_hash) then
+    raise exception 'Incorrect pin';
+  end if;
+
+  insert into public.linked_devices (
+    owner_id,
+    device_user_id,
+    device_name,
+    linked_at,
+    last_seen_at,
+    status
+  )
+  values (
+    v_row.owner_id,
+    auth.uid(),
+    v_device_name,
+    now(),
+    now(),
+    'online'
+  );
+
+  update public.sync_codes
+    set claimed_at = now(),
+        claimed_by = auth.uid()
+  where id = v_row.id;
+
+  return query select v_row.owner_id, true, 'Device linked successfully';
+end;
+$$;
+
+revoke all on function public.claim_sync_code(text, text, text) from public;
+grant execute on function public.claim_sync_code(text, text, text) to authenticated;
+
+create or replace function public.unlink_device(p_device_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  delete from public.linked_devices
+  where owner_id = auth.uid()
+    and device_user_id = p_device_user_id;
+end;
+$$;
+
+revoke all on function public.unlink_device(uuid) from public;
+grant execute on function public.unlink_device(uuid) to authenticated;
+
+create or replace function public.start_tv_login_session(
+  p_device_nonce text,
+  p_redirect_base_url text,
+  p_device_name text default null
+)
+returns table (
+  code text,
+  web_url text,
+  expires_at timestamptz,
+  poll_interval_seconds integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_code text;
+  v_expires_at timestamptz := now() + interval '10 minutes';
+  v_poll_interval integer := 3;
+  v_base_url text := trim(coalesce(p_redirect_base_url, ''));
+  v_nonce text := trim(coalesce(p_device_nonce, ''));
+  v_web_url text;
+  v_device_name text := nullif(trim(coalesce(p_device_name, '')), '');
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if v_nonce = '' then
+    raise exception 'Invalid device nonce';
+  end if;
+
+  if v_base_url !~* '^https?://[^ ]+$' then
+    raise exception 'Invalid TV login redirect base url';
+  end if;
+
+  update public.tv_login_sessions
+    set status = 'expired'
+  where requester_user_id = auth.uid()
+    and status = 'pending'
+    and expires_at <= now();
+
+  v_code := public.generate_unique_human_code('tv_login_sessions', 'code', 6);
+  v_base_url := regexp_replace(v_base_url, '/+$', '');
+  v_web_url := v_base_url || '/approve?code=' || v_code || '&nonce=' || replace(v_nonce, '+', '%2B');
+
+  insert into public.tv_login_sessions (
+    code,
+    requester_user_id,
+    device_nonce,
+    device_name,
+    redirect_base_url,
+    web_url,
+    status,
+    poll_interval_seconds,
+    expires_at
+  )
+  values (
+    v_code,
+    auth.uid(),
+    v_nonce,
+    v_device_name,
+    v_base_url,
+    v_web_url,
+    'pending',
+    v_poll_interval,
+    v_expires_at
+  );
+
+  return query select v_code, v_web_url, v_expires_at, v_poll_interval;
+end;
+$$;
+
+revoke all on function public.start_tv_login_session(text, text, text) from public;
+grant execute on function public.start_tv_login_session(text, text, text) to authenticated;
+
+create or replace function public.poll_tv_login_session(
+  p_code text,
+  p_device_nonce text
+)
+returns table (
+  status text,
+  expires_at timestamptz,
+  poll_interval_seconds integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tv_login_sessions%rowtype;
+  v_status text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select *
+    into v_row
+  from public.tv_login_sessions
+  where code = upper(trim(coalesce(p_code, '')))
+    and device_nonce = trim(coalesce(p_device_nonce, ''))
+    and requester_user_id = auth.uid()
+  order by created_at desc
+  limit 1;
+
+  if not found then
+    raise exception 'Invalid TV login code or nonce';
+  end if;
+
+  v_status := v_row.status;
+
+  if v_row.expires_at <= now() and v_row.status = 'pending' then
+    update public.tv_login_sessions
+      set status = 'expired'
+    where id = v_row.id;
+    v_status := 'expired';
+  end if;
+
+  return query select v_status, v_row.expires_at, v_row.poll_interval_seconds;
+end;
+$$;
+
+revoke all on function public.poll_tv_login_session(text, text) from public;
+grant execute on function public.poll_tv_login_session(text, text) to authenticated;
+
+create or replace function public.approve_tv_login_session(
+  p_code text,
+  p_device_nonce text
+)
+returns table (message text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.tv_login_sessions%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select *
+    into v_row
+  from public.tv_login_sessions
+  where code = upper(trim(coalesce(p_code, '')))
+    and device_nonce = trim(coalesce(p_device_nonce, ''))
+  for update;
+
+  if not found then
+    raise exception 'Invalid TV login code or nonce';
+  end if;
+
+  if v_row.expires_at <= now() then
+    update public.tv_login_sessions
+      set status = 'expired'
+    where id = v_row.id;
+    raise exception 'TV login expired';
+  end if;
+
+  if v_row.status = 'used' then
+    raise exception 'TV login already used';
+  end if;
+
+  if v_row.status = 'cancelled' then
+    raise exception 'TV login cancelled';
+  end if;
+
+  update public.tv_login_sessions
+    set approved_by_user_id = auth.uid(),
+        approved_at = now(),
+        status = 'approved'
+  where id = v_row.id;
+
+  return query select 'TV login approved.';
+end;
+$$;
+
+revoke all on function public.approve_tv_login_session(text, text) from public;
+grant execute on function public.approve_tv_login_session(text, text) to authenticated;
 
 drop policy if exists account_settings_public_owner_select on public.account_settings_public;
 create policy account_settings_public_owner_select on public.account_settings_public

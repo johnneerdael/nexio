@@ -1,6 +1,6 @@
 <template>
   <PortalShell :signed-in="signedIn" @sign-out="signOut">
-    <div class="landing-page" :class="{ 'is-ready': pageReady }">
+    <div ref="landingPage" class="landing-page" :class="{ 'is-ready': pageReady }">
     <section class="landing-hero glass reveal reveal-hero">
       <div class="landing-copy">
         <span class="badge">Nexio Account Portal</span>
@@ -36,7 +36,7 @@
         <article class="device-frame hero-device">
           <div class="device-screen playback-screen">
             <div class="screen-brand">
-              <img src="/landing-logo.png" alt="Nexio emblem">
+              <img src="/landing-logo.webp" alt="Nexio emblem">
               <span>Nexio Playback Core</span>
             </div>
             <div class="playback-copy">
@@ -107,7 +107,7 @@
       <span
         v-for="(item, index) in featureRibbon"
         :key="item"
-        class="marquee-pill reveal-pill"
+        class="marquee-pill scroll-reveal"
         :style="{ '--reveal-delay': `${420 + (index * 45)}ms` }"
       >
         {{ item }}
@@ -115,7 +115,7 @@
     </section>
 
     <section class="story-grid">
-      <article class="story-panel story-panel-large glass reveal reveal-panel" style="--reveal-delay: 520ms;">
+      <article class="story-panel story-panel-large glass scroll-reveal scroll-reveal-wide" style="--reveal-delay: 80ms;">
         <div class="story-copy">
           <span class="badge">Cloud Account</span>
           <h2 class="section-title">Complete settings sync between the web and every linked addon instance.</h2>
@@ -142,7 +142,7 @@
         </div>
       </article>
 
-      <article class="story-panel surface reveal reveal-panel" style="--reveal-delay: 620ms;">
+      <article class="story-panel surface scroll-reveal scroll-reveal-left" style="--reveal-delay: 120ms;">
         <div class="story-copy">
           <span class="badge">Native Integrations</span>
           <h3 class="section-title">Trakt and MDBList go beyond basic auth.</h3>
@@ -162,7 +162,7 @@
         </div>
       </article>
 
-      <article class="story-panel glass reveal reveal-panel" style="--reveal-delay: 700ms;">
+      <article class="story-panel glass scroll-reveal scroll-reveal-right" style="--reveal-delay: 160ms;">
         <div class="story-copy">
           <span class="badge">Poster Stack</span>
           <h3 class="section-title">Custom posters without breaking the account model.</h3>
@@ -177,7 +177,7 @@
         </div>
       </article>
 
-      <article class="story-panel surface reveal reveal-panel" style="--reveal-delay: 780ms;">
+      <article class="story-panel surface scroll-reveal scroll-reveal-left" style="--reveal-delay: 200ms;">
         <div class="story-copy">
           <span class="badge">Localization</span>
           <h3 class="section-title">One account language profile across every screen.</h3>
@@ -196,7 +196,7 @@
       </article>
     </section>
 
-    <section class="closing-banner glass reveal reveal-panel" style="--reveal-delay: 860ms;">
+    <section class="closing-banner glass scroll-reveal scroll-reveal-wide" style="--reveal-delay: 120ms;">
       <div>
         <span class="badge">Ready</span>
         <h2 class="section-title">Control onboarding, secrets, catalogs, and synced settings from one place.</h2>
@@ -214,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import PortalShell from '~/components/portal/PortalShell.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
 
@@ -232,13 +232,55 @@ const featureRibbon = [
 ]
 
 const pageReady = ref(false)
+const landingPage = ref<HTMLElement | null>(null)
 const { bootstrap, signedIn, signOut } = usePortalStore()
+let revealObserver: IntersectionObserver | null = null
+
+const setupScrollReveals = async () => {
+  await nextTick()
+  revealObserver?.disconnect()
+
+  const root = landingPage.value
+  if (!root || typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+    root?.querySelectorAll<HTMLElement>('.scroll-reveal').forEach((element) => {
+      element.classList.add('is-visible')
+    })
+    return
+  }
+
+  revealObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) {
+          return
+        }
+
+        entry.target.classList.add('is-visible')
+        revealObserver?.unobserve(entry.target)
+      })
+    },
+    {
+      root: null,
+      rootMargin: '0px 0px -12% 0px',
+      threshold: 0.16
+    }
+  )
+
+  root.querySelectorAll<HTMLElement>('.scroll-reveal').forEach((element) => {
+    revealObserver?.observe(element)
+  })
+}
 
 onMounted(() => {
   bootstrap()
   requestAnimationFrame(() => {
     pageReady.value = true
+    setupScrollReveals()
   })
+})
+
+onBeforeUnmount(() => {
+  revealObserver?.disconnect()
 })
 </script>
 
@@ -427,7 +469,7 @@ onMounted(() => {
     radial-gradient(circle at top left, rgba(255, 209, 102, 0.22), transparent 26%),
     radial-gradient(circle at top right, rgba(123, 255, 211, 0.22), transparent 24%),
     linear-gradient(160deg, rgba(9, 20, 35, 0.92), rgba(5, 10, 17, 0.98)),
-    url('/landing-logo.png');
+    url('/landing-logo.webp');
   background-size: auto, auto, cover, 42%;
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
   background-position: top left, top right, center, 112% 116%;
@@ -645,9 +687,39 @@ onMounted(() => {
   backdrop-filter: blur(12px);
 }
 
-.landing-page.is-ready .marquee-pill {
+.scroll-reveal.is-visible.marquee-pill {
   opacity: 1;
   transform: translateY(0);
+  filter: blur(0);
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translate3d(0, 34px, 0) scale(0.985);
+  filter: blur(12px);
+  transition:
+    opacity 860ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 1050ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 1050ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform, filter;
+}
+
+.scroll-reveal-left {
+  transform: translate3d(-26px, 34px, 0) scale(0.985);
+}
+
+.scroll-reveal-right {
+  transform: translate3d(26px, 34px, 0) scale(0.985);
+}
+
+.scroll-reveal-wide {
+  transform: translate3d(0, 42px, 0) scale(0.978);
+}
+
+.scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
   filter: blur(0);
 }
 
@@ -663,6 +735,34 @@ onMounted(() => {
   padding: 1.5rem;
   border-radius: var(--radius-xl);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.story-panel > *,
+.closing-banner > * {
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(8px);
+  transition:
+    opacity 720ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 860ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 860ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.story-panel > *:nth-child(1),
+.closing-banner > *:nth-child(1) {
+  transition-delay: 110ms;
+}
+
+.story-panel > *:nth-child(2),
+.closing-banner > *:nth-child(2) {
+  transition-delay: 220ms;
+}
+
+.scroll-reveal.is-visible.story-panel > *,
+.scroll-reveal.is-visible.closing-banner > * {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
 }
 
 .story-panel-large {
@@ -706,6 +806,63 @@ onMounted(() => {
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sync-node,
+.sync-line,
+.sync-tv,
+.integration-tile,
+.poster-slab,
+.language-cloud span {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 640ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.scroll-reveal.is-visible .sync-node,
+.scroll-reveal.is-visible .sync-line,
+.scroll-reveal.is-visible .sync-tv,
+.scroll-reveal.is-visible .integration-tile,
+.scroll-reveal.is-visible .poster-slab,
+.scroll-reveal.is-visible .language-cloud span {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.scroll-reveal.is-visible .sync-node:nth-child(1),
+.scroll-reveal.is-visible .integration-tile:nth-child(1),
+.scroll-reveal.is-visible .poster-slab:nth-child(1),
+.scroll-reveal.is-visible .language-cloud span:nth-child(1) {
+  transition-delay: 160ms;
+}
+
+.scroll-reveal.is-visible .sync-node:nth-child(3),
+.scroll-reveal.is-visible .integration-tile:nth-child(2),
+.scroll-reveal.is-visible .poster-slab:nth-child(2),
+.scroll-reveal.is-visible .language-cloud span:nth-child(2) {
+  transition-delay: 240ms;
+}
+
+.scroll-reveal.is-visible .sync-cluster .sync-tv:nth-child(1),
+.scroll-reveal.is-visible .poster-slab:nth-child(3),
+.scroll-reveal.is-visible .language-cloud span:nth-child(3) {
+  transition-delay: 320ms;
+}
+
+.scroll-reveal.is-visible .sync-cluster .sync-tv:nth-child(2),
+.scroll-reveal.is-visible .language-cloud span:nth-child(4) {
+  transition-delay: 400ms;
+}
+
+.scroll-reveal.is-visible .sync-cluster .sync-tv:nth-child(3),
+.scroll-reveal.is-visible .language-cloud span:nth-child(5) {
+  transition-delay: 480ms;
+}
+
+.scroll-reveal.is-visible .language-cloud span:nth-child(6) {
+  transition-delay: 560ms;
 }
 
 .sync-node strong,
