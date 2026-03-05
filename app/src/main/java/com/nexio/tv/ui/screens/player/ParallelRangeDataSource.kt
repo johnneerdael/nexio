@@ -37,6 +37,7 @@ internal class ParallelRangeDataSource(
     private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
     private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
     private val onResolvedUri: (Uri?) -> Unit = {},
+    private val onReadPositionAdvanced: (Long) -> Unit = {},
     private val consumeBootstrapCache: (DataSpec) -> BootstrapCacheEntry? = { null },
     private val updateBootstrapCache: (BootstrapCacheEntry?) -> Unit = {}
 ) : DataSource {
@@ -198,7 +199,19 @@ internal class ParallelRangeDataSource(
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         // Fallback mode: delegate to single upstream
-        fallbackSource?.let { return it.read(buffer, offset, length) }
+        fallbackSource?.let {
+            val read = it.read(buffer, offset, length)
+            if (read > 0) {
+                position += read
+                bytesRemaining = if (bytesRemaining == C.LENGTH_UNSET.toLong()) {
+                    C.LENGTH_UNSET.toLong()
+                } else {
+                    bytesRemaining - read
+                }
+                onReadPositionAdvanced(position)
+            }
+            return read
+        }
 
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
 
@@ -230,6 +243,7 @@ internal class ParallelRangeDataSource(
                 if (read > 0) {
                     position += read
                     bytesRemaining -= read
+                    onReadPositionAdvanced(position)
                     if (position >= continuationEndPositionExclusive) {
                         source.close()
                         continuationSource = null
@@ -286,6 +300,7 @@ internal class ParallelRangeDataSource(
         currentChunkReadOffset += readSize
         position += readSize
         bytesRemaining -= readSize
+        onReadPositionAdvanced(position)
 
         return readSize
     }
@@ -495,7 +510,8 @@ internal class ParallelRangeDataSource(
         private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
         private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
-        private val onResolvedUri: (Uri?) -> Unit = {}
+        private val onResolvedUri: (Uri?) -> Unit = {},
+        private val onReadPositionAdvanced: (Long) -> Unit = {}
     ) : DataSource.Factory {
         @Volatile
         private var startupBootstrapCache: BootstrapCacheEntry? = null
@@ -507,6 +523,7 @@ internal class ParallelRangeDataSource(
                 chunkSize = chunkSize,
                 shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,
                 onResolvedUri = onResolvedUri,
+                onReadPositionAdvanced = onReadPositionAdvanced,
                 consumeBootstrapCache = { dataSpec ->
                     val cached = startupBootstrapCache ?: return@ParallelRangeDataSource null
                     val isFresh = SystemClock.uptimeMillis() - cached.createdAtUptimeMs <= 15_000L

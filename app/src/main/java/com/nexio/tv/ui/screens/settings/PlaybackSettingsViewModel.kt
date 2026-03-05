@@ -252,18 +252,16 @@ class PlaybackSettingsViewModel @Inject constructor(
             return
         }
         val current = playerSettings.first()
-        val bufferMb = MemoryBudget.effectiveBufferMb(current.bufferSettings.targetBufferSizeMb)
         val (adjBuffer, adjChunk) = MemoryBudget.enforce(
-            bufferMb,
+            MemoryBudget.defaultBufferSizeMb,
             current.parallelChunkSizeMb,
             current.parallelConnectionCount
         )
-        if (adjBuffer == bufferMb && adjChunk == current.parallelChunkSizeMb) {
+        if (adjBuffer == MemoryBudget.defaultBufferSizeMb && adjChunk == current.parallelChunkSizeMb) {
             playerSettingsDataStore.setUseParallelConnections(true)
         } else {
             playerSettingsDataStore.updateMemorySettings(
                 useParallelConnections = true,
-                targetBufferSizeMb = if (adjBuffer != bufferMb) adjBuffer else null,
                 parallelChunkSizeMb = adjChunk
             )
         }
@@ -275,8 +273,7 @@ class PlaybackSettingsViewModel @Inject constructor(
         if (count <= current.parallelConnectionCount) {
             playerSettingsDataStore.setParallelConnectionCount(count)
         } else {
-            val bufferMb = MemoryBudget.effectiveBufferMb(current.bufferSettings.targetBufferSizeMb)
-            val maxChunk = MemoryBudget.maxChunkMb(bufferMb, count)
+            val maxChunk = MemoryBudget.maxChunkMb(MemoryBudget.defaultBufferSizeMb, count)
             val newChunkMb = current.parallelChunkSizeMb.coerceAtMost(maxChunk)
             if (newChunkMb == current.parallelChunkSizeMb) {
                 playerSettingsDataStore.setParallelConnectionCount(count)
@@ -292,8 +289,10 @@ class PlaybackSettingsViewModel @Inject constructor(
     @androidx.annotation.OptIn(UnstableApi::class)
     suspend fun setParallelChunkSizeMb(mb: Int) {
         val current = playerSettings.first()
-        val bufferMb = MemoryBudget.effectiveBufferMb(current.bufferSettings.targetBufferSizeMb)
-        val maxChunk = MemoryBudget.maxChunkMb(bufferMb, current.parallelConnectionCount)
+        val maxChunk = MemoryBudget.maxChunkMb(
+            MemoryBudget.defaultBufferSizeMb,
+            current.parallelConnectionCount
+        )
         val clamped = mb.coerceAtMost(maxChunk)
         playerSettingsDataStore.setParallelChunkSizeMb(clamped)
     }
