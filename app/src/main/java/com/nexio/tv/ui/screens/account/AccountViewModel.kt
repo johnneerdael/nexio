@@ -10,13 +10,6 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
-import com.nexio.tv.core.sync.LibrarySyncService
-import com.nexio.tv.core.sync.WatchProgressSyncService
-import com.nexio.tv.core.sync.WatchedItemsSyncService
-import com.nexio.tv.data.local.LibraryPreferences
-import com.nexio.tv.data.local.WatchedItemsPreferences
-import com.nexio.tv.data.local.TraktAuthDataStore
-import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.data.repository.LibraryRepositoryImpl
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
@@ -45,16 +38,9 @@ class AccountViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val syncRepository: SyncRepository,
     private val addonSyncService: AddonSyncService,
-    private val watchProgressSyncService: WatchProgressSyncService,
-    private val librarySyncService: LibrarySyncService,
-    private val watchedItemsSyncService: WatchedItemsSyncService,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
-    private val watchProgressPreferences: WatchProgressPreferences,
-    private val libraryPreferences: LibraryPreferences,
-    private val watchedItemsPreferences: WatchedItemsPreferences,
-    private val traktAuthDataStore: TraktAuthDataStore,
     private val postgrest: Postgrest,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -343,7 +329,7 @@ class AccountViewModel @Inject constructor(
 
             val stats = runCatching {
                 val addonsCount = addonRepository.getInstalledAddons().first().size
-                val libraryCount = libraryPreferences.getAllItems().size
+                val libraryCount = libraryRepository.libraryItems.first().size
                 val watchProgressCount = watchProgressRepository.allProgress.first().size
                 AccountConnectedStats(
                     addons = addonsCount,
@@ -537,9 +523,6 @@ class AccountViewModel @Inject constructor(
 
     private suspend fun pushLocalDataToRemote() {
         addonSyncService.pushToRemote()
-        watchProgressSyncService.pushToRemote()
-        librarySyncService.pushToRemote()
-        watchedItemsSyncService.pushToRemote()
     }
 
     private suspend fun pullRemoteData(): Result<Unit> {
@@ -551,40 +534,9 @@ class AccountViewModel @Inject constructor(
                 removeMissingLocal = true
             )
             addonRepository.isSyncingFromRemote = false
-
-            val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
-            Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected")
-            if (!isTraktConnected) {
-                watchProgressRepository.isSyncingFromRemote = true
-                val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
-                Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteEntries.size} watch progress entries")
-                watchProgressPreferences.replaceWithRemoteEntries(remoteEntries.toMap())
-                Log.d("AccountViewModel", "pullRemoteData: reconciled local watch progress with ${remoteEntries.size} remote entries")
-                watchProgressRepository.isSyncingFromRemote = false
-
-                libraryRepository.isSyncingFromRemote = true
-                librarySyncService.pullFromRemote().fold(
-                    onSuccess = { remoteLibraryItems ->
-                        Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteLibraryItems.size} library items")
-                        libraryPreferences.mergeRemoteItems(remoteLibraryItems)
-                        Log.d("AccountViewModel", "pullRemoteData: reconciled local library with ${remoteLibraryItems.size} remote items")
-                    },
-                    onFailure = { e ->
-                        Log.e("AccountViewModel", "pullRemoteData: failed to pull library items", e)
-                    }
-                )
-                libraryRepository.isSyncingFromRemote = false
-
-                val remoteWatchedItems = watchedItemsSyncService.pullFromRemote().getOrElse { throw it }
-                Log.d("AccountViewModel", "pullRemoteData: pulled ${remoteWatchedItems.size} watched items")
-                watchedItemsPreferences.replaceWithRemoteItems(remoteWatchedItems)
-                Log.d("AccountViewModel", "pullRemoteData: reconciled local watched items with ${remoteWatchedItems.size} remote items")
-            }
             return Result.success(Unit)
         } catch (e: Exception) {
             addonRepository.isSyncingFromRemote = false
-            watchProgressRepository.isSyncingFromRemote = false
-            libraryRepository.isSyncingFromRemote = false
             return Result.failure(e)
         }
     }

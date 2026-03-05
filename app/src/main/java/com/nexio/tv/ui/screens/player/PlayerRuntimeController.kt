@@ -42,7 +42,6 @@ class PlayerRuntimeController(
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
-    internal val watchedItemsPreferences: com.nexio.tv.data.local.WatchedItemsPreferences,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
