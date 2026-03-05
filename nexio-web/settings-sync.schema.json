@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexio.app/schemas/settings-sync.schema.json",
+  "title": "NEXIO Settings Sync Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["appearance", "layout", "plugins", "integrations", "playback", "trakt", "debug"],
+  "properties": {
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["theme", "font", "localeTag"],
+      "properties": {
+        "theme": {"type": "string", "enum": ["CRIMSON", "OCEAN", "VIOLET", "EMERALD", "AMBER", "ROSE", "WHITE"], "default": "WHITE"},
+        "font": {"type": "string", "enum": ["INTER", "DM_SANS", "OPEN_SANS"], "default": "INTER"},
+        "localeTag": {"type": ["string", "null"], "default": null}
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectedLayout", "modernLandscapePostersEnabled", "heroCatalogKeys", "sidebarCollapsedByDefault", "modernSidebarEnabled", "modernSidebarBlurEnabled", "heroSectionEnabled", "searchDiscoverEnabled", "posterLabelsEnabled", "catalogAddonNameEnabled", "catalogTypeSuffixEnabled", "hideUnreleasedContent", "blurUnwatchedEpisodes", "preferExternalMetaAddonDetail", "focusedPosterBackdropExpandEnabled", "focusedPosterBackdropExpandDelaySeconds", "posterCardWidthDp", "posterCardCornerRadiusDp"],
+      "properties": {
+        "selectedLayout": {"type": "string", "enum": ["MODERN", "GRID", "CLASSIC"], "default": "MODERN"},
+        "modernLandscapePostersEnabled": {"type": "boolean", "default": false},
+        "heroCatalogKeys": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "default": []},
+        "sidebarCollapsedByDefault": {"type": "boolean", "default": false},
+        "modernSidebarEnabled": {"type": "boolean", "default": false},
+        "modernSidebarBlurEnabled": {"type": "boolean", "default": false},
+        "heroSectionEnabled": {"type": "boolean", "default": true},
+        "searchDiscoverEnabled": {"type": "boolean", "default": true},
+        "posterLabelsEnabled": {"type": "boolean", "default": true},
+        "catalogAddonNameEnabled": {"type": "boolean", "default": true},
+        "catalogTypeSuffixEnabled": {"type": "boolean", "default": true},
+        "hideUnreleasedContent": {"type": "boolean", "default": false},
+        "blurUnwatchedEpisodes": {"type": "boolean", "default": false},
+        "preferExternalMetaAddonDetail": {"type": "boolean", "default": false},
+        "focusedPosterBackdropExpandEnabled": {"type": "boolean", "default": false},
+        "focusedPosterBackdropExpandDelaySeconds": {"type": "integer", "minimum": 0, "maximum": 10, "default": 3},
+        "posterCardWidthDp": {"type": "integer", "enum": [104, 112, 120, 126, 134, 140], "default": 126},
+        "posterCardCornerRadiusDp": {"type": "integer", "enum": [0, 4, 8, 12, 16], "default": 12}
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pluginsEnabled"],
+      "properties": {
+        "pluginsEnabled": {"type": "boolean", "default": true},
+        "repositories": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["url"],
+            "properties": {
+              "url": {"type": "string", "minLength": 1},
+              "enabledScraperIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "default": []}
+            }
+          }
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tmdb", "mdblist", "animeSkip", "posterRatings"],
+      "properties": {
+        "tmdb": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "language", "useArtwork", "useBasicInfo", "useDetails", "useCredits", "useProductions", "useNetworks", "useEpisodes", "useMoreLikeThis", "useCollections"],
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "language": {"type": "string", "default": "en"},
+            "useArtwork": {"type": "boolean", "default": true},
+            "useBasicInfo": {"type": "boolean", "default": true},
+            "useDetails": {"type": "boolean", "default": true},
+            "useCredits": {"type": "boolean", "default": true},
+            "useProductions": {"type": "boolean", "default": true},
+            "useNetworks": {"type": "boolean", "default": true},
+            "useEpisodes": {"type": "boolean", "default": true},
+            "useMoreLikeThis": {"type": "boolean", "default": true},
+            "useCollections": {"type": "boolean", "default": true}
+          }
+        },
+        "mdblist": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "apiKey", "showTrakt", "showImdb", "showTmdb", "showLetterboxd", "showTomatoes", "showAudience", "showMetacritic", "hiddenPersonalListKeys", "selectedTopListKeys", "catalogOrder"],
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "apiKey": {"type": "string", "default": ""},
+            "showTrakt": {"type": "boolean", "default": true},
+            "showImdb": {"type": "boolean", "default": true},
+            "showTmdb": {"type": "boolean", "default": true},
+            "showLetterboxd": {"type": "boolean", "default": true},
+            "showTomatoes": {"type": "boolean", "default": true},
+            "showAudience": {"type": "boolean", "default": true},
+            "showMetacritic": {"type": "boolean", "default": true},
+            "hiddenPersonalListKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []},
+            "selectedTopListKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []},
+            "catalogOrder": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []}
+          }
+        },
+        "animeSkip": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "clientId"],
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "clientId": {"type": "string", "default": ""}
+          }
+        },
+        "posterRatings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rpdbEnabled", "rpdbApiKey", "topPostersEnabled", "topPostersApiKey"],
+          "properties": {
+            "rpdbEnabled": {"type": "boolean", "default": false},
+            "rpdbApiKey": {"type": "string", "default": ""},
+            "topPostersEnabled": {"type": "boolean", "default": false},
+            "topPostersApiKey": {"type": "string", "default": ""}
+          },
+          "allOf": [
+            {"if": {"properties": {"rpdbEnabled": {"const": true}}}, "then": {"properties": {"topPostersEnabled": {"const": false}}}},
+            {"if": {"properties": {"topPostersEnabled": {"const": true}}}, "then": {"properties": {"rpdbEnabled": {"const": false}}}}
+          ]
+        }
+      }
+    },
+    "playback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["general", "streamSelection", "audioTrailer", "subtitles", "bufferNetwork"],
+      "properties": {
+        "general": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["loadingOverlayEnabled", "pauseOverlayEnabled", "osdClockEnabled", "skipIntroEnabled", "frameRateMatchingMode", "resolutionMatchingEnabled"],
+          "properties": {
+            "loadingOverlayEnabled": {"type": "boolean", "default": true},
+            "pauseOverlayEnabled": {"type": "boolean", "default": true},
+            "osdClockEnabled": {"type": "boolean", "default": true},
+            "skipIntroEnabled": {"type": "boolean", "default": true},
+            "frameRateMatchingMode": {"type": "string", "enum": ["OFF", "START", "START_STOP"], "default": "OFF"},
+            "resolutionMatchingEnabled": {"type": "boolean", "default": false}
+          }
+        },
+        "streamSelection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["playerPreference", "streamReuseLastLinkEnabled", "streamReuseLastLinkCacheHours", "streamAutoPlayMode", "streamAutoPlaySource", "streamAutoPlaySelectedAddons", "streamAutoPlaySelectedPlugins", "streamAutoPlayRegex", "streamAutoPlayNextEpisodeEnabled", "streamAutoPlayPreferBingeGroupForNextEpisode", "nextEpisodeThresholdMode", "nextEpisodeThresholdPercent", "nextEpisodeThresholdMinutesBeforeEnd"],
+          "properties": {
+            "playerPreference": {"type": "string", "enum": ["INTERNAL", "EXTERNAL", "ASK_EVERY_TIME"], "default": "INTERNAL"},
+            "streamReuseLastLinkEnabled": {"type": "boolean", "default": false},
+            "streamReuseLastLinkCacheHours": {"type": "integer", "enum": [1, 6, 12, 24, 48, 72, 168], "default": 24},
+            "streamAutoPlayMode": {"type": "string", "enum": ["MANUAL", "FIRST_STREAM", "REGEX_MATCH"], "default": "MANUAL"},
+            "streamAutoPlaySource": {"type": "string", "enum": ["ALL_SOURCES", "INSTALLED_ADDONS_ONLY", "ENABLED_PLUGINS_ONLY"], "default": "ALL_SOURCES"},
+            "streamAutoPlaySelectedAddons": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []},
+            "streamAutoPlaySelectedPlugins": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []},
+            "streamAutoPlayRegex": {"type": "string", "default": ""},
+            "streamAutoPlayNextEpisodeEnabled": {"type": "boolean", "default": false},
+            "streamAutoPlayPreferBingeGroupForNextEpisode": {"type": "boolean", "default": true},
+            "nextEpisodeThresholdMode": {"type": "string", "enum": ["PERCENTAGE", "MINUTES_BEFORE_END"], "default": "PERCENTAGE"},
+            "nextEpisodeThresholdPercent": {"type": "number", "minimum": 97.0, "maximum": 99.5, "multipleOf": 0.5, "default": 99.0},
+            "nextEpisodeThresholdMinutesBeforeEnd": {"type": "number", "minimum": 1.0, "maximum": 3.5, "multipleOf": 0.5, "default": 2.0}
+          }
+        },
+        "audioTrailer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["preferredAudioLanguage", "secondaryPreferredAudioLanguage", "skipSilence", "decoderPriority", "tunnelingEnabled", "mapDV7ToHevc", "experimentalDv7ToDv81Enabled", "experimentalDtsIecPassthroughEnabled", "experimentalDv7ToDv81PreserveMappingEnabled", "experimentalDv5ToDv81Enabled"],
+          "properties": {
+            "preferredAudioLanguage": {"type": "string", "default": "device"},
+            "secondaryPreferredAudioLanguage": {"type": ["string", "null"], "default": null},
+            "skipSilence": {"type": "boolean", "default": false},
+            "decoderPriority": {"type": "integer", "minimum": 0, "maximum": 2, "default": 1},
+            "tunnelingEnabled": {"type": "boolean", "default": false},
+            "mapDV7ToHevc": {"type": "boolean", "default": false},
+            "experimentalDv7ToDv81Enabled": {"type": "boolean", "default": false},
+            "experimentalDtsIecPassthroughEnabled": {"type": "boolean", "default": false},
+            "experimentalDv7ToDv81PreserveMappingEnabled": {"type": "boolean", "default": false},
+            "experimentalDv5ToDv81Enabled": {"type": "boolean", "default": false}
+          }
+        },
+        "subtitles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["preferredLanguage", "secondaryPreferredLanguage", "subtitleOrganizationMode", "addonSubtitleStartupMode", "size", "verticalOffset", "bold", "textColor", "backgroundColor", "outlineEnabled", "outlineColor", "useLibass"],
+          "properties": {
+            "preferredLanguage": {"type": "string", "default": "en"},
+            "secondaryPreferredLanguage": {"type": ["string", "null"], "default": null},
+            "subtitleOrganizationMode": {"type": "string", "enum": ["NONE", "BY_LANGUAGE", "BY_ADDON"], "default": "NONE"},
+            "addonSubtitleStartupMode": {"type": "string", "enum": ["FAST_STARTUP", "PREFERRED_ONLY", "ALL_SUBTITLES"], "default": "ALL_SUBTITLES"},
+            "size": {"type": "integer", "minimum": 50, "maximum": 200, "multipleOf": 10, "default": 120},
+            "verticalOffset": {"type": "integer", "minimum": -20, "maximum": 50, "default": 5},
+            "bold": {"type": "boolean", "default": false},
+            "textColor": {"type": "integer", "default": -1},
+            "backgroundColor": {"type": "integer", "default": 0},
+            "outlineEnabled": {"type": "boolean", "default": true},
+            "outlineColor": {"type": "integer", "default": -16777216},
+            "useLibass": {"type": "boolean", "default": false}
+          }
+        },
+        "bufferNetwork": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minBufferMs", "maxBufferMs", "bufferForPlaybackMs", "bufferForPlaybackAfterRebufferMs", "targetBufferSizeMb", "backBufferDurationMs", "vodCacheSizeMode", "vodCacheSizeMb", "useParallelConnections", "parallelConnectionCount", "parallelChunkSizeMb", "enableBufferLogs"],
+          "properties": {
+            "minBufferMs": {"type": "integer", "minimum": 5000, "maximum": 120000, "multipleOf": 5000, "default": 20000},
+            "maxBufferMs": {"type": "integer", "minimum": 5000, "maximum": 120000, "multipleOf": 5000, "default": 50000},
+            "bufferForPlaybackMs": {"type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000, "default": 3000},
+            "bufferForPlaybackAfterRebufferMs": {"type": "integer", "minimum": 1000, "maximum": 120000, "multipleOf": 1000, "default": 5000},
+            "targetBufferSizeMb": {"type": "integer", "minimum": 0, "default": 100},
+            "backBufferDurationMs": {"type": "integer", "minimum": 0, "maximum": 120000, "multipleOf": 5000, "default": 0},
+            "vodCacheSizeMode": {"type": "string", "enum": ["AUTO", "MANUAL"], "default": "AUTO"},
+            "vodCacheSizeMb": {"type": "integer", "minimum": 100, "maximum": 65536, "default": 500},
+            "useParallelConnections": {"type": "boolean", "default": false},
+            "parallelConnectionCount": {"type": "integer", "minimum": 2, "maximum": 4, "default": 2},
+            "parallelChunkSizeMb": {"type": "integer", "minimum": 8, "maximum": 128, "default": 16},
+            "enableBufferLogs": {"type": "boolean", "default": false}
+          }
+        }
+      }
+    },
+    "trakt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["continueWatchingDaysCap", "showUnairedNextUp", "catalogEnabledSet", "catalogOrder", "selectedPopularListKeys"],
+      "properties": {
+        "continueWatchingDaysCap": {"type": "integer", "enum": [0, 14, 30, 60, 90, 180, 365], "default": 60},
+        "showUnairedNextUp": {"type": "boolean", "default": true},
+        "catalogEnabledSet": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["trakt_up_next", "trakt_trending_movies", "trakt_trending_shows", "trakt_popular_movies", "trakt_popular_shows", "trakt_recommended_movies", "trakt_recommended_shows", "trakt_calendar_next_7_days"]},
+          "uniqueItems": true,
+          "default": ["trakt_up_next", "trakt_recommended_movies", "trakt_recommended_shows", "trakt_calendar_next_7_days"]
+        },
+        "catalogOrder": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["trakt_up_next", "trakt_trending_movies", "trakt_trending_shows", "trakt_popular_movies", "trakt_popular_shows", "trakt_recommended_movies", "trakt_recommended_shows", "trakt_calendar_next_7_days"]},
+          "uniqueItems": true,
+          "default": ["trakt_up_next", "trakt_trending_movies", "trakt_trending_shows", "trakt_popular_movies", "trakt_popular_shows", "trakt_recommended_movies", "trakt_recommended_shows", "trakt_calendar_next_7_days"]
+        },
+        "selectedPopularListKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []}
+      }
+    },
+    "debug": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accountTabEnabled", "syncCodeFeaturesEnabled", "bufferLogsEnabled"],
+      "properties": {
+        "accountTabEnabled": {"type": "boolean", "default": false},
+        "syncCodeFeaturesEnabled": {"type": "boolean", "default": false},
+        "bufferLogsEnabled": {"type": "boolean", "default": false}
+      }
+    }
+  }
+}

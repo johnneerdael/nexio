@@ -194,6 +194,18 @@ class TraktSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setCatalogPreferences(
+        enabledCatalogs: Set<String>,
+        catalogOrder: List<String>,
+        selectedPopularListKeys: Set<String>
+    ) {
+        store().edit { prefs ->
+            prefs[catalogEnabledSetKey] = sanitizeEnabledCatalogs(enabledCatalogs)
+            prefs[catalogOrderCsvKey] = sanitizeCatalogOrder(catalogOrder).joinToString(",")
+            prefs[selectedPopularListKeysKey] = selectedPopularListKeys.filter { it.isNotBlank() }.toSet()
+        }
+    }
+
     private fun sanitizeEnabledCatalogs(value: Set<String>): Set<String> {
         val known = TraktCatalogIds.BUILT_IN_ORDER.toSet()
         return value.filterTo(linkedSetOf()) { it in known }

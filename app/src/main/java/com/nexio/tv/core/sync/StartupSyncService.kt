@@ -18,7 +18,7 @@ private const val TAG = "StartupSyncService"
 @Singleton
 class StartupSyncService @Inject constructor(
     private val authManager: AuthManager,
-    private val addonSyncService: AddonSyncService,
+    private val accountSettingsSyncService: AccountSettingsSyncService,
     private val addonRepository: AddonRepositoryImpl
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -80,14 +80,14 @@ class StartupSyncService @Inject constructor(
             var syncCompleted = false
             repeat(maxAttempts) { index ->
                 val attempt = index + 1
-                Log.d(TAG, "Startup addon sync attempt $attempt/$maxAttempts for key=$key")
-                val result = pullRemoteAddons()
+                Log.d(TAG, "Startup account snapshot sync attempt $attempt/$maxAttempts for key=$key")
+                val result = pullRemoteSnapshot()
                 if (result.isSuccess) {
                     lastPulledKey = key
                     syncCompleted = true
                     return@repeat
                 }
-                Log.w(TAG, "Startup addon sync attempt $attempt failed for key=$key", result.exceptionOrNull())
+                Log.w(TAG, "Startup account snapshot sync attempt $attempt failed for key=$key", result.exceptionOrNull())
                 if (attempt < maxAttempts) delay(3000)
             }
 
@@ -102,22 +102,21 @@ class StartupSyncService @Inject constructor(
         return true
     }
 
-    private suspend fun pullRemoteAddons(): Result<Unit> {
+    private suspend fun pullRemoteSnapshot(): Result<Unit> {
         return try {
             addonRepository.isSyncingFromRemote = true
-            val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
+            val remoteAddonUrls = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
             addonRepository.reconcileWithRemoteAddonUrls(
                 remoteUrls = remoteAddonUrls,
                 removeMissingLocal = true
             )
-            Log.d(TAG, "Pulled ${remoteAddonUrls.size} addons from remote")
+            Log.d(TAG, "Pulled account snapshot with ${remoteAddonUrls.size} addons from remote")
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Startup addon sync failed", e)
+            Log.e(TAG, "Startup account snapshot sync failed", e)
             Result.failure(e)
         } finally {
             addonRepository.isSyncingFromRemote = false
         }
     }
 }
-

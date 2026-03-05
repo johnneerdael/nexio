@@ -10,6 +10,7 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
+import com.nexio.tv.core.sync.AccountSettingsSyncService
 import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.data.repository.LibraryRepositoryImpl
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
@@ -38,6 +39,7 @@ class AccountViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val syncRepository: SyncRepository,
     private val addonSyncService: AddonSyncService,
+    private val accountSettingsSyncService: AccountSettingsSyncService,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
     private val libraryRepository: LibraryRepositoryImpl,
@@ -522,13 +524,14 @@ class AccountViewModel @Inject constructor(
     }
 
     private suspend fun pushLocalDataToRemote() {
+        accountSettingsSyncService.pushToRemote()
         addonSyncService.pushToRemote()
     }
 
     private suspend fun pullRemoteData(): Result<Unit> {
         try {
             addonRepository.isSyncingFromRemote = true
-            val remoteAddonUrls = addonSyncService.getRemoteAddonUrls().getOrElse { throw it }
+            val remoteAddonUrls = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
             addonRepository.reconcileWithRemoteAddonUrls(
                 remoteUrls = remoteAddonUrls,
                 removeMissingLocal = true

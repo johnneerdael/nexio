@@ -3,7 +3,8 @@ package com.nexio.tv.core.sync
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.AddonPreferences
-import com.nexio.tv.data.remote.supabase.SupabaseAddon
+import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
+import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -38,28 +39,27 @@ class AddonSyncService @Inject constructor(
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val profileId = 1
-
             val localUrls = addonPreferences.installedAddonUrls.first()
-            Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size} for profile $profileId")
+            Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size}")
 
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
                     localUrls.forEachIndexed { index, url ->
                         addJsonObject {
                             put("url", url)
+                            put("manifest_url", "${url.trimEnd('/')}/manifest.json")
                             put("sort_order", index)
                         }
                     }
                 })
-                put("p_profile_id", profileId)
+                put("p_source", "app")
             }
-            Log.d(TAG, "pushToRemote: calling RPC sync_push_addons with profile_id=$profileId")
+            Log.d(TAG, "pushToRemote: calling RPC sync_push_account_addons")
             withJwtRefreshRetry {
-                postgrest.rpc("sync_push_addons", params)
+                postgrest.rpc("sync_push_account_addons", params).decodeList<AccountSyncMutationResult>()
             }
 
-            Log.d(TAG, "Pushed ${localUrls.size} addons to remote for profile $profileId")
+            Log.d(TAG, "Pushed ${localUrls.size} addons to remote")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push addons to remote", e)
@@ -69,26 +69,14 @@ class AddonSyncService @Inject constructor(
 
     suspend fun getRemoteAddonUrls(): Result<List<String>> = withContext(Dispatchers.IO) {
         try {
-            val effectiveUserId = authManager.getEffectiveUserId(fallbackToOwnIdOnFailure = false)
-                ?: return@withContext Result.failure(
-                    IllegalStateException("Unable to resolve sync owner for addon sync")
-                )
-
-            val profileId = 1
-
-            val remoteAddons = withJwtRefreshRetry {
-                postgrest.from("addons")
-                    .select { filter {
-                        eq("user_id", effectiveUserId)
-                        eq("profile_id", profileId)
-                    } }
-                    .decodeList<SupabaseAddon>()
+            val snapshot = withJwtRefreshRetry {
+                postgrest.rpc("sync_pull_account_snapshot").decodeAs<AccountSnapshotRpcResponse>()
             }
 
             Result.success(
-                remoteAddons
-                .sortedBy { it.sortOrder }
-                .map { it.url }
+                snapshot.addons
+                    .sortedBy { it.sortOrder }
+                    .map { it.url }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get remote addon URLs", e)
