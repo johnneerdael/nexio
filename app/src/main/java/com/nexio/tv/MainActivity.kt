@@ -100,7 +100,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
@@ -109,14 +108,11 @@ import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.AuthState
-import com.nexio.tv.core.sync.ProfileSyncService
 import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.ui.navigation.NexioNavHost
 import com.nexio.tv.ui.navigation.Screen
 import com.nexio.tv.ui.components.NexioScrollDefaults
-import com.nexio.tv.ui.components.ProfileAvatarCircle
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
-import com.nexio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import com.nexio.tv.updater.UpdateViewModel
@@ -169,12 +165,6 @@ class MainActivity : ComponentActivity() {
     lateinit var startupSyncService: StartupSyncService
 
     @Inject
-    lateinit var profileSyncService: ProfileSyncService
-
-    @Inject
-    lateinit var profileManager: ProfileManager
-
-    @Inject
     lateinit var authManager: AuthManager
 
     @Inject
@@ -202,9 +192,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         setContent {
-            var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
-            var onboardingProfileSyncInProgress by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
                 .hasSeenAuthQrOnFirstLaunch
                 .map<Boolean, Boolean?> { it }
@@ -216,12 +204,6 @@ class MainActivity : ComponentActivity() {
                     appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
                     onboardingCompletedThisSession = true
                 }
-            }
-
-            val activeProfileId by profileManager.activeProfileId.collectAsState()
-            val profiles by profileManager.profiles.collectAsState()
-            val activeProfile = remember(activeProfileId, profiles) {
-                profiles.firstOrNull { it.id == activeProfileId }
             }
 
             val mainUiPrefsFlow = remember(themeDataStore, layoutPreferenceDataStore) {
@@ -274,50 +256,9 @@ class MainActivity : ComponentActivity() {
                             onBackPress = {},
                             onContinue = {
                                 lifecycleScope.launch {
-                                    val shouldRunRemoteOnboardingSync =
-                                        authManager.authState.value is AuthState.FullAccount
-
-                                    if (shouldRunRemoteOnboardingSync) {
-                                        if (onboardingProfileSyncInProgress) return@launch
-                                        onboardingProfileSyncInProgress = true
-                                        val maxAttempts = 3
-                                        var synced = false
-                                        for (attempt in 0 until maxAttempts) {
-                                            val result = profileSyncService.pullFromRemote()
-                                            if (result.isSuccess) {
-                                                synced = true
-                                                break
-                                            }
-                                            if (attempt < maxAttempts - 1) {
-                                                delay(1_000)
-                                            }
-                                        }
-                                        if (!synced) {
-                                            android.util.Log.w(
-                                                "MainActivity",
-                                                "Onboarding profile sync failed after retries; continuing"
-                                            )
-                                        }
-                                    }
                                     appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
                                     onboardingCompletedThisSession = true
-                                    onboardingProfileSyncInProgress = false
                                 }
-                                if (authManager.authState.value is AuthState.FullAccount) {
-                                    startupSyncService.requestSyncNow()
-                                }
-                            }
-                        )
-                        return@Surface
-                    }
-
-                    val shouldShowProfileSelection =
-                        !hasSelectedProfileThisSession && profiles.size > 1
-
-                    if (shouldShowProfileSelection) {
-                        ProfileSelectionScreen(
-                            onProfileSelected = {
-                                hasSelectedProfileThisSession = true
                                 if (authManager.authState.value is AuthState.FullAccount) {
                                     startupSyncService.requestSyncNow()
                                 }
@@ -424,10 +365,6 @@ class MainActivity : ComponentActivity() {
                             sidebarCollapsed = sidebarCollapsed,
                             modernSidebarBlurEnabled = modernSidebarBlurEnabled,
                             hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
-                            activeProfileName = activeProfile?.name ?: "",
-                            activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                            showProfileSelector = profiles.size > 1,
-                            onSwitchProfile = { hasSelectedProfileThisSession = false },
                             onExitApp = {
                                 finishAffinity()
                                 finishAndRemoveTask()
@@ -443,10 +380,6 @@ class MainActivity : ComponentActivity() {
                             selectedDrawerRoute = selectedDrawerRoute,
                             sidebarCollapsed = sidebarCollapsed,
                             hideBuiltInHeaders = false,
-                            activeProfileName = activeProfile?.name ?: "",
-                            activeProfileColorHex = activeProfile?.avatarColorHex ?: "#1E88E5",
-                            showProfileSelector = profiles.size > 1,
-                            onSwitchProfile = { hasSelectedProfileThisSession = false },
                             onExitApp = {
                                 finishAffinity()
                                 finishAndRemoveTask()
@@ -507,10 +440,6 @@ private fun LegacySidebarScaffold(
     selectedDrawerRoute: String?,
     sidebarCollapsed: Boolean,
     hideBuiltInHeaders: Boolean,
-    activeProfileName: String,
-    activeProfileColorHex: String,
-    showProfileSelector: Boolean,
-    onSwitchProfile: () -> Unit,
     onExitApp: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -633,46 +562,6 @@ private fun LegacySidebarScaffold(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    if (isExpanded && showProfileSelector && activeProfileName.isNotEmpty()) {
-                        var isProfileFocused by remember { mutableStateOf(false) }
-                        val profileItemShape = RoundedCornerShape(32.dp)
-                        val profileBgColor by animateColorAsState(
-                            targetValue = if (isProfileFocused) NexioColors.FocusBackground else Color.Transparent,
-                            label = "legacyProfileItemBg"
-                        )
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .width(itemWidth)
-                                    .height(52.dp)
-                                    .clip(profileItemShape)
-                                    .background(color = profileBgColor, shape = profileItemShape)
-                                    .onFocusChanged { isProfileFocused = it.isFocused }
-                                    .clickable {
-                                        onSwitchProfile()
-                                        drawerState.setValue(DrawerValue.Closed)
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Spacer(modifier = Modifier.width(10.dp))
-                                ProfileAvatarCircle(
-                                    name = activeProfileName,
-                                    colorHex = activeProfileColorHex,
-                                    size = 34.dp
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = activeProfileName,
-                                    color = if (isProfileFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
-                                    maxLines = 1,
-                                    textAlign = TextAlign.Start
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -795,10 +684,6 @@ private fun ModernSidebarScaffold(
     sidebarCollapsed: Boolean,
     modernSidebarBlurEnabled: Boolean,
     hideBuiltInHeaders: Boolean,
-    activeProfileName: String,
-    activeProfileColorHex: String,
-    showProfileSelector: Boolean,
-    onSwitchProfile: () -> Unit,
     onExitApp: () -> Unit
 ) {
     val showSidebar = currentRoute in rootRoutes
@@ -1125,11 +1010,7 @@ private fun ModernSidebarScaffold(
                             isSidebarExpanded = false
                             sidebarCollapsePending = false
                             pendingContentFocusTransfer = true
-                        },
-                        activeProfileName = activeProfileName,
-                        activeProfileColorHex = activeProfileColorHex,
-                        showProfileSelector = showProfileSelector,
-                        onSwitchProfile = onSwitchProfile
+                        }
                     )
                 }
             }

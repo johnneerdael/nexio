@@ -8,7 +8,6 @@ import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
-import com.nexio.tv.core.profile.ProfileManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,8 +44,7 @@ sealed interface TraktScrobbleItem {
 class TraktScrobbleService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
-    private val traktProgressService: TraktProgressService,
-    private val profileManager: ProfileManager
+    private val traktProgressService: TraktProgressService
 ) {
     data class WatchingNowState(
         val active: Boolean = false,
@@ -81,7 +79,6 @@ class TraktScrobbleService @Inject constructor(
     }
 
     suspend fun checkin(item: TraktScrobbleItem, message: String? = null): Boolean {
-        if (profileManager.activeProfileId.value != 1) return false
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) return false
         if (!traktAuthService.hasRequiredCredentials()) return false
 
@@ -109,7 +106,6 @@ class TraktScrobbleService @Inject constructor(
         item: TraktScrobbleItem,
         progressPercent: Float
     ) {
-        if (profileManager.activeProfileId.value != 1) return
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) return
         if (!traktAuthService.hasRequiredCredentials()) return
 

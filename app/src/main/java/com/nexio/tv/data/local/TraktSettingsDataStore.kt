@@ -1,16 +1,23 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private val Context.traktSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "trakt_settings"
+)
 
 object TraktCatalogIds {
     const val UP_NEXT = "trakt_up_next"
@@ -50,11 +57,9 @@ data class TraktCatalogPreferences(
 
 @Singleton
 class TraktSettingsDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
     companion object {
-        private const val FEATURE = "trakt_settings"
         const val CONTINUE_WATCHING_DAYS_CAP_ALL = 0
         const val DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
         const val DEFAULT_SHOW_UNAIRED_NEXT_UP = true
@@ -62,8 +67,8 @@ class TraktSettingsDataStore @Inject constructor(
         const val MAX_CONTINUE_WATCHING_DAYS_CAP = 365
     }
 
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
+    private val dataStore = context.traktSettingsDataStore
+    private fun store() = dataStore
 
     private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
     private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
@@ -73,49 +78,39 @@ class TraktSettingsDataStore @Inject constructor(
     private val catalogOrderCsvKey = stringPreferencesKey("catalog_order_csv")
     private val selectedPopularListKeysKey = stringSetPreferencesKey("selected_popular_list_keys")
 
-    val continueWatchingDaysCap: Flow<Int> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            normalizeContinueWatchingDaysCap(
-                prefs[continueWatchingDaysCapKey] ?: DEFAULT_CONTINUE_WATCHING_DAYS_CAP
-            )
-        }
+    val continueWatchingDaysCap: Flow<Int> = dataStore.data.map { prefs ->
+        normalizeContinueWatchingDaysCap(
+            prefs[continueWatchingDaysCapKey] ?: DEFAULT_CONTINUE_WATCHING_DAYS_CAP
+        )
     }
 
-    val dismissedNextUpKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[dismissedNextUpKeysKey] ?: emptySet()
-        }
+    val dismissedNextUpKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[dismissedNextUpKeysKey] ?: emptySet()
     }
 
-    val dismissedRecommendationKeys: Flow<Set<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[dismissedRecommendationKeysKey] ?: emptySet()
-        }
+    val dismissedRecommendationKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[dismissedRecommendationKeysKey] ?: emptySet()
     }
 
-    val showUnairedNextUp: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[showUnairedNextUpKey] ?: DEFAULT_SHOW_UNAIRED_NEXT_UP
-        }
+    val showUnairedNextUp: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[showUnairedNextUpKey] ?: DEFAULT_SHOW_UNAIRED_NEXT_UP
     }
 
-    val catalogPreferences: Flow<TraktCatalogPreferences> = profileManager.activeProfileId.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            val enabled = sanitizeEnabledCatalogs(prefs[catalogEnabledSetKey] ?: TraktCatalogIds.DEFAULT_ENABLED)
-            val order = sanitizeCatalogOrder(
-                prefs[catalogOrderCsvKey]
-                    ?.split(',')
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotBlank() }
-                    ?: TraktCatalogIds.BUILT_IN_ORDER
-            )
-            val selectedListKeys = prefs[selectedPopularListKeysKey] ?: emptySet()
-            TraktCatalogPreferences(
-                enabledCatalogs = enabled,
-                catalogOrder = order,
-                selectedPopularListKeys = selectedListKeys
-            )
-        }
+    val catalogPreferences: Flow<TraktCatalogPreferences> = dataStore.data.map { prefs ->
+        val enabled = sanitizeEnabledCatalogs(prefs[catalogEnabledSetKey] ?: TraktCatalogIds.DEFAULT_ENABLED)
+        val order = sanitizeCatalogOrder(
+            prefs[catalogOrderCsvKey]
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?: TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val selectedListKeys = prefs[selectedPopularListKeysKey] ?: emptySet()
+        TraktCatalogPreferences(
+            enabledCatalogs = enabled,
+            catalogOrder = order,
+            selectedPopularListKeys = selectedListKeys
+        )
     }
 
     suspend fun setContinueWatchingDaysCap(days: Int) {

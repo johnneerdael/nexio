@@ -9,7 +9,6 @@ import com.nexio.tv.R
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.plugin.PluginManager
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
 import com.nexio.tv.core.sync.LibrarySyncService
@@ -61,7 +60,6 @@ class AccountViewModel @Inject constructor(
     private val watchedItemsPreferences: WatchedItemsPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val postgrest: Postgrest,
-    private val profileManager: ProfileManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -71,7 +69,6 @@ class AccountViewModel @Inject constructor(
 
     init {
         observeAuthState()
-        observeProfileNames()
     }
 
     private fun observeAuthState() {
@@ -90,23 +87,6 @@ class AccountViewModel @Inject constructor(
                     loadConnectedStats()
                     loadSyncOverview()
                 }
-            }
-        }
-    }
-
-    private fun observeProfileNames() {
-        viewModelScope.launch {
-            profileManager.profiles.collect { profiles ->
-                val current = _uiState.value.syncOverview ?: return@collect
-                val updated = current.copy(
-                    perProfile = current.perProfile.map { stat ->
-                        val local = profiles.firstOrNull { it.id == stat.profileId }
-                        if (local != null) {
-                            stat.copy(profileName = local.name, avatarColorHex = local.avatarColorHex)
-                        } else stat
-                    }
-                )
-                _uiState.update { it.copy(syncOverview = updated) }
             }
         }
     }
@@ -418,15 +398,13 @@ class AccountViewModel @Inject constructor(
                     .distinct()
                     .sorted()
 
-                val localProfiles = profileManager.profiles.value
                 val perProfile = allProfileIds.map { pid ->
                     val pidStr = pid.toString()
-                    val local = localProfiles.firstOrNull { it.id == pid }
                     val remote = response.profiles[pidStr]
                     ProfileSyncStats(
                         profileId = pid,
-                        profileName = local?.name ?: remote?.name ?: "Profile $pid",
-                        avatarColorHex = local?.avatarColorHex ?: remote?.color ?: "#1E88E5",
+                        profileName = remote?.name ?: "Profile $pid",
+                        avatarColorHex = remote?.color ?: "#1E88E5",
                         addons = response.addons[pidStr] ?: 0,
                         plugins = response.plugins[pidStr] ?: 0,
                         library = response.libraryItems[pidStr] ?: 0,
@@ -592,9 +570,8 @@ class AccountViewModel @Inject constructor(
             )
             addonRepository.isSyncingFromRemote = false
 
-            val isPrimaryProfile = profileManager.activeProfileId.value == 1
-            val isTraktConnected = isPrimaryProfile && traktAuthDataStore.isAuthenticated.first()
-            Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected isPrimaryProfile=$isPrimaryProfile")
+            val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
+            Log.d("AccountViewModel", "pullRemoteData: isTraktConnected=$isTraktConnected")
             if (!isTraktConnected) {
                 watchProgressRepository.isSyncingFromRemote = true
                 val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }

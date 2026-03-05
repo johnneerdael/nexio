@@ -2,7 +2,6 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchedItemsPreferences
 import com.nexio.tv.data.remote.supabase.SupabaseWatchedItem
@@ -26,8 +25,7 @@ class WatchedItemsSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val postgrest: Postgrest,
     private val watchedItemsPreferences: WatchedItemsPreferences,
-    private val traktAuthDataStore: TraktAuthDataStore,
-    private val profileManager: ProfileManager
+    private val traktAuthDataStore: TraktAuthDataStore
 ) {
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
@@ -48,7 +46,7 @@ class WatchedItemsSyncService @Inject constructor(
             val items = watchedItemsPreferences.getAllItems()
             Log.d(TAG, "pushToRemote: ${items.size} watched items to push")
 
-            val profileId = profileManager.activeProfileId.value
+            val profileId = 1
             val params = buildJsonObject {
                 put("p_items", buildJsonArray {
                     items.forEach { item ->
@@ -85,7 +83,7 @@ class WatchedItemsSyncService @Inject constructor(
                 return@withContext Result.success(emptyList())
             }
 
-            val profileId = profileManager.activeProfileId.value
+            val profileId = 1
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
             }

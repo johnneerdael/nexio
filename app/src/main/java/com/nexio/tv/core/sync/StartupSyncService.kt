@@ -3,7 +3,6 @@ package com.nexio.tv.core.sync
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.plugin.PluginManager
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LibraryPreferences
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchProgressPreferences
@@ -32,7 +31,6 @@ class StartupSyncService @Inject constructor(
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
     private val watchedItemsSyncService: WatchedItemsSyncService,
-    private val profileSyncService: ProfileSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
     private val watchProgressRepository: WatchProgressRepositoryImpl,
@@ -40,8 +38,7 @@ class StartupSyncService @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val watchProgressPreferences: WatchProgressPreferences,
     private val libraryPreferences: LibraryPreferences,
-    private val watchedItemsPreferences: WatchedItemsPreferences,
-    private val profileManager: ProfileManager
+    private val watchedItemsPreferences: WatchedItemsPreferences
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
@@ -85,7 +82,7 @@ class StartupSyncService @Inject constructor(
     }
 
     private fun pullKey(userId: String): String {
-        val profileId = profileManager.activeProfileId.value
+        val profileId = 1
         return "${userId}_p${profileId}"
     }
 
@@ -133,12 +130,8 @@ class StartupSyncService @Inject constructor(
 
     private suspend fun pullRemoteData(): Result<Unit> {
         try {
-            val profileId = profileManager.activeProfileId.value
+            val profileId = 1
             Log.d(TAG, "Pulling remote data for profile $profileId")
-
-            // Pull profiles list first so profile selection stays up-to-date
-            profileSyncService.pullFromRemote().getOrElse { throw it }
-            Log.d(TAG, "Pulled profiles from remote")
 
             pluginManager.isSyncingFromRemote = true
             try {
@@ -168,9 +161,8 @@ class StartupSyncService @Inject constructor(
                 addonRepository.isSyncingFromRemote = false
             }
 
-            val isPrimaryProfile = profileManager.activeProfileId.value == 1
-            val isTraktConnected = isPrimaryProfile && traktAuthDataStore.isAuthenticated.first()
-            Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected isPrimaryProfile=$isPrimaryProfile")
+            val isTraktConnected = traktAuthDataStore.isAuthenticated.first()
+            Log.d(TAG, "Watch progress sync: isTraktConnected=$isTraktConnected")
             if (!isTraktConnected) {
                 // Pull library and watched items first — these are lightweight and critical.
                 // Watch progress is pulled last because the table is large and may time out;

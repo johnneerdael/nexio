@@ -1,53 +1,36 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
+import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.domain.model.PluginRepository
 import com.nexio.tv.domain.model.ScraperInfo
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.pluginDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "plugin_settings"
+)
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class PluginDataStore @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val moshi: Moshi,
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    private val moshi: Moshi
 ) {
-    companion object {
-        private const val FEATURE = "plugin_settings"
-    }
-
-    private fun effectiveProfileId(): Int {
-        val active = profileManager.activeProfile
-        return if (active != null && active.usesPrimaryPlugins) 1 else profileManager.activeProfileId.value
-    }
-
-    private fun store(profileId: Int = effectiveProfileId()) =
-        factory.get(profileId, FEATURE)
-
-    private val effectiveProfileIdFlow: Flow<Int> = combine(
-        profileManager.activeProfileId,
-        profileManager.profiles
-    ) { activeProfileId, profiles ->
-        val activeProfile = profiles.firstOrNull { it.id == activeProfileId }
-        if (activeProfile?.usesPrimaryPlugins == true) 1 else activeProfileId
-    }.distinctUntilChanged()
+    private val dataStore = context.pluginDataStore
+    private fun store() = dataStore
 
     private val repositoriesKey = stringPreferencesKey("repositories")
     private val scrapersKey = stringPreferencesKey("scrapers")
@@ -65,26 +48,21 @@ class PluginDataStore @Inject constructor(
     // Plugin code directory - per-profile
     val codeDir: File
         get() {
-            val pid = effectiveProfileId()
-            val dirName = if (pid == 1) "plugin_code" else "plugin_code_p${pid}"
-            return File(context.filesDir, dirName).also { it.mkdirs() }
+            return File(context.filesDir, "plugin_code").also { it.mkdirs() }
         }
 
     // Repositories
-    val repositories: Flow<List<PluginRepository>> = effectiveProfileIdFlow.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[repositoriesKey]?.let { json ->
-                try {
-                    moshi.adapter<List<PluginRepository>>(repoListType).fromJson(json) ?: emptyList()
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            } ?: emptyList()
-        }
+    val repositories = dataStore.data.map { prefs ->
+        prefs[repositoriesKey]?.let { json ->
+            try {
+                moshi.adapter<List<PluginRepository>>(repoListType).fromJson(json) ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
     }
 
     suspend fun saveRepositories(repos: List<PluginRepository>) {
-        if (profileManager.activeProfile?.usesPrimaryPlugins == true) return
         val json = moshi.adapter<List<PluginRepository>>(repoListType).toJson(repos)
         store().edit { prefs ->
             prefs[repositoriesKey] = json
@@ -92,7 +70,6 @@ class PluginDataStore @Inject constructor(
     }
 
     suspend fun addRepository(repo: PluginRepository) {
-        if (profileManager.activeProfile?.usesPrimaryPlugins == true) return
         val current = repositories.first().toMutableList()
         current.removeAll { it.id == repo.id }
         current.add(repo)
@@ -100,7 +77,6 @@ class PluginDataStore @Inject constructor(
     }
 
     suspend fun removeRepository(repoId: String) {
-        if (profileManager.activeProfile?.usesPrimaryPlugins == true) return
         val current = repositories.first().toMutableList()
         current.removeAll { it.id == repoId }
         saveRepositories(current)
@@ -119,20 +95,17 @@ class PluginDataStore @Inject constructor(
     }
 
     // Scrapers
-    val scrapers: Flow<List<ScraperInfo>> = effectiveProfileIdFlow.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[scrapersKey]?.let { json ->
-                try {
-                    moshi.adapter<List<ScraperInfo>>(scraperListType).fromJson(json) ?: emptyList()
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            } ?: emptyList()
-        }
+    val scrapers = dataStore.data.map { prefs ->
+        prefs[scrapersKey]?.let { json ->
+            try {
+                moshi.adapter<List<ScraperInfo>>(scraperListType).fromJson(json) ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
     }
 
     suspend fun saveScrapers(scrapers: List<ScraperInfo>) {
-        if (profileManager.activeProfile?.usesPrimaryPlugins == true) return
         val json = moshi.adapter<List<ScraperInfo>>(scraperListType).toJson(scrapers)
         store().edit { prefs ->
             prefs[scrapersKey] = json
@@ -152,14 +125,11 @@ class PluginDataStore @Inject constructor(
     }
 
     // Plugins enabled global toggle
-    val pluginsEnabled: Flow<Boolean> = effectiveProfileIdFlow.flatMapLatest { pid ->
-        factory.get(pid, FEATURE).data.map { prefs ->
-            prefs[pluginsEnabledKey] ?: true
-        }
+    val pluginsEnabled = dataStore.data.map { prefs ->
+        prefs[pluginsEnabledKey] ?: true
     }
 
     suspend fun setPluginsEnabled(enabled: Boolean) {
-        if (profileManager.activeProfile?.usesPrimaryPlugins == true) return
         store().edit { prefs ->
             prefs[pluginsEnabledKey] = enabled
         }

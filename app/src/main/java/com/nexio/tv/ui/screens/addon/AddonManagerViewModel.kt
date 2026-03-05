@@ -8,7 +8,6 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.server.AddonConfigServer
 import com.nexio.tv.core.server.DeviceIpAddress
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -31,7 +30,6 @@ import javax.inject.Inject
 class AddonManagerViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
-    private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -39,10 +37,7 @@ class AddonManagerViewModel @Inject constructor(
     val uiState: StateFlow<AddonManagerUiState> = _uiState.asStateFlow()
 
     val isReadOnly: Boolean
-        get() {
-            val profile = profileManager.activeProfile ?: return false
-            return !profile.isPrimary && profile.usesPrimaryAddons
-        }
+        get() = false
 
     private var server: AddonConfigServer? = null
     private var logoBytes: ByteArray? = null

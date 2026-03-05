@@ -2,7 +2,6 @@ package com.nexio.tv.core.sync
 
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
-import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.remote.supabase.SupabaseAddon
 import io.github.jan.supabase.postgrest.Postgrest
@@ -22,8 +21,7 @@ private const val TAG = "AddonSyncService"
 class AddonSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val authManager: AuthManager,
-    private val addonPreferences: AddonPreferences,
-    private val profileManager: ProfileManager
+    private val addonPreferences: AddonPreferences
 ) {
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
@@ -40,14 +38,7 @@ class AddonSyncService @Inject constructor(
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val activeProfile = profileManager.activeProfile
-            val profileId = profileManager.activeProfileId.value
-            Log.d(TAG, "pushToRemote: activeProfile=${activeProfile?.id} isPrimary=${activeProfile?.isPrimary} usesPrimaryAddons=${activeProfile?.usesPrimaryAddons} profileId=$profileId")
-
-            if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryAddons) {
-                Log.d(TAG, "Profile ${activeProfile.id} uses primary addons, skipping push")
-                return@withContext Result.success(Unit)
-            }
+            val profileId = 1
 
             val localUrls = addonPreferences.installedAddonUrls.first()
             Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size} for profile $profileId")
@@ -83,9 +74,7 @@ class AddonSyncService @Inject constructor(
                     IllegalStateException("Unable to resolve sync owner for addon sync")
                 )
 
-            val activeProfile = profileManager.activeProfile
-            val profileId = if (activeProfile != null && !activeProfile.isPrimary && activeProfile.usesPrimaryAddons) 1
-                            else profileManager.activeProfileId.value
+            val profileId = 1
 
             val remoteAddons = withJwtRefreshRetry {
                 postgrest.from("addons")

@@ -51,7 +51,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
-import com.nexio.tv.ui.components.ProfileAvatarCircle
 import com.nexio.tv.ui.theme.NexioColors
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -72,11 +71,7 @@ internal fun ModernSidebarBlurPanel(
     panelShape: RoundedCornerShape,
     drawerItemFocusRequesters: Map<String, FocusRequester>,
     onDrawerItemFocused: (Int) -> Unit,
-    onDrawerItemClick: (String) -> Unit,
-    activeProfileName: String,
-    activeProfileColorHex: String,
-    showProfileSelector: Boolean,
-    onSwitchProfile: () -> Unit
+    onDrawerItemClick: (String) -> Unit
 ) {
     val delayedBlurProgress =
         ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
@@ -180,25 +175,6 @@ internal fun ModernSidebarBlurPanel(
             }
         }
 
-        if (showProfileSelector && activeProfileName.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                SidebarProfileItem(
-                    profileName = activeProfileName,
-                    profileColorHex = activeProfileColorHex,
-                    focusEnabled = keepSidebarFocusDuringCollapse,
-                    labelAlpha = sidebarLabelAlpha,
-                    onFocusChanged = { focused ->
-                        if (focused) onDrawerItemFocused(drawerItems.size)
-                    },
-                    onClick = onSwitchProfile,
-                    modifier = Modifier.fillMaxWidth(0.92f)
-                )
-            }
-        }
     }
 }
 
@@ -299,69 +275,6 @@ private fun SidebarNavigationItem(
             overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.width(iconContainerSize + contentGap))
-    }
-}
-
-@Composable
-private fun SidebarProfileItem(
-    profileName: String,
-    profileColorHex: String,
-    focusEnabled: Boolean,
-    labelAlpha: Float,
-    onFocusChanged: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(999.dp)
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isFocused) Color.White.copy(alpha = 0.18f) else Color.Transparent,
-        animationSpec = tween(durationMillis = 180),
-        label = "profileItemBackground"
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (isFocused) Color.White.copy(alpha = 0.4f) else Color.Transparent,
-        animationSpec = tween(durationMillis = 180),
-        label = "profileItemBorder"
-    )
-    val contentGap = 14.dp
-    val iconContainerSize = 34.dp
-
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(backgroundColor)
-            .border(width = 1.5.dp, color = borderColor, shape = shape)
-            .onFocusChanged {
-                isFocused = it.isFocused
-                onFocusChanged(it.isFocused)
-            }
-            .focusable(enabled = focusEnabled)
-            .onPreviewKeyEvent { event ->
-                if (focusEnabled && event.type == KeyEventType.KeyUp &&
-                    (event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter)
-                ) {
-                    onClick()
-                    true
-                } else false
-            }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        ProfileAvatarCircle(
-            name = profileName,
-            colorHex = profileColorHex,
-            size = iconContainerSize
-        )
-        Spacer(modifier = Modifier.width(contentGap))
-        Text(
-            text = profileName,
-            color = Color.White,
-            modifier = Modifier
-                .graphicsLayer { alpha = labelAlpha },
-            style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
-            maxLines = 1
-        )
     }
 }
 
