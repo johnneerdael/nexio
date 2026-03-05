@@ -1,6 +1,7 @@
 import { bearerToken, okJson, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
+import { mapSecretRows } from '~/server/utils/account-secrets'
 import { defaultAccountAddons, defaultSettings, demoDevices } from '~/utils/portal-defaults'
-import type { AddonRecord, BootstrapPayload, LinkedDevice, PortalSettings } from '~/types/portal'
+import type { AddonRecord, BootstrapPayload, LinkedDevice, PortalSettings, SecretType } from '~/types/portal'
 
 type SnapshotRpcPayload = {
   user_id?: string
@@ -15,7 +16,20 @@ type SnapshotRpcPayload = {
     description?: string | null
     enabled?: boolean | null
     sort_order?: number | null
+    public_query_params?: Record<string, string> | null
+    install_kind?: 'manifest' | 'configured' | null
+    secret_ref?: string | null
   }>
+}
+
+type SecretRow = {
+  id: string
+  secret_type: SecretType
+  secret_ref: string
+  masked_preview?: string | null
+  status?: string | null
+  version?: number | null
+  updated_at?: string | null
 }
 
 type DeviceRow = {
@@ -40,6 +54,9 @@ function toAddonRecords(addons: SnapshotRpcPayload['addons']): AddonRecord[] {
     name: addon.name ?? addon.url ?? 'Addon',
     enabled: addon.enabled ?? true,
     description: addon.description ?? undefined,
+    publicQueryParams: addon.public_query_params ?? {},
+    installKind: addon.install_kind ?? 'manifest',
+    secretRef: addon.secret_ref ?? null,
     sortOrder: addon.sort_order ?? index
   })).filter((addon) => addon.url)
 }
@@ -50,6 +67,7 @@ export default defineEventHandler(async (event) => {
 
   let settings = defaultSettings()
   let addons = defaultAccountAddons()
+  let secretStatuses = [] as BootstrapPayload['snapshot']['secretStatuses']
   let syncRevision = 1
   let lastSyncedAt: string | null = null
   let linkedDevices: LinkedDevice[] = demoDevices()
@@ -86,6 +104,9 @@ export default defineEventHandler(async (event) => {
             name: addon.name,
             description: addon.description ?? null,
             enabled: addon.enabled,
+            public_query_params: addon.publicQueryParams ?? {},
+            install_kind: addon.installKind ?? 'manifest',
+            secret_ref: addon.secretRef ?? null,
             sort_order: index
           })),
           p_source: 'web-bootstrap'
@@ -102,6 +123,13 @@ export default defineEventHandler(async (event) => {
     }
   } catch {
     // Keep the portal usable before the new Supabase migration lands.
+  }
+
+  try {
+    const rows = await supabaseFetch<SecretRow[]>(`/rest/v1/account_secrets?select=id,secret_type,secret_ref,masked_preview,status,version,updated_at`, {}, token, false)
+    secretStatuses = mapSecretRows(rows)
+  } catch {
+    // Secret metadata can stay empty until the secret contract is installed.
   }
 
   try {
@@ -125,6 +153,7 @@ export default defineEventHandler(async (event) => {
     snapshot: {
       settings,
       addons,
+      secretStatuses,
       linkedDevices,
       syncRevision,
       lastSyncedAt

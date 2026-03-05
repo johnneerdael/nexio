@@ -1,5 +1,6 @@
 import { createError } from 'h3'
-import { readJsonBody, okJson } from '~/server/utils/supabase'
+import { bearerToken, readJsonBody, okJson, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
+import { buildResolvedManifestUrl, type AddonTransportPayload } from '~/server/utils/account-secrets'
 import type { AddonManifestInspection, AddonRecord } from '~/types/portal'
 
 type InspectBody = {
@@ -40,7 +41,7 @@ function manifestUrlFor(addon: AddonRecord): string {
 }
 
 function normalizeCatalogType(value: string | undefined): string {
-  const type = String(value || '').trim().lowercase()
+  const type = String(value || '').trim().toLowerCase()
   if (type === 'tv' || type === 'show') {
     return 'series'
   }
@@ -64,11 +65,29 @@ function disableKey(addonUrl: string, type: string, catalogId: string, catalogNa
   return `${addonUrl}_${type}_${catalogId}_${catalogName}`
 }
 
-async function inspectAddon(addon: AddonRecord): Promise<AddonManifestInspection> {
+async function inspectAddon(addon: AddonRecord, userId?: string | null): Promise<AddonManifestInspection> {
   const addonUrl = canonicalAddonUrl(addon.url)
-  const resolvedManifestUrl = manifestUrlFor(addon)
+  let resolvedManifestUrl = manifestUrlFor(addon)
 
   try {
+    if (userId && addon.secretRef) {
+      const transport = await supabaseFetch<AddonTransportPayload>('/rest/v1/rpc/service_get_account_addon_transport', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: userId,
+          p_addon_id: addon.id,
+          p_source: 'web-inspect'
+        })
+      }, undefined, true)
+
+      resolvedManifestUrl = buildResolvedManifestUrl({
+        manifestUrl: transport.manifest_url,
+        baseUrl: transport.base_url,
+        publicQueryParams: transport.public_query_params ?? addon.publicQueryParams ?? {},
+        secretPayload: transport.secret_payload ?? null
+      })
+    }
+
     const response = await fetch(resolvedManifestUrl)
     if (!response.ok) {
       throw new Error(`Manifest returned ${response.status}`)
@@ -126,11 +145,20 @@ async function inspectAddon(addon: AddonRecord): Promise<AddonManifestInspection
 export default defineEventHandler(async (event) => {
   const body = await readJsonBody<InspectBody>(event)
   const addons = body.addons ?? []
+  const userId = await (async () => {
+    try {
+      bearerToken(event)
+      const user = await supabaseUser(event)
+      return user.id
+    } catch {
+      return null
+    }
+  })()
 
   if (!Array.isArray(addons)) {
     throw createError({ statusCode: 400, statusMessage: 'Addons payload must be an array.' })
   }
 
-  const inspections = await Promise.all(addons.map((addon) => inspectAddon(addon)))
+  const inspections = await Promise.all(addons.map((addon) => inspectAddon(addon, userId)))
   return okJson({ inspections })
 })

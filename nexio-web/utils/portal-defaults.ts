@@ -79,7 +79,6 @@ export const defaultSettings = (): PortalSettings => ({
     },
     mdblist: {
       enabled: false,
-      apiKey: '',
       showTrakt: true,
       showImdb: true,
       showTmdb: true,
@@ -97,21 +96,14 @@ export const defaultSettings = (): PortalSettings => ({
     },
     posterRatings: {
       rpdbEnabled: false,
-      rpdbApiKey: '',
-      topPostersEnabled: false,
-      topPostersApiKey: ''
+      topPostersEnabled: false
     },
     traktAuth: {
       connected: false,
       username: '',
       userSlug: '',
       connectedAt: null,
-      pending: false,
-      accessToken: '',
-      refreshToken: '',
-      tokenType: '',
-      createdAt: null,
-      expiresIn: null
+      pending: false
     }
   },
   playback: {
@@ -195,6 +187,9 @@ export const defaultAccountAddons = (): AddonRecord[] => [
     name: 'Cinemeta',
     enabled: true,
     description: 'Default metadata and catalog provider.',
+    installKind: 'manifest',
+    publicQueryParams: {},
+    secretRef: null,
     sortOrder: 0
   },
   {
@@ -204,6 +199,9 @@ export const defaultAccountAddons = (): AddonRecord[] => [
     name: 'OpenSubtitles',
     enabled: true,
     description: 'Default subtitle provider.',
+    installKind: 'manifest',
+    publicQueryParams: {},
+    secretRef: null,
     sortOrder: 1
   }
 ]

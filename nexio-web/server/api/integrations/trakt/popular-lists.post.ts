@@ -1,9 +1,6 @@
 import { createError } from 'h3'
-import { okJson, readJsonBody } from '~/server/utils/supabase'
-
-type PopularListsBody = {
-  accessToken?: string
-}
+import { bearerToken, okJson, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
+import { secretRefs } from '~/server/utils/account-secrets'
 
 type TraktPopularListApiResponse = Array<{
   user?: {
@@ -33,8 +30,19 @@ function slugify(value: string): string {
 }
 
 export default defineEventHandler(async (event) => {
-  const body = await readJsonBody<PopularListsBody>(event)
-  const accessToken = body.accessToken?.trim()
+  bearerToken(event)
+  const user = await supabaseUser(event)
+  const secretPayload = await supabaseFetch<Record<string, string | number>>('/rest/v1/rpc/service_resolve_account_secret', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_user_id: user.id,
+      p_secret_type: 'trakt_access_token',
+      p_secret_ref: secretRefs.trakt,
+      p_source: 'web-trakt'
+    })
+  }, undefined, true)
+
+  const accessToken = String(secretPayload.accessToken || '').trim()
   if (!accessToken) {
     throw createError({ statusCode: 400, statusMessage: 'Trakt access token is required.' })
   }

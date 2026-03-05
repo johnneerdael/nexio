@@ -1,5 +1,6 @@
 import { createError } from 'h3'
-import { okJson, readJsonBody } from '~/server/utils/supabase'
+import { bearerToken, okJson, readJsonBody, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
+import { secretRefs } from '~/server/utils/account-secrets'
 import type { MDBListListOption } from '~/types/portal'
 
 type ValidateBody = {
@@ -64,7 +65,22 @@ async function requestListOptions(apiKey: string, relativeUrl: string): Promise<
 
 export default defineEventHandler(async (event) => {
   const body = await readJsonBody<ValidateBody>(event)
-  const apiKey = body.apiKey?.trim()
+  let apiKey = body.apiKey?.trim() ?? ''
+  if (!apiKey) {
+    bearerToken(event)
+    const user = await supabaseUser(event)
+    const payload = await supabaseFetch<Record<string, string>>('/rest/v1/rpc/service_resolve_account_secret', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_user_id: user.id,
+        p_secret_type: 'mdblist_api_key',
+        p_secret_ref: secretRefs.mdblist,
+        p_source: 'web-mdblist'
+      })
+    }, undefined, true)
+    apiKey = String(payload.apiKey || '').trim()
+  }
+
   if (!apiKey) {
     throw createError({ statusCode: 400, statusMessage: 'MDBList API key is required.' })
   }

@@ -24,6 +24,10 @@ class AddonSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val addonPreferences: AddonPreferences
 ) {
+    private fun publicAddonUrl(rawUrl: String): String {
+        return rawUrl.substringBefore('?').substringBefore('#').trim().removeSuffix("/")
+    }
+
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
             block()
@@ -45,9 +49,10 @@ class AddonSyncService @Inject constructor(
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
                     localUrls.forEachIndexed { index, url ->
+                        val publicUrl = publicAddonUrl(url)
                         addJsonObject {
-                            put("url", url)
-                            put("manifest_url", "${url.trimEnd('/')}/manifest.json")
+                            put("url", publicUrl)
+                            put("manifest_url", "${publicUrl.trimEnd('/')}/manifest.json")
                             put("sort_order", index)
                         }
                     }

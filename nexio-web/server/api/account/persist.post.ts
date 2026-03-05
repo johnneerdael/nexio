@@ -39,6 +39,9 @@ export default defineEventHandler(async (event) => {
         name: addon.name,
         description: addon.description ?? null,
         enabled: addon.enabled,
+        public_query_params: addon.publicQueryParams ?? {},
+        install_kind: addon.installKind ?? 'manifest',
+        secret_ref: addon.secretRef ?? null,
         sort_order: index
       })),
       p_source: 'web'

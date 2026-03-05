@@ -13,7 +13,7 @@
       <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
         <div>
           <label>Trakt account</label>
-          <p>Use Trakt device auth from the web portal and keep the account token state inside the synced profile.</p>
+          <p>Use Trakt device auth from the web portal. Tokens are stored as account secrets, while profile state stays in the public sync payload.</p>
         </div>
         <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
           <button v-if="!settings.integrations.traktAuth.connected && !traktFlow" class="secondary-btn" @click="emit('start-trakt')">Start QR flow</button>
@@ -28,6 +28,7 @@
           <p v-if="settings.integrations.traktAuth.connected">Connected as {{ settings.integrations.traktAuth.username || 'Trakt user' }}</p>
           <p v-else-if="traktFlow">Awaiting approval with code {{ traktFlow.userCode }}</p>
           <p v-else>Not connected.</p>
+          <p v-if="secretStatuses['integration:trakt']?.maskedPreview">{{ secretStatuses['integration:trakt']?.maskedPreview }}</p>
         </div>
         <div v-if="traktFlow" class="field-shell" style="padding:0.95rem;">
           <strong>Verification</strong>
@@ -74,6 +75,66 @@
     </article>
 
     <article v-if="showIntegrations" class="field-shell">
+      <div class="grid-2" style="margin-bottom:1rem;">
+        <div class="field-shell" style="padding:0.95rem;">
+          <label>MDBList secret</label>
+          <p>Stored separately from public settings. Save or rotate the key here.</p>
+          <input
+            :value="secretDrafts['integration:mdblist'] || ''"
+            placeholder="Paste MDBList API key"
+            @input="emit('update-secret-draft', 'integration:mdblist', ($event.target as HTMLInputElement).value)"
+          >
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.75rem;">
+            <button class="secondary-btn" @click="emit('save-secret', 'mdblist_api_key', 'integration:mdblist')">Save key</button>
+            <button
+              v-if="secretStatuses['integration:mdblist']"
+              class="danger-btn"
+              @click="emit('delete-secret', 'mdblist_api_key', 'integration:mdblist')"
+            >
+              Clear key
+            </button>
+          </div>
+          <p v-if="secretStatuses['integration:mdblist']?.maskedPreview">{{ secretStatuses['integration:mdblist']?.maskedPreview }}</p>
+        </div>
+
+        <div class="field-shell" style="padding:0.95rem;">
+          <label>Poster provider secrets</label>
+          <p>RPDB and TOP Posters keys are stored separately and never returned to the browser after save.</p>
+          <input
+            :value="secretDrafts['integration:rpdb'] || ''"
+            placeholder="Paste RPDB API key"
+            @input="emit('update-secret-draft', 'integration:rpdb', ($event.target as HTMLInputElement).value)"
+          >
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin:0.75rem 0;">
+            <button class="secondary-btn" @click="emit('save-secret', 'rpdb_api_key', 'integration:rpdb')">Save RPDB key</button>
+            <button
+              v-if="secretStatuses['integration:rpdb']"
+              class="danger-btn"
+              @click="emit('delete-secret', 'rpdb_api_key', 'integration:rpdb')"
+            >
+              Clear RPDB
+            </button>
+          </div>
+          <input
+            :value="secretDrafts['integration:topposters'] || ''"
+            placeholder="Paste TOP Posters API key"
+            @input="emit('update-secret-draft', 'integration:topposters', ($event.target as HTMLInputElement).value)"
+          >
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.75rem;">
+            <button class="secondary-btn" @click="emit('save-secret', 'top_posters_api_key', 'integration:topposters')">Save TOP Posters key</button>
+            <button
+              v-if="secretStatuses['integration:topposters']"
+              class="danger-btn"
+              @click="emit('delete-secret', 'top_posters_api_key', 'integration:topposters')"
+            >
+              Clear TOP Posters
+            </button>
+          </div>
+          <p v-if="secretStatuses['integration:rpdb']?.maskedPreview">{{ secretStatuses['integration:rpdb']?.maskedPreview }}</p>
+          <p v-if="secretStatuses['integration:topposters']?.maskedPreview">{{ secretStatuses['integration:topposters']?.maskedPreview }}</p>
+        </div>
+      </div>
+
       <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
         <div>
           <label>MDBList catalog discovery</label>
@@ -137,9 +198,9 @@
 <script setup lang="ts">
 import PortalField from '~/components/portal/PortalField.vue'
 import { fieldValue, traktCatalogLabels, type PortalGroup } from '~/utils/portal-metadata'
-import type { CatalogId, MDBListListOption, PortalSettings, TraktDeviceFlow, TraktPopularListOption } from '~/types/portal'
+import type { CatalogId, MDBListListOption, PortalSettings, SecretMetadata, SecretType, TraktDeviceFlow, TraktPopularListOption } from '~/types/portal'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   title: string
   subtitle: string
   groups: PortalGroup[]
@@ -148,11 +209,19 @@ const props = defineProps<{
   traktPopularLists?: TraktPopularListOption[]
   mdblistPersonalLists?: MDBListListOption[]
   mdblistTopLists?: MDBListListOption[]
+  secretStatuses?: Record<string, SecretMetadata>
+  secretDrafts?: Record<string, string>
   mdblistValidating?: boolean
   mdblistError?: string | null
   showTrakt?: boolean
   showIntegrations?: boolean
-}>()
+}>(), {
+  traktPopularLists: () => [],
+  mdblistPersonalLists: () => [],
+  mdblistTopLists: () => [],
+  secretStatuses: () => ({}),
+  secretDrafts: () => ({})
+})
 
 const emit = defineEmits<{
   persist: []
@@ -162,6 +231,9 @@ const emit = defineEmits<{
   'refresh-trakt-lists': []
   'disconnect-trakt': []
   'toggle-trakt-list': [key: string]
+  'update-secret-draft': [secretRef: string, value: string]
+  'save-secret': [secretType: SecretType, secretRef: string]
+  'delete-secret': [secretType: SecretType, secretRef: string]
   'validate-mdblist': []
   'toggle-mdblist-personal-list': [key: string, currentlyHidden: boolean]
   'toggle-mdblist-top-list': [key: string, shouldSelect: boolean]

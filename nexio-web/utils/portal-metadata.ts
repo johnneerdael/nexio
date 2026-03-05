@@ -132,7 +132,7 @@ export const accountGroups: Record<string, PortalGroup[]> = {
       subtitle: 'Metadata enrichment switches for artwork, credits, and detailed discovery.',
       fields: [
         { path: 'integrations.tmdb.enabled', label: 'Enable TMDB', description: 'Turns TMDB metadata enrichment on account-wide.', kind: 'toggle' },
-        { path: 'integrations.tmdb.apiKey', label: 'API key', description: 'TMDB API key shared with every synced TV.', kind: 'secret', placeholder: 'Paste TMDB API key' },
+        { path: 'integrations.tmdb.apiKey', label: 'API key', description: 'TMDB API key shared with every synced TV.', kind: 'text', placeholder: 'Paste TMDB API key' },
         { path: 'integrations.tmdb.useArtwork', label: 'Use artwork', description: 'Prefer TMDB artwork when available.', kind: 'toggle' },
         { path: 'integrations.tmdb.useBasicInfo', label: 'Basic info', description: 'Use TMDB summary metadata.', kind: 'toggle' },
         { path: 'integrations.tmdb.useDetails', label: 'Detailed info', description: 'Pull extended detail metadata.', kind: 'toggle' },
@@ -147,10 +147,9 @@ export const accountGroups: Record<string, PortalGroup[]> = {
     {
       id: 'mdblist',
       title: 'MDBList',
-      subtitle: 'Ratings, catalog curation, and personal list controls.',
+      subtitle: 'Ratings, catalog curation, and personal list controls. The API key is stored separately as a secret.',
       fields: [
         { path: 'integrations.mdblist.enabled', label: 'Enable MDBList', description: 'Turns MDBList ratings and rails on.', kind: 'toggle' },
-        { path: 'integrations.mdblist.apiKey', label: 'API key', description: 'Personal MDBList API key used by synced TVs.', kind: 'secret', placeholder: 'Paste MDBList API key' },
         { path: 'integrations.mdblist.showTrakt', label: 'Show Trakt ratings', description: 'Display Trakt scoring.', kind: 'toggle' },
         { path: 'integrations.mdblist.showImdb', label: 'Show IMDb ratings', description: 'Display IMDb scoring.', kind: 'toggle' },
         { path: 'integrations.mdblist.showTmdb', label: 'Show TMDB ratings', description: 'Display TMDB scoring.', kind: 'toggle' },
@@ -175,12 +174,10 @@ export const accountGroups: Record<string, PortalGroup[]> = {
     {
       id: 'poster-ratings',
       title: 'Poster Ratings',
-      subtitle: 'Choose the single active poster provider and sync its key.',
+      subtitle: 'Choose the single active poster provider. RPDB and TOP Posters keys are stored separately as secrets.',
       fields: [
         { path: 'integrations.posterRatings.rpdbEnabled', label: 'Enable RPDB', description: 'Mutually exclusive with TOP Posters.', kind: 'toggle' },
-        { path: 'integrations.posterRatings.rpdbApiKey', label: 'RPDB API key', description: 'Key used for RPDB poster rendering.', kind: 'secret', placeholder: 'Paste RPDB API key' },
         { path: 'integrations.posterRatings.topPostersEnabled', label: 'Enable TOP Posters', description: 'Mutually exclusive with RPDB.', kind: 'toggle' },
-        { path: 'integrations.posterRatings.topPostersApiKey', label: 'TOP Posters API key', description: 'Key used for TOP Posters rendering.', kind: 'secret', placeholder: 'Paste TOP Posters API key' }
       ]
     }
   ],

@@ -21,7 +21,6 @@ import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
-import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
@@ -263,7 +262,6 @@ class AccountSettingsSyncService @Inject constructor(
                 ),
                 mdblist = MDBListSyncSettings(
                     enabled = mdbList.enabled,
-                    apiKey = mdbList.apiKey,
                     showTrakt = mdbList.showTrakt,
                     showImdb = mdbList.showImdb,
                     showTmdb = mdbList.showTmdb,
@@ -281,21 +279,14 @@ class AccountSettingsSyncService @Inject constructor(
                 ),
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.rpdbEnabled,
-                    rpdbApiKey = posterRatings.rpdbApiKey,
-                    topPostersEnabled = posterRatings.topPostersEnabled,
-                    topPostersApiKey = posterRatings.topPostersApiKey
+                    topPostersEnabled = posterRatings.topPostersEnabled
                 ),
                 traktAuth = TraktAuthSyncSettings(
                     connected = traktAuth.isAuthenticated,
                     username = traktAuth.username.orEmpty(),
                     userSlug = traktAuth.userSlug.orEmpty(),
                     connectedAt = null,
-                    pending = traktAuth.deviceCode != null && !traktAuth.isAuthenticated,
-                    accessToken = traktAuth.accessToken.orEmpty(),
-                    refreshToken = traktAuth.refreshToken.orEmpty(),
-                    tokenType = traktAuth.tokenType.orEmpty(),
-                    createdAt = traktAuth.createdAt,
-                    expiresIn = traktAuth.expiresIn
+                    pending = traktAuth.deviceCode != null && !traktAuth.isAuthenticated
                 )
             ),
             playback = PlaybackSettings(
@@ -409,7 +400,6 @@ class AccountSettingsSyncService @Inject constructor(
         tmdbSettingsDataStore.setUseCollections(settings.integrations.tmdb.useCollections)
 
         mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
-        mdbListSettingsDataStore.setApiKey(settings.integrations.mdblist.apiKey)
         mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
         mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb)
         mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb)
@@ -427,31 +417,7 @@ class AccountSettingsSyncService @Inject constructor(
         animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
-        posterRatingsSettingsDataStore.setRpdbApiKey(settings.integrations.posterRatings.rpdbApiKey)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
-        posterRatingsSettingsDataStore.setTopPostersApiKey(settings.integrations.posterRatings.topPostersApiKey)
-
-        if (settings.integrations.traktAuth.connected &&
-            settings.integrations.traktAuth.accessToken.isNotBlank() &&
-            settings.integrations.traktAuth.refreshToken.isNotBlank()
-        ) {
-            traktAuthDataStore.saveToken(
-                TraktTokenResponseDto(
-                    accessToken = settings.integrations.traktAuth.accessToken,
-                    tokenType = settings.integrations.traktAuth.tokenType.ifBlank { "bearer" },
-                    expiresIn = settings.integrations.traktAuth.expiresIn ?: 0,
-                    refreshToken = settings.integrations.traktAuth.refreshToken,
-                    createdAt = settings.integrations.traktAuth.createdAt ?: (System.currentTimeMillis() / 1000L)
-                )
-            )
-            traktAuthDataStore.saveUser(
-                username = settings.integrations.traktAuth.username,
-                userSlug = settings.integrations.traktAuth.userSlug
-            )
-            traktAuthDataStore.clearDeviceFlow()
-        } else {
-            traktAuthDataStore.clearAuth()
-        }
 
         playerSettingsDataStore.setLoadingOverlayEnabled(settings.playback.general.loadingOverlayEnabled)
         playerSettingsDataStore.setPauseOverlayEnabled(settings.playback.general.pauseOverlayEnabled)

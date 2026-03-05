@@ -55,7 +55,6 @@ export const useSettings = () => {
       },
       mdblist: {
         enabled: false,
-        apiKey: '',
         showTrakt: true,
         showImdb: true,
         showTmdb: true,
@@ -73,9 +72,7 @@ export const useSettings = () => {
       },
       posterRatings: {
         rpdbEnabled: false,
-        rpdbApiKey: '',
-        topPostersEnabled: false,
-        topPostersApiKey: ''
+        topPostersEnabled: false
       }
     },
     playback: {
