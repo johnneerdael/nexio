@@ -27,7 +27,6 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
-import com.nexio.tv.data.local.WatchedItemsPreferences
 import com.nexio.tv.core.util.isUnreleased
 import java.time.LocalDate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import android.content.Context
@@ -60,7 +60,6 @@ class MetaDetailsViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
-    private val watchedItemsPreferences: WatchedItemsPreferences,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -229,7 +228,12 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchedItemsPreferences.getWatchedEpisodesForContent(itemId)
+            watchProgressRepository.getAllEpisodeProgress(itemId)
+                .map { progressMap ->
+                    progressMap
+                        .filterValues { it.isCompleted() }
+                        .keys
+                }
                 .distinctUntilChanged()
                 .collectLatest { watchedSet ->
                 _uiState.update { state ->

@@ -31,7 +31,6 @@ class PlayerViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
-    private val watchedItemsPreferences: com.nexio.tv.data.local.WatchedItemsPreferences,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -47,7 +46,6 @@ class PlayerViewModel @Inject constructor(
         playerSettingsDataStore = playerSettingsDataStore,
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
-        watchedItemsPreferences = watchedItemsPreferences,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

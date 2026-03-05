@@ -135,10 +135,9 @@ internal fun PlayerRuntimeController.observeEpisodeWatchProgress() {
     scope.launch {
         watchProgressRepository.getAllEpisodeProgress(baseId).collectLatest { progressMap ->
             _uiState.update { it.copy(episodeWatchProgressMap = progressMap) }
-        }
-    }
-    scope.launch {
-        watchedItemsPreferences.getWatchedEpisodesForContent(baseId).collectLatest { watchedSet ->
+            val watchedSet = progressMap
+                .filterValues { it.isCompleted() }
+                .keys
             _uiState.update { it.copy(watchedEpisodeKeys = watchedSet) }
         }
     }
