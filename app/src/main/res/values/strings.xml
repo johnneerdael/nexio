@@ -158,6 +158,7 @@
     <string name="cd_decrease">Decrease</string>
     <string name="cd_increase">Increase</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
     <string name="action_none">None</string>
 
     <!-- PlaybackSettingsSections -->
@@ -476,6 +477,34 @@
     <string name="trakt_stat_watched_hours">Watched Hours</string>
     <string name="trakt_watching_now_label">Watching now</string>
     <string name="trakt_hide_recommendation">Hide recommendation</string>
+    <string name="trakt_auth_status_title">Authentication</string>
+    <string name="trakt_auth_status_subtitle">Current Trakt connection state</string>
+    <string name="trakt_auth_status_authenticated">Authenticated</string>
+    <string name="trakt_catalogs_title">Trakt Catalogs</string>
+    <string name="trakt_catalogs_subtitle">Choose which Trakt rails appear on Home and reorder them</string>
+    <string name="trakt_catalogs_dialog_subtitle">Enable, disable, and reorder built-in Trakt catalogs. Select popular lists to add custom rails.</string>
+    <string name="trakt_catalogs_enabled_count">%1$d enabled</string>
+    <string name="trakt_catalogs_updated">Trakt catalog settings updated</string>
+    <string name="trakt_move_up">Move Up</string>
+    <string name="trakt_move_down">Move Down</string>
+    <string name="trakt_popular_lists_title">Popular Lists</string>
+    <string name="trakt_popular_lists_subtitle">Select lists to add as custom Trakt catalogs on Home.</string>
+    <string name="trakt_catalog_up_next">Up Next</string>
+    <string name="trakt_catalog_trending_movies">Trending Movies</string>
+    <string name="trakt_catalog_trending_shows">Trending Shows</string>
+    <string name="trakt_catalog_popular_movies">Popular Movies</string>
+    <string name="trakt_catalog_popular_shows">Popular Shows</string>
+    <string name="trakt_catalog_recommended_movies">Recommended Movies</string>
+    <string name="trakt_catalog_recommended_shows">Recommended Shows</string>
+    <string name="trakt_catalog_calendar">Calendar (Next 7 Days)</string>
+    <string name="trakt_catalog_up_next_subtitle">Episodes you are currently watching or ready to continue.</string>
+    <string name="trakt_catalog_trending_movies_subtitle">Movies with the highest current viewer activity.</string>
+    <string name="trakt_catalog_trending_shows_subtitle">Shows with the highest current viewer activity.</string>
+    <string name="trakt_catalog_popular_movies_subtitle">Movies with the highest long-term popularity.</string>
+    <string name="trakt_catalog_popular_shows_subtitle">Shows with the highest long-term popularity.</string>
+    <string name="trakt_catalog_recommended_movies_subtitle">Personalized movie recommendations from Trakt.</string>
+    <string name="trakt_catalog_recommended_shows_subtitle">Personalized show recommendations from Trakt.</string>
+    <string name="trakt_catalog_calendar_subtitle">Upcoming episodes from your Trakt calendar.</string>
     <string name="trakt_disconnect">Disconnect</string>
     <string name="trakt_disconnect_title">Disconnect Trakt?</string>
     <string name="trakt_disconnect_subtitle">This will disconnect your Trakt account from NEXIO.</string>

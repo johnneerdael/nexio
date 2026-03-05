@@ -3,6 +3,9 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.TraktCatalogIds
+import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -33,15 +36,31 @@ private data class CatalogUpdateResult(
 private const val TRAKT_RAIL_ADDON_ID = "trakt"
 private const val TRAKT_RAIL_ADDON_NAME = "Trakt"
 private const val TRAKT_RAIL_ADDON_BASE_URL = "https://api.trakt.tv"
-private const val TRAKT_CATALOG_UP_NEXT = "trakt_up_next"
-private const val TRAKT_CATALOG_CALENDAR = "trakt_calendar_next_7_days"
-private const val TRAKT_CATALOG_RECOMMENDED_MOVIES = "trakt_recommended_movies"
-private const val TRAKT_CATALOG_RECOMMENDED_SHOWS = "trakt_recommended_shows"
+
+private const val TRAKT_ROW_NAME_UP_NEXT = "Trakt Up Next"
+private const val TRAKT_ROW_NAME_TRENDING_MOVIES = "Trakt Trending Movies"
+private const val TRAKT_ROW_NAME_TRENDING_SHOWS = "Trakt Trending Shows"
+private const val TRAKT_ROW_NAME_POPULAR_MOVIES = "Trakt Popular Movies"
+private const val TRAKT_ROW_NAME_POPULAR_SHOWS = "Trakt Popular Shows"
+private const val TRAKT_ROW_NAME_RECOMMENDED_MOVIES = "Trakt Recommended Movies"
+private const val TRAKT_ROW_NAME_RECOMMENDED_SHOWS = "Trakt Recommended Shows"
+private const val TRAKT_ROW_NAME_CALENDAR = "Trakt Calendar (Next 7 Days)"
 
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
             traktDiscoverySnapshot = snapshot
+            scheduleUpdateCatalogRows()
+        }
+    }
+}
+
+internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
+    viewModelScope.launch {
+        traktSettingsDataStore.catalogPreferences.collectLatest { prefs ->
+            if (prefs == traktCatalogPreferences) return@collectLatest
+            traktCatalogPreferences = prefs
+            traktDiscoveryService.ensureFresh(force = true)
             scheduleUpdateCatalogRows()
         }
     }
@@ -311,15 +330,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val heroSectionEnabled = _uiState.value.heroSectionEnabled
     val hideUnreleased = _uiState.value.hideUnreleasedContent
     val traktSnapshot = traktDiscoverySnapshot
+    val traktPrefs = traktCatalogPreferences
     val traktUpNextItems = continueWatchingItems
         .filterIsInstance<ContinueWatchingItem.NextUp>()
         .take(20)
         .map { nextUpToMetaPreview(it) }
     val syntheticTraktRows = buildSyntheticTraktRows(
+        prefs = traktPrefs,
         upNextItems = traktUpNextItems,
-        calendarItems = traktSnapshot.calendarItems,
-        recommendationMovieItems = traktSnapshot.recommendationMovieItems,
-        recommendationShowItems = traktSnapshot.recommendationShowItems
+        snapshot = traktSnapshot
     )
     val recommendationRefMap = traktSnapshot.recommendationRefsByStatusKey
 
@@ -503,45 +522,92 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 }
 
 private fun buildSyntheticTraktRows(
+    prefs: TraktCatalogPreferences,
     upNextItems: List<MetaPreview>,
-    calendarItems: List<MetaPreview>,
-    recommendationMovieItems: List<MetaPreview>,
-    recommendationShowItems: List<MetaPreview>
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
 ): List<CatalogRow> {
-    val rows = mutableListOf<CatalogRow>()
-    if (upNextItems.isNotEmpty()) {
-        rows += buildTraktCatalogRow(
-            catalogId = TRAKT_CATALOG_UP_NEXT,
-            catalogName = "Trakt Up Next",
+    val builtInRows = linkedMapOf<String, CatalogRow>()
+
+    if (TraktCatalogIds.UP_NEXT in prefs.enabledCatalogs && upNextItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.UP_NEXT] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.UP_NEXT,
+            catalogName = TRAKT_ROW_NAME_UP_NEXT,
             type = ContentType.SERIES,
             items = upNextItems
         )
     }
-    if (calendarItems.isNotEmpty()) {
-        rows += buildTraktCatalogRow(
-            catalogId = TRAKT_CATALOG_CALENDAR,
-            catalogName = "Trakt Calendar (Next 7 Days)",
-            type = ContentType.SERIES,
-            items = calendarItems
-        )
-    }
-    if (recommendationMovieItems.isNotEmpty()) {
-        rows += buildTraktCatalogRow(
-            catalogId = TRAKT_CATALOG_RECOMMENDED_MOVIES,
-            catalogName = "Trakt Recommended Movies",
+    if (TraktCatalogIds.TRENDING_MOVIES in prefs.enabledCatalogs && snapshot.trendingMovieItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.TRENDING_MOVIES] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.TRENDING_MOVIES,
+            catalogName = TRAKT_ROW_NAME_TRENDING_MOVIES,
             type = ContentType.MOVIE,
-            items = recommendationMovieItems
+            items = snapshot.trendingMovieItems
         )
     }
-    if (recommendationShowItems.isNotEmpty()) {
-        rows += buildTraktCatalogRow(
-            catalogId = TRAKT_CATALOG_RECOMMENDED_SHOWS,
-            catalogName = "Trakt Recommended Shows",
+    if (TraktCatalogIds.TRENDING_SHOWS in prefs.enabledCatalogs && snapshot.trendingShowItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.TRENDING_SHOWS] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.TRENDING_SHOWS,
+            catalogName = TRAKT_ROW_NAME_TRENDING_SHOWS,
             type = ContentType.SERIES,
-            items = recommendationShowItems
+            items = snapshot.trendingShowItems
         )
     }
-    return rows
+    if (TraktCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs && snapshot.popularMovieItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.POPULAR_MOVIES] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.POPULAR_MOVIES,
+            catalogName = TRAKT_ROW_NAME_POPULAR_MOVIES,
+            type = ContentType.MOVIE,
+            items = snapshot.popularMovieItems
+        )
+    }
+    if (TraktCatalogIds.POPULAR_SHOWS in prefs.enabledCatalogs && snapshot.popularShowItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.POPULAR_SHOWS] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.POPULAR_SHOWS,
+            catalogName = TRAKT_ROW_NAME_POPULAR_SHOWS,
+            type = ContentType.SERIES,
+            items = snapshot.popularShowItems
+        )
+    }
+    if (TraktCatalogIds.RECOMMENDED_MOVIES in prefs.enabledCatalogs && snapshot.recommendationMovieItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.RECOMMENDED_MOVIES] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.RECOMMENDED_MOVIES,
+            catalogName = TRAKT_ROW_NAME_RECOMMENDED_MOVIES,
+            type = ContentType.MOVIE,
+            items = snapshot.recommendationMovieItems
+        )
+    }
+    if (TraktCatalogIds.RECOMMENDED_SHOWS in prefs.enabledCatalogs && snapshot.recommendationShowItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.RECOMMENDED_SHOWS] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.RECOMMENDED_SHOWS,
+            catalogName = TRAKT_ROW_NAME_RECOMMENDED_SHOWS,
+            type = ContentType.SERIES,
+            items = snapshot.recommendationShowItems
+        )
+    }
+    if (TraktCatalogIds.CALENDAR in prefs.enabledCatalogs && snapshot.calendarItems.isNotEmpty()) {
+        builtInRows[TraktCatalogIds.CALENDAR] = buildTraktCatalogRow(
+            catalogId = TraktCatalogIds.CALENDAR,
+            catalogName = TRAKT_ROW_NAME_CALENDAR,
+            type = ContentType.SERIES,
+            items = snapshot.calendarItems
+        )
+    }
+
+    val orderedBuiltIns = prefs.catalogOrder.mapNotNull { id -> builtInRows[id] }
+    val customListRows = snapshot.customListCatalogs.mapNotNull { custom ->
+        custom.toCatalogRow()
+    }
+    return orderedBuiltIns + customListRows
+}
+
+private fun TraktCustomListCatalog.toCatalogRow(): CatalogRow? {
+    if (items.isEmpty()) return null
+    return buildTraktCatalogRow(
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items
+    )
 }
 
 private fun buildTraktCatalogRow(

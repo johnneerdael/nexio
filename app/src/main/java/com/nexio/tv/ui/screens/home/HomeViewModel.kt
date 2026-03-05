@@ -6,6 +6,7 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -95,6 +96,7 @@ class HomeViewModel @Inject constructor(
     internal var currentTmdbSettings: TmdbSettings = TmdbSettings()
     internal var traktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    internal var traktCatalogPreferences: TraktCatalogPreferences = TraktCatalogPreferences()
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
@@ -117,6 +119,7 @@ class HomeViewModel @Inject constructor(
         loadDisabledHomeCatalogPreference()
         observeLibraryState()
         observeTmdbSettings()
+        observeTraktCatalogPreferences()
         observeTraktDiscovery()
         loadContinueWatching()
         observeInstalledAddons()
@@ -137,6 +140,8 @@ class HomeViewModel @Inject constructor(
     private fun loadDisabledHomeCatalogPreference() = loadDisabledHomeCatalogPreferencePipeline()
 
     private fun observeTmdbSettings() = observeTmdbSettingsPipeline()
+
+    private fun observeTraktCatalogPreferences() = observeTraktCatalogPreferencesPipeline()
 
     private fun observeTraktDiscovery() = observeTraktDiscoveryPipeline()
 

@@ -4,6 +4,9 @@ import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktTrendingMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktTrendingShowItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktPopularListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRecommendationItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
@@ -25,6 +28,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
+import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowProgressResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
@@ -261,4 +266,35 @@ interface TraktApi {
         @Path("start_date") startDate: String,
         @Path("days") days: Int = 7
     ): Response<List<TraktCalendarEpisodeItemDto>>
+
+    @GET("movies/trending")
+    suspend fun getTrendingMovies(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 20
+    ): Response<List<TraktTrendingMovieItemDto>>
+
+    @GET("shows/trending")
+    suspend fun getTrendingShows(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 20
+    ): Response<List<TraktTrendingShowItemDto>>
+
+    @GET("movies/popular")
+    suspend fun getPopularMovies(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 20
+    ): Response<List<TraktMovieDto>>
+
+    @GET("shows/popular")
+    suspend fun getPopularShows(
+        @Header("Authorization") authorization: String,
+        @Query("limit") limit: Int = 20
+    ): Response<List<TraktShowDto>>
+
+    @GET("lists/popular")
+    suspend fun getPopularLists(
+        @Header("Authorization") authorization: String,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20
+    ): Response<List<TraktPopularListItemDto>>
 }

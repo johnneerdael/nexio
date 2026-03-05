@@ -4,10 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.data.local.TraktCatalogIds
+import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.TraktAuthService
+import com.nexio.tv.data.repository.TraktDiscoveryService
+import com.nexio.tv.data.repository.TraktPopularListOption
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktTokenPollResult
@@ -47,6 +51,8 @@ data class TraktUiState(
     val watchingNowActive: Boolean = false,
     val watchingNowTitle: String? = null,
     val watchingNowProgressPercent: Float? = null,
+    val catalogPreferences: TraktCatalogPreferences = TraktCatalogPreferences(),
+    val popularLists: List<TraktPopularListOption> = emptyList(),
     val statusMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -56,6 +62,7 @@ class TraktViewModel @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
+    private val traktDiscoveryService: TraktDiscoveryService,
     private val traktScrobbleService: TraktScrobbleService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
@@ -73,6 +80,7 @@ class TraktViewModel @Inject constructor(
         }
         observeSettings()
         observeAuthState()
+        observeDiscovery()
         observeWatchingNow()
     }
 
@@ -201,15 +209,27 @@ class TraktViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 traktSettingsDataStore.continueWatchingDaysCap,
-                traktSettingsDataStore.showUnairedNextUp
-            ) { daysCap, showUnairedNextUp ->
-                daysCap to showUnairedNextUp
-            }.collectLatest { (daysCap, showUnairedNextUp) ->
+                traktSettingsDataStore.showUnairedNextUp,
+                traktSettingsDataStore.catalogPreferences
+            ) { daysCap, showUnairedNextUp, catalogPreferences ->
+                Triple(daysCap, showUnairedNextUp, catalogPreferences)
+            }.collectLatest { (daysCap, showUnairedNextUp, catalogPreferences) ->
                 _uiState.update {
                     it.copy(
                         continueWatchingDaysCap = daysCap,
-                        showUnairedNextUp = showUnairedNextUp
+                        showUnairedNextUp = showUnairedNextUp,
+                        catalogPreferences = catalogPreferences
                     )
+                }
+            }
+        }
+    }
+
+    private fun observeDiscovery() {
+        viewModelScope.launch {
+            traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+                _uiState.update { current ->
+                    current.copy(popularLists = snapshot.popularLists)
                 }
             }
         }
@@ -226,6 +246,42 @@ class TraktViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    fun onCatalogEnabledChanged(catalogId: String, enabled: Boolean) {
+        if (catalogId !in TraktCatalogIds.BUILT_IN_ORDER) return
+        viewModelScope.launch {
+            traktSettingsDataStore.setCatalogEnabled(catalogId, enabled)
+            traktDiscoveryService.ensureFresh(force = true)
+            _uiState.update {
+                it.copy(statusMessage = context.getString(R.string.trakt_catalogs_updated))
+            }
+        }
+    }
+
+    fun onMoveCatalogUp(catalogId: String) {
+        moveCatalog(catalogId = catalogId, direction = -1)
+    }
+
+    fun onMoveCatalogDown(catalogId: String) {
+        moveCatalog(catalogId = catalogId, direction = 1)
+    }
+
+    fun onPopularListSelected(listKey: String, selected: Boolean) {
+        if (listKey.isBlank()) return
+        viewModelScope.launch {
+            traktSettingsDataStore.setPopularListSelected(listKey, selected)
+            traktDiscoveryService.ensureFresh(force = true)
+            _uiState.update {
+                it.copy(statusMessage = context.getString(R.string.trakt_catalogs_updated))
+            }
+        }
+    }
+
+    fun onCatalogManagementOpened() {
+        viewModelScope.launch {
+            traktDiscoveryService.ensureFresh(force = false)
         }
     }
 
@@ -277,6 +333,17 @@ class TraktViewModel @Inject constructor(
     private fun shouldAutoSyncNow(): Boolean {
         val now = System.currentTimeMillis()
         return now - lastAutoSyncAtMs >= 15_000L
+    }
+
+    private fun moveCatalog(catalogId: String, direction: Int) {
+        if (catalogId !in TraktCatalogIds.BUILT_IN_ORDER) return
+        if (direction == 0) return
+        viewModelScope.launch {
+            traktSettingsDataStore.moveCatalog(catalogId, direction)
+            _uiState.update {
+                it.copy(statusMessage = context.getString(R.string.trakt_catalogs_updated))
+            }
+        }
     }
 
     private fun autoSyncAfterConnected() {
