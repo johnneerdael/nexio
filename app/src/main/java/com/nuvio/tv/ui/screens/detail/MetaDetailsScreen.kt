@@ -593,6 +593,14 @@ private fun MetaDetailsContent(
             override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
         }
     }
+    // Suppress vertical scroll from LazyColumn when focus moves horizontally inside nested LazyRows,
+    // but still pass the rect upward so focus traversal works correctly.
+    val noVerticalScrollResponder = remember {
+        object : BringIntoViewResponder {
+            override fun calculateRectForParent(localRect: Rect): Rect = localRect
+            override suspend fun bringChildIntoView(localRect: () -> Rect?) { }
+        }
+    }
     val selectedSeasonFocusRequester = remember { FocusRequester() }
     val heroPlayFocusRequester = remember { FocusRequester() }
     val castTabFocusRequester = remember { FocusRequester() }
@@ -1051,46 +1059,50 @@ private fun MetaDetailsContent(
             // Season tabs and episodes for series
             if (isSeries && seasons.isNotEmpty()) {
                 item(key = "season_tabs", contentType = "season_tabs") {
-                    SeasonTabs(
-                        seasons = seasons,
-                        selectedSeason = selectedSeason,
-                        onSeasonSelected = onSeasonSelected,
-                        onSeasonLongPress = { seasonOptionsDialogSeason = it },
-                        selectedTabFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = seasonDownFocusRequester
-                    )
+                    Box(modifier = Modifier.bringIntoViewResponder(noVerticalScrollResponder)) {
+                        SeasonTabs(
+                            seasons = seasons,
+                            selectedSeason = selectedSeason,
+                            onSeasonSelected = onSeasonSelected,
+                            onSeasonLongPress = { seasonOptionsDialogSeason = it },
+                            selectedTabFocusRequester = selectedSeasonFocusRequester,
+                            downFocusRequester = seasonDownFocusRequester
+                        )
+                    }
                 }
                 item(key = "episodes_$selectedSeason", contentType = "episodes") {
-                    EpisodesRow(
-                        episodes = episodesForSeason,
-                        episodeProgressMap = episodeProgressMap,
-                        episodeRatings = episodeImdbRatings,
-                        watchedEpisodes = watchedEpisodes,
-                        episodeWatchedPendingKeys = episodeWatchedPendingKeys,
-                        blurUnwatchedEpisodes = blurUnwatchedEpisodes,
-                        onEpisodeClick = episodeClick,
-                        onToggleEpisodeWatched = onToggleEpisodeWatched,
-                        onMarkSeasonWatched = onMarkSeasonWatched,
-                        onMarkSeasonUnwatched = onMarkSeasonUnwatched,
-                        isSeasonFullyWatched = isSeasonFullyWatched(selectedSeason),
-                        selectedSeason = selectedSeason,
-                        onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
-                        upFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = episodesDownFocusRequester,
-                        episodeFocusRequesters = seasonEpisodeFocusRequesters,
-                        restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
-                        restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
-                        onRestoreFocusHandled = {
-                            clearPendingRestore()
-                        },
-                        onEpisodeFocused = { episodeId ->
-                            lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
-                        },
-                        scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
-                            nextToWatch?.nextVideoId
-                                ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
-                        } else null
-                    )
+                    Box(modifier = Modifier.bringIntoViewResponder(noVerticalScrollResponder)) {
+                        EpisodesRow(
+                            episodes = episodesForSeason,
+                            episodeProgressMap = episodeProgressMap,
+                            episodeRatings = episodeImdbRatings,
+                            watchedEpisodes = watchedEpisodes,
+                            episodeWatchedPendingKeys = episodeWatchedPendingKeys,
+                            blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                            onEpisodeClick = episodeClick,
+                            onToggleEpisodeWatched = onToggleEpisodeWatched,
+                            onMarkSeasonWatched = onMarkSeasonWatched,
+                            onMarkSeasonUnwatched = onMarkSeasonUnwatched,
+                            isSeasonFullyWatched = isSeasonFullyWatched(selectedSeason),
+                            selectedSeason = selectedSeason,
+                            onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
+                            upFocusRequester = selectedSeasonFocusRequester,
+                            downFocusRequester = episodesDownFocusRequester,
+                            episodeFocusRequesters = seasonEpisodeFocusRequesters,
+                            restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
+                            restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
+                            onRestoreFocusHandled = {
+                                clearPendingRestore()
+                            },
+                            onEpisodeFocused = { episodeId ->
+                                lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
+                            },
+                            scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
+                                nextToWatch?.nextVideoId
+                                    ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
+                            } else null
+                        )
+                    }
                 }
             }
 
