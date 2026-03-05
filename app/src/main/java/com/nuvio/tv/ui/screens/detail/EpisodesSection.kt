@@ -444,6 +444,8 @@ private fun EpisodeCard(
         )
     }
     val badgeBgColor = remember { Color.Black.copy(alpha = 0.42f) }
+    val badgeShape = remember(cardMetrics.episodeBadgeCornerRadius) { RoundedCornerShape(cardMetrics.episodeBadgeCornerRadius) }
+    val progressBgColor = remember { Color.Black.copy(alpha = 0.45f) }
     val thumbnailRequest = remember(context, episode.thumbnail, thumbnailWidthPx, thumbnailHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(episode.thumbnail)
@@ -567,7 +569,7 @@ private fun EpisodeCard(
                     modifier = Modifier
                         .background(
                             color = badgeBgColor,
-                            shape = RoundedCornerShape(cardMetrics.episodeBadgeCornerRadius)
+                            shape = badgeShape
                         )
                         .padding(
                             horizontal = cardMetrics.episodeBadgeHorizontalPadding,
@@ -660,7 +662,6 @@ private fun EpisodeCard(
 
             if (showProgress) {
                 val progressBarRadius = cardMetrics.progressBarHeight / 2
-                val progressBgColor = remember { Color.Black.copy(alpha = 0.45f) }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
