@@ -88,6 +88,7 @@ import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.MetaDetailsSkeleton
 import com.nexio.tv.ui.components.NexioDialog
@@ -186,7 +187,16 @@ fun MetaDetailsScreen(
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val activity = LocalContext.current as? android.app.Activity
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
+
+    LaunchedEffect(activity) {
+        if (activity != null) {
+            FrameRateUtils.setBlockDisplayModeChangesOutsideMainPlayer(true)
+            FrameRateUtils.setMainPlayerDisplayModeSessionActive(false)
+            FrameRateUtils.enforceUiBaselineRefreshRate(activity)
+        }
+    }
 
     BackHandler {
         if (uiState.isTrailerPlaying) {
