@@ -111,8 +111,7 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("release")
-            isDebuggable = false
+            isDebuggable = true
             isMinifyEnabled = false
 
             // Keep debug native builds single-ABI for faster and more stable local iteration.
