@@ -15,11 +15,11 @@ object AppLocaleResolver {
     val supportedOptions: List<AppLocaleOption> = listOf(
         AppLocaleOption(tag = null, displayName = "System default"),
         AppLocaleOption(tag = "en", displayName = "English"),
-        AppLocaleOption(tag = "es", displayName = "Spanish"),
-        AppLocaleOption(tag = "fr", displayName = "French"),
-        AppLocaleOption(tag = "de", displayName = "German"),
-        AppLocaleOption(tag = "nl", displayName = "Dutch"),
-        AppLocaleOption(tag = "zh-CN", displayName = "Mandarin")
+        AppLocaleOption(tag = "es", displayName = "Español"),
+        AppLocaleOption(tag = "fr", displayName = "Français"),
+        AppLocaleOption(tag = "de", displayName = "Deutsch"),
+        AppLocaleOption(tag = "nl", displayName = "Nederlands"),
+        AppLocaleOption(tag = "zh-CN", displayName = "中文（简体）")
     )
 
     fun getStoredLocaleTag(context: Context): String? {
