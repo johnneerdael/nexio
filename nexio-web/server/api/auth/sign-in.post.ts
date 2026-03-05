@@ -14,13 +14,16 @@ type AuthResponse = {
 
 export default defineEventHandler(async (event) => {
   const body = await readJsonBody<{ email?: string; password?: string }>(event)
-  if (!body.email || !body.password) {
+  const email = body.email?.trim() ?? ''
+  const password = body.password ?? ''
+
+  if (!email || !password) {
     throw createError({ statusCode: 400, statusMessage: 'Email and password are required.' })
   }
 
   const payload = await supabaseFetch<AuthResponse>('/auth/v1/token?grant_type=password', {
     method: 'POST',
-    body: JSON.stringify({ email: body.email, password: body.password })
+    body: JSON.stringify({ email, password })
   })
 
   const session: PortalSession = {
