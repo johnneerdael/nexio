@@ -541,7 +541,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     val tmdbSettings = currentTmdbSettings
-    val shouldUseEnrichedHeroItems = tmdbSettings.enabled &&
+    val shouldUseEnrichedHeroItems = tmdbSettings.isActive &&
         (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
 
     if (shouldUseEnrichedHeroItems && baseHeroItems.isNotEmpty()) {

@@ -26,7 +26,7 @@ class TmdbSettingsDataStore @Inject constructor(
     private fun store() = dataStore
 
     private val enabledKey = booleanPreferencesKey("tmdb_enabled")
-    private val languageKey = stringPreferencesKey("tmdb_language")
+    private val apiKeyKey = stringPreferencesKey("tmdb_api_key")
     private val useArtworkKey = booleanPreferencesKey("tmdb_use_artwork")
     private val useBasicInfoKey = booleanPreferencesKey("tmdb_use_basic_info")
     private val useDetailsKey = booleanPreferencesKey("tmdb_use_details")
@@ -40,7 +40,7 @@ class TmdbSettingsDataStore @Inject constructor(
     val settings: Flow<TmdbSettings> = dataStore.data.map { prefs ->
         TmdbSettings(
             enabled = prefs[enabledKey] ?: false,
-            language = prefs[languageKey] ?: "en",
+            apiKey = prefs[apiKeyKey] ?: "",
             useArtwork = prefs[useArtworkKey] ?: true,
             useBasicInfo = prefs[useBasicInfoKey] ?: true,
             useDetails = prefs[useDetailsKey] ?: true,
@@ -57,8 +57,8 @@ class TmdbSettingsDataStore @Inject constructor(
         store().edit { it[enabledKey] = enabled }
     }
 
-    suspend fun setLanguage(language: String) {
-        store().edit { it[languageKey] = language.ifBlank { "en" } }
+    suspend fun setApiKey(apiKey: String) {
+        store().edit { it[apiKeyKey] = apiKey.trim() }
     }
 
     suspend fun setUseArtwork(enabled: Boolean) {

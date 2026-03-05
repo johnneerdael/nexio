@@ -8,6 +8,11 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface TmdbApi {
+
+    @GET("configuration")
+    suspend fun getConfiguration(
+        @Query("api_key") apiKey: String
+    ): Response<TmdbConfigurationResponse>
     
     @GET("find/{external_id}")
     suspend fun findByExternalId(
@@ -141,6 +146,11 @@ interface TmdbApi {
         @Query("language") language: String? = null
     ): Response<TmdbPersonCreditsResponse>
 }
+
+@JsonClass(generateAdapter = true)
+data class TmdbConfigurationResponse(
+    @Json(name = "change_keys") val changeKeys: List<String>? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class TmdbFindResponse(

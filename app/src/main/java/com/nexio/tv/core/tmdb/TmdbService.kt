@@ -1,8 +1,10 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
+import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -11,7 +13,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "TmdbService"
-private const val TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"
 
 /**
  * Service to handle TMDB ID conversions and lookups.
@@ -19,7 +20,8 @@ private const val TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"
  */
 @Singleton
 class TmdbService @Inject constructor(
-    private val tmdbApi: TmdbApi
+    private val tmdbApi: TmdbApi,
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore
 ) {
     // Cache: IMDB ID -> TMDB ID
     private val imdbToTmdbCache = ConcurrentHashMap<String, Int>()
@@ -49,13 +51,15 @@ class TmdbService @Inject constructor(
             Log.d(TAG, "Cache hit: IMDB $imdbId -> TMDB $cached")
             return@withContext cached
         }
+
+        val apiKey = requireApiKey() ?: return@withContext null
         
         try {
             Log.d(TAG, "Looking up TMDB ID for IMDB: $imdbId (type: $mediaType)")
             
             val response = tmdbApi.findByExternalId(
                 externalId = imdbId,
-                apiKey = TMDB_API_KEY,
+                apiKey = apiKey,
                 externalSource = "imdb_id"
             )
             
@@ -108,15 +112,17 @@ class TmdbService @Inject constructor(
             Log.d(TAG, "Cache hit: TMDB $tmdbId -> IMDB $cached")
             return@withContext cached
         }
+
+        val apiKey = requireApiKey() ?: return@withContext null
         
         try {
             Log.d(TAG, "Looking up IMDB ID for TMDB: $tmdbId (type: $mediaType)")
             
             val normalizedType = normalizeMediaType(mediaType)
             val response = when (normalizedType) {
-                "movie" -> tmdbApi.getMovieExternalIds(tmdbId, TMDB_API_KEY)
-                "tv", "series" -> tmdbApi.getTvExternalIds(tmdbId, TMDB_API_KEY)
-                else -> tmdbApi.getMovieExternalIds(tmdbId, TMDB_API_KEY)
+                "movie" -> tmdbApi.getMovieExternalIds(tmdbId, apiKey)
+                "tv", "series" -> tmdbApi.getTvExternalIds(tmdbId, apiKey)
+                else -> tmdbApi.getMovieExternalIds(tmdbId, apiKey)
             }
             
             if (!response.isSuccessful) {
@@ -213,5 +219,12 @@ class TmdbService @Inject constructor(
         tmdbToImdbCache[tmdbId] = imdbId
     }
 
-    fun apiKey(): String = TMDB_API_KEY
+    private suspend fun requireApiKey(): String? {
+        val key = tmdbSettingsDataStore.settings.first().apiKey.trim()
+        if (key.isBlank()) {
+            Log.w(TAG, "TMDB API key is missing; lookup skipped")
+            return null
+        }
+        return key
+    }
 }

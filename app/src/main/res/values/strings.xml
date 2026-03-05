@@ -448,9 +448,14 @@
     <string name="tmdb_title">TMDB Enrichment</string>
     <string name="tmdb_subtitle">Choose which metadata fields should come from TMDB</string>
     <string name="tmdb_enable_title">Enable TMDB Enrichment</string>
-    <string name="tmdb_enable_subtitle">Use TMDB as a metadata source to enhance addon data</string>
-    <string name="tmdb_language_title">Language</string>
-    <string name="tmdb_language_subtitle">TMDB metadata language for title, logo, and enabled fields</string>
+    <string name="tmdb_enable_subtitle">Use TMDB as a metadata source to enhance addon data (requires your TMDB API key)</string>
+    <string name="tmdb_api_key_title">API Key</string>
+    <string name="tmdb_api_key_subtitle">Required to activate TMDB integration</string>
+    <string name="tmdb_dialog_title">TMDB API Key</string>
+    <string name="tmdb_dialog_subtitle">Enter your personal TMDB API key</string>
+    <string name="tmdb_dialog_placeholder">Enter TMDB API key</string>
+    <string name="tmdb_missing_api_key">TMDB API key is required</string>
+    <string name="tmdb_invalid_api_key">Invalid TMDB API key</string>
     <string name="tmdb_artwork_title">Artwork</string>
     <string name="tmdb_artwork_subtitle">Logo and backdrop images from TMDB</string>
     <string name="tmdb_basic_info_title">Basic Info</string>
@@ -470,7 +475,6 @@
     <string name="tmdb_collections_title">Collections</string>
     <string name="tmdb_collections_subtitle">TMDB movie collections in release order</string>
 
-    <string name="tmdb_language_dialog_title">TMDB Language</string>
 
     <!-- TraktScreen -->
     <string name="trakt_description">Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt.</string>

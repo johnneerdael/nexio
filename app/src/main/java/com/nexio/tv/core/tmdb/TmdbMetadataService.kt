@@ -1,7 +1,10 @@
 package com.nexio.tv.core.tmdb
 
+import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbImage
@@ -18,19 +21,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 private const val TAG = "TmdbMetadataService"
-private const val TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"
 
 @Singleton
 class TmdbMetadataService @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val tmdbApi: TmdbApi,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore
 ) {
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
@@ -41,14 +47,15 @@ class TmdbMetadataService @Inject constructor(
     suspend fun fetchEnrichment(
         tmdbId: String,
         contentType: ContentType,
-        language: String = "en"
+        language: String? = null
     ): TmdbEnrichment? =
         withContext(Dispatchers.IO) {
-            val normalizedLanguage = normalizeTmdbLanguage(language)
+            val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
             val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
             val providerToken = posterProviderCacheToken(activePosterProvider)
             val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:$providerToken"
             enrichmentCache[cacheKey]?.let { return@withContext it }
+            val apiKey = requireApiKey() ?: return@withContext null
 
             val numericId = tmdbId.toIntOrNull() ?: return@withContext null
             val tmdbType = when (contentType) {
@@ -68,30 +75,30 @@ class TmdbMetadataService @Inject constructor(
                 val (details, credits, images, ageRating) = coroutineScope {
                     val detailsDeferred = async {
                         when (tmdbType) {
-                            "tv" -> tmdbApi.getTvDetails(numericId, TMDB_API_KEY, normalizedLanguage)
-                            else -> tmdbApi.getMovieDetails(numericId, TMDB_API_KEY, normalizedLanguage)
+                            "tv" -> tmdbApi.getTvDetails(numericId, apiKey, normalizedLanguage)
+                            else -> tmdbApi.getMovieDetails(numericId, apiKey, normalizedLanguage)
                         }.body()
                     }
                     val creditsDeferred = async {
                         when (tmdbType) {
-                            "tv" -> tmdbApi.getTvCredits(numericId, TMDB_API_KEY, normalizedLanguage)
-                            else -> tmdbApi.getMovieCredits(numericId, TMDB_API_KEY, normalizedLanguage)
+                            "tv" -> tmdbApi.getTvCredits(numericId, apiKey, normalizedLanguage)
+                            else -> tmdbApi.getMovieCredits(numericId, apiKey, normalizedLanguage)
                         }.body()
                     }
                     val imagesDeferred = async {
                         when (tmdbType) {
-                            "tv" -> tmdbApi.getTvImages(numericId, TMDB_API_KEY, includeImageLanguage)
-                            else -> tmdbApi.getMovieImages(numericId, TMDB_API_KEY, includeImageLanguage)
+                            "tv" -> tmdbApi.getTvImages(numericId, apiKey, includeImageLanguage)
+                            else -> tmdbApi.getMovieImages(numericId, apiKey, includeImageLanguage)
                         }.body()
                     }
                     val ageRatingDeferred = async {
                         when (tmdbType) {
                             "tv" -> {
-                                val ratings = tmdbApi.getTvContentRatings(numericId, TMDB_API_KEY).body()?.results.orEmpty()
+                                val ratings = tmdbApi.getTvContentRatings(numericId, apiKey).body()?.results.orEmpty()
                                 selectTvAgeRating(ratings, normalizedLanguage)
                             }
                             else -> {
-                                val releases = tmdbApi.getMovieReleaseDates(numericId, TMDB_API_KEY).body()?.results.orEmpty()
+                                val releases = tmdbApi.getMovieReleaseDates(numericId, apiKey).body()?.results.orEmpty()
                                 selectMovieAgeRating(releases, normalizedLanguage)
                             }
                         }
@@ -310,18 +317,19 @@ class TmdbMetadataService @Inject constructor(
     suspend fun fetchEpisodeEnrichment(
         tmdbId: String,
         seasonNumbers: List<Int>,
-        language: String = "en"
+        language: String? = null
     ): Map<Pair<Int, Int>, TmdbEpisodeEnrichment> = withContext(Dispatchers.IO) {
-        val normalizedLanguage = normalizeTmdbLanguage(language)
+        val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
         val cacheKey = "$tmdbId:${seasonNumbers.sorted().joinToString(",")}:$normalizedLanguage"
         episodeCache[cacheKey]?.let { return@withContext it }
+        val apiKey = requireApiKey() ?: return@withContext emptyMap()
 
         val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyMap()
         val result = mutableMapOf<Pair<Int, Int>, TmdbEpisodeEnrichment>()
 
         seasonNumbers.distinct().forEach { season ->
             try {
-                val response = tmdbApi.getTvSeasonDetails(numericId, season, TMDB_API_KEY, normalizedLanguage)
+                val response = tmdbApi.getTvSeasonDetails(numericId, season, apiKey, normalizedLanguage)
                 val episodes = response.body()?.episodes.orEmpty()
                 episodes.forEach { ep ->
                     val epNum = ep.episodeNumber ?: return@forEach
@@ -341,14 +349,15 @@ class TmdbMetadataService @Inject constructor(
     suspend fun fetchMoreLikeThis(
         tmdbId: String,
         contentType: ContentType,
-        language: String = "en",
+        language: String? = null,
         maxItems: Int = 12
     ): List<MetaPreview> = withContext(Dispatchers.IO) {
-        val normalizedLanguage = normalizeTmdbLanguage(language)
+        val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val providerToken = posterProviderCacheToken(activePosterProvider)
         val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:more_like:$providerToken"
         moreLikeThisCache[cacheKey]?.let { return@withContext it }
+        val apiKey = requireApiKey() ?: return@withContext emptyList()
 
         val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyList()
         val tmdbType = when (contentType) {
@@ -365,8 +374,8 @@ class TmdbMetadataService @Inject constructor(
 
         try {
             val recommendations = when (tmdbType) {
-                "tv" -> tmdbApi.getTvRecommendations(numericId, TMDB_API_KEY, normalizedLanguage).body()
-                else -> tmdbApi.getMovieRecommendations(numericId, TMDB_API_KEY, normalizedLanguage).body()
+                "tv" -> tmdbApi.getTvRecommendations(numericId, apiKey, normalizedLanguage).body()
+                else -> tmdbApi.getMovieRecommendations(numericId, apiKey, normalizedLanguage).body()
             }
 
             val rawResults = recommendations?.results
@@ -410,8 +419,8 @@ class TmdbMetadataService @Inject constructor(
 
                         val localizedBackdropPath = runCatching {
                             when (recTmdbType) {
-                                "tv" -> tmdbApi.getTvImages(rec.id, TMDB_API_KEY, includeImageLanguage).body()
-                                else -> tmdbApi.getMovieImages(rec.id, TMDB_API_KEY, includeImageLanguage).body()
+                                "tv" -> tmdbApi.getTvImages(rec.id, apiKey, includeImageLanguage).body()
+                                else -> tmdbApi.getMovieImages(rec.id, apiKey, includeImageLanguage).body()
                             }
                         }.getOrNull()?.let { images ->
                             selectBestLocalizedImagePath(
@@ -427,7 +436,7 @@ class TmdbMetadataService @Inject constructor(
                             val startYear = rec.firstAirDate?.take(4)
                             if (startYear != null) {
                                 val tvDetails = runCatching {
-                                    tmdbApi.getTvDetails(rec.id, TMDB_API_KEY, normalizedLanguage).body()
+                                    tmdbApi.getTvDetails(rec.id, apiKey, normalizedLanguage).body()
                                 }.getOrNull()
                                 val status = tvDetails?.status
                                 val endYear = tvDetails?.lastAirDate?.take(4)
@@ -467,16 +476,17 @@ class TmdbMetadataService @Inject constructor(
 
     suspend fun fetchMovieCollection(
         collectionId: Int,
-        language: String = "en"
+        language: String? = null
     ): List<MetaPreview> = withContext(Dispatchers.IO) {
-        val normalizedLanguage = normalizeTmdbLanguage(language)
+        val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val providerToken = posterProviderCacheToken(activePosterProvider)
         val cacheKey = "$collectionId:$normalizedLanguage:collection:$providerToken"
         collectionCache[cacheKey]?.let { return@withContext it }
+        val apiKey = requireApiKey() ?: return@withContext emptyList()
 
         try {
-            val collectionResponse = tmdbApi.getCollectionDetails(collectionId, TMDB_API_KEY, normalizedLanguage).body()
+            val collectionResponse = tmdbApi.getCollectionDetails(collectionId, apiKey, normalizedLanguage).body()
             val rawParts = collectionResponse?.parts.orEmpty()
             
             // Show in release order
@@ -495,7 +505,7 @@ class TmdbMetadataService @Inject constructor(
                         val title = part.title ?: return@async null
 
                         val localizedBackdropPath = runCatching {
-                            tmdbApi.getMovieImages(part.id, TMDB_API_KEY, includeImageLanguage).body()
+                            tmdbApi.getMovieImages(part.id, apiKey, includeImageLanguage).body()
                         }.getOrNull()?.let { images ->
                             selectBestLocalizedImagePath(
                                 images = images.backdrops.orEmpty(),
@@ -551,7 +561,20 @@ class TmdbMetadataService @Inject constructor(
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?.replace('_', '-')
-            ?: "en"
+            ?: "en-US"
+    }
+
+    fun currentTmdbLanguageTag(): String {
+        return AppLocaleResolver.resolveTmdbLanguageTag(appContext)
+    }
+
+    private suspend fun requireApiKey(): String? {
+        val key = tmdbSettingsDataStore.settings.first().apiKey.trim()
+        if (key.isBlank()) {
+            Log.w(TAG, "TMDB API key is missing; metadata request skipped")
+            return null
+        }
+        return key
     }
 
     private fun posterProviderCacheToken(
@@ -585,14 +608,15 @@ class TmdbMetadataService @Inject constructor(
         withContext(Dispatchers.IO) {
             val cacheKey = "$personId:${preferCrewCredits?.toString() ?: "auto"}"
             personCache[cacheKey]?.let { return@withContext it }
+            val apiKey = requireApiKey() ?: return@withContext null
 
             try {
                 val (person, credits) = coroutineScope {
                     val personDeferred = async {
-                        tmdbApi.getPersonDetails(personId, TMDB_API_KEY).body()
+                        tmdbApi.getPersonDetails(personId, apiKey).body()
                     }
                     val creditsDeferred = async {
-                        tmdbApi.getPersonCombinedCredits(personId, TMDB_API_KEY).body()
+                        tmdbApi.getPersonCombinedCredits(personId, apiKey).body()
                     }
                     Pair(personDeferred.await(), creditsDeferred.await())
                 }
@@ -841,3 +865,4 @@ private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
         runtimeMinutes = runtime
     )
 }
+

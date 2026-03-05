@@ -55,6 +55,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.R
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.ui.components.NexioDialog
@@ -89,18 +90,14 @@ fun ThemeSettingsContent(
     var pendingLanguageRestart by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val supportedLocales = remember {
-        listOf(
-            "en" to "English"
-        )
-    }
+    val supportedLocales = remember { AppLocaleResolver.supportedOptions }
     var selectedTag by remember {
-        mutableStateOf(
-            context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
-                .getString("locale_tag", null)?.takeIf { it.isNotEmpty() }
-        )
+        mutableStateOf(AppLocaleResolver.getStoredLocaleTag(context))
     }
-    val currentLocaleName = supportedLocales.firstOrNull { it.first == selectedTag }?.second ?: "English"
+    val currentLocaleName = supportedLocales
+        .firstOrNull { it.tag == selectedTag }
+        ?.displayName
+        ?: stringResource(R.string.appearance_language_system)
     val strRestartHint = stringResource(R.string.appearance_language_restart_hint)
 
     LaunchedEffect(pendingLanguageRestart, showLanguageDialog) {
@@ -244,14 +241,15 @@ fun ThemeSettingsContent(
                     contentPadding = PaddingValues(vertical = 2.dp)
                 ) {
                     for (index in supportedLocales.indices) {
-                        val (tag, name) = supportedLocales[index]
+                        val option = supportedLocales[index]
+                        val tag = option.tag
+                        val name = option.displayName
                         item {
                             val isSelected = tag == selectedTag
                             Button(
                                 onClick = {
                                     val previousTag = selectedTag
-                                    context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
-                                        .edit().putString("locale_tag", tag ?: "").apply()
+                                    AppLocaleResolver.setStoredLocaleTag(context, tag)
                                     selectedTag = tag
                                     showLanguageDialog = false
                                     if (previousTag != tag) {

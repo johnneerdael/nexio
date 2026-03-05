@@ -420,8 +420,7 @@ class MetaDetailsViewModel @Inject constructor(
             val rawRecommendations = runCatching {
                 tmdbMetadataService.fetchMoreLikeThis(
                     tmdbId = tmdbId,
-                    contentType = tmdbContentType,
-                    language = settings.language
+                    contentType = tmdbContentType
                 )
             }.getOrElse {
                 Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
@@ -446,21 +445,20 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun shouldLoadMoreLikeThis(settings: TmdbSettings): Boolean {
-        return settings.enabled && settings.useMoreLikeThis
+        return settings.isActive && settings.useMoreLikeThis
     }
 
     private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {
         collectionJob?.cancel()
         collectionJob = viewModelScope.launch {
-            if (!settings.enabled || !settings.useCollections) {
+            if (!settings.isActive || !settings.useCollections) {
                 _uiState.update { it.copy(collection = emptyList(), collectionName = null) }
                 return@launch
             }
 
             val items = runCatching {
                 tmdbMetadataService.fetchMovieCollection(
-                    collectionId = collectionId,
-                    language = settings.language
+                    collectionId = collectionId
                 )
             }.getOrElse {
                 Log.w(TAG, "Failed to load collection $collectionId: ${it.message}")
@@ -514,7 +512,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun enrichMeta(meta: Meta): Meta {
         val settings = tmdbSettingsDataStore.settings.first()
-        if (!settings.enabled) return meta
+        if (!settings.isActive) return meta
 
         val tmdbContentType = resolveTmdbContentType(meta)
         val tmdbLookupType = tmdbContentType.toApiString()
@@ -524,8 +522,7 @@ class MetaDetailsViewModel @Inject constructor(
 
         val enrichment = tmdbMetadataService.fetchEnrichment(
             tmdbId = tmdbId,
-            contentType = tmdbContentType,
-            language = settings.language
+            contentType = tmdbContentType
         )
 
         var updated = meta
@@ -598,8 +595,7 @@ class MetaDetailsViewModel @Inject constructor(
             val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
             val episodeMap = tmdbMetadataService.fetchEpisodeEnrichment(
                 tmdbId = tmdbId,
-                seasonNumbers = seasonNumbers,
-                language = settings.language
+                seasonNumbers = seasonNumbers
             )
             if (episodeMap.isNotEmpty()) {
                 updated = updated.copy(
