@@ -102,10 +102,10 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = "nuviotv"
-            keyPassword = "815787"
-            storeFile = file("../nuviotv.jks")
-            storePassword = "815787"
+            keyAlias = "nexio"
+            keyPassword = "gP^EJa&xPLCk89"
+            storeFile = file("../nexio.jks")
+            storePassword = "gP^EJa&xPLCk89"
         }
     }
 
