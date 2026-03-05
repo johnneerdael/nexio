@@ -3,10 +3,14 @@ package com.nexio.tv.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.domain.model.TmdbSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
@@ -15,15 +19,24 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TmdbSettingsViewModel @Inject constructor(
-    private val dataStore: TmdbSettingsDataStore
+    private val dataStore: TmdbSettingsDataStore,
+    private val tmdbApi: TmdbApi
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TmdbSettingsUiState())
     val uiState: StateFlow<TmdbSettingsUiState> = _uiState.asStateFlow()
+    private val _validating = MutableStateFlow(false)
+    val validating: StateFlow<Boolean> = _validating.asStateFlow()
+    private val _validationError = MutableSharedFlow<TmdbValidationError>(extraBufferCapacity = 1)
+    val validationError: SharedFlow<TmdbValidationError> = _validationError.asSharedFlow()
 
     init {
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
+                if (settings.enabled && settings.apiKey.isBlank()) {
+                    dataStore.setEnabled(false)
+                    return@collectLatest
+                }
                 _uiState.update { it.fromSettings(settings) }
             }
         }
@@ -31,10 +44,18 @@ class TmdbSettingsViewModel @Inject constructor(
 
     fun onEvent(event: TmdbSettingsEvent) {
         when (event) {
-            is TmdbSettingsEvent.ToggleEnabled -> update { dataStore.setEnabled(event.enabled) }
-            is TmdbSettingsEvent.SetLanguage -> update {
-                val newLanguage = event.language.ifBlank { "en" }
-                dataStore.setLanguage(newLanguage)
+            is TmdbSettingsEvent.ToggleEnabled -> update {
+                if (!event.enabled) {
+                    dataStore.setEnabled(false)
+                } else {
+                    val key = _uiState.value.apiKey.trim()
+                    if (key.isBlank()) {
+                        _validationError.tryEmit(TmdbValidationError.MissingApiKey)
+                        dataStore.setEnabled(false)
+                    } else {
+                        dataStore.setEnabled(true)
+                    }
+                }
             }
             is TmdbSettingsEvent.ToggleArtwork -> update { dataStore.setUseArtwork(event.enabled) }
             is TmdbSettingsEvent.ToggleBasicInfo -> update { dataStore.setUseBasicInfo(event.enabled) }
@@ -48,6 +69,33 @@ class TmdbSettingsViewModel @Inject constructor(
         }
     }
 
+    fun validateAndSaveApiKey(value: String, onSuccess: () -> Unit) {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) {
+            viewModelScope.launch {
+                dataStore.setApiKey("")
+                dataStore.setEnabled(false)
+            }
+            onSuccess()
+            return
+        }
+        viewModelScope.launch {
+            _validating.value = true
+            val valid = try {
+                tmdbApi.getConfiguration(trimmed).isSuccessful
+            } catch (_: Exception) {
+                false
+            }
+            _validating.value = false
+            if (valid) {
+                dataStore.setApiKey(trimmed)
+                onSuccess()
+            } else {
+                _validationError.tryEmit(TmdbValidationError.InvalidApiKey)
+            }
+        }
+    }
+
     private fun update(action: suspend () -> Unit) {
         viewModelScope.launch { action() }
     }
@@ -55,7 +103,7 @@ class TmdbSettingsViewModel @Inject constructor(
 
 data class TmdbSettingsUiState(
     val enabled: Boolean = false,
-    val language: String = "en",
+    val apiKey: String = "",
     val useArtwork: Boolean = true,
     val useBasicInfo: Boolean = true,
     val useDetails: Boolean = true,
@@ -66,9 +114,12 @@ data class TmdbSettingsUiState(
     val useMoreLikeThis: Boolean = true,
     val useCollections: Boolean = true
 ) {
+    val isActive: Boolean
+        get() = enabled && apiKey.isNotBlank()
+
     fun fromSettings(settings: TmdbSettings): TmdbSettingsUiState = copy(
         enabled = settings.enabled,
-        language = settings.language,
+        apiKey = settings.apiKey,
         useArtwork = settings.useArtwork,
         useBasicInfo = settings.useBasicInfo,
         useDetails = settings.useDetails,
@@ -83,7 +134,6 @@ data class TmdbSettingsUiState(
 
 sealed class TmdbSettingsEvent {
     data class ToggleEnabled(val enabled: Boolean) : TmdbSettingsEvent()
-    data class SetLanguage(val language: String) : TmdbSettingsEvent()
     data class ToggleArtwork(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleBasicInfo(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleDetails(val enabled: Boolean) : TmdbSettingsEvent()
@@ -93,4 +143,9 @@ sealed class TmdbSettingsEvent {
     data class ToggleEpisodes(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleMoreLikeThis(val enabled: Boolean) : TmdbSettingsEvent()
     data class ToggleCollections(val enabled: Boolean) : TmdbSettingsEvent()
+}
+
+enum class TmdbValidationError {
+    MissingApiKey,
+    InvalidApiKey
 }

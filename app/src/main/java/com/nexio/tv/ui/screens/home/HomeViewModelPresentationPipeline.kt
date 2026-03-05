@@ -270,8 +270,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                     val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@async item
                     val enrichment = tmdbMetadataService.fetchEnrichment(
                         tmdbId = tmdbId,
-                        contentType = item.type,
-                        language = settings.language
+                        contentType = item.type
                     ) ?: return@async item
 
                     var enriched = item
@@ -331,9 +330,11 @@ internal fun HomeViewModel.heroEnrichmentSignaturePipeline(
         "${item.id}:${item.apiType}:${item.name}:${item.background}:${item.logo}:${item.poster}"
     }
     return buildString {
-        append(settings.enabled)
+        append(settings.isActive)
         append(':')
-        append(settings.language)
+        append(settings.apiKey.hashCode())
+        append(':')
+        append(tmdbMetadataService.currentTmdbLanguageTag())
         append(':')
         append(settings.useArtwork)
         append(':')

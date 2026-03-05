@@ -2,8 +2,7 @@ package com.nexio.tv.domain.model
 
 data class TmdbSettings(
     val enabled: Boolean = false,
-    // TMDB language preference (ISO-639-1, default English)
-    val language: String = "en",
+    val apiKey: String = "",
     // Group: Artwork (logo, backdrop)
     val useArtwork: Boolean = true,
     // Group: Basic Info (description, genres, rating)
@@ -22,4 +21,7 @@ data class TmdbSettings(
     val useMoreLikeThis: Boolean = true,
     // Group: Collections
     val useCollections: Boolean = true
-)
+) {
+    val isActive: Boolean
+        get() = enabled && apiKey.isNotBlank()
+}

@@ -101,6 +101,7 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
@@ -174,8 +175,7 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
     override fun attachBaseContext(newBase: Context) {
-        val tag = newBase.getSharedPreferences("app_locale", Context.MODE_PRIVATE)
-            .getString("locale_tag", null)
+        val tag = AppLocaleResolver.getStoredLocaleTag(newBase)
         if (!tag.isNullOrEmpty()) {
             val locale = Locale.forLanguageTag(tag)
             Locale.setDefault(locale)
