@@ -99,7 +99,9 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
         traktSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             if (prefs == traktCatalogPreferences) return@collectLatest
             traktCatalogPreferences = prefs
-            traktDiscoveryService.ensureFresh(force = true)
+            if (shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot)) {
+                traktDiscoveryService.ensureFresh(force = false)
+            }
             scheduleUpdateCatalogRows()
         }
     }
@@ -123,8 +125,10 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
         mdbListSettingsDataStore.settings
             .distinctUntilChanged()
             .collectLatest { settings ->
-                if (settings.enabled && settings.apiKey.isNotBlank()) {
-                    runCatching { mdbListDiscoveryService.ensureFresh(force = true) }
+                if (settings.enabled && settings.apiKey.isNotBlank() &&
+                    shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, mdbListDiscoverySnapshot)
+                ) {
+                    runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
                         .onFailure { error ->
                             Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
                         }
@@ -141,7 +145,9 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
         mdbListSettingsDataStore.catalogPreferences.collectLatest { prefs ->
             if (prefs == mdbListCatalogPreferences) return@collectLatest
             mdbListCatalogPreferences = prefs
-            mdbListDiscoveryService.ensureFresh(force = true)
+            if (shouldRefreshMDBListDiscoveryForState(prefs, mdbListDiscoverySnapshot)) {
+                mdbListDiscoveryService.ensureFresh(force = false)
+            }
             scheduleUpdateCatalogRows()
         }
     }
@@ -699,6 +705,41 @@ private fun buildSyntheticMDBListRows(
             "MDBList synthetic rows available=${availableKeys.size} grouped=${groupedByKey.size} emitted=${groups.size}"
         )
     }
+}
+
+internal fun shouldRefreshTraktDiscoveryForState(
+    prefs: TraktCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
+): Boolean {
+    if (snapshot.popularLists.isEmpty()) {
+        return true
+    }
+
+    val customKeys = snapshot.customListCatalogs.map { it.key }.toSet()
+    return prefs.selectedPopularListKeys.any { it !in customKeys }
+}
+
+internal fun shouldRefreshMDBListDiscoveryForState(
+    prefs: MDBListCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+): Boolean {
+    if (snapshot.personalLists.isEmpty() && snapshot.topLists.isEmpty()) {
+        return true
+    }
+
+    val enabledPersonalCount = snapshot.personalLists.count { prefs.isPersonalListEnabled(it.key) }
+    val selectedTopCount = snapshot.topLists.count { prefs.isTopListSelected(it.key) }
+
+    val requiredKeys = buildSet {
+        addAll(snapshot.personalLists.filter { prefs.isPersonalListEnabled(it.key) }.map { it.key })
+        addAll(snapshot.topLists.filter { prefs.isTopListSelected(it.key) }.map { it.key })
+    }
+    if (requiredKeys.isEmpty()) {
+        return enabledPersonalCount == 0 && selectedTopCount > 0
+    }
+
+    val customKeys = snapshot.customListCatalogs.map { it.key }.toSet()
+    return requiredKeys.any { it !in customKeys }
 }
 
 private fun buildSyntheticTraktRows(
