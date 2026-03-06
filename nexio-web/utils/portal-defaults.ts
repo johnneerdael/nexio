@@ -18,11 +18,11 @@ export const defaultTraktCatalogOrder: CatalogId[] = [
 ]
 
 export const defaultSyncExclusions: SyncExclusion[] = [
-  { key: 'playback.audioTrailer.mapDV7ToHevc', reason: 'Dolby Vision handling is TV-specific.' },
-  { key: 'playback.audioTrailer.experimentalDv7ToDv81Enabled', reason: 'DV7 conversion depends on device codec behavior.' },
-  { key: 'playback.audioTrailer.experimentalDv7ToDv81PreserveMappingEnabled', reason: 'DV mapping behavior depends on local playback capability.' },
-  { key: 'playback.audioTrailer.experimentalDv5ToDv81Enabled', reason: 'DV5 compatibility is device-specific.' },
-  { key: 'playback.audioTrailer.experimentalDtsIecPassthroughEnabled', reason: 'Fire OS audio quirks must stay local to the device.' },
+  { key: 'playback.audio.mapDV7ToHevc', reason: 'Dolby Vision handling is TV-specific.' },
+  { key: 'playback.audio.experimentalDv7ToDv81Enabled', reason: 'DV7 conversion depends on device codec behavior.' },
+  { key: 'playback.audio.experimentalDv7ToDv81PreserveMappingEnabled', reason: 'DV mapping behavior depends on local playback capability.' },
+  { key: 'playback.audio.experimentalDv5ToDv81Enabled', reason: 'DV5 compatibility is device-specific.' },
+  { key: 'playback.audio.experimentalDtsIecPassthroughEnabled', reason: 'Fire OS audio quirks must stay local to the device.' },
   { key: 'playback.bufferNetwork.vodCacheSizeMode', reason: 'Cache size should remain per-device.' },
   { key: 'playback.bufferNetwork.vodCacheSizeMb', reason: 'Cache size should remain per-device.' },
   { key: 'playback.bufferNetwork.useParallelConnections', reason: 'Parallel fetch tuning should remain per-device.' },
@@ -61,7 +61,6 @@ export const defaultSettings = (): PortalSettings => ({
   integrations: {
     tmdb: {
       enabled: false,
-      apiKey: '',
       useArtwork: true,
       useBasicInfo: true,
       useDetails: true,
@@ -124,7 +123,7 @@ export const defaultSettings = (): PortalSettings => ({
       nextEpisodeThresholdPercent: 99,
       nextEpisodeThresholdMinutesBeforeEnd: 2
     },
-    audioTrailer: {
+    audio: {
       preferredAudioLanguage: 'device',
       secondaryPreferredAudioLanguage: null,
       skipSilence: false,

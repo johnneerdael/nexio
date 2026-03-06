@@ -132,7 +132,6 @@ export const accountGroups: Record<string, PortalGroup[]> = {
       subtitle: 'Metadata enrichment switches for artwork, credits, and detailed discovery.',
       fields: [
         { path: 'integrations.tmdb.enabled', label: 'Enable TMDB', description: 'Turns TMDB metadata enrichment on account-wide.', kind: 'toggle' },
-        { path: 'integrations.tmdb.apiKey', label: 'API key', description: 'TMDB API key shared with every synced TV.', kind: 'text', placeholder: 'Paste TMDB API key' },
         { path: 'integrations.tmdb.useArtwork', label: 'Use artwork', description: 'Prefer TMDB artwork when available.', kind: 'toggle' },
         { path: 'integrations.tmdb.useBasicInfo', label: 'Basic info', description: 'Use TMDB summary metadata.', kind: 'toggle' },
         { path: 'integrations.tmdb.useDetails', label: 'Detailed info', description: 'Pull extended detail metadata.', kind: 'toggle' },
@@ -220,15 +219,15 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         ] },
         { path: 'playback.streamSelection.nextEpisodeThresholdPercent', label: 'Next episode threshold percent', description: 'Percent watched before auto-playing the next episode.', kind: 'slider', min: 97, max: 99.5, step: 0.5 },
         { path: 'playback.streamSelection.nextEpisodeThresholdMinutesBeforeEnd', label: 'Next episode threshold minutes', description: 'Minutes before end before auto-playing the next episode.', kind: 'slider', min: 1, max: 3.5, step: 0.5 },
-        { path: 'playback.audioTrailer.preferredAudioLanguage', label: 'Preferred audio language', description: 'Primary synced audio preference.', kind: 'text', placeholder: 'device' },
-        { path: 'playback.audioTrailer.secondaryPreferredAudioLanguage', label: 'Secondary audio language', description: 'Fallback audio language code.', kind: 'text', placeholder: 'en' },
-        { path: 'playback.audioTrailer.skipSilence', label: 'Skip silence', description: 'Use silence skipping when available.', kind: 'toggle' },
-        { path: 'playback.audioTrailer.decoderPriority', label: 'Decoder priority', description: 'Renderer preference for playback codecs.', kind: 'select', options: [
+        { path: 'playback.audio.preferredAudioLanguage', label: 'Preferred audio language', description: 'Primary synced audio preference.', kind: 'text', placeholder: 'device' },
+        { path: 'playback.audio.secondaryPreferredAudioLanguage', label: 'Secondary audio language', description: 'Fallback audio language code.', kind: 'text', placeholder: 'en' },
+        { path: 'playback.audio.skipSilence', label: 'Skip silence', description: 'Use silence skipping when available.', kind: 'toggle' },
+        { path: 'playback.audio.decoderPriority', label: 'Decoder priority', description: 'Renderer preference for playback codecs.', kind: 'select', options: [
           { label: '0', value: 0 },
           { label: '1', value: 1 },
           { label: '2', value: 2 }
         ] },
-        { path: 'playback.audioTrailer.tunnelingEnabled', label: 'Enable tunneling', description: 'Keep tunneling consistent on supported TVs.', kind: 'toggle' }
+        { path: 'playback.audio.tunnelingEnabled', label: 'Enable tunneling', description: 'Keep tunneling consistent on supported TVs.', kind: 'toggle' }
       ]
     },
     {

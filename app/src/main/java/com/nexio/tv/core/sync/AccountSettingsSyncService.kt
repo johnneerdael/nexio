@@ -22,11 +22,12 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
+import com.nexio.tv.data.remote.supabase.AccountSecretApiKeyPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
 import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.AppearanceSettings
-import com.nexio.tv.data.remote.supabase.AudioTrailerSettings
+import com.nexio.tv.data.remote.supabase.AudioSettings
 import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
@@ -64,6 +65,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "AccountSettingsSync"
+private const val TMDB_SECRET_TYPE = "tmdb_api_key"
+private const val TMDB_SECRET_REF = "integration:tmdb"
 
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
@@ -171,6 +174,8 @@ class AccountSettingsSyncService @Inject constructor(
                 postgrest.rpc("sync_push_account_settings", params).decodeList<AccountSyncMutationResult>()
             }
 
+            syncTmdbSecretToRemote()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push account settings to remote", e)
@@ -187,6 +192,7 @@ class AccountSettingsSyncService @Inject constructor(
             isApplyingRemote = true
             try {
                 applyRemoteSettings(snapshot.settings)
+                applyRemoteTmdbSecret()
             } finally {
                 isApplyingRemote = false
             }
@@ -247,7 +253,6 @@ class AccountSettingsSyncService @Inject constructor(
             integrations = IntegrationSettings(
                 tmdb = TmdbSyncSettings(
                     enabled = tmdb.enabled,
-                    apiKey = tmdb.apiKey,
                     useArtwork = tmdb.useArtwork,
                     useBasicInfo = tmdb.useBasicInfo,
                     useDetails = tmdb.useDetails,
@@ -310,7 +315,7 @@ class AccountSettingsSyncService @Inject constructor(
                     nextEpisodeThresholdPercent = player.nextEpisodeThresholdPercent,
                     nextEpisodeThresholdMinutesBeforeEnd = player.nextEpisodeThresholdMinutesBeforeEnd
                 ),
-                audioTrailer = AudioTrailerSettings(
+                audio = AudioSettings(
                     preferredAudioLanguage = player.preferredAudioLanguage,
                     secondaryPreferredAudioLanguage = player.secondaryPreferredAudioLanguage,
                     skipSilence = player.skipSilence,
@@ -386,7 +391,6 @@ class AccountSettingsSyncService @Inject constructor(
         layoutPreferenceDataStore.setPosterCardCornerRadiusDp(settings.layout.posterCardCornerRadiusDp)
 
         tmdbSettingsDataStore.setEnabled(settings.integrations.tmdb.enabled)
-        tmdbSettingsDataStore.setApiKey(settings.integrations.tmdb.apiKey)
         tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
         tmdbSettingsDataStore.setUseBasicInfo(settings.integrations.tmdb.useBasicInfo)
         tmdbSettingsDataStore.setUseDetails(settings.integrations.tmdb.useDetails)
@@ -435,11 +439,11 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setNextEpisodeThresholdMode(enumValueOrDefault(settings.playback.streamSelection.nextEpisodeThresholdMode, NextEpisodeThresholdMode.PERCENTAGE))
         playerSettingsDataStore.setNextEpisodeThresholdPercent(settings.playback.streamSelection.nextEpisodeThresholdPercent)
         playerSettingsDataStore.setNextEpisodeThresholdMinutesBeforeEnd(settings.playback.streamSelection.nextEpisodeThresholdMinutesBeforeEnd)
-        playerSettingsDataStore.setPreferredAudioLanguage(settings.playback.audioTrailer.preferredAudioLanguage)
-        playerSettingsDataStore.setSecondaryPreferredAudioLanguage(settings.playback.audioTrailer.secondaryPreferredAudioLanguage)
-        playerSettingsDataStore.setSkipSilence(settings.playback.audioTrailer.skipSilence)
-        playerSettingsDataStore.setDecoderPriority(settings.playback.audioTrailer.decoderPriority)
-        playerSettingsDataStore.setTunnelingEnabled(settings.playback.audioTrailer.tunnelingEnabled)
+        playerSettingsDataStore.setPreferredAudioLanguage(settings.playback.audio.preferredAudioLanguage)
+        playerSettingsDataStore.setSecondaryPreferredAudioLanguage(settings.playback.audio.secondaryPreferredAudioLanguage)
+        playerSettingsDataStore.setSkipSilence(settings.playback.audio.skipSilence)
+        playerSettingsDataStore.setDecoderPriority(settings.playback.audio.decoderPriority)
+        playerSettingsDataStore.setTunnelingEnabled(settings.playback.audio.tunnelingEnabled)
         playerSettingsDataStore.setSubtitlePreferredLanguage(settings.playback.subtitles.preferredLanguage)
         playerSettingsDataStore.setSubtitleSecondaryLanguage(settings.playback.subtitles.secondaryPreferredLanguage)
         playerSettingsDataStore.setSubtitleOrganizationMode(enumValueOrDefault(settings.playback.subtitles.subtitleOrganizationMode, SubtitleOrganizationMode.NONE))
@@ -470,6 +474,55 @@ class AccountSettingsSyncService @Inject constructor(
 
         debugSettingsDataStore.setAccountTabEnabled(settings.debug.accountTabEnabled)
         debugSettingsDataStore.setSyncCodeFeaturesEnabled(settings.debug.syncCodeFeaturesEnabled)
+    }
+
+    private suspend fun syncTmdbSecretToRemote() {
+        val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+
+        if (apiKey.isBlank()) {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TMDB_SECRET_TYPE)
+                        put("p_secret_ref", TMDB_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+            }
+            return
+        }
+
+        withJwtRefreshRetry {
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", TMDB_SECRET_TYPE)
+                    put("p_secret_ref", TMDB_SECRET_REF)
+                    put("p_secret_payload", Json.encodeToJsonElement(AccountSecretApiKeyPayload.serializer(), AccountSecretApiKeyPayload(apiKey)))
+                    put("p_masked_preview", "Stored ••••${apiKey.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+        }
+    }
+
+    private suspend fun applyRemoteTmdbSecret() {
+        val payload = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TMDB_SECRET_TYPE)
+                        put("p_secret_ref", TMDB_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountSecretApiKeyPayload>()
+            }
+        }.getOrNull()
+
+        tmdbSettingsDataStore.setApiKey(payload?.apiKey?.trim().orEmpty())
     }
 
     private inline fun <reified T : Enum<T>> enumValueOrDefault(value: String, default: T): T {

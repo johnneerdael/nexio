@@ -43,10 +43,10 @@
           <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
             <div>
               <strong>Built-in Trakt catalogs</strong>
-              <p style="margin-top:0.3rem;">These rails are enabled and ordered from the same Trakt settings surface used in the app.</p>
+              <p style="margin-top:0.3rem;">Enabled rails stay highlighted here. Their position is managed from the Catalogs view.</p>
             </div>
           </div>
-          <div class="selection-grid">
+          <div class="selection-grid compact-grid">
             <button
               v-for="catalog in settings.trakt.catalogOrder"
               :key="catalog"
@@ -58,14 +58,14 @@
           </div>
         </div>
 
-        <div class="field-shell" style="padding:0.95rem;">
-          <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
-            <div>
+        <details class="collapsible-shell">
+          <summary class="collapsible-summary">
+            <span>
               <strong>Popular Trakt lists</strong>
-              <p style="margin-top:0.3rem;">Choose which discovered popular lists should surface as Trakt rails.</p>
-            </div>
-            <span class="badge">{{ traktPopularLists.length }} discovered</span>
-          </div>
+              <small>{{ traktPopularLists.length }} discovered</small>
+            </span>
+            <span class="badge">Collapsed by default</span>
+          </summary>
           <div class="selection-grid">
             <button
               v-for="list in traktPopularLists"
@@ -76,77 +76,143 @@
               {{ list.title }}
             </button>
           </div>
-        </div>
+        </details>
       </template>
     </article>
 
     <article v-if="showIntegrations" class="field-shell">
+      <div class="grid-2 integrations-grid">
+        <div class="field-shell" style="padding:0.95rem;">
+          <div class="integration-header">
+            <div>
+              <label>TMDB</label>
+              <p>Enable TMDB metadata and manage the shared API key from one compact panel.</p>
+            </div>
+            <button :class="settings.integrations.tmdb.enabled ? 'toggle-chip active' : 'toggle-chip'" @click="emit('update', 'integrations.tmdb.enabled', !settings.integrations.tmdb.enabled)">
+              TMDB
+            </button>
+          </div>
+          <input v-model="tmdbDraft" placeholder="Paste TMDB API key">
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.1rem;">
+            <button class="secondary-btn" :disabled="!tmdbDraft.trim()" @click="handleSaveTmdb">Save key</button>
+            <button v-if="secretStatuses['integration:tmdb']" class="danger-btn" @click="emit('clear-tmdb-key')">Clear key</button>
+          </div>
+          <p v-if="maskedTmdbKey">{{ maskedTmdbKey }}</p>
+          <details class="collapsible-shell">
+            <summary class="collapsible-summary">
+              <span>
+                <strong>Advanced Settings</strong>
+                <small>Artwork, credits, networks, episodes, and discovery depth.</small>
+              </span>
+            </summary>
+            <div class="selection-grid compact-grid">
+              <button v-for="field in tmdbFields" :key="field.path" :class="fieldValue(settings, field.path) ? 'toggle-chip active block' : 'toggle-chip block'" @click="emit('update', field.path, !fieldValue(settings, field.path))">
+                {{ field.label }}
+              </button>
+            </div>
+          </details>
+        </div>
+
+        <div class="field-shell" style="padding:0.95rem;">
+          <div class="integration-header">
+            <div>
+              <label>MDBList</label>
+              <p>Store the shared API key separately, then discover personal and top-list rails without keeping the page open and expanded.</p>
+            </div>
+            <button :class="settings.integrations.mdblist.enabled ? 'toggle-chip active' : 'toggle-chip'" @click="emit('update', 'integrations.mdblist.enabled', !settings.integrations.mdblist.enabled)">
+              MDBList
+            </button>
+          </div>
+          <input
+            :value="secretDrafts['integration:mdblist'] || ''"
+            placeholder="Paste MDBList API key"
+            @input="emit('update-secret-draft', 'integration:mdblist', ($event.target as HTMLInputElement).value)"
+          >
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.1rem;">
+            <button class="secondary-btn" @click="emit('save-secret', 'mdblist_api_key', 'integration:mdblist')">Save key</button>
+            <button
+              v-if="secretStatuses['integration:mdblist']"
+              class="danger-btn"
+              @click="emit('delete-secret', 'mdblist_api_key', 'integration:mdblist')"
+            >
+              Clear key
+            </button>
+            <button class="secondary-btn" :disabled="mdblistValidating" @click="emit('validate-mdblist')">
+              {{ mdblistValidating ? 'Refreshing...' : 'Refresh Lists' }}
+            </button>
+          </div>
+          <p v-if="secretStatuses['integration:mdblist']?.maskedPreview">{{ secretStatuses['integration:mdblist']?.maskedPreview }}</p>
+          <p v-if="mdblistError" style="color: var(--danger);">{{ mdblistError }}</p>
+          <details class="collapsible-shell">
+            <summary class="collapsible-summary">
+              <span>
+                <strong>Advanced Settings</strong>
+                <small>Ratings overlays and rail discovery stay tucked away until needed.</small>
+              </span>
+            </summary>
+            <div class="selection-grid compact-grid">
+              <button v-for="field in mdblistFields" :key="field.path" :class="fieldValue(settings, field.path) ? 'toggle-chip active block' : 'toggle-chip block'" @click="emit('update', field.path, !fieldValue(settings, field.path))">
+                {{ field.label }}
+              </button>
+            </div>
+            <details class="collapsible-shell nested-collapse">
+              <summary class="collapsible-summary">
+                <span>
+                  <strong>Personal Lists</strong>
+                  <small>{{ mdblistPersonalLists.length }} discovered</small>
+                </span>
+              </summary>
+              <div class="selection-grid">
+                <button
+                  v-for="list in mdblistPersonalLists"
+                  :key="list.key"
+                  :class="settings.integrations.mdblist.hiddenPersonalListKeys.includes(list.key) ? 'toggle-chip block' : 'toggle-chip active block'"
+                  @click="emit('toggle-mdblist-personal-list', list.key, settings.integrations.mdblist.hiddenPersonalListKeys.includes(list.key))"
+                >
+                  {{ list.title }}
+                </button>
+              </div>
+            </details>
+            <details class="collapsible-shell nested-collapse">
+              <summary class="collapsible-summary">
+                <span>
+                  <strong>Top Lists</strong>
+                  <small>{{ mdblistTopLists.length }} discovered</small>
+                </span>
+              </summary>
+              <div class="selection-grid">
+                <button
+                  v-for="list in mdblistTopLists"
+                  :key="list.key"
+                  :class="settings.integrations.mdblist.selectedTopListKeys.includes(list.key) ? 'toggle-chip active block' : 'toggle-chip block'"
+                  @click="emit('toggle-mdblist-top-list', list.key, !settings.integrations.mdblist.selectedTopListKeys.includes(list.key))"
+                >
+                  {{ list.title }}
+                </button>
+              </div>
+            </details>
+          </details>
+        </div>
+      </div>
+
       <div class="field-shell" style="padding:0.95rem;">
-        <label>MDBList secret</label>
-        <p>Stored separately from the public account payload. Save or rotate the key here, then refresh discovered lists.</p>
+        <div class="integration-header">
+          <div>
+            <label>Anime Skip</label>
+            <p>Intro-skip account settings that still belong at the account layer.</p>
+          </div>
+          <button :class="settings.integrations.animeSkip.enabled ? 'toggle-chip active' : 'toggle-chip'" @click="emit('update', 'integrations.animeSkip.enabled', !settings.integrations.animeSkip.enabled)">
+            Anime Skip
+          </button>
+        </div>
         <input
-          :value="secretDrafts['integration:mdblist'] || ''"
-          placeholder="Paste MDBList API key"
-          @input="emit('update-secret-draft', 'integration:mdblist', ($event.target as HTMLInputElement).value)"
+          :value="animeSkipClientId"
+          placeholder="Paste Anime Skip client ID"
+          @input="emit('update', 'integrations.animeSkip.clientId', ($event.target as HTMLInputElement).value)"
         >
-        <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.75rem;">
-          <button class="secondary-btn" @click="emit('save-secret', 'mdblist_api_key', 'integration:mdblist')">Save key</button>
-          <button
-            v-if="secretStatuses['integration:mdblist']"
-            class="danger-btn"
-            @click="emit('delete-secret', 'mdblist_api_key', 'integration:mdblist')"
-          >
-            Clear key
-          </button>
-          <button class="secondary-btn" :disabled="mdblistValidating" @click="emit('validate-mdblist')">
-            {{ mdblistValidating ? 'Refreshing...' : 'Refresh Lists' }}
-          </button>
-        </div>
-        <p v-if="secretStatuses['integration:mdblist']?.maskedPreview">{{ secretStatuses['integration:mdblist']?.maskedPreview }}</p>
-        <p v-if="mdblistError" style="color: var(--danger);">{{ mdblistError }}</p>
       </div>
 
-      <div class="field-shell" style="padding:0.95rem;">
-        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
-          <div>
-            <strong>MDBList personal lists</strong>
-            <p style="margin-top:0.3rem;">Choose which personal lists stay visible as app-configurable rails.</p>
-          </div>
-          <span class="badge">{{ mdblistPersonalLists.length }} lists</span>
-        </div>
-        <div class="selection-grid">
-          <button
-            v-for="list in mdblistPersonalLists"
-            :key="list.key"
-            :class="settings.integrations.mdblist.hiddenPersonalListKeys.includes(list.key) ? 'toggle-chip block' : 'toggle-chip active block'"
-            @click="emit('toggle-mdblist-personal-list', list.key, settings.integrations.mdblist.hiddenPersonalListKeys.includes(list.key))"
-          >
-            {{ list.title }}
-          </button>
-        </div>
-      </div>
-
-      <div class="field-shell" style="padding:0.95rem;">
-        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
-          <div>
-            <strong>MDBList top lists</strong>
-            <p style="margin-top:0.3rem;">Pick the top lists that should be available as MDBList rails.</p>
-          </div>
-          <span class="badge">{{ mdblistTopLists.length }} lists</span>
-        </div>
-        <div class="selection-grid">
-          <button
-            v-for="list in mdblistTopLists"
-            :key="list.key"
-            :class="settings.integrations.mdblist.selectedTopListKeys.includes(list.key) ? 'toggle-chip active block' : 'toggle-chip block'"
-            @click="emit('toggle-mdblist-top-list', list.key, !settings.integrations.mdblist.selectedTopListKeys.includes(list.key))"
-          >
-            {{ list.title }}
-          </button>
-        </div>
-      </div>
-
-      <div class="grid-2">
+      <div class="grid-2 integrations-grid">
         <div class="field-shell" :style="providerCardStyle('rpdb')">
           <div style="display:grid; gap:0.35rem;">
             <strong>RPDB</strong>
@@ -220,8 +286,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import PortalField from '~/components/portal/PortalField.vue'
-import { fieldValue, traktCatalogLabels, type PortalGroup } from '~/utils/portal-metadata'
+import { accountGroups, fieldValue, traktCatalogLabels, type PortalGroup } from '~/utils/portal-metadata'
 import type { CatalogId, MDBListListOption, PortalSettings, SecretMetadata, SecretType, TraktDeviceFlow, TraktPopularListOption } from '~/types/portal'
 
 const props = withDefaults(defineProps<{
@@ -256,6 +323,8 @@ const emit = defineEmits<{
   'refresh-trakt-lists': []
   'disconnect-trakt': []
   'toggle-trakt-list': [key: string]
+  'save-tmdb-key': [apiKey: string]
+  'clear-tmdb-key': []
   'update-secret-draft': [secretRef: string, value: string]
   'save-secret': [secretType: SecretType, secretRef: string]
   'delete-secret': [secretType: SecretType, secretRef: string]
@@ -263,6 +332,29 @@ const emit = defineEmits<{
   'toggle-mdblist-personal-list': [key: string, currentlyHidden: boolean]
   'toggle-mdblist-top-list': [key: string, shouldSelect: boolean]
 }>()
+
+const tmdbFields = accountGroups.integrations
+  .find((group) => group.id === 'tmdb')
+  ?.fields.filter((field) => field.path !== 'integrations.tmdb.enabled') ?? []
+
+const mdblistFields = accountGroups.integrations
+  .find((group) => group.id === 'mdblist')
+  ?.fields.filter((field) => !['integrations.mdblist.enabled', 'integrations.mdblist.hiddenPersonalListKeys', 'integrations.mdblist.selectedTopListKeys', 'integrations.mdblist.catalogOrder'].includes(field.path)) ?? []
+
+const tmdbDraft = ref('')
+
+watch(() => props.secretStatuses['integration:tmdb']?.updatedAt, () => {
+  tmdbDraft.value = ''
+})
+
+const maskedTmdbKey = computed(() => {
+  return props.secretStatuses['integration:tmdb']?.maskedPreview ?? ''
+})
+
+const animeSkipClientId = computed(() => {
+  const value = fieldValue(props.settings, 'integrations.animeSkip.clientId')
+  return typeof value === 'string' ? value : ''
+})
 
 function toggleCatalog(catalog: CatalogId) {
   const enabled = props.settings.trakt.catalogEnabledSet.includes(catalog)
@@ -300,5 +392,13 @@ function togglePosterProvider(provider: 'rpdb' | 'topposters') {
     return
   }
   emit('update', 'integrations.posterRatings.topPostersEnabled', !props.settings.integrations.posterRatings.topPostersEnabled)
+}
+
+function handleSaveTmdb() {
+  const apiKey = tmdbDraft.value.trim()
+  if (!apiKey) {
+    return
+  }
+  emit('save-tmdb-key', apiKey)
 }
 </script>

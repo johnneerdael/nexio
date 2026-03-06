@@ -5,6 +5,7 @@ import {
   defaultSettings,
   demoDevices
 } from '~/utils/portal-defaults'
+import { traktCatalogLabels } from '~/utils/portal-metadata'
 import type {
   AddonCatalogRecord,
   AddonManifestInspection,
@@ -183,9 +184,9 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
         ...defaults.playback.streamSelection,
         ...(input?.playback?.streamSelection ?? {})
       },
-      audioTrailer: {
-        ...defaults.playback.audioTrailer,
-        ...(input?.playback?.audioTrailer ?? {})
+      audio: {
+        ...defaults.playback.audio,
+        ...(input?.playback?.audio ?? {})
       },
       subtitles: {
         ...defaults.playback.subtitles,
@@ -296,7 +297,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
   return (await response.json()) as T
 }
 
-function orderedAddonCatalogs(catalogs: AddonCatalogRecord[], settings: PortalSettings): AddonCatalogRecord[] {
+function orderedCatalogs(catalogs: AddonCatalogRecord[], settings: PortalSettings): AddonCatalogRecord[] {
   const order = settings.layout.homeCatalogOrderKeys
   const orderIndex = new Map(order.map((key, index) => [key, index]))
   const uniqueCatalogs = new Map(catalogs.map((catalog) => [catalog.key, catalog]))
@@ -316,6 +317,78 @@ function orderedAddonCatalogs(catalogs: AddonCatalogRecord[], settings: PortalSe
       }
       return leftIndex - rightIndex
     })
+}
+
+function buildTraktCatalogs(state: StoreState): AddonCatalogRecord[] {
+  if (!state.settings.integrations.traktAuth.connected) {
+    return []
+  }
+
+  const enabledBuiltIns = state.settings.trakt.catalogOrder
+    .filter((key) => state.settings.trakt.catalogEnabledSet.includes(key))
+    .map((key) => ({
+      key,
+      disableKey: '',
+      addonId: 'trakt',
+      addonName: 'Trakt',
+      addonUrl: 'trakt://catalogs',
+      catalogId: key,
+      catalogName: traktCatalogLabels[key],
+      type: 'built-in',
+      source: 'trakt' as const,
+      isSearchOnly: false
+    }))
+
+  const selectedPopular = state.traktDiscovery.popularLists
+    .filter((list) => state.settings.trakt.selectedPopularListKeys.includes(list.key))
+    .map((list) => ({
+      key: list.key,
+      disableKey: '',
+      addonId: 'trakt',
+      addonName: 'Trakt',
+      addonUrl: 'trakt://lists',
+      catalogId: list.catalogIdBase || list.key,
+      catalogName: list.title,
+      type: 'popular list',
+      source: 'trakt' as const,
+      isSearchOnly: false
+    }))
+
+  return [...enabledBuiltIns, ...selectedPopular]
+}
+
+function buildMDBListCatalogs(state: StoreState): AddonCatalogRecord[] {
+  const visiblePersonal = state.mdblistDiscovery.personalLists
+    .filter((list) => !state.settings.integrations.mdblist.hiddenPersonalListKeys.includes(list.key))
+    .map((list) => ({
+      key: list.key,
+      disableKey: '',
+      addonId: 'mdblist',
+      addonName: 'MDBList',
+      addonUrl: 'mdblist://lists',
+      catalogId: list.listId,
+      catalogName: list.title,
+      type: 'personal list',
+      source: 'mdblist' as const,
+      isSearchOnly: false
+    }))
+
+  const selectedTop = state.mdblistDiscovery.topLists
+    .filter((list) => state.settings.integrations.mdblist.selectedTopListKeys.includes(list.key))
+    .map((list) => ({
+      key: list.key,
+      disableKey: '',
+      addonId: 'mdblist',
+      addonName: 'MDBList',
+      addonUrl: 'mdblist://top-lists',
+      catalogId: list.listId,
+      catalogName: list.title,
+      type: 'top list',
+      source: 'mdblist' as const,
+      isSearchOnly: false
+    }))
+
+  return [...visiblePersonal, ...selectedTop]
 }
 
 export function usePortalStore() {
@@ -419,7 +492,7 @@ export function usePortalStore() {
 
       await inspectAddons()
 
-      if (state.value.settings.integrations.mdblist.enabled && secretStatus(secretRefs.mdblist)?.status === 'configured') {
+      if (secretStatus(secretRefs.mdblist)?.status === 'configured') {
         await validateMDBList().catch(() => undefined)
       }
 
@@ -641,38 +714,28 @@ export function usePortalStore() {
   }
 
   function moveCatalog(key: string, direction: -1 | 1) {
-    const availableKeys = orderedAddonCatalogs(
-      Object.values(state.value.addonInspections)
-        .flatMap((inspection) => inspection.catalogs)
-        .filter((catalog) => !catalog.isSearchOnly),
-      state.value.settings
-    ).map((catalog) => catalog.key)
+    const availableKeys = catalogInventory.value.map((catalog) => catalog.key)
 
     if (!availableKeys.includes(key)) {
       return
     }
 
     const fullOrder = [
-      ...state.value.settings.layout.homeCatalogOrderKeys,
+      ...state.value.settings.layout.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
       ...availableKeys.filter((catalogKey) => !state.value.settings.layout.homeCatalogOrderKeys.includes(catalogKey))
     ]
-    const addonPositions = fullOrder
-      .map((catalogKey, index) => availableKeys.includes(catalogKey) ? index : -1)
-      .filter((index) => index !== -1)
-    const currentAddonIndex = addonPositions.findIndex((position) => fullOrder[position] === key)
-    if (currentAddonIndex === -1) {
+    const currentIndex = fullOrder.indexOf(key)
+    if (currentIndex === -1) {
       return
     }
 
-    const targetAddonIndex = Math.max(0, Math.min(addonPositions.length - 1, currentAddonIndex + direction))
-    if (targetAddonIndex === currentAddonIndex) {
+    const targetIndex = Math.max(0, Math.min(fullOrder.length - 1, currentIndex + direction))
+    if (targetIndex === currentIndex) {
       return
     }
 
-    const from = addonPositions[currentAddonIndex]
-    const to = addonPositions[targetAddonIndex]
     const nextOrder = [...fullOrder]
-    ;[nextOrder[from], nextOrder[to]] = [nextOrder[to], nextOrder[from]]
+    ;[nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]]
     state.value.settings.layout.homeCatalogOrderKeys = nextOrder
   }
 
@@ -737,6 +800,18 @@ export function usePortalStore() {
     } finally {
       state.value.saving = false
     }
+  }
+
+  async function saveTmdbApiKey(apiKey: string) {
+    await saveSecret({
+      secretType: 'tmdb_api_key',
+      secretRef: secretRefs.tmdb,
+      secretPayload: { apiKey: apiKey.trim() }
+    })
+  }
+
+  async function clearTmdbApiKey() {
+    await deleteSecret('tmdb_api_key', secretRefs.tmdb)
   }
 
   async function saveSecret(payload: SecretSetPayload) {
@@ -852,6 +927,10 @@ export function usePortalStore() {
       secretRef,
       secretPayload: payloadFactory ? payloadFactory(value) : { apiKey: value }
     })
+
+    if (secretType === 'mdblist_api_key') {
+      await validateMDBList().catch(() => undefined)
+    }
   }
 
   async function startTraktDeviceFlow() {
@@ -1009,7 +1088,9 @@ export function usePortalStore() {
     const addonCatalogs = Object.values(state.value.addonInspections)
       .flatMap((inspection) => inspection.catalogs)
       .filter((catalog) => !catalog.isSearchOnly)
-    return orderedAddonCatalogs(addonCatalogs, state.value.settings)
+    const traktCatalogs = buildTraktCatalogs(state.value)
+    const mdblistCatalogs = buildMDBListCatalogs(state.value)
+    return orderedCatalogs([...addonCatalogs, ...traktCatalogs, ...mdblistCatalogs], state.value.settings)
       .map((catalog) => ({
         ...catalog,
         disableKey: catalog.disableKey || '',
@@ -1037,6 +1118,8 @@ export function usePortalStore() {
     toggleCatalog,
     unlinkDevice,
     persistSnapshot,
+    saveTmdbApiKey,
+    clearTmdbApiKey,
     secretStatus,
     setSecretDraft,
     saveDraftSecret,

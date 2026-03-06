@@ -64,7 +64,7 @@ import com.nexio.tv.ui.theme.NexioColors
 private enum class PlaybackSection {
     GENERAL,
     STREAM_SELECTION,
-    AUDIO_TRAILER,
+    AUDIO,
     SUBTITLES,
     BUFFER_NETWORK
 }
@@ -141,14 +141,14 @@ internal fun PlaybackSettingsSections(
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
     var afrExpanded by rememberSaveable { mutableStateOf(false) }
     var streamExpanded by rememberSaveable { mutableStateOf(false) }
-    var audioTrailerExpanded by rememberSaveable { mutableStateOf(false) }
+    var audioExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
     var bufferAndNetworkExpanded by rememberSaveable { mutableStateOf(false) }
 
     val defaultGeneralHeaderFocus = remember { FocusRequester() }
     val afrHeaderFocus = remember { FocusRequester() }
     val streamHeaderFocus = remember { FocusRequester() }
-    val audioTrailerHeaderFocus = remember { FocusRequester() }
+    val audioHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
     val bufferAndNetworkHeaderFocus = remember { FocusRequester() }
     val generalHeaderFocus = initialFocusRequester ?: defaultGeneralHeaderFocus
@@ -193,9 +193,9 @@ internal fun PlaybackSettingsSections(
             streamHeaderFocus.requestFocus()
         }
     }
-    LaunchedEffect(audioTrailerExpanded, focusedSection) {
-        if (!audioTrailerExpanded && focusedSection == PlaybackSection.AUDIO_TRAILER) {
-            audioTrailerHeaderFocus.requestFocus()
+    LaunchedEffect(audioExpanded, focusedSection) {
+        if (!audioExpanded && focusedSection == PlaybackSection.AUDIO) {
+            audioHeaderFocus.requestFocus()
         }
     }
     LaunchedEffect(subtitlesExpanded, focusedSection) {
@@ -334,15 +334,15 @@ internal fun PlaybackSettingsSections(
         }
 
         playbackCollapsibleSection(
-            keyPrefix = "audio_trailer",
+            keyPrefix = "audio",
             title = strSectionAudio,
             description = strSectionAudioDesc,
-            expanded = audioTrailerExpanded,
-            onToggle = { audioTrailerExpanded = !audioTrailerExpanded },
-            focusRequester = audioTrailerHeaderFocus,
-            onHeaderFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER }
+            expanded = audioExpanded,
+            onToggle = { audioExpanded = !audioExpanded },
+            focusRequester = audioHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.AUDIO }
         ) {
-            trailerAndAudioSettingsItems(
+            audioSettingsItems(
                 playerSettings = playerSettings,
                 onShowAudioLanguageDialog = onShowAudioLanguageDialog,
                 onShowSecondaryAudioLanguageDialog = onShowSecondaryAudioLanguageDialog,
@@ -355,7 +355,7 @@ internal fun PlaybackSettingsSections(
                 onSetExperimentalDv5ToDv81Enabled = onSetExperimentalDv5ToDv81Enabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
                     onSetExperimentalDv7ToDv81PreserveMappingEnabled,
-                onItemFocused = { focusedSection = PlaybackSection.AUDIO_TRAILER },
+                onItemFocused = { focusedSection = PlaybackSection.AUDIO },
                 enabled = !generalUi.isExternalPlayer
             )
         }

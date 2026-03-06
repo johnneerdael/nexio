@@ -41,6 +41,7 @@ Not synced:
 ## What Is Stored As Secrets
 Store these through the secret channel immediately:
 - addon credentials embedded in addon URLs
+- TMDB API key
 - MDBList API key
 - RPDB API key
 - TOP Posters API key
@@ -213,6 +214,9 @@ These are called with the user JWT:
 - `sync_pull_account_snapshot()`
 - `sync_push_account_settings(p_settings_payload jsonb, p_source text)`
 - `sync_push_account_addons(p_addons jsonb, p_source text)`
+- `sync_set_account_secret(p_secret_type text, p_secret_ref text, p_secret_payload jsonb, p_masked_preview text, p_status text default 'configured', p_source text default 'app')`
+- `sync_delete_account_secret(p_secret_type text, p_secret_ref text, p_source text default 'app')`
+- `sync_resolve_account_secret(p_secret_type text, p_secret_ref text, p_source text default 'app')`
 
 ### Service-role-only RPCs
 These are called by server-side code only:
@@ -319,7 +323,7 @@ The SQL script already adds `public.account_sync_events` to the `supabase_realti
 - no extra SQL is required if the script completes successfully
 
 After applying SQL, verify in Supabase:
-1. Open `Database` -> `Replication`.
+1. Open `Database` -> `Publications`.
 2. Open the `supabase_realtime` publication.
 3. Confirm `public.account_sync_events` is listed.
 
@@ -391,13 +395,17 @@ After applying the SQL and setting runtime env vars, verify:
 9. saving an MDBList key creates:
    - one `account_secrets` metadata row
    - one Vault secret
-10. saving a tokenized addon URL stores:
+10. saving a TMDB key creates:
+   - one `account_secrets` metadata row
+   - one Vault secret
+   - no public TMDB API key in `account_settings_public`
+11. saving a tokenized addon URL stores:
    - public base URL in `account_addons_public`
    - masked secret metadata in `account_secrets`
    - no plaintext credential in public addon fields
-11. Trakt connect stores tokens as secrets and only public profile state in settings
-12. `account_sync_events` receives inserts for public and secret changes
-13. no plaintext secrets appear in public snapshot responses
+12. Trakt connect stores tokens as secrets and only public profile state in settings
+13. `account_sync_events` receives inserts for public and secret changes
+14. no plaintext secrets appear in public snapshot responses
 
 ## Operational Notes
 - Never log request bodies for secret endpoints.

@@ -47,7 +47,7 @@
 
 ## Integration / TMDB
 - tmdb_enabled (default `false`)
-- tmdb_language (default `en`)
+- tmdb_api_key (secret-backed, not stored in the public sync payload)
 - tmdb_use_artwork (default `true`)
 - tmdb_use_basic_info (default `true`)
 - tmdb_use_details (default `true`)

@@ -49,10 +49,9 @@
         "tmdb": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "language", "useArtwork", "useBasicInfo", "useDetails", "useCredits", "useProductions", "useNetworks", "useEpisodes", "useMoreLikeThis", "useCollections"],
+          "required": ["enabled", "useArtwork", "useBasicInfo", "useDetails", "useCredits", "useProductions", "useNetworks", "useEpisodes", "useMoreLikeThis", "useCollections"],
           "properties": {
             "enabled": {"type": "boolean", "default": false},
-            "language": {"type": "string", "default": "en"},
             "useArtwork": {"type": "boolean", "default": true},
             "useBasicInfo": {"type": "boolean", "default": true},
             "useDetails": {"type": "boolean", "default": true},
@@ -109,7 +108,7 @@
     "playback": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["general", "streamSelection", "audioTrailer", "subtitles", "bufferNetwork"],
+      "required": ["general", "streamSelection", "audio", "subtitles", "bufferNetwork"],
       "properties": {
         "general": {
           "type": "object",
@@ -143,7 +142,7 @@
             "nextEpisodeThresholdMinutesBeforeEnd": {"type": "number", "minimum": 1.0, "maximum": 3.5, "multipleOf": 0.5, "default": 2.0}
           }
         },
-        "audioTrailer": {
+        "audio": {
           "type": "object",
           "additionalProperties": false,
           "required": ["preferredAudioLanguage", "secondaryPreferredAudioLanguage", "skipSilence", "decoderPriority", "tunnelingEnabled", "mapDV7ToHevc", "experimentalDv7ToDv81Enabled", "experimentalDtsIecPassthroughEnabled", "experimentalDv7ToDv81PreserveMappingEnabled", "experimentalDv5ToDv81Enabled"],

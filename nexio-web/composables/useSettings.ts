@@ -38,7 +38,6 @@ export const useSettings = () => {
     integrations: {
       tmdb: {
         enabled: false,
-        language: 'en',
         useArtwork: true,
         useBasicInfo: true,
         useDetails: true,
@@ -94,7 +93,7 @@ export const useSettings = () => {
         nextEpisodeThresholdPercent: 99.0,
         nextEpisodeThresholdMinutesBeforeEnd: 2.0
       },
-      audioTrailer: {
+      audio: {
         preferredAudioLanguage: 'device',
         secondaryPreferredAudioLanguage: null,
         skipSilence: false,

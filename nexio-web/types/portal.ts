@@ -22,6 +22,7 @@ export type CatalogId =
 
 export type SecretType =
   | 'addon_credential'
+  | 'tmdb_api_key'
   | 'mdblist_api_key'
   | 'rpdb_api_key'
   | 'top_posters_api_key'
@@ -161,7 +162,6 @@ export type PortalSettings = {
   integrations: {
     tmdb: {
       enabled: boolean
-      apiKey: string
       useArtwork: boolean
       useBasicInfo: boolean
       useDetails: boolean
@@ -224,7 +224,7 @@ export type PortalSettings = {
       nextEpisodeThresholdPercent: number
       nextEpisodeThresholdMinutesBeforeEnd: number
     }
-    audioTrailer: {
+    audio: {
       preferredAudioLanguage: string
       secondaryPreferredAudioLanguage: string | null
       skipSilence: boolean

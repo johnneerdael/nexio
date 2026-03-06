@@ -53,7 +53,7 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
-internal fun LazyListScope.trailerAndAudioSettingsItems(
+internal fun LazyListScope.audioSettingsItems(
     playerSettings: PlayerSettings,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
