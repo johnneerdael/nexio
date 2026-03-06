@@ -162,15 +162,16 @@ class MDBListDiscoveryService @Inject constructor(
         apiKey: String,
         option: MDBListListOption
     ): List<MDBListCustomCatalog> {
-        val arrays = listOfNotNull(
-            requestArray(apiKey = apiKey, relativeUrl = "lists/${option.listId}/items"),
-            requestArray(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}/items"),
-            requestArray(apiKey = apiKey, relativeUrl = "lists/${option.listId}"),
-            requestArray(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+        val payloads = listOfNotNull(
+            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.listId}/items"),
+            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}/items"),
+            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.listId}"),
+            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
         )
 
-        val parsedItems = arrays.asSequence()
-            .flatMap { array -> parseListItems(array).asSequence() }
+        val parsedItems = payloads.asSequence()
+            .flatMap { payload -> parseListItemsPayload(payload).asSequence() }
+            .distinctBy { "${it.type}:${it.preview.id}" }
             .take(maxItemsPerRail * 2)
             .toList()
 
@@ -207,11 +208,14 @@ class MDBListDiscoveryService @Inject constructor(
     }
 
     private suspend fun requestArray(apiKey: String, relativeUrl: String): JSONArray? {
+        return requestBody(apiKey, relativeUrl)?.let(::parseJsonArray)
+    }
+
+    private suspend fun requestBody(apiKey: String, relativeUrl: String): String? {
         return try {
             val response = mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
             if (!response.isSuccessful) return null
-            val body = response.body()?.string()?.trim().orEmpty()
-            parseJsonArray(body)
+            response.body()?.string()?.trim().orEmpty()
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
             null
@@ -374,6 +378,43 @@ class MDBListDiscoveryService @Inject constructor(
                     )
                 )
             }
+        }
+    }
+
+    private fun parseListItemsPayload(raw: String): List<ParsedListItem> {
+        if (raw.isBlank()) return emptyList()
+
+        return try {
+            when {
+                raw.startsWith("[") -> parseListItems(JSONArray(raw))
+                raw.startsWith("{") -> {
+                    val obj = JSONObject(raw)
+                    val groupedItems = buildList {
+                        obj.optJSONArray("movies")?.let { addAll(parseListItems(it)) }
+                        obj.optJSONArray("shows")?.let { addAll(parseListItems(it)) }
+                        obj.optJSONArray("items")?.let { addAll(parseListItems(it)) }
+                        obj.optJSONArray("results")?.let { addAll(parseListItems(it)) }
+                        when (val data = obj.opt("data")) {
+                            is JSONArray -> addAll(parseListItems(data))
+                            is JSONObject -> {
+                                data.optJSONArray("movies")?.let { addAll(parseListItems(it)) }
+                                data.optJSONArray("shows")?.let { addAll(parseListItems(it)) }
+                                data.optJSONArray("items")?.let { addAll(parseListItems(it)) }
+                                data.optJSONArray("results")?.let { addAll(parseListItems(it)) }
+                            }
+                        }
+                    }
+
+                    if (groupedItems.isNotEmpty()) {
+                        groupedItems
+                    } else {
+                        parseJsonArray(raw)?.let(::parseListItems).orEmpty()
+                    }
+                }
+                else -> emptyList()
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

@@ -35,6 +35,11 @@ private data class CatalogUpdateResult(
     val fullRows: List<CatalogRow>
 )
 
+private data class SyntheticCatalogOrderGroup(
+    val orderKey: String,
+    val rows: List<CatalogRow>
+)
+
 private const val TRAKT_RAIL_ADDON_ID = "trakt"
 private const val TRAKT_RAIL_ADDON_NAME = "Trakt"
 private const val TRAKT_RAIL_ADDON_BASE_URL = "https://api.trakt.tv"
@@ -363,12 +368,12 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         .filterIsInstance<ContinueWatchingItem.NextUp>()
         .take(20)
         .map { nextUpToMetaPreview(it) }
-    val syntheticTraktRows = buildSyntheticTraktRows(
+    val syntheticTraktGroups = buildSyntheticTraktRows(
         prefs = traktPrefs,
         upNextItems = traktUpNextItems,
         snapshot = traktSnapshot
     )
-    val syntheticMDBListRows = buildSyntheticMDBListRows(
+    val syntheticMDBListGroups = buildSyntheticMDBListRows(
         prefs = mdbListPrefs,
         snapshot = mdbListSnapshot
     )
@@ -383,29 +388,29 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
             .toMap(linkedMapOf())
 
-        val syntheticRows = syntheticTraktRows + syntheticMDBListRows
-        val syntheticRowsByKey = syntheticRows
-            .associateByTo(linkedMapOf()) { row -> homeCatalogGlobalKey(row) }
-
-        val combinedRowsByKey = linkedMapOf<String, CatalogRow>().apply {
-            putAll(syntheticRowsByKey)
-            putAll(rawRowsByKey)
+        val syntheticGroups = syntheticTraktGroups + syntheticMDBListGroups
+        val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
+            syntheticGroups.forEach { group -> put(group.orderKey, group.rows) }
         }
 
         val defaultOrderKeys = buildList {
-            addAll(syntheticRows.map { row -> homeCatalogGlobalKey(row) })
+            addAll(syntheticGroups.map { it.orderKey })
             addAll(rawRowsByKey.keys)
         }.distinct()
 
         val savedOrderKeys = homeCatalogOrderKeys
             .asSequence()
-            .filter { it in combinedRowsByKey }
+            .filter { it in defaultOrderKeys }
             .distinct()
             .toList()
 
         val savedOrderSet = savedOrderKeys.toSet()
         val effectiveOrderKeys = savedOrderKeys + defaultOrderKeys.filterNot { it in savedOrderSet }
-        val combinedRows = effectiveOrderKeys.mapNotNull { combinedRowsByKey[it] }
+        val combinedRows = buildList {
+            effectiveOrderKeys.forEach { key ->
+                syntheticRowsByKey[key]?.let { addAll(it) } ?: rawRowsByKey[key]?.let { add(it) }
+            }
+        }
         val orderedRows = if (hideUnreleased) {
             val today = LocalDate.now()
             combinedRows.map { row ->
@@ -585,7 +590,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 private fun buildSyntheticMDBListRows(
     prefs: MDBListCatalogPreferences,
     snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
-): List<CatalogRow> {
+): List<SyntheticCatalogOrderGroup> {
     if (snapshot.customListCatalogs.isEmpty()) return emptyList()
 
     val availableKeys = buildSet {
@@ -609,8 +614,9 @@ private fun buildSyntheticMDBListRows(
     }
 
     val groupedByKey = snapshot.customListCatalogs.groupBy { it.key }
-    return orderedKeys.flatMap { key ->
-        groupedByKey[key].orEmpty().mapNotNull { custom -> custom.toCatalogRow() }
+    return orderedKeys.mapNotNull { key ->
+        val rows = groupedByKey[key].orEmpty().mapNotNull { custom -> custom.toCatalogRow() }
+        if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = key, rows = rows)
     }
 }
 
@@ -618,7 +624,7 @@ private fun buildSyntheticTraktRows(
     prefs: TraktCatalogPreferences,
     upNextItems: List<MetaPreview>,
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
-): List<CatalogRow> {
+): List<SyntheticCatalogOrderGroup> {
     val builtInRows = linkedMapOf<String, CatalogRow>()
 
     if (TraktCatalogIds.UP_NEXT in prefs.enabledCatalogs && upNextItems.isNotEmpty()) {
@@ -686,10 +692,17 @@ private fun buildSyntheticTraktRows(
         )
     }
 
-    val orderedBuiltIns = prefs.catalogOrder.mapNotNull { id -> builtInRows[id] }
-    val customListRows = snapshot.customListCatalogs.mapNotNull { custom ->
-        custom.toCatalogRow()
+    val orderedBuiltIns = prefs.catalogOrder.mapNotNull { id ->
+        builtInRows[id]?.let { row -> SyntheticCatalogOrderGroup(orderKey = id, rows = listOf(row)) }
     }
+    val selectedCustomKeys = prefs.selectedPopularListKeys.toSet()
+    val customListRows = snapshot.customListCatalogs
+        .groupBy { it.key }
+        .mapNotNull { (key, catalogs) ->
+            if (key !in selectedCustomKeys) return@mapNotNull null
+            val rows = catalogs.mapNotNull { custom -> custom.toCatalogRow() }
+            if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = key, rows = rows)
+        }
     return orderedBuiltIns + customListRows
 }
 

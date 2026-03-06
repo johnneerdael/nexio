@@ -194,7 +194,7 @@ using (requester_user_id = auth.uid() or approved_by_user_id = auth.uid());
 create or replace function public.generate_human_code(p_length integer default 6)
 returns text
 language plpgsql
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_code text := '';
@@ -466,11 +466,11 @@ begin
     raise exception 'Invalid TV login redirect base url';
   end if;
 
-  update public.tv_login_sessions
+  update public.tv_login_sessions tls
     set status = 'expired'
-  where requester_user_id = auth.uid()
-    and status = 'pending'
-    and expires_at <= now();
+  where tls.requester_user_id = auth.uid()
+    and tls.status = 'pending'
+    and tls.expires_at <= now();
 
   v_code := public.generate_unique_human_code('tv_login_sessions', 'code', 6);
   v_base_url := regexp_replace(v_base_url, '/+$', '');
