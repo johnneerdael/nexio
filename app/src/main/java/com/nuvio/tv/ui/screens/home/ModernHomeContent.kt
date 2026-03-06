@@ -183,7 +183,8 @@ fun ModernHomeContent(
                                 item = item,
                                 useLandscapePosters = useLandscapePosters,
                                 airsDateTemplate = strAirsDate,
-                                upcomingLabel = strUpcoming
+                                upcomingLabel = strUpcoming,
+                                context = LocalContext.current
                             )
                         }
                     )
