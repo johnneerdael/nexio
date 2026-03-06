@@ -57,6 +57,7 @@
     <string name="episodes_mark_season_unwatched">Mark season as unwatched</string>
     <string name="episodes_mark_previous_watched">Mark previous in this season as watched</string>
     <string name="episodes_play">Play</string>
+    <string name="play_manually">Play manually</string>
     <string name="episodes_season_actions">Season actions</string>
 
     <!-- MetaDetailsViewModel -->

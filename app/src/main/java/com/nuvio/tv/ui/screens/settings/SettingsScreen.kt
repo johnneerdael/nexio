@@ -270,7 +270,7 @@ fun SettingsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .focusRequester(railContainerFocusRequester)
-                        .width(282.dp)
+                        .width(220.dp)
                         .fillMaxHeight()
                         .onFocusChanged { state ->
                             val justGainedFocus = !railHadFocus && state.hasFocus
