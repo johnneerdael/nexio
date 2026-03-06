@@ -65,7 +65,7 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
 
     val savedValid = homeCatalogOrderKeys
         .asSequence()
-        .filter { it in availableSet }
+        .mapNotNull { rawKey -> resolveHomeOrderedKey(rawKey, availableSet) }
         .distinct()
         .toList()
 
@@ -74,6 +74,35 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
 
     catalogOrder.clear()
     catalogOrder.addAll(mergedOrder)
+}
+
+private fun resolveHomeOrderedKey(rawKey: String, availableKeys: Set<String>): String? {
+    if (rawKey in availableKeys) {
+        return rawKey
+    }
+
+    val canonical = canonicalSyntheticCatalogOrderKey(rawKey)
+    if (canonical.isBlank()) {
+        return null
+    }
+
+    return availableKeys.firstOrNull { canonicalSyntheticCatalogOrderKey(it) == canonical }
+}
+
+private fun canonicalSyntheticCatalogOrderKey(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return ""
+    return when {
+        trimmed.startsWith("personal:", ignoreCase = true) ||
+            trimmed.startsWith("top:", ignoreCase = true) -> {
+            val prefix = trimmed.substringBefore(':').lowercase()
+            val payload = trimmed.substringAfter(':', "")
+            val listId = payload.substringAfterLast('/').trim().lowercase()
+            if (listId.isBlank()) trimmed.lowercase() else "$prefix:$listId"
+        }
+
+        else -> trimmed
+    }
 }
 
 private fun HomeViewModel.buildDefaultCatalogOrder(addons: List<Addon>): List<String> {
