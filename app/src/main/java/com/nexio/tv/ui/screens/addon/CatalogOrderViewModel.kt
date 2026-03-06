@@ -39,6 +39,7 @@ class CatalogOrderViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CatalogOrderUiState())
     val uiState: StateFlow<CatalogOrderUiState> = _uiState.asStateFlow()
     private var disabledKeysCache: Set<String> = emptySet()
+    private var savedOrderKeysCache: List<String> = emptyList()
 
     init {
         observeCatalogs()
@@ -63,7 +64,12 @@ class CatalogOrderViewModel @Inject constructor(
     }
 
     private fun moveCatalog(key: String, direction: Int) {
-        val currentKeys = _uiState.value.items.map { it.key }
+        val visibleKeys = _uiState.value.items.map { it.key }
+        val visibleKeySet = visibleKeys.toSet()
+        val currentKeys = buildEffectiveVisibleOrder(
+            savedOrderKeys = savedOrderKeysCache,
+            availableKeys = visibleKeys
+        )
         val currentIndex = currentKeys.indexOf(key)
         if (currentIndex == -1) return
 
@@ -76,7 +82,13 @@ class CatalogOrderViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            layoutPreferenceDataStore.setHomeCatalogOrderKeys(reordered)
+            val hiddenKeys = savedOrderKeysCache
+                .asSequence()
+                .mapNotNull { rawKey -> resolveOrderedKey(rawKey, visibleKeySet) }
+                .distinct()
+                .filter { it !in reordered }
+                .toList()
+            layoutPreferenceDataStore.setHomeCatalogOrderKeys(reordered + hiddenKeys)
         }
     }
 
@@ -103,7 +115,7 @@ class CatalogOrderViewModel @Inject constructor(
                 mdbListDiscoveryService.observeSnapshot(),
                 mdbListSettingsDataStore.catalogPreferences
             ) { base, mdbListSnapshot, mdbListPrefs ->
-                buildOrderedCatalogItems(
+                base.savedOrderKeys to buildOrderedCatalogItems(
                     addons = base.addons,
                     savedOrderKeys = base.savedOrderKeys,
                     disabledKeys = base.disabledKeys,
@@ -112,7 +124,8 @@ class CatalogOrderViewModel @Inject constructor(
                     mdbListSnapshot = mdbListSnapshot,
                     mdbListPrefs = mdbListPrefs
                 )
-            }.collectLatest { orderedItems ->
+            }.collectLatest { (savedOrderKeys, orderedItems) ->
+                savedOrderKeysCache = savedOrderKeys
                 disabledKeysCache = orderedItems.filter { it.isDisabled }.map { it.disableKey }.toSet()
                 _uiState.update {
                     it.copy(
@@ -138,10 +151,9 @@ class CatalogOrderViewModel @Inject constructor(
             .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs))
         val availableMap = defaultEntries.associateBy { it.key }
         val defaultOrderKeys = defaultEntries.map { it.key }
-
         val savedValid = savedOrderKeys
             .asSequence()
-            .filter { it in availableMap }
+            .mapNotNull { rawKey -> resolveOrderedKey(rawKey, availableMap.keys) }
             .distinct()
             .toList()
 
@@ -283,6 +295,48 @@ class CatalogOrderViewModel @Inject constructor(
 
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {
         return "${addonId}_${type}_${catalogId}"
+    }
+
+    private fun buildEffectiveVisibleOrder(
+        savedOrderKeys: List<String>,
+        availableKeys: List<String>
+    ): List<String> {
+        val availableSet = availableKeys.toSet()
+        val savedVisible = savedOrderKeys
+            .asSequence()
+            .mapNotNull { rawKey -> resolveOrderedKey(rawKey, availableSet) }
+            .distinct()
+            .toList()
+        return savedVisible + availableKeys.filterNot { it in savedVisible }
+    }
+
+    private fun resolveOrderedKey(rawKey: String, availableKeys: Set<String>): String? {
+        if (rawKey in availableKeys) {
+            return rawKey
+        }
+
+        val canonical = canonicalSyntheticCatalogKey(rawKey)
+        if (canonical.isBlank()) {
+            return null
+        }
+
+        return availableKeys.firstOrNull { canonicalSyntheticCatalogKey(it) == canonical }
+    }
+
+    private fun canonicalSyntheticCatalogKey(value: String): String {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return ""
+        return when {
+            trimmed.startsWith("personal:", ignoreCase = true) ||
+                trimmed.startsWith("top:", ignoreCase = true) -> {
+                val prefix = trimmed.substringBefore(':').lowercase()
+                val payload = trimmed.substringAfter(':', "")
+                val listId = payload.substringAfterLast('/').trim().lowercase()
+                if (listId.isBlank()) trimmed.lowercase() else "$prefix:$listId"
+            }
+
+            else -> trimmed
+        }
     }
 
     private fun disableKey(
