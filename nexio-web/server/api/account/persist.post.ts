@@ -1,5 +1,6 @@
 import { createError } from 'h3'
 import { bearerToken, okJson, readJsonBody, supabaseUser, supabaseFetch } from '~/server/utils/supabase'
+import { normalizeAddonUrl } from '~/server/utils/account-secrets'
 import type { AddonRecord, PortalSettings } from '~/types/portal'
 
 type PersistBody = {
@@ -34,8 +35,8 @@ export default defineEventHandler(async (event) => {
     method: 'POST',
     body: JSON.stringify({
       p_addons: (body.addons ?? []).map((addon, index) => ({
-        url: addon.url,
-        manifest_url: addon.manifestUrl,
+        url: normalizeAddonUrl(addon.url),
+        manifest_url: `${normalizeAddonUrl(addon.url)}/manifest.json`,
         name: addon.name,
         description: addon.description ?? null,
         enabled: addon.enabled,

@@ -32,14 +32,6 @@ function canonicalAddonUrl(url: string): string {
   return trimmed.replace(/\/$/, '')
 }
 
-function manifestUrlFor(addon: AddonRecord): string {
-  const explicit = addon.manifestUrl?.trim()
-  if (explicit) {
-    return explicit
-  }
-  return `${canonicalAddonUrl(addon.url)}/manifest.json`
-}
-
 function normalizeCatalogType(value: string | undefined): string {
   const type = String(value || '').trim().toLowerCase()
   if (type === 'tv' || type === 'show') {
@@ -67,7 +59,8 @@ function disableKey(addonUrl: string, type: string, catalogId: string, catalogNa
 
 async function inspectAddon(addon: AddonRecord, userId?: string | null): Promise<AddonManifestInspection> {
   const addonUrl = canonicalAddonUrl(addon.url)
-  let resolvedManifestUrl = manifestUrlFor(addon)
+  const publicManifestUrl = `${addonUrl}/manifest.json`
+  let resolvedManifestUrl = publicManifestUrl
 
   try {
     if (userId && addon.secretRef) {
@@ -116,7 +109,7 @@ async function inspectAddon(addon: AddonRecord, userId?: string | null): Promise
 
     return {
       addonUrl,
-      manifestUrl: resolvedManifestUrl,
+      manifestUrl: publicManifestUrl,
       addonId,
       addonName,
       description: manifest.description ?? addon.description,
@@ -129,7 +122,7 @@ async function inspectAddon(addon: AddonRecord, userId?: string | null): Promise
   } catch (error) {
     return {
       addonUrl,
-      manifestUrl: resolvedManifestUrl,
+      manifestUrl: publicManifestUrl,
       addonId: addon.id,
       addonName: addon.name,
       description: addon.description,
