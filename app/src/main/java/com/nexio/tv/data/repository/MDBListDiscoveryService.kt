@@ -24,6 +24,7 @@ data class MDBListListOption(
     val key: String,
     val owner: String,
     val listId: String,
+    val itemListIds: List<String> = emptyList(),
     val title: String,
     val itemCount: Int,
     val isPersonal: Boolean
@@ -168,11 +169,23 @@ class MDBListDiscoveryService @Inject constructor(
         apiKey: String,
         option: MDBListListOption
     ): List<MDBListCustomCatalog> {
+        val resolvedListIds = resolveItemListIds(apiKey = apiKey, option = option)
         val payloads = listOfNotNull(
-            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.listId}/items"),
-            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}/items"),
-            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.listId}"),
-            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+            *resolvedListIds
+                .mapNotNull { resolvedId ->
+                    requestBodyWithQuery(
+                        relativeUrl = "lists/$resolvedId/items",
+                        query = mapOf(
+                            "apikey" to apiKey,
+                            "limit" to maxItemsPerRail.toString(),
+                            "offset" to "0",
+                            "append_to_response" to "poster"
+                        )
+                    )
+                }
+                .toTypedArray(),
+            requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}"),
+            requestAbsoluteBody("https://mdblist.com/lists/${option.owner}/${option.listId}/json")
         )
 
         val parsedItems = payloads.asSequence()
@@ -183,7 +196,7 @@ class MDBListDiscoveryService @Inject constructor(
 
         Log.d(
             "MDBListDiscovery",
-            "Catalog ${option.key} payloads=${payloads.size} parsed=${parsedItems.size}"
+            "Catalog ${option.key} listIds=${resolvedListIds.joinToString(",")} payloads=${payloads.size} parsed=${parsedItems.size}"
         )
 
         val movies = parsedItems
@@ -225,10 +238,51 @@ class MDBListDiscoveryService @Inject constructor(
     private suspend fun requestBody(apiKey: String, relativeUrl: String): String? {
         return try {
             val response = mdbListApi.getRaw(relativeUrl = relativeUrl, apiKey = apiKey)
-            if (!response.isSuccessful) return null
+            if (!response.isSuccessful) {
+                Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${response.code()}")
+                return null
+            }
             response.body()?.string()?.trim().orEmpty()
         } catch (error: Exception) {
             Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
+            null
+        }
+    }
+
+    private suspend fun requestBodyWithQuery(relativeUrl: String, query: Map<String, String>): String? {
+        return try {
+            val response = mdbListApi.getRawWithQuery(relativeUrl = relativeUrl, query = query)
+            if (!response.isSuccessful) {
+                Log.d("MDBListDiscovery", "Request failed: $relativeUrl code=${response.code()} query=${query.keys.joinToString(",")}")
+                return null
+            }
+            response.body()?.string()?.trim().orEmpty()
+        } catch (error: Exception) {
+            Log.w("MDBListDiscovery", "Request failed: $relativeUrl (${error.message})")
+            null
+        }
+    }
+
+    private suspend fun resolveItemListIds(apiKey: String, option: MDBListListOption): List<String> {
+        if (option.itemListIds.isNotEmpty()) {
+            return option.itemListIds
+        }
+
+        val detailBody = requestBody(apiKey = apiKey, relativeUrl = "lists/${option.owner}/${option.listId}")
+            ?: return emptyList()
+        return parseResolvedListIds(detailBody)
+    }
+
+    private suspend fun requestAbsoluteBody(url: String): String? {
+        return try {
+            val response = mdbListApi.getRawWithQuery(relativeUrl = url, query = emptyMap())
+            if (!response.isSuccessful) {
+                Log.d("MDBListDiscovery", "Request failed: $url code=${response.code()}")
+                return null
+            }
+            response.body()?.string()?.trim().orEmpty()
+        } catch (error: Exception) {
+            Log.w("MDBListDiscovery", "Request failed: $url (${error.message})")
             null
         }
     }
@@ -273,6 +327,8 @@ class MDBListDiscoveryService @Inject constructor(
                 val owner = firstNonBlank(
                     ownerObj?.optString("slug"),
                     ownerObj?.optString("username"),
+                    ownerObj?.optString("username"),
+                    listObj.optString("user_name"),
                     listObj.optString("owner"),
                     "mdblist"
                 )
@@ -293,11 +349,20 @@ class MDBListDiscoveryService @Inject constructor(
                     listObj.optInt("items", -1),
                     listObj.optInt("count", -1)
                 )
+                val itemListIds = buildList {
+                    listObj.opt("id")?.toString()?.takeIf { it.isNotBlank() }?.let(::add)
+                    listObj.optJSONArray("ids")?.let { ids ->
+                        for (idIndex in 0 until ids.length()) {
+                            ids.opt(idIndex)?.toString()?.takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                }.distinct()
                 add(
                     MDBListListOption(
                         key = "$prefix:$owner/$listId",
                         owner = owner,
                         listId = listId,
+                        itemListIds = itemListIds,
                         title = title,
                         itemCount = itemCount,
                         isPersonal = isPersonal
@@ -424,6 +489,31 @@ class MDBListDiscoveryService @Inject constructor(
                 }
                 else -> emptyList()
             }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun parseResolvedListIds(raw: String): List<String> {
+        if (raw.isBlank()) return emptyList()
+        return try {
+            val array = when {
+                raw.startsWith("[") -> JSONArray(raw)
+                raw.startsWith("{") -> parseJsonArray(raw)
+                else -> null
+            } ?: return emptyList()
+
+            buildList {
+                for (index in 0 until array.length()) {
+                    val obj = array.optJSONObject(index) ?: continue
+                    obj.opt("id")?.toString()?.takeIf { it.isNotBlank() }?.let(::add)
+                    obj.optJSONArray("ids")?.let { ids ->
+                        for (idIndex in 0 until ids.length()) {
+                            ids.opt(idIndex)?.toString()?.takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                }
+            }.distinct()
         } catch (_: Exception) {
             emptyList()
         }
