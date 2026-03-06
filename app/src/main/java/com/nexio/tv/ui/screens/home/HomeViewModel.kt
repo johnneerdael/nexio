@@ -129,6 +129,7 @@ class HomeViewModel @Inject constructor(
         loadDisabledHomeCatalogPreference()
         observeLibraryState()
         observeTmdbSettings()
+        observeMDBListSettings()
         observeTraktCatalogPreferences()
         observeTraktDiscovery()
         observeMDBListCatalogPreferences()
@@ -153,6 +154,8 @@ class HomeViewModel @Inject constructor(
     private fun loadDisabledHomeCatalogPreference() = loadDisabledHomeCatalogPreferencePipeline()
 
     private fun observeTmdbSettings() = observeTmdbSettingsPipeline()
+
+    private fun observeMDBListSettings() = observeMDBListSettingsPipeline()
 
     private fun observeTraktCatalogPreferences() = observeTraktCatalogPreferencesPipeline()
 

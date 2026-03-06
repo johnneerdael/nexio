@@ -68,6 +68,7 @@ class MDBListDiscoveryService @Inject constructor(
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) {
+            Log.d("MDBListDiscovery", "Skipping refresh enabled=${settings.enabled} apiKeyPresent=${apiKey.isNotBlank()}")
             snapshotState.value = MDBListDiscoverySnapshot()
             return
         }
@@ -94,6 +95,11 @@ class MDBListDiscoveryService @Inject constructor(
                 personalLists = personalLists,
                 topLists = topLists,
                 catalogPrefs = catalogPrefs
+            )
+
+            Log.d(
+                "MDBListDiscovery",
+                "Refreshed personal=${personalLists.size} top=${topLists.size} custom=${customCatalogs.size}"
             )
 
             snapshotState.value = MDBListDiscoverySnapshot(
@@ -174,6 +180,11 @@ class MDBListDiscoveryService @Inject constructor(
             .distinctBy { "${it.type}:${it.preview.id}" }
             .take(maxItemsPerRail * 2)
             .toList()
+
+        Log.d(
+            "MDBListDiscovery",
+            "Catalog ${option.key} payloads=${payloads.size} parsed=${parsedItems.size}"
+        )
 
         val movies = parsedItems
             .filter { it.type == ContentType.MOVIE }
