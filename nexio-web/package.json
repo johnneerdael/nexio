@@ -12,7 +12,8 @@
     "@heroicons/vue": "^2.2.0",
     "nuxt": "^4.3.1",
     "uqr": "^0.1.2",
-    "vue": "^3.5.29"
+    "vue": "^3.5.29",
+    "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.14.0",

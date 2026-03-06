@@ -322,6 +322,11 @@ button {
   z-index: 20;
 }
 
+.catalog-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .selection-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -410,6 +415,16 @@ button {
   box-shadow: inset 0 0 0 1px rgba(123, 255, 211, 0.2);
 }
 
+.catalog-row-ghost {
+  opacity: 0.35;
+}
+
+.catalog-row-chosen,
+.catalog-row-drag {
+  border-color: rgba(123, 255, 211, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(123, 255, 211, 0.22);
+}
+
 .catalog-row--trakt {
   box-shadow: inset 3px 0 0 rgba(123, 255, 211, 0.45);
 }
@@ -421,6 +436,15 @@ button {
 .managed-chip {
   justify-content: center;
   min-width: 9rem;
+}
+
+.catalog-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.catalog-drag-handle:active {
+  cursor: grabbing;
 }
 
 .trakt-managed {

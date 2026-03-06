@@ -45,7 +45,7 @@
         :busy="state.saving"
         @persist="persistSnapshot"
         @move-catalog="moveCatalog"
-        @reorder-catalog="reorderCatalog"
+        @reorder-catalogs="reorderCatalogs"
         @toggle-catalog="toggleCatalog"
       />
 
@@ -179,7 +179,7 @@ const {
   moveAddon,
   toggleAddon,
   moveCatalog,
-  reorderCatalog,
+  reorderCatalogs,
   toggleCatalog,
   unlinkDevice,
   persistSnapshot,

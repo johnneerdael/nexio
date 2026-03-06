@@ -25,44 +25,47 @@
       <p>Addons, Trakt, and MDBList rails appear here once those sources are configured and inspected. If you enabled Hide disabled, turn it off to see hidden addon rails.</p>
     </article>
 
-    <div v-else style="display:grid; gap:0.85rem;">
-      <article
-        v-for="catalog in visibleCatalogs"
-        :key="catalog.key"
-        class="catalog-row"
-        :class="rowClass(catalog)"
-        draggable="true"
-        @dragstart="handleDragStart(catalog.key)"
-        @dragenter.prevent="handleDragEnter(catalog.key)"
-        @dragover.prevent
-        @dragend="handleDragEnd"
-        @drop.prevent="handleDrop(catalog.key)"
-      >
-        <div style="display:grid; gap:0.2rem; min-width:0;">
-          <strong style="font-size:1rem;">{{ catalog.catalogName }}</strong>
-          <p>{{ sourceLabel(catalog.source) }} · {{ catalog.type }}</p>
-          <p style="word-break: break-word;">{{ catalogKeyLabel(catalog.key) }}</p>
-        </div>
-        <div style="display:flex; gap:0.45rem; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
-          <span class="badge">Drag</span>
-          <button class="ghost-btn" @click="emit('move-catalog', catalog.key, -1)">Up</button>
-          <button class="ghost-btn" @click="emit('move-catalog', catalog.key, 1)">Down</button>
-          <button
-            v-if="catalog.source === 'addon'"
-            :class="isDisabled(catalog.key) ? 'toggle-chip' : 'toggle-chip active'"
-            @click="emit('toggle-catalog', catalog.key)"
-          >
-            {{ isDisabled(catalog.key) ? 'Disabled' : 'Enabled' }}
-          </button>
-          <span v-else :class="managedBadgeClass(catalog.source)">{{ sourceControlLabel(catalog.source) }}</span>
-        </div>
-      </article>
-    </div>
+    <draggable
+      v-else
+      v-model="dragCatalogs"
+      item-key="key"
+      class="catalog-list"
+      handle=".catalog-drag-handle"
+      ghost-class="catalog-row-ghost"
+      chosen-class="catalog-row-chosen"
+      drag-class="catalog-row-drag"
+      :animation="180"
+    >
+      <template #item="{ element: catalog }">
+        <article class="catalog-row" :class="rowClass(catalog)">
+          <div style="display:grid; gap:0.2rem; min-width:0;">
+            <strong style="font-size:1rem;">{{ catalog.catalogName }}</strong>
+            <p>{{ sourceLabel(catalog.source) }} · {{ catalog.type }}</p>
+            <p style="word-break: break-word;">{{ catalogKeyLabel(catalog.key) }}</p>
+          </div>
+          <div style="display:flex; gap:0.45rem; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
+            <button class="badge catalog-drag-handle" type="button">Drag</button>
+            <button class="ghost-btn" @click="emit('move-catalog', catalog.key, -1)">Up</button>
+            <button class="ghost-btn" @click="emit('move-catalog', catalog.key, 1)">Down</button>
+            <button
+              v-if="catalog.source === 'addon'"
+              :class="isDisabled(catalog.key) ? 'toggle-chip' : 'toggle-chip active'"
+              @click="emit('toggle-catalog', catalog.key)"
+            >
+              {{ isDisabled(catalog.key) ? 'Disabled' : 'Enabled' }}
+            </button>
+            <span v-else :class="managedBadgeClass(catalog.source)">{{ sourceControlLabel(catalog.source) }}</span>
+          </div>
+        </article>
+      </template>
+    </draggable>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
+import { useState } from '#imports'
+import draggable from 'vuedraggable'
 import type { AddonCatalogRecord } from '~/types/portal'
 
 const props = defineProps<{
@@ -74,12 +77,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   persist: []
   'move-catalog': [key: string, direction: -1 | 1]
-  'reorder-catalog': [draggedKey: string, targetKey: string]
+  'reorder-catalogs': [orderedVisibleKeys: string[]]
   'toggle-catalog': [key: string]
 }>()
 
-const hideDisabled = ref(false)
-const draggedKey = ref<string | null>(null)
+const hideDisabled = useState<boolean>('portal-catalog-hide-disabled', () => false)
 
 const visibleCatalogs = computed(() => {
   if (!hideDisabled.value) {
@@ -87,6 +89,13 @@ const visibleCatalogs = computed(() => {
   }
 
   return props.catalogs.filter((catalog) => catalog.source !== 'addon' || !isDisabled(catalog.key))
+})
+
+const dragCatalogs = computed({
+  get: () => visibleCatalogs.value,
+  set: (value: AddonCatalogRecord[]) => {
+    emit('reorder-catalogs', value.map((catalog) => catalog.key))
+  }
 })
 
 function isDisabled(key: string) {
@@ -116,7 +125,6 @@ function managedBadgeClass(source: AddonCatalogRecord['source']) {
 
 function rowClass(catalog: AddonCatalogRecord) {
   return {
-    dragging: draggedKey.value === catalog.key,
     'catalog-row--trakt': catalog.source === 'trakt',
     'catalog-row--mdblist': catalog.source === 'mdblist'
   }
@@ -124,29 +132,5 @@ function rowClass(catalog: AddonCatalogRecord) {
 
 function catalogKeyLabel(key: string) {
   return key.replace(/_/g, ' ')
-}
-
-function handleDragStart(key: string) {
-  draggedKey.value = key
-}
-
-function handleDragEnter(key: string) {
-  if (!draggedKey.value || draggedKey.value === key) {
-    return
-  }
-}
-
-function handleDrop(targetKey: string) {
-  if (!draggedKey.value || draggedKey.value === targetKey) {
-    draggedKey.value = null
-    return
-  }
-
-  emit('reorder-catalog', draggedKey.value, targetKey)
-  draggedKey.value = null
-}
-
-function handleDragEnd() {
-  draggedKey.value = null
 }
 </script>
