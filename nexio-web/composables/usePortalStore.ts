@@ -1013,6 +1013,25 @@ export function usePortalStore() {
     }
   }
 
+  async function flushPendingSnapshotIfNeeded() {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      return
+    }
+
+    const localSignature = snapshotSignature(state.value.settings, state.value.addons)
+    if (localSignature === remoteSignature) {
+      return
+    }
+
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+
+    await persistSnapshot()
+  }
+
   async function saveTmdbApiKey(apiKey: string) {
     await saveSecret({
       secretType: 'tmdb_api_key',
@@ -1031,6 +1050,8 @@ export function usePortalStore() {
       throw new Error('Sign in before saving account secrets.')
     }
 
+    await flushPendingSnapshotIfNeeded()
+
     const response = await apiFetch<{ secret: SecretMetadata }>('/api/account/secrets/set', {
       method: 'POST',
       body: JSON.stringify(payload)
@@ -1046,6 +1067,8 @@ export function usePortalStore() {
     if (!token) {
       throw new Error('Sign in before deleting account secrets.')
     }
+
+    await flushPendingSnapshotIfNeeded()
 
     await apiFetch('/api/account/secrets/delete', {
       method: 'POST',
