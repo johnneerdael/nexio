@@ -35,10 +35,6 @@ export const useSettings = () => {
       posterCardWidthDp: 126,
       posterCardCornerRadiusDp: 12
     },
-    plugins: {
-      pluginsEnabled: true,
-      repositories: []
-    },
     integrations: {
       tmdb: {
         enabled: false,
@@ -91,7 +87,6 @@ export const useSettings = () => {
         streamAutoPlayMode: 'MANUAL',
         streamAutoPlaySource: 'ALL_SOURCES',
         streamAutoPlaySelectedAddons: [],
-        streamAutoPlaySelectedPlugins: [],
         streamAutoPlayRegex: '',
         streamAutoPlayNextEpisodeEnabled: false,
         streamAutoPlayPreferBingeGroupForNextEpisode: true,

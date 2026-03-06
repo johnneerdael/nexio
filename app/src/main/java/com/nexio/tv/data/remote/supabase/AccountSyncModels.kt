@@ -35,7 +35,6 @@ data class AccountAddonPayload(
 data class AccountSettingsPayload(
     val appearance: AppearanceSettings = AppearanceSettings(),
     val layout: LayoutSettings = LayoutSettings(),
-    val plugins: PluginSettings = PluginSettings(),
     val integrations: IntegrationSettings = IntegrationSettings(),
     val playback: PlaybackSettings = PlaybackSettings(),
     val trakt: TraktSettingsPayload = TraktSettingsPayload(),
@@ -71,20 +70,6 @@ data class LayoutSettings(
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
     val posterCardWidthDp: Int = 126,
     val posterCardCornerRadiusDp: Int = 12
-)
-
-@Serializable
-data class PluginSettings(
-    val pluginsEnabled: Boolean = true,
-    val repositories: List<PluginRepositoryPayload> = emptyList()
-)
-
-@Serializable
-data class PluginRepositoryPayload(
-    val id: String? = null,
-    val url: String,
-    val label: String,
-    val enabledScraperIds: List<String> = emptyList()
 )
 
 @Serializable

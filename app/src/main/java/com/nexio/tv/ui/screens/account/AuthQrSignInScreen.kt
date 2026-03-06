@@ -360,18 +360,16 @@ private fun AccountConnectedStatsStrip(
     isLoading: Boolean
 ) {
     val values = if (isLoading) {
-        listOf("...", "...", "...")
+        listOf("...", "...")
     } else {
         listOf(
             (stats?.addons ?: 0).toString(),
-            (stats?.library ?: 0).toString(),
-            (stats?.watchProgress ?: 0).toString()
+            (stats?.linkedDevices ?: 0).toString()
         )
     }
     val labels = listOf(
         stringResource(R.string.account_stat_addons),
-        stringResource(R.string.account_stat_library),
-        stringResource(R.string.account_stat_progress)
+        stringResource(R.string.account_linked_devices, stats?.linkedDevices ?: 0)
     )
 
     Column(

@@ -2,7 +2,6 @@ import type {
   AddonRecord,
   CatalogId,
   LinkedDevice,
-  PluginRepository,
   PortalSettings,
   SyncExclusion
 } from '~/types/portal'
@@ -58,10 +57,6 @@ export const defaultSettings = (): PortalSettings => ({
     focusedPosterBackdropExpandDelaySeconds: 3,
     posterCardWidthDp: 126,
     posterCardCornerRadiusDp: 12
-  },
-  plugins: {
-    pluginsEnabled: true,
-    repositories: []
   },
   integrations: {
     tmdb: {
@@ -205,8 +200,6 @@ export const defaultAccountAddons = (): AddonRecord[] => [
     sortOrder: 1
   }
 ]
-
-export const demoRepositories = (): PluginRepository[] => []
 
 export const demoDevices = (): LinkedDevice[] => [
   {

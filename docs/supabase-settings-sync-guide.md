@@ -26,7 +26,6 @@ Public sync payload:
 - appearance settings
 - layout settings
 - playback settings, excluding device-specific values
-- plugin repositories
 - Trakt catalog preferences
 - MDBList catalog preferences
 - addon enablement, ordering, and public metadata

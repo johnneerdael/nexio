@@ -15,7 +15,7 @@
 }
 
 # ── Gson ───────────────────────────────────────────────────────────────────────
-# Keep TypeToken generic signatures (used in AddonConfigServer/RepositoryConfigServer)
+# Keep TypeToken generic signatures (used by local config serializers)
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 

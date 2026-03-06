@@ -72,15 +72,9 @@ export type AddonManifestInspection = {
   error?: string
 }
 
-export type PluginRepository = {
-  id: string
-  url: string
-  label: string
-  enabledScraperIds: string[]
-}
-
 export type LinkedDevice = {
   id: string
+  deviceUserId?: string
   name: string
   model: string
   lastSeenAt: string
@@ -163,10 +157,6 @@ export type PortalSettings = {
     focusedPosterBackdropExpandDelaySeconds: number
     posterCardWidthDp: number
     posterCardCornerRadiusDp: number
-  }
-  plugins: {
-    pluginsEnabled: boolean
-    repositories: PluginRepository[]
   }
   integrations: {
     tmdb: {

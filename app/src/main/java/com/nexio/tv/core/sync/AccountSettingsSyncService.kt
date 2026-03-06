@@ -34,7 +34,6 @@ import com.nexio.tv.data.remote.supabase.LayoutSettings
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackGeneralSettings
 import com.nexio.tv.data.remote.supabase.PlaybackSettings
-import com.nexio.tv.data.remote.supabase.PluginSettings
 import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionSettings
 import com.nexio.tv.data.remote.supabase.SubtitleSyncSettings
@@ -245,7 +244,6 @@ class AccountSettingsSyncService @Inject constructor(
                 posterCardWidthDp = layoutPreferenceDataStore.posterCardWidthDp.first(),
                 posterCardCornerRadiusDp = layoutPreferenceDataStore.posterCardCornerRadiusDp.first()
             ),
-            plugins = PluginSettings(),
             integrations = IntegrationSettings(
                 tmdb = TmdbSyncSettings(
                     enabled = tmdb.enabled,

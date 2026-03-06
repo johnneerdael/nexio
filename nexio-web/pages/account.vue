@@ -16,10 +16,9 @@
         :sync-revision="state.syncRevision"
         :addons-count="state.addons.length"
         :linked-devices="state.linkedDevices.length"
-        :sync-scope-label="syncScopeLabel"
         :last-synced-at="state.lastSyncedAt"
         :devices="state.linkedDevices"
-        :exclusions="defaultSyncExclusions"
+        @unlink-device="unlinkDevice"
       />
 
       <section class="glass" style="padding:1rem; border-radius: var(--radius-xl); display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
@@ -28,27 +27,29 @@
             {{ item.label }}
           </button>
         </div>
-        <span class="badge"><strong>{{ state.demoMode ? 'Demo mode' : 'Supabase live' }}</strong></span>
+        <span class="badge"><strong>{{ state.demoMode ? 'Demo mode' : 'Nexio Live' }}</strong></span>
       </section>
 
       <AddonManager
         v-if="activeView === 'addons'"
         :addons="state.addons"
-        :repositories="repositories"
         :secret-statuses="secretStatusMap"
+        :busy="state.saving"
         @persist="persistSnapshot"
         @add-addon="addAddon"
         @remove-addon="removeAddon"
         @move-addon="moveAddon"
         @toggle-addon="toggleAddon"
-        @add-repository="addRepository"
-        @remove-repository="removeRepository"
-        @set-repository-scrapers="setRepositoryScrapers"
       />
 
       <CatalogInventory
         v-else-if="activeView === 'catalogs'"
         :catalogs="catalogInventory"
+        :disabled-keys="state.settings.layout.disabledHomeCatalogKeys"
+        :busy="state.saving"
+        @persist="persistSnapshot"
+        @move-catalog="moveCatalog"
+        @toggle-catalog="toggleCatalog"
       />
 
       <SettingsWorkspace
@@ -60,6 +61,7 @@
         :secret-statuses="secretStatusMap"
         :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
+        :busy="state.saving"
         @persist="persistSnapshot"
         @update="updateSetting"
       />
@@ -73,6 +75,7 @@
         :secret-statuses="secretStatusMap"
         :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
+        :busy="state.saving"
         @persist="persistSnapshot"
         @update="updateSetting"
       />
@@ -91,6 +94,7 @@
         :mdblist-top-lists="state.mdblistDiscovery.topLists"
         :mdblist-validating="state.mdblistDiscovery.validating"
         :mdblist-error="state.mdblistDiscovery.error"
+        :busy="state.saving"
         show-trakt
         show-integrations
         @persist="persistSnapshot"
@@ -117,6 +121,7 @@
         :secret-statuses="secretStatusMap"
         :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
+        :busy="state.saving"
         @persist="persistSnapshot"
         @update="updateSetting"
       />
@@ -124,12 +129,13 @@
       <SettingsWorkspace
         v-else
         title="Debug sync"
-        subtitle="Migration and developer controls while the new Supabase contract rolls out."
+        subtitle="Migration and developer controls while the Nexio account contract rolls out."
         :groups="accountGroups.debug"
         :settings="state.settings"
         :secret-statuses="secretStatusMap"
         :secret-drafts="state.secretDrafts"
         :trakt-flow="state.traktFlow"
+        :busy="state.saving"
         @persist="persistSnapshot"
         @update="updateSetting"
       />
@@ -159,19 +165,16 @@ const {
   startGoogleSignIn,
   signOut,
   signedIn,
-  repositories,
   secretStatusMap,
   catalogInventory,
-  syncScopeLabel,
-  defaultSyncExclusions,
   updateSetting,
   addAddon,
   removeAddon,
   moveAddon,
   toggleAddon,
-  addRepository,
-  removeRepository,
-  setRepositoryScrapers,
+  moveCatalog,
+  toggleCatalog,
+  unlinkDevice,
   persistSnapshot,
   setSecretDraft,
   saveDraftSecret,

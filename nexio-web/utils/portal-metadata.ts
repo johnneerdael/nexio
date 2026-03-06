@@ -156,10 +156,7 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'integrations.mdblist.showLetterboxd', label: 'Show Letterboxd', description: 'Display Letterboxd scoring.', kind: 'toggle' },
         { path: 'integrations.mdblist.showTomatoes', label: 'Show Rotten Tomatoes', description: 'Display critic tomato scores.', kind: 'toggle' },
         { path: 'integrations.mdblist.showAudience', label: 'Show audience score', description: 'Display audience tomato scores.', kind: 'toggle' },
-        { path: 'integrations.mdblist.showMetacritic', label: 'Show Metacritic', description: 'Display Metacritic scores.', kind: 'toggle' },
-        { path: 'integrations.mdblist.hiddenPersonalListKeys', label: 'Hidden personal lists', description: 'CSV list of personal MDBList keys to hide.', kind: 'list', placeholder: 'watchlist, private-horror' },
-        { path: 'integrations.mdblist.selectedTopListKeys', label: 'Pinned top lists', description: 'CSV list of top-list keys shown on home.', kind: 'list', placeholder: 'top_250, best_of_2025' },
-        { path: 'integrations.mdblist.catalogOrder', label: 'MDBList catalog order', description: 'Account-wide order of MDBList rail keys.', kind: 'list', placeholder: 'top_250, best_of_2025, staff_picks' }
+        { path: 'integrations.mdblist.showMetacritic', label: 'Show Metacritic', description: 'Display Metacritic scores.', kind: 'toggle' }
       ]
     },
     {

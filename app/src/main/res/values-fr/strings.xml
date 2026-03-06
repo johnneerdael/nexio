@@ -537,7 +537,7 @@
   <string name="library_empty_trakt_subtitle">Utilisez + dans les détails pour ajouter des éléments à la liste de suivi ou aux listes</string>
   <!-- AccountSettingsContent -->
   <string name="account_loading">Chargement\u2026</string>
-  <string name="account_sync_description">Synchronisez votre bibliothèque, votre progression, vos addons et plugins entre vos appareils.</string>
+  <string name="account_sync_description">Synchronisez les paramètres de votre compte et vos addons entre vos appareils.</string>
   <string name="account_signin_qr_title">Connexion par QR</string>
   <string name="account_signin_qr_subtitle">Scannez un QR code et complétez la connexion par e-mail sur votre téléphone</string>
   <string name="account_signed_in_label">Connecté</string>
@@ -595,7 +595,7 @@
   <string name="update_open_settings">Ouvrir les paramètres</string>
   <!-- AccountScreen -->
   <string name="account_title">Compte</string>
-  <string name="account_sign_in_description">Connectez-vous pour synchroniser votre bibliothèque, votre progression, vos addons et plugins entre vos appareils. La synchronisation de la bibliothèque et de la progression ne fonctionne que lorsque Trakt n\'est pas connecté.</string>
+  <string name="account_sign_in_description">Connectez-vous pour synchroniser les paramètres de votre compte et vos addons entre vos appareils.</string>
   <string name="account_sync_code_title">Code de synchronisation</string>
   <string name="account_sync_code_description">Synchroniser entre appareils sans créer de compte.</string>
   <string name="account_linked_devices">Appareils liés (%1$d)</string>
