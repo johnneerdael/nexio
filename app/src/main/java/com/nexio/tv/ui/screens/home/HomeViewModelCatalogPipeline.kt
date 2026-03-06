@@ -452,7 +452,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
         val savedOrderKeys = homeCatalogOrderKeys
             .asSequence()
-            .filter { it in defaultOrderKeys }
+            .mapNotNull { rawKey -> resolveHomeOrderedKey(rawKey, defaultOrderKeys.toSet()) }
             .distinct()
             .toList()
 
