@@ -61,10 +61,6 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
-        internal const val STARTUP_GRACE_PERIOD_MS = 3000L
-        internal const val MAX_INITIAL_HOME_CATALOGS = 8
-        internal const val DEFERRED_HOME_CATALOG_DELAY_MS = 2500L
-        internal const val DEFERRED_HOME_CATALOG_STAGGER_MS = 120L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
     }
@@ -100,7 +96,6 @@ class HomeViewModel @Inject constructor(
     internal var activeCatalogLoadSignature: String? = null
     internal var catalogLoadGeneration: Long = 0L
     internal var catalogsLoadInProgress: Boolean = false
-    internal var deferredCatalogLoadJob: Job? = null
     internal data class TruncatedRowCacheEntry(
         val sourceRow: CatalogRow,
         val truncatedRow: CatalogRow
@@ -114,10 +109,6 @@ class HomeViewModel @Inject constructor(
     internal var trailerPreviewRequestVersion: Long = 0L
     internal var currentTmdbSettings: TmdbSettings = TmdbSettings()
     internal var heroEnrichmentJob: Job? = null
-    internal var activeHeroEnrichmentSignature: String? = null
-    internal var continueWatchingEnrichmentJob: Job? = null
-    internal var activeContinueWatchingEnrichmentSignature: String? = null
-    internal var lastContinueWatchingEnrichmentSignature: String? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
@@ -146,9 +137,8 @@ class HomeViewModel @Inject constructor(
         loadContinueWatching()
         observeInstalledAddons()
         viewModelScope.launch {
-            delay(STARTUP_GRACE_PERIOD_MS)
+            delay(3000)
             startupGracePeriodActive = false
-            scheduleUpdateCatalogRows()
         }
     }
 
@@ -311,8 +301,6 @@ class HomeViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        heroEnrichmentJob?.cancel()
-        continueWatchingEnrichmentJob?.cancel()
         posterStatusReconcileJob?.cancel()
         cancelInFlightCatalogLoads()
         posterLibraryObserverJobs.values.forEach { it.cancel() }

@@ -142,15 +142,10 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
                 }
                 .map { catalog -> addon to catalog }
         }
-        val orderedCatalogsToLoad = orderCatalogLoads(catalogsToLoad)
-        val initialCatalogsToLoad = selectInitialCatalogLoads(orderedCatalogsToLoad)
-        val deferredCatalogsToLoad = orderedCatalogsToLoad.filterNot { it in initialCatalogsToLoad }
-
-        pendingCatalogLoads = initialCatalogsToLoad.size
-        initialCatalogsToLoad.forEach { (addon, catalog) ->
+        pendingCatalogLoads = catalogsToLoad.size
+        catalogsToLoad.forEach { (addon, catalog) ->
             loadCatalogPipeline(addon, catalog, generation)
         }
-        scheduleDeferredCatalogLoads(deferredCatalogsToLoad, generation)
     } catch (e: Exception) {
         catalogsLoadInProgress = false
         _uiState.update { it.copy(isLoading = false, error = e.message) }
@@ -227,46 +222,6 @@ internal fun HomeViewModel.loadCatalogPipeline(
         }
     }
     registerCatalogLoadJob(loadJob)
-}
-
-private fun HomeViewModel.orderCatalogLoads(
-    catalogsToLoad: List<Pair<Addon, CatalogDescriptor>>
-): List<Pair<Addon, CatalogDescriptor>> {
-    val orderIndexByKey = catalogOrder.withIndex().associate { (index, key) -> key to index }
-    return catalogsToLoad.sortedBy { (addon, catalog) ->
-        orderIndexByKey[catalogKey(addon.id, catalog.apiType, catalog.id)] ?: Int.MAX_VALUE
-    }
-}
-
-private fun HomeViewModel.selectInitialCatalogLoads(
-    orderedCatalogsToLoad: List<Pair<Addon, CatalogDescriptor>>
-): List<Pair<Addon, CatalogDescriptor>> {
-    val preferredCatalogs = orderedCatalogsToLoad.filterNot { (_, catalog) ->
-        catalog.apiType.equals("other", ignoreCase = true)
-    }
-    return preferredCatalogs.take(HomeViewModel.MAX_INITIAL_HOME_CATALOGS)
-}
-
-private fun HomeViewModel.scheduleDeferredCatalogLoads(
-    deferredCatalogsToLoad: List<Pair<Addon, CatalogDescriptor>>,
-    generation: Long
-) {
-    deferredCatalogLoadJob?.cancel()
-    deferredCatalogLoadJob = null
-
-    if (deferredCatalogsToLoad.isEmpty()) return
-
-    deferredCatalogLoadJob = viewModelScope.launch {
-        delay(HomeViewModel.DEFERRED_HOME_CATALOG_DELAY_MS)
-        deferredCatalogsToLoad.forEachIndexed { index, (addon, catalog) ->
-            if (generation != catalogLoadGeneration) return@launch
-            pendingCatalogLoads += 1
-            loadCatalogPipeline(addon, catalog, generation)
-            if (index < deferredCatalogsToLoad.lastIndex) {
-                delay(HomeViewModel.DEFERRED_HOME_CATALOG_STAGGER_MS)
-            }
-        }
-    }
 }
 
 internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addonId: String, type: String) {
@@ -462,52 +417,36 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
 
     if (shouldUseEnrichedHeroItems && baseHeroItems.isNotEmpty()) {
-        val enrichmentSignature = heroEnrichmentSignaturePipeline(baseHeroItems, tmdbSettings)
-        if (lastHeroEnrichmentSignature == enrichmentSignature) {
-            activeHeroEnrichmentSignature = null
-            val cached = lastHeroEnrichedItems
-            _uiState.update { state ->
-                state.copy(
-                    heroItems = if (state.heroItems == cached) state.heroItems else cached,
-                    gridItems = if (currentLayout == HomeLayout.GRID) {
-                        val enrichedGrid = replaceGridHeroItemsPipeline(state.gridItems, cached)
-                        if (state.gridItems == enrichedGrid) state.gridItems else enrichedGrid
-                    } else state.gridItems
-                )
-            }
-        } else if (activeHeroEnrichmentSignature != enrichmentSignature) {
-            heroEnrichmentJob?.cancel()
-            activeHeroEnrichmentSignature = enrichmentSignature
-            heroEnrichmentJob = viewModelScope.launch {
-                if (startupGracePeriodActive) {
-                    delay(HomeViewModel.STARTUP_GRACE_PERIOD_MS)
+        heroEnrichmentJob?.cancel()
+        heroEnrichmentJob = viewModelScope.launch {
+            val enrichmentSignature = heroEnrichmentSignaturePipeline(baseHeroItems, tmdbSettings)
+            if (lastHeroEnrichmentSignature == enrichmentSignature) {
+                val cached = lastHeroEnrichedItems
+                _uiState.update { state ->
+                    state.copy(
+                        heroItems = if (state.heroItems == cached) state.heroItems else cached,
+                        gridItems = if (currentLayout == HomeLayout.GRID) {
+                            val enrichedGrid = replaceGridHeroItemsPipeline(state.gridItems, cached)
+                            if (state.gridItems == enrichedGrid) state.gridItems else enrichedGrid
+                        } else state.gridItems
+                    )
                 }
-                if (startupGracePeriodActive) {
-                    activeHeroEnrichmentSignature = null
-                    return@launch
-                }
-                try {
-                    val enrichedItems = enrichHeroItemsPipeline(baseHeroItems, tmdbSettings)
-                    lastHeroEnrichmentSignature = enrichmentSignature
-                    lastHeroEnrichedItems = enrichedItems
-                    _uiState.update { state ->
-                        state.copy(
-                            heroItems = if (state.heroItems == enrichedItems) state.heroItems else enrichedItems,
-                            gridItems = if (currentLayout == HomeLayout.GRID) {
-                                val enrichedGrid = replaceGridHeroItemsPipeline(state.gridItems, enrichedItems)
-                                if (state.gridItems == enrichedGrid) state.gridItems else enrichedGrid
-                            } else state.gridItems
-                        )
-                    }
-                } finally {
-                    if (activeHeroEnrichmentSignature == enrichmentSignature) {
-                        activeHeroEnrichmentSignature = null
-                    }
+            } else {
+                val enrichedItems = enrichHeroItemsPipeline(baseHeroItems, tmdbSettings)
+                lastHeroEnrichmentSignature = enrichmentSignature
+                lastHeroEnrichedItems = enrichedItems
+                _uiState.update { state ->
+                    state.copy(
+                        heroItems = if (state.heroItems == enrichedItems) state.heroItems else enrichedItems,
+                        gridItems = if (currentLayout == HomeLayout.GRID) {
+                            val enrichedGrid = replaceGridHeroItemsPipeline(state.gridItems, enrichedItems)
+                            if (state.gridItems == enrichedGrid) state.gridItems else enrichedGrid
+                        } else state.gridItems
+                    )
                 }
             }
         }
     } else {
-        activeHeroEnrichmentSignature = null
         lastHeroEnrichmentSignature = null
         lastHeroEnrichedItems = emptyList()
     }
