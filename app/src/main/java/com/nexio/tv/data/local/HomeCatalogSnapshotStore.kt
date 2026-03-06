@@ -3,7 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonObject
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,10 +33,10 @@ class HomeCatalogSnapshotStore @Inject constructor(
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            val type = object : TypeToken<Snapshot>() {}.type
-            gson.fromJson<Snapshot>(raw, type)
+            decodeSnapshot(raw)
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
+            clear()
         }.getOrNull()
     }
 
@@ -56,5 +56,19 @@ class HomeCatalogSnapshotStore @Inject constructor(
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear home snapshot", error)
         }
+    }
+
+    private fun decodeSnapshot(raw: String): Snapshot? {
+        val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+        return Snapshot(
+            catalogRows = decodeArray<CatalogRow>(root, "catalogRows"),
+            fullCatalogRows = decodeArray<CatalogRow>(root, "fullCatalogRows"),
+            heroItems = decodeArray<MetaPreview>(root, "heroItems")
+        )
+    }
+
+    private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {
+        val array = root.getAsJsonArray(key) ?: return emptyList()
+        return array.map { element -> gson.fromJson(element, T::class.java) }
     }
 }
