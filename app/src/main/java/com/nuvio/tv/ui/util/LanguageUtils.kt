@@ -12,7 +12,7 @@ fun String.localizeEpisodeTitle(context: Context): String {
     return "${context.getString(R.string.episodes_episode)} $number"
 }
 
-private val LANGUAGE_OVERRIDES = mapOf(
+internal val LANGUAGE_OVERRIDES = mapOf(
     "pt" to "pt",
     "pt-pt" to "pt",
     "pt_pt" to "pt",
