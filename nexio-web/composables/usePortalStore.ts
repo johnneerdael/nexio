@@ -1,3 +1,4 @@
+import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import { computed, watch } from 'vue'
 import { parseAddonInstallUrl, secretRefs } from '~/utils/account-secrets'
 import {
@@ -70,6 +71,11 @@ const SESSION_KEY = 'nexio.portal.session'
 
 let remoteSignature = ''
 let persistTimer: ReturnType<typeof setTimeout> | null = null
+let remoteBootstrapTimer: ReturnType<typeof setTimeout> | null = null
+let realtimeClient: SupabaseClient | null = null
+let realtimeChannel: RealtimeChannel | null = null
+let realtimeUserId = ''
+let realtimeToken = ''
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -398,6 +404,94 @@ function buildMDBListCatalogs(state: StoreState): AddonCatalogRecord[] {
 
 export function usePortalStore() {
   const state = useInternalStore()
+  const runtimeConfig = useRuntimeConfig()
+
+  function clearRemoteBootstrapTimer() {
+    if (!remoteBootstrapTimer) {
+      return
+    }
+    clearTimeout(remoteBootstrapTimer)
+    remoteBootstrapTimer = null
+  }
+
+  function stopRealtimeSubscription() {
+    clearRemoteBootstrapTimer()
+    const channel = realtimeChannel
+    realtimeChannel = null
+    realtimeUserId = ''
+    realtimeToken = ''
+
+    if (realtimeClient && channel) {
+      void realtimeClient.removeChannel(channel)
+    }
+  }
+
+  function scheduleRemoteBootstrap(revision?: number) {
+    if (typeof revision === 'number' && Number.isFinite(revision) && revision <= state.value.syncRevision) {
+      return
+    }
+
+    clearRemoteBootstrapTimer()
+    remoteBootstrapTimer = setTimeout(() => {
+      bootstrap(true).catch(() => undefined)
+    }, 250)
+  }
+
+  async function ensureRealtimeSubscription() {
+    if (!process.client) {
+      return
+    }
+
+    const session = state.value.session
+    const token = accessToken(session)
+    const userId = session?.user.id ?? ''
+    const supabaseUrl = runtimeConfig.public.supabaseUrl?.trim()
+    const supabaseAnonKey = runtimeConfig.public.supabaseAnonKey?.trim()
+
+    if (!token || !userId || !supabaseUrl || !supabaseAnonKey) {
+      stopRealtimeSubscription()
+      return
+    }
+
+    if (!realtimeClient) {
+      realtimeClient = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      })
+    }
+
+    if (realtimeToken !== token) {
+      realtimeClient.realtime.setAuth(token)
+      realtimeToken = token
+    }
+
+    if (realtimeChannel && realtimeUserId === userId) {
+      return
+    }
+
+    stopRealtimeSubscription()
+    realtimeUserId = userId
+
+    realtimeChannel = realtimeClient
+      .channel(`account-sync:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'account_sync_events',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          const revision = Number((payload.new as { revision?: number | string } | null)?.revision ?? 0)
+          scheduleRemoteBootstrap(Number.isFinite(revision) ? revision : undefined)
+        }
+      )
+      .subscribe()
+  }
 
   function secretStatus(secretRef: string, secretType?: SecretType) {
     return state.value.secretStatuses.find((entry) =>
@@ -510,8 +604,8 @@ export function usePortalStore() {
     await persistSnapshot()
   }
 
-  async function bootstrap() {
-    if (state.value.bootstrapped || state.value.loading) {
+  async function bootstrap(force = false) {
+    if (!force && (state.value.bootstrapped || state.value.loading)) {
       return
     }
 
@@ -521,6 +615,7 @@ export function usePortalStore() {
     try {
       const session = readSession()
       if (!session) {
+        stopRealtimeSubscription()
         state.value = {
           ...normalizeSnapshot(readLocalState()),
           bootstrapped: true
@@ -544,6 +639,7 @@ export function usePortalStore() {
 
       await migrateLegacyAddonSecrets()
       remoteSignature = snapshotSignature(state.value.settings, state.value.addons)
+      await ensureRealtimeSubscription()
 
       await inspectAddons()
 
@@ -634,6 +730,7 @@ export function usePortalStore() {
       error: null,
       popularLists: []
     }
+    stopRealtimeSubscription()
     remoteSignature = ''
     writeSession(null)
     state.value = {
@@ -650,7 +747,7 @@ export function usePortalStore() {
       state.value.session = session
       writeSession(session)
       state.value.bootstrapped = false
-      await bootstrap()
+      await bootstrap(true)
     } catch (error) {
       state.value.error = error instanceof Error ? error.message : 'Unable to complete sign in.'
       throw error
