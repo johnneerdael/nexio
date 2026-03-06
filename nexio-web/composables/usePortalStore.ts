@@ -738,6 +738,29 @@ export function usePortalStore() {
     state.value.settings.layout.homeCatalogOrderKeys = nextOrder
   }
 
+  function reorderCatalog(draggedKey: string, targetKey: string) {
+    const availableKeys = catalogInventory.value.map((catalog) => catalog.key)
+    if (!availableKeys.includes(draggedKey) || !availableKeys.includes(targetKey) || draggedKey === targetKey) {
+      return
+    }
+
+    const fullOrder = [
+      ...state.value.settings.layout.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
+      ...availableKeys.filter((catalogKey) => !state.value.settings.layout.homeCatalogOrderKeys.includes(catalogKey))
+    ]
+
+    const fromIndex = fullOrder.indexOf(draggedKey)
+    const toIndex = fullOrder.indexOf(targetKey)
+    if (fromIndex === -1 || toIndex === -1) {
+      return
+    }
+
+    const nextOrder = [...fullOrder]
+    const [moved] = nextOrder.splice(fromIndex, 1)
+    nextOrder.splice(toIndex, 0, moved)
+    state.value.settings.layout.homeCatalogOrderKeys = nextOrder
+  }
+
   function toggleCatalog(key: string) {
     const disabled = new Set(state.value.settings.layout.disabledHomeCatalogKeys)
     if (disabled.has(key)) {
@@ -1114,6 +1137,7 @@ export function usePortalStore() {
     moveAddon,
     toggleAddon,
     moveCatalog,
+    reorderCatalog,
     toggleCatalog,
     unlinkDevice,
     persistSnapshot,
