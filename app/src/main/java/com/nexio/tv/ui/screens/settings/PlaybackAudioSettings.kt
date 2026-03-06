@@ -53,22 +53,85 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
+internal fun LazyListScope.videoSettingsItems(
+    playerSettings: PlayerSettings,
+    onSetTunnelingEnabled: (Boolean) -> Unit,
+    onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
+    onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
+    onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
+    onItemFocused: () -> Unit = {},
+    enabled: Boolean = true
+) {
+    item(key = "video_section_intro") {
+        Text(
+            text = stringResource(R.string.video_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = NexioColors.TextSecondary,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+    }
+
+    item(key = "audio_tunneled_playback") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_tunneled),
+            subtitle = stringResource(R.string.audio_tunneled_sub),
+            isChecked = playerSettings.tunnelingEnabled,
+            onCheckedChange = onSetTunnelingEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_dv7_dovi_experimental") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_dv_experimental_title),
+            subtitle = stringResource(R.string.audio_dv_experimental_sub),
+            isChecked = playerSettings.experimentalDv7ToDv81Enabled,
+            onCheckedChange = onSetExperimentalDv7ToDv81Enabled,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_dv7_dovi_experimental_preserve_mapping") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_dv_experimental_preserve_mapping_title),
+            subtitle = stringResource(R.string.audio_dv_experimental_preserve_mapping_sub),
+            isChecked = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
+            onCheckedChange = onSetExperimentalDv7ToDv81PreserveMappingEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
+        )
+    }
+
+    item(key = "audio_dv5_dovi_experimental") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_dv5_compatibility_title),
+            subtitle = stringResource(R.string.audio_dv5_compatibility_sub),
+            isChecked = playerSettings.experimentalDv5ToDv81Enabled,
+            onCheckedChange = onSetExperimentalDv5ToDv81Enabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
+        )
+    }
+}
+
 internal fun LazyListScope.audioSettingsItems(
     playerSettings: PlayerSettings,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
-    onSetTunnelingEnabled: (Boolean) -> Unit,
-    onSetMapDV7ToHevc: (Boolean) -> Unit,
-    onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
-    onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
-    onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
     item(key = "audio_section_intro") {
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.audio_section),
             style = MaterialTheme.typography.titleMedium,
@@ -132,25 +195,6 @@ internal fun LazyListScope.audioSettingsItems(
         )
     }
 
-    item(key = "audio_advanced_header") {
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = stringResource(R.string.audio_advanced_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = NexioColors.TextSecondary,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-    }
-
-    item(key = "audio_advanced_warning") {
-        Text(
-            text = stringResource(R.string.audio_advanced_warning),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFFFF9800),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-    }
-
     item(key = "audio_decoder_priority") {
         val decoderName = when (playerSettings.decoderPriority) {
             0 -> stringResource(R.string.audio_decoder_device_only)
@@ -169,42 +213,6 @@ internal fun LazyListScope.audioSettingsItems(
         )
     }
 
-    item(key = "audio_tunneled_playback") {
-        ToggleSettingsItem(
-            icon = Icons.AutoMirrored.Filled.VolumeUp,
-            title = stringResource(R.string.audio_tunneled),
-            subtitle = stringResource(R.string.audio_tunneled_sub),
-            isChecked = playerSettings.tunnelingEnabled,
-            onCheckedChange = onSetTunnelingEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    item(key = "audio_dv7_hevc_fallback") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv_title),
-            subtitle = stringResource(R.string.audio_dv_sub),
-            isChecked = playerSettings.mapDV7ToHevc,
-            onCheckedChange = onSetMapDV7ToHevc,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    item(key = "audio_dv7_dovi_experimental") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv_experimental_title),
-            subtitle = stringResource(R.string.audio_dv_experimental_sub),
-            isChecked = playerSettings.experimentalDv7ToDv81Enabled,
-            onCheckedChange = onSetExperimentalDv7ToDv81Enabled,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
     item(key = "audio_dts_iec_experimental") {
         ToggleSettingsItem(
             icon = Icons.Default.Tune,
@@ -214,30 +222,6 @@ internal fun LazyListScope.audioSettingsItems(
             onCheckedChange = onSetExperimentalDtsIecPassthroughEnabled,
             onFocused = onItemFocused,
             enabled = enabled
-        )
-    }
-
-    item(key = "audio_dv7_dovi_experimental_preserve_mapping") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv_experimental_preserve_mapping_title),
-            subtitle = stringResource(R.string.audio_dv_experimental_preserve_mapping_sub),
-            isChecked = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
-            onCheckedChange = onSetExperimentalDv7ToDv81PreserveMappingEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
-        )
-    }
-
-    item(key = "audio_dv5_dovi_experimental") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv5_compatibility_title),
-            subtitle = stringResource(R.string.audio_dv5_compatibility_sub),
-            isChecked = playerSettings.experimentalDv5ToDv81Enabled,
-            onCheckedChange = onSetExperimentalDv5ToDv81Enabled,
-            onFocused = onItemFocused,
-            enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
         )
     }
 }
@@ -463,4 +447,3 @@ private fun DecoderPriorityDialog(
         }
     }
 }
-

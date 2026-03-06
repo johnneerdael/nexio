@@ -8,17 +8,23 @@ import kotlinx.coroutines.launch
 internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
     viewModelScope.launch {
         accountSyncRefreshNotifier.events.collect {
+            startupRefreshPending = true
+
             if (shouldRefreshTraktDiscoveryForState(traktCatalogPreferences, traktDiscoverySnapshot)) {
+                traktDiscoveryRefreshInProgress = true
                 runCatching { traktDiscoveryService.ensureFresh(force = false) }
                     .onFailure { error ->
                         Log.w(HomeViewModel.TAG, "Failed to refresh Trakt discovery after account sync", error)
                     }
+                traktDiscoveryRefreshInProgress = false
             }
             if (shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, mdbListDiscoverySnapshot)) {
+                mdbListDiscoveryRefreshInProgress = true
                 runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
                     .onFailure { error ->
                         Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after account sync", error)
                     }
+                mdbListDiscoveryRefreshInProgress = false
             }
 
             catalogRepository.clearCache()

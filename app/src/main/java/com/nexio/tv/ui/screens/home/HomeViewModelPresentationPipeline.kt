@@ -181,7 +181,9 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
 }
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
-    if (startupGracePeriodActive) return
+    if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
+        return
+    }
     if (!externalMetaPrefetchEnabled) return
     if (item.id in prefetchedExternalMetaIds) return
     if (pendingExternalMetaPrefetchItemId == item.id) return

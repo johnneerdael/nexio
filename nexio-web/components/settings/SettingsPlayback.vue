@@ -9,10 +9,6 @@
       <SettingRow label="Pause Overlay Enabled" description="Show info overlay when media is paused.">
         <BaseToggle v-model="settings.playback.general.pauseOverlayEnabled" />
       </SettingRow>
-
-      <SettingRow label="Frame Rate Matching">
-        <BaseSelect v-model="settings.playback.general.frameRateMatchingMode" :options="frameRateOptions" />
-      </SettingRow>
     </SettingsSection>
 
     <!-- Stream Selection -->
@@ -60,6 +56,55 @@
           />
         </SettingRow>
       </template>
+    </SettingsSection>
+
+    <!-- Video & Audio -->
+    <SettingsSection title="Video & Audio" description="Video compatibility and audio controls.">
+      <div class="space-y-4">
+        <div class="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Video</div>
+
+        <SettingRow label="Frame Rate Matching" description="Switch refresh rate to match the content.">
+          <BaseSelect v-model="settings.playback.general.frameRateMatchingMode" :options="frameRateOptions" />
+        </SettingRow>
+
+        <SettingRow label="Resolution Matching" description="Allow the app to switch output resolution when needed.">
+          <BaseToggle v-model="settings.playback.general.resolutionMatchingEnabled" />
+        </SettingRow>
+
+        <SettingRow label="Tunneled Playback" description="Enable tunneling on supported devices.">
+          <BaseToggle v-model="settings.playback.audio.tunnelingEnabled" />
+        </SettingRow>
+
+        <SettingRow label="DV7 - Experimental DV8.1" description="Use the experimental DV7 to DV8.1 conversion path.">
+          <BaseToggle v-model="settings.playback.audio.experimentalDv7ToDv81Enabled" />
+        </SettingRow>
+
+        <SettingRow label="DV7 - Preserve Mapping" description="Keep Dolby Vision mapping metadata when DV8.1 conversion is enabled.">
+          <BaseToggle
+            v-model="settings.playback.audio.experimentalDv7ToDv81PreserveMappingEnabled"
+            :disabled="!settings.playback.audio.experimentalDv7ToDv81Enabled"
+          />
+        </SettingRow>
+
+        <SettingRow label="DV5 - Compatibility Remap" description="Use the DV5 compatibility remap path when DV8.1 conversion is enabled.">
+          <BaseToggle
+            v-model="settings.playback.audio.experimentalDv5ToDv81Enabled"
+            :disabled="!settings.playback.audio.experimentalDv7ToDv81Enabled"
+          />
+        </SettingRow>
+      </div>
+
+      <div class="space-y-4 pt-4">
+        <div class="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Audio</div>
+
+        <SettingRow label="Decoder Priority" description="Renderer preference for playback codecs.">
+          <BaseSelect v-model="settings.playback.audio.decoderPriority" :options="decoderPriorityOptions" />
+        </SettingRow>
+
+        <SettingRow label="Fire OS - Experimental Audio Compatibility" description="Enable the Fire OS experimental IEC compatibility path.">
+          <BaseToggle v-model="settings.playback.audio.experimentalDtsIecPassthroughEnabled" />
+        </SettingRow>
+      </div>
     </SettingsSection>
 
     <!-- Subtitles -->
@@ -147,6 +192,12 @@ const autoPlayOptions = [
   { label: 'Manual Selection', value: 'MANUAL' },
   { label: 'Play First Result', value: 'FIRST_STREAM' },
   { label: 'Regex Parsing Match', value: 'REGEX_MATCH' },
+]
+
+const decoderPriorityOptions = [
+  { label: 'Device only', value: 0 },
+  { label: 'Prefer device', value: 1 },
+  { label: 'Prefer app', value: 2 },
 ]
 
 const thresholdOptions = [

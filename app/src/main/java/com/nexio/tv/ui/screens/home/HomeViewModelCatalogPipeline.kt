@@ -63,6 +63,8 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         return
     }
 
+    hasPersistedCatalogSnapshot = true
+    startupRefreshPending = true
     restoredCatalogSnapshotActive = true
     _fullCatalogRows.value = snapshot.fullCatalogRows
     _uiState.update { state ->
@@ -241,10 +243,16 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     try {
         val hasRestoredContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
             _uiState.value.heroItems.isNotEmpty()
-        val shouldPreserveRestoredSnapshot = restoredCatalogSnapshotActive && hasRestoredContent
+        val activeRefreshInProgress =
+            catalogsLoadInProgress ||
+                traktDiscoveryRefreshInProgress ||
+                mdbListDiscoveryRefreshInProgress
+        val refreshInProgress = startupRefreshPending || activeRefreshInProgress
+        val shouldPreserveCachedHome =
+            hasPersistedCatalogSnapshot && (restoredCatalogSnapshotActive || hasRestoredContent || refreshInProgress)
 
         if (addons.isEmpty()) {
-            if ((startupGracePeriodActive || shouldPreserveRestoredSnapshot) && hasRestoredContent) {
+            if (shouldPreserveCachedHome) {
                 catalogsLoadInProgress = false
                 _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = 0) }
                 return
@@ -268,11 +276,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         rebuildCatalogOrder(addons)
 
         if (catalogOrder.isEmpty()) {
-            if ((startupGracePeriodActive || shouldPreserveRestoredSnapshot) && hasRestoredContent) {
+            if (shouldPreserveCachedHome) {
                 catalogsLoadInProgress = false
                 _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
                 return
             }
+            hasPersistedCatalogSnapshot = false
+            startupRefreshPending = false
             homeCatalogSnapshotStore.clear()
             catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
@@ -578,20 +588,30 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val currentState = _uiState.value
     val hasCurrentRenderedContent = currentState.catalogRows.any { it.items.isNotEmpty() } ||
         currentState.heroItems.isNotEmpty()
-    val shouldKeepRestoredSnapshot =
-        restoredCatalogSnapshotActive &&
-            hasCurrentRenderedContent &&
+    val activeRefreshInProgress =
+        catalogsLoadInProgress ||
+            traktDiscoveryRefreshInProgress ||
+            mdbListDiscoveryRefreshInProgress
+    val refreshInProgress = startupRefreshPending || activeRefreshInProgress
+    val shouldKeepVisibleContent =
+        hasCurrentRenderedContent &&
             displayRows.isEmpty() &&
             baseHeroItems.isEmpty() &&
-            fullRowsFiltered.isEmpty()
+            fullRowsFiltered.isEmpty() &&
+            refreshInProgress
 
-    if (shouldKeepRestoredSnapshot) {
-        _uiState.update { it.copy(isLoading = catalogsLoadInProgress, error = null) }
+    if (shouldKeepVisibleContent) {
+        _uiState.update { it.copy(isLoading = true, error = null) }
         return
     }
 
     if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
         restoredCatalogSnapshotActive = false
+        if (!activeRefreshInProgress) {
+            startupRefreshPending = false
+        }
+    } else if (!activeRefreshInProgress) {
+        startupRefreshPending = false
     }
 
     _uiState.update { state ->
@@ -609,6 +629,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
+        hasPersistedCatalogSnapshot = true
         homeCatalogSnapshotStore.write(
             com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
                 catalogRows = displayRows,

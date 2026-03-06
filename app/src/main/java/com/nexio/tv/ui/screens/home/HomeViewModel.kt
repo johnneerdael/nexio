@@ -122,9 +122,15 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
-    internal var startupGracePeriodActive: Boolean = true
-    @Volatile
     internal var restoredCatalogSnapshotActive: Boolean = false
+    @Volatile
+    internal var hasPersistedCatalogSnapshot: Boolean = false
+    @Volatile
+    internal var startupRefreshPending: Boolean = false
+    @Volatile
+    internal var traktDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
+    internal var mdbListDiscoveryRefreshInProgress: Boolean = false
 
     init {
         restorePersistedCatalogSnapshot()
@@ -142,10 +148,6 @@ class HomeViewModel @Inject constructor(
         observeAccountSyncRefresh()
         loadContinueWatching()
         observeInstalledAddons()
-        viewModelScope.launch {
-            delay(3000)
-            startupGracePeriodActive = false
-        }
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
