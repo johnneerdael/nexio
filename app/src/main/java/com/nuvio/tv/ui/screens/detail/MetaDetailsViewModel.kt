@@ -637,7 +637,7 @@ class MetaDetailsViewModel @Inject constructor(
                             state.copy(
                                 episodeImdbRatings = emptyMap(),
                                 isEpisodeRatingsLoading = false,
-                                episodeRatingsError = "Ratings are unavailable for this show."
+                                episodeRatingsError = context.getString(R.string.ratings_unavailable)
                             )
                         }
                     }
@@ -671,7 +671,7 @@ class MetaDetailsViewModel @Inject constructor(
                         state.copy(
                             episodeImdbRatings = emptyMap(),
                             isEpisodeRatingsLoading = false,
-                            episodeRatingsError = "Unable to load episode ratings."
+                            episodeRatingsError = context.getString(R.string.ratings_load_error)
                         )
                     }
                 }

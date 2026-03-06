@@ -3,6 +3,7 @@ package com.nuvio.tv
 import android.os.Bundle
 import android.content.Context
 import android.content.res.Configuration
+import androidx.core.os.ConfigurationCompat
 import android.util.Log
 import androidx.compose.ui.platform.LocalView
 import androidx.metrics.performance.JankStats
@@ -197,6 +198,9 @@ class MainActivity : ComponentActivity() {
             config.setLocale(locale)
             super.attachBaseContext(newBase.createConfigurationContext(config))
         } else {
+            val systemLocale = ConfigurationCompat.getLocales(newBase.resources.configuration)[0]
+                ?: Locale.getDefault(Locale.Category.DISPLAY)
+            Locale.setDefault(systemLocale)
             super.attachBaseContext(newBase)
         }
     }

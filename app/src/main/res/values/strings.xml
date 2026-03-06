@@ -754,6 +754,11 @@
     <string name="library_filter_list">List</string>
     <string name="library_filter_type">Type</string>
     <string name="library_filter_sort">Sort</string>
+    <string name="library_sort_trakt_order">Trakt Order</string>
+    <string name="library_sort_added_desc">Added ↓</string>
+    <string name="library_sort_added_asc">Added ↑</string>
+    <string name="library_sort_title_asc">Title A-Z</string>
+    <string name="library_sort_title_desc">Title Z-A</string>
     <string name="library_manage_lists">Manage Lists</string>
     <string name="library_manage_trakt_lists">Manage Trakt Lists</string>
     <string name="library_no_lists">No personal lists yet.</string>
@@ -897,6 +902,7 @@
     <!-- EpisodeRatingsSection -->
     <string name="ratings_loading">Loading episode ratings...</string>
     <string name="ratings_unavailable">Episode ratings are unavailable.</string>
+    <string name="ratings_load_error">Unable to load episode ratings.</string>
     <string name="ratings_season_summary">Season %1$d - %2$d episodes</string>
 
     <!-- SearchDiscoverSection -->
