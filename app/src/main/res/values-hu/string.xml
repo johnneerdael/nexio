@@ -57,6 +57,7 @@
     <string name="episodes_mark_season_unwatched">Évad megjelölése nem látottként</string>
     <string name="episodes_mark_previous_watched">Korábbiak megjelölése megnézettként ebben az évadban</string>
     <string name="episodes_play">Lejátszás</string>
+	<string name="play_manually">Kézi lejátszás</string>
     <string name="episodes_season_actions">Évad műveletek</string>
 
     <!-- MetaDetailsViewModel -->
@@ -87,7 +88,7 @@
     <string name="detail_tab_ratings">Értékelések</string>
     <string name="detail_tab_more_like_this">Hasonló tartalmak</string>
     <string name="detail_section_network">Csatorna</string>
-    <string name="detail_section_production">Gyártó</string>
+    <string name="detail_section_production">Stúdiók</string>
     <string name="detail_lists_fallback">Listák</string>
     <string name="detail_lists_subtitle">Válaszd ki, melyik listákba kerüljön be ez a tartalom.</string>
     <string name="action_save">Mentés</string>
@@ -410,7 +411,7 @@
     <string name="mdblist_dialog_subtitle">Add meg az API-kulcsot a külső értékelések lekéréséhez</string>
     <string name="mdblist_dialog_placeholder">MDBList API-kulcs megadása</string>
     <string name="mdblist_not_set">Nincs beállítva</string>
-    <string name="action_clear">Törlés</string>
+    <string name="mdblist_invalid_api_key">Érvénytelen MDBList API-kulcs</string>
 
     <!-- Anime-Skip -->
     <string name="animeskip_title">Anime-kihagyás</string>
@@ -438,7 +439,7 @@
     <string name="tmdb_basic_info_subtitle">Leírás, műfajok és értékelés a TMDB-ről</string>
     <string name="tmdb_details_title">Részletek</string>
     <string name="tmdb_details_subtitle">Hossz, premier dátuma, ország és nyelv a TMDB-ről</string>
-    <string name="tmdb_credits_title">Stáb</string>
+    <string name="tmdb_credits_title">Szereplők és stáb<string>
     <string name="tmdb_credits_subtitle">Szereplők (fotókkal), rendező és író a TMDB-ről</string>
     <string name="tmdb_productions_title">Gyártók</string>
     <string name="tmdb_productions_subtitle">Gyártó cégek a TMDB-ről</string>
@@ -448,7 +449,7 @@
     <string name="tmdb_episodes_subtitle">Epizódcímek, leírások, miniatűrök és hosszak a TMDB-ről</string>
     <string name="tmdb_more_like_this_title">Hasonlóak</string>
     <string name="tmdb_more_like_this_subtitle">TMDB ajánlások a részletek oldalon</string>
-	<string name="tmdb_collections_title">Gyűjtemények</string>
+    <string name="tmdb_collections_title">Gyűjtemények</string>
     <string name="tmdb_collections_subtitle">TMDB filmgyűjtemények megjelenési sorrendben</string>
 	
     <string name="tmdb_language_dialog_title">TMDB nyelv</string>
@@ -473,7 +474,7 @@
     <string name="trakt_unaired_shown">Látható</string>
     <string name="trakt_unaired_hidden">Rejtett</string>
     <string name="trakt_cached_label">Gyorsítótárazva</string>
-	<string name="trakt_unaired_now_shown">A még nem vetített következő epizódok mostantól láthatók</string>
+    <string name="trakt_unaired_now_shown">A még nem vetített következő epizódok mostantól láthatók</string>
     <string name="trakt_unaired_now_hidden">A még nem vetített következő epizódok mostantól rejtettek</string>
     <string name="trakt_stat_movies">Film</string>
     <string name="trakt_stat_shows">Sorozat</string>
@@ -593,7 +594,7 @@
     <string name="parental_violence">Erőszak</string>
     <string name="parental_profanity">Káromkodás</string>
     <string name="parental_alcohol">Alkohol/Drogok</string>
-    <string name="parental_frightening">Félelemkeltés</string>
+    <string name="parental_frightening">Félelemkeltő elemek</string>
     <string name="parental_severity_severe">Súlyos</string>
     <string name="parental_severity_moderate">Mérsékelt</string>
     <string name="parental_severity_mild">Enyhe</string>
@@ -671,7 +672,7 @@
     <string name="panel_failed_load_episodes">Nem sikerült betölteni az epizódokat</string>
 
     <!-- PauseOverlay -->
-    <string name="pause_you_are_watching">Most nézed</string>
+    <string name="pause_you_are_watching">Folyamatban</string>
     <string name="pause_cast_label">Szereplők</string>
     <string name="pause_back_to_details">Vissza a részletekhez</string>
     <string name="pause_as_character">mint %1$s</string>
@@ -692,7 +693,7 @@
 
 
     <!-- SearchScreen -->
-    <string name="search_keyboard_hint">A kereséshez nyomd meg a Kész gombot a billentyűzeten</string>
+    <string name="search_keyboard_hint">A kereséshez nyomd meg az OK gombot</string>
     <string name="search_placeholder">Filmek és sorozatok keresése</string>
     <string name="search_start_title">Kezdj el keresni</string>
     <string name="search_start_subtitle">Adj meg legalább 2 karaktert</string>
