@@ -112,89 +112,69 @@ fun NuvioNavHost(
         }
 
         composable(Screen.Home.route) {
+            fun createContinueWatchingRoute(
+                item: ContinueWatchingItem,
+                manualSelection: Boolean = false,
+                startFromBeginning: Boolean = false
+            ): String {
+                return when (item) {
+                    is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
+                        videoId = item.progress.videoId,
+                        contentType = item.progress.contentType,
+                        title = item.progress.name,
+                        poster = item.progress.poster,
+                        backdrop = item.progress.backdrop,
+                        logo = item.progress.logo,
+                        season = item.progress.season,
+                        episode = item.progress.episode,
+                        episodeName = item.progress.episodeTitle,
+                        genres = null,
+                        year = null,
+                        contentId = item.progress.contentId,
+                        contentName = item.progress.name,
+                        runtime = null,
+                        manualSelection = manualSelection,
+                        returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
+                        startFromBeginning = startFromBeginning
+                    )
+                    is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
+                        videoId = item.info.videoId,
+                        contentType = item.info.contentType,
+                        title = item.info.name,
+                        poster = item.info.poster,
+                        backdrop = item.info.backdrop,
+                        logo = item.info.logo,
+                        season = item.info.season,
+                        episode = item.info.episode,
+                        episodeName = item.info.episodeTitle,
+                        genres = null,
+                        year = null,
+                        contentId = item.info.contentId,
+                        contentName = item.info.name,
+                        runtime = null,
+                        manualSelection = manualSelection,
+                        returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true),
+                        startFromBeginning = startFromBeginning
+                    )
+                }
+            }
+
             HomeScreen(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
                 onContinueWatchingClick = { item ->
-                    val route = when (item) {
-                        is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
-                            videoId = item.progress.videoId,
-                            contentType = item.progress.contentType,
-                            title = item.progress.name,
-                            poster = item.progress.poster,
-                            backdrop = item.progress.backdrop,
-                            logo = item.progress.logo,
-                            season = item.progress.season,
-                            episode = item.progress.episode,
-                            episodeName = item.progress.episodeTitle,
-                            genres = null,
-                            year = null,
-                            contentId = item.progress.contentId,
-                            contentName = item.progress.name,
-                            runtime = null,
-                            returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true)
-                        )
-                        is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
-                            videoId = item.info.videoId,
-                            contentType = item.info.contentType,
-                            title = item.info.name,
-                            poster = item.info.poster,
-                            backdrop = item.info.backdrop,
-                            logo = item.info.logo,
-                            season = item.info.season,
-                            episode = item.info.episode,
-                            episodeName = item.info.episodeTitle,
-                            genres = null,
-                            year = null,
-                            contentId = item.info.contentId,
-                            contentName = item.info.name,
-                            runtime = null,
-                            returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
-                        )
-                    }
-                    navController.navigate(route)
+                    navController.navigate(createContinueWatchingRoute(item))
                 },
                 onContinueWatchingStartFromBeginning = { item ->
-                    val route = when (item) {
-                        is ContinueWatchingItem.InProgress -> Screen.Stream.createRoute(
-                            videoId = item.progress.videoId,
-                            contentType = item.progress.contentType,
-                            title = item.progress.name,
-                            poster = item.progress.poster,
-                            backdrop = item.progress.backdrop,
-                            logo = item.progress.logo,
-                            season = item.progress.season,
-                            episode = item.progress.episode,
-                            episodeName = item.progress.episodeTitle,
-                            genres = null,
-                            year = null,
-                            contentId = item.progress.contentId,
-                            contentName = item.progress.name,
-                            runtime = null,
-                            returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
-                            startFromBeginning = true
-                        )
-                        is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
-                            videoId = item.info.videoId,
-                            contentType = item.info.contentType,
-                            title = item.info.name,
-                            poster = item.info.poster,
-                            backdrop = item.info.backdrop,
-                            logo = item.info.logo,
-                            season = item.info.season,
-                            episode = item.info.episode,
-                            episodeName = item.info.episodeTitle,
-                            genres = null,
-                            year = null,
-                            contentId = item.info.contentId,
-                            contentName = item.info.name,
-                            runtime = null,
-                            returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true),
-                            startFromBeginning = true
-                        )
-                    }
-                    navController.navigate(route)
+                    navController.navigate(
+                        createContinueWatchingRoute(item, startFromBeginning = true)
+                    )
+                },
+                onContinueWatchingPlayManually = { item ->
+                    navController.navigate(
+                        createContinueWatchingRoute(item, manualSelection = true)
+                    )
                 },
                 onNavigateToCatalogSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
@@ -252,6 +232,27 @@ fun NuvioNavHost(
                             contentId = contentId,
                             contentName = title,
                             runtime = runtime
+                        )
+                    )
+                },
+                onPlayManuallyClick = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, genres, year, runtime ->
+                    navController.navigate(
+                        Screen.Stream.createRoute(
+                            videoId = videoId,
+                            contentType = contentType,
+                            title = title,
+                            poster = poster,
+                            backdrop = backdrop,
+                            logo = logo,
+                            season = season,
+                            episode = episode,
+                            episodeName = episodeName,
+                            genres = genres,
+                            year = year,
+                            contentId = contentId,
+                            contentName = title,
+                            runtime = runtime,
+                            manualSelection = true
                         )
                     )
                 }

@@ -200,7 +200,9 @@ fun EpisodesRow(
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
+    onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
     onToggleEpisodeWatched: (Video) -> Unit,
+    showManualPlayOption: Boolean = false,
     onMarkSeasonWatched: (Int) -> Unit = {},
     onMarkSeasonUnwatched: (Int) -> Unit = {},
     isSeasonFullyWatched: Boolean = false,
@@ -336,6 +338,11 @@ fun EpisodesRow(
                 onEpisodeClick(selectedEpisode)
                 optionsEpisode = null
             },
+            onPlayManually = {
+                onEpisodeManualPlayClick(selectedEpisode)
+                optionsEpisode = null
+            },
+            showPlayManually = showManualPlayOption,
             onToggleWatched = {
                 onToggleEpisodeWatched(selectedEpisode)
                 optionsEpisode = null
@@ -757,6 +764,8 @@ private fun EpisodeOptionsDialog(
     hasPreviousEpisodes: Boolean = false,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
+    onPlayManually: () -> Unit = {},
+    showPlayManually: Boolean = false,
     onToggleWatched: () -> Unit,
     onMarkSeasonWatched: () -> Unit = {},
     onMarkSeasonUnwatched: () -> Unit = {},
@@ -820,6 +829,19 @@ private fun EpisodeOptionsDialog(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(stringResource(R.string.episodes_play))
+        }
+
+        if (showPlayManually) {
+            Button(
+                onClick = onPlayManually,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.BackgroundCard,
+                    contentColor = NuvioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.play_manually))
+            }
         }
     }
 }

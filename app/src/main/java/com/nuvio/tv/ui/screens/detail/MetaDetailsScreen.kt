@@ -190,9 +190,27 @@ fun MetaDetailsScreen(
         genres: String?,
         year: String?,
         runtime: Int?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    onPlayManuallyClick: (
+        videoId: String,
+        contentType: String,
+        contentId: String,
+        title: String,
+        poster: String?,
+        backdrop: String?,
+        logo: String?,
+        season: Int?,
+        episode: Int?,
+        episodeName: String?,
+        genres: String?,
+        year: String?,
+        runtime: Int?
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsStateWithLifecycle(
+        initialValue = false
+    )
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
 
     BackHandler {
@@ -361,6 +379,23 @@ fun MetaDetailsScreen(
                             video.runtime
                         )
                     },
+                    onEpisodeManualPlayClick = { video ->
+                        onPlayManuallyClick(
+                            video.id,
+                            meta.apiType,
+                            meta.id,
+                            meta.name,
+                            video.thumbnail ?: meta.poster,
+                            meta.background,
+                            meta.logo,
+                            video.season,
+                            video.episode,
+                            video.title,
+                            null,
+                            null,
+                            video.runtime
+                        )
+                    },
                     onPlayClick = { videoId ->
                         onPlayClick(
                             videoId,
@@ -378,6 +413,24 @@ fun MetaDetailsScreen(
                             null
                         )
                     },
+                    onPlayManuallyClick = { videoId ->
+                        onPlayManuallyClick(
+                            videoId,
+                            meta.apiType,
+                            meta.id,
+                            meta.name,
+                            meta.poster,
+                            meta.background,
+                            meta.logo,
+                            null,
+                            null,
+                            null,
+                            genresString,
+                            yearString,
+                            null
+                        )
+                    },
+                    showManualPlayOption = effectiveAutoplayEnabled,
                     onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                     onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                     onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
@@ -543,7 +596,10 @@ private fun MetaDetailsContent(
     showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
+    onEpisodeManualPlayClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
+    onPlayManuallyClick: (String) -> Unit,
+    showManualPlayOption: Boolean,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
@@ -615,6 +671,7 @@ private fun MetaDetailsContent(
     var pendingRestoreMoreLikeItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var showHeroPlayOptionsDialog by rememberSaveable(meta.id) { mutableStateOf(false) }
     var initialDetailReturnFocusHandled by rememberSaveable(
         meta.id,
         detailReturnEpisodeFocusRequest?.season,
@@ -903,11 +960,27 @@ private fun MetaDetailsContent(
             }
         }
     }
+    val heroPlayManualClick = remember(heroVideo, meta.id, onEpisodeManualPlayClick, onPlayManuallyClick) {
+        {
+            markHeroRestore()
+            if (heroVideo != null) {
+                onEpisodeManualPlayClick(heroVideo)
+            } else {
+                onPlayManuallyClick(meta.id)
+            }
+        }
+    }
 
     val episodeClick = remember(onEpisodeClick) {
         { video: Video ->
             markEpisodeRestore(video.id)
             onEpisodeClick(video)
+        }
+    }
+    val episodeManualClick = remember(onEpisodeManualPlayClick) {
+        { video: Video ->
+            markEpisodeRestore(video.id)
+            onEpisodeManualPlayClick(video)
         }
     }
 
@@ -1042,6 +1115,11 @@ private fun MetaDetailsContent(
                         nextEpisode = nextEpisode,
                         nextToWatch = nextToWatch,
                         onPlayClick = heroPlayClick,
+                        onPlayLongPress = if (showManualPlayOption) {
+                            { showHeroPlayOptionsDialog = true }
+                        } else {
+                            null
+                        },
                         isInLibrary = isInLibrary,
                         onToggleLibrary = onToggleLibrary,
                         onLibraryLongPress = {
@@ -1103,6 +1181,8 @@ private fun MetaDetailsContent(
                             episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                             onEpisodeClick = episodeClick,
+                            onEpisodeManualPlayClick = episodeManualClick,
+                            showManualPlayOption = showManualPlayOption,
                             onToggleEpisodeWatched = onToggleEpisodeWatched,
                             onMarkSeasonWatched = onMarkSeasonWatched,
                             onMarkSeasonUnwatched = onMarkSeasonUnwatched,
@@ -1126,11 +1206,11 @@ private fun MetaDetailsContent(
                             } else null
                         )
                     }
-                }
             }
+        }
 
-            // Cast / More like this section
-            if (hasPeopleSection) {
+        // Cast / More like this section
+        if (hasPeopleSection) {
                 if (hasPeopleTabs) {
                     item(key = "cast_more_like_tabs", contentType = "horizontal_row") {
                         PeopleSectionTabs(
@@ -1286,6 +1366,52 @@ private fun MetaDetailsContent(
                     seasonOptionsDialogSeason = null
                 }
             )
+        }
+
+        if (showHeroPlayOptionsDialog) {
+            PlayManualOverrideDialog(
+                title = meta.name,
+                subtitle = nextToWatch?.displayText ?: stringResource(R.string.hero_play),
+                onDismiss = { showHeroPlayOptionsDialog = false },
+                onPlayManually = {
+                    showHeroPlayOptionsDialog = false
+                    heroPlayManualClick()
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlayManualOverrideDialog(
+    title: String,
+    subtitle: String?,
+    onDismiss: () -> Unit,
+    onPlayManually: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    NuvioDialog(
+        onDismiss = onDismiss,
+        title = title,
+        subtitle = subtitle
+    ) {
+        Button(
+            onClick = onPlayManually,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(primaryFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NuvioColors.BackgroundCard,
+                contentColor = NuvioColors.TextPrimary
+            )
+        ) {
+            Text(stringResource(R.string.play_manually))
         }
     }
 }
