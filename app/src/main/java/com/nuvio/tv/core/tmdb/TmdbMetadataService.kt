@@ -1,6 +1,7 @@
 package com.nuvio.tv.core.tmdb
 
 import android.util.Log
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.data.remote.api.TmdbApi
 import com.nuvio.tv.data.remote.api.TmdbEpisode
 import com.nuvio.tv.data.remote.api.TmdbImage
@@ -25,7 +26,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "TmdbMetadataService"
-private const val TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c"
+private val TMDB_API_KEY = BuildConfig.TMDB_API_KEY
 
 @Singleton
 class TmdbMetadataService @Inject constructor(

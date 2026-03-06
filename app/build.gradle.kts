@@ -2,7 +2,7 @@
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.androidx.baselineprofile)
+    // alias(libs.plugins.androidx.baselineprofile) 
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -30,7 +30,7 @@ android {
 
     defaultConfig {
         applicationId = "com.nuvio.tv"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 36
         versionCode = 28
         versionName = "0.4.10-beta"
@@ -44,6 +44,7 @@ android {
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${localProperties.getProperty("TRAKT_CLIENT_SECRET", "")}\"")
         buildConfigField("String", "TRAKT_API_URL", "\"${localProperties.getProperty("TRAKT_API_URL", "https://api.trakt.tv/")}\"")
         buildConfigField("String", "TRAKT_REDIRECT_URI", "\"${localProperties.getProperty("TRAKT_REDIRECT_URI", "urn:ietf:wg:oauth:2.0:oob")}\"")
+        buildConfigField("String", "TMDB_API_KEY", "\"${localProperties.getProperty("TMDB_API_KEY", "")}\"")
         buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://app.nuvio.tv/tv-login")}\"")
 
         // In-app updater (GitHub Releases)
@@ -80,6 +81,7 @@ android {
         }
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -112,6 +114,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlin {
         compilerOptions {
@@ -164,6 +167,7 @@ configurations.all {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     val composeBom = platform("androidx.compose:compose-bom:2026.01.01")
 
     // baselineProfile(project(":benchmark"))  // TODO: create benchmark module later
@@ -272,7 +276,7 @@ dependencies {
 
     // Performance profiling
     implementation("androidx.metrics:metrics-performance:1.0.0-beta01")  // JankStats
-    implementation("androidx.compose.runtime:runtime-tracing")           // Compose function names in Perfetto
+    debugImplementation("androidx.compose.runtime:runtime-tracing")     
 
     // Bundle real crypto-js (JS) for QuickJS plugins
     implementation("org.webjars.npm:crypto-js:4.2.0")
