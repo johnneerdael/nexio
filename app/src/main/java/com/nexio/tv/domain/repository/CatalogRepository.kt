@@ -17,4 +17,6 @@ interface CatalogRepository {
         extraArgs: Map<String, String> = emptyMap(),
         supportsSkip: Boolean = false
     ): Flow<NetworkResult<CatalogRow>>
+
+    fun clearCache()
 }

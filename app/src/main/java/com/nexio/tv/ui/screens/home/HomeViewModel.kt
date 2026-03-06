@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -52,7 +53,8 @@ class HomeViewModel @Inject constructor(
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
     internal val tmdbService: TmdbService,
-    internal val tmdbMetadataService: TmdbMetadataService
+    internal val tmdbMetadataService: TmdbMetadataService,
+    internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -131,6 +133,7 @@ class HomeViewModel @Inject constructor(
         observeTraktDiscovery()
         observeMDBListCatalogPreferences()
         observeMDBListDiscovery()
+        observeAccountSyncRefresh()
         loadContinueWatching()
         observeInstalledAddons()
         viewModelScope.launch {
@@ -158,6 +161,8 @@ class HomeViewModel @Inject constructor(
     private fun observeMDBListCatalogPreferences() = observeMDBListCatalogPreferencesPipeline()
 
     private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
+
+    private fun observeAccountSyncRefresh() = observeAccountSyncRefreshPipeline()
 
     fun onEvent(event: HomeEvent) {
         when (event) {

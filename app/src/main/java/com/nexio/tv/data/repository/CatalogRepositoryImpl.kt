@@ -168,4 +168,8 @@ class CatalogRepositoryImpl @Inject constructor(
         val normalizedBaseUrl = addonBaseUrl.trim().trimEnd('/').lowercase()
         return "${normalizedBaseUrl}_${addonId}_${type}_${catalogId}_${skip}_${skipStep}_${normalizedArgs}_${providerCacheToken}"
     }
+
+    override fun clearCache() {
+        catalogCache.clear()
+    }
 }

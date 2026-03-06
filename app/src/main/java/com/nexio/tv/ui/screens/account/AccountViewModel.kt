@@ -11,6 +11,7 @@ import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
 import com.nexio.tv.core.sync.AccountSettingsSyncService
+import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.data.repository.AddonRepositoryImpl
 import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.domain.repository.SyncRepository
@@ -36,6 +37,7 @@ class AccountViewModel @Inject constructor(
     private val addonSyncService: AddonSyncService,
     private val accountSettingsSyncService: AccountSettingsSyncService,
     private val addonRepository: AddonRepositoryImpl,
+    private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -462,6 +464,7 @@ class AccountViewModel @Inject constructor(
                 remoteUrls = remoteAddonUrls,
                 removeMissingLocal = true
             )
+            accountSyncRefreshNotifier.notifyRefreshRequired()
             addonRepository.isSyncingFromRemote = false
             return Result.success(Unit)
         } catch (e: Exception) {
