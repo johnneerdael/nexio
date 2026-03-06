@@ -1,6 +1,6 @@
 import { bearerToken, okJson, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
 import { mapSecretRows } from '~/server/utils/account-secrets'
-import { normalizeAddonUrl } from '~/server/utils/account-secrets'
+import { normalizeAddonManifestUrl, normalizeAddonUrl } from '~/server/utils/account-secrets'
 import { defaultAccountAddons, defaultSettings } from '~/utils/portal-defaults'
 import type { AddonRecord, BootstrapPayload, LinkedDevice, PortalSettings, SecretType } from '~/types/portal'
 
@@ -51,7 +51,7 @@ type RpcMutationResult = Array<{
 function toAddonRecords(addons: SnapshotRpcPayload['addons']): AddonRecord[] {
   return (addons ?? []).map((addon, index) => {
     const normalizedUrl = normalizeAddonUrl(String(addon.url || ''))
-    const manifestUrl = String(addon.manifest_url || '').trim() || (normalizedUrl ? `${normalizedUrl}/manifest.json` : '')
+    const manifestUrl = normalizeAddonManifestUrl(normalizedUrl, addon.manifest_url)
     return {
       id: addon.id ?? crypto.randomUUID(),
       url: normalizedUrl,

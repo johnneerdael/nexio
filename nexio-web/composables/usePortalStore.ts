@@ -1,6 +1,6 @@
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import { computed, watch } from 'vue'
-import { parseAddonInstallUrl, secretRefs } from '~/utils/account-secrets'
+import { normalizeAddonManifestUrl, normalizeAddonUrl, parseAddonInstallUrl, secretRefs } from '~/utils/account-secrets'
 import {
   defaultAccountAddons,
   defaultSettings
@@ -128,12 +128,8 @@ function writeSession(session: PortalSession | null) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
 }
 
-function normalizeAddonUrl(url: string): string {
-  return url.trim().replace(/\/manifest\.json$/i, '').replace(/\/$/, '')
-}
-
 function addonInstallCandidate(addon: AddonRecord): string {
-  const base = addon.manifestUrl?.trim() || `${addon.url.replace(/\/$/, '')}/manifest.json`
+  const base = normalizeAddonManifestUrl(addon.url, addon.manifestUrl)
   const query = new URLSearchParams(addon.publicQueryParams ?? {}).toString()
   return query ? `${base}?${query}` : base
 }
@@ -143,7 +139,7 @@ function sanitizeAddonRecord(addon: AddonRecord, index: number): AddonRecord {
   return {
     ...addon,
     url: normalizedUrl,
-    manifestUrl: normalizedUrl ? `${normalizedUrl}/manifest.json` : '',
+    manifestUrl: normalizeAddonManifestUrl(normalizedUrl, addon.manifestUrl),
     publicQueryParams: { ...(addon.publicQueryParams ?? {}) },
     sortOrder: addon.sortOrder ?? index
   }

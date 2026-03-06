@@ -1,5 +1,5 @@
 import type { AddonRecord } from '~/types/portal'
-import { buildResolvedManifestUrl, normalizeAddonUrl, type AddonSecretPayload, type AddonTransportPayload } from '~/server/utils/account-secrets'
+import { buildResolvedManifestUrl, normalizeAddonManifestUrl, normalizeAddonUrl, type AddonSecretPayload, type AddonTransportPayload } from '~/server/utils/account-secrets'
 import { supabaseFetch } from '~/server/utils/supabase'
 
 type AccountAddonRow = {
@@ -102,7 +102,10 @@ export async function resolveAddonTransport(
     addon_id: row?.id ?? addon.id,
     addon_name: row?.name ?? null,
     base_url: row?.base_url ?? normalizeAddonUrl(addon.url),
-    manifest_url: row?.manifest_url ?? addon.manifestUrl ?? null,
+    manifest_url: normalizeAddonManifestUrl(
+      row?.base_url ?? addon.url,
+      row?.manifest_url ?? addon.manifestUrl ?? null
+    ),
     public_query_params: row?.public_query_params ?? addon.publicQueryParams ?? {},
     secret_payload: secretPayload
   }

@@ -54,6 +54,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { AddonRecord } from '~/types/portal'
+import { normalizeAddonManifestUrl } from '~/utils/account-secrets'
 
 const props = defineProps<{
   addons: AddonRecord[]
@@ -73,14 +74,14 @@ const addonUrl = ref('')
 
 function addonDisplayUrl(addon: AddonRecord) {
   const params = new URLSearchParams(addon.publicQueryParams ?? {})
-  const base = addon.manifestUrl || `${addon.url.replace(/\/$/, '')}/manifest.json`
+  const base = normalizeAddonManifestUrl(addon.url, addon.manifestUrl)
   const query = params.toString()
   return query ? `${base}?${query}` : base
 }
 
 function addonHost(addon: AddonRecord) {
   try {
-    return new URL(addon.manifestUrl || `${addon.url.replace(/\/$/, '')}/manifest.json`).host
+    return new URL(normalizeAddonManifestUrl(addon.url, addon.manifestUrl)).host
   } catch {
     return addon.name
   }
