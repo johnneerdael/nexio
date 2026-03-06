@@ -188,19 +188,13 @@ export const accountGroups: Record<string, PortalGroup[]> = {
   playback: [
     {
       id: 'playback-general',
-      title: 'Playback',
+      title: 'General',
       subtitle: 'Core player behavior that should stay aligned across every screen.',
       fields: [
         { path: 'playback.general.loadingOverlayEnabled', label: 'Loading overlay', description: 'Show the premium loading treatment during startup.', kind: 'toggle' },
         { path: 'playback.general.pauseOverlayEnabled', label: 'Pause overlay', description: 'Show overlay chrome while paused.', kind: 'toggle' },
         { path: 'playback.general.osdClockEnabled', label: 'OSD clock', description: 'Display the clock in playback overlays.', kind: 'toggle' },
         { path: 'playback.general.skipIntroEnabled', label: 'Skip intro', description: 'Enable intro skip actions.', kind: 'toggle' },
-        { path: 'playback.general.frameRateMatchingMode', label: 'Frame-rate matching', description: 'Switch refresh rate to match content at playback boundaries.', kind: 'select', options: [
-          { label: 'Off', value: 'OFF' },
-          { label: 'On start', value: 'START' },
-          { label: 'Start and stop', value: 'START_STOP' }
-        ] },
-        { path: 'playback.general.resolutionMatchingEnabled', label: 'Resolution matching', description: 'Allow the app to switch output resolution when needed.', kind: 'toggle' },
         { path: 'playback.streamSelection.playerPreference', label: 'Player preference', description: 'Choose the default player flow.', kind: 'select', options: [
           { label: 'Internal', value: 'INTERNAL' },
           { label: 'External', value: 'EXTERNAL' },
@@ -227,6 +221,30 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         ] },
         { path: 'playback.streamSelection.nextEpisodeThresholdPercent', label: 'Next episode threshold percent', description: 'Percent watched before auto-playing the next episode.', kind: 'slider', min: 97, max: 99.5, step: 0.5 },
         { path: 'playback.streamSelection.nextEpisodeThresholdMinutesBeforeEnd', label: 'Next episode threshold minutes', description: 'Minutes before end before auto-playing the next episode.', kind: 'slider', min: 1, max: 3.5, step: 0.5 },
+      ]
+    },
+    {
+      id: 'playback-video',
+      title: 'Video',
+      subtitle: 'Display switching and Dolby Vision compatibility controls.',
+      fields: [
+        { path: 'playback.general.frameRateMatchingMode', label: 'Frame-rate matching', description: 'Switch refresh rate to match content at playback boundaries.', kind: 'select', options: [
+          { label: 'Off', value: 'OFF' },
+          { label: 'On start', value: 'START' },
+          { label: 'Start and stop', value: 'START_STOP' }
+        ] },
+        { path: 'playback.general.resolutionMatchingEnabled', label: 'Resolution matching', description: 'Allow the app to switch output resolution when needed.', kind: 'toggle' },
+        { path: 'playback.audio.tunnelingEnabled', label: 'Tunneled playback', description: 'Enable tunneling on supported devices.', kind: 'toggle' },
+        { path: 'playback.audio.experimentalDv7ToDv81Enabled', label: 'DV7 - Experimental DV8.1', description: 'Use the experimental DV7 to DV8.1 conversion path.', kind: 'toggle' },
+        { path: 'playback.audio.experimentalDv7ToDv81PreserveMappingEnabled', label: 'DV7 - Preserve Mapping', description: 'Keep Dolby Vision mapping metadata when the DV8.1 path is enabled.', kind: 'toggle' },
+        { path: 'playback.audio.experimentalDv5ToDv81Enabled', label: 'DV5 - Compatibility Remap', description: 'Use the DV5 compatibility remap path when DV8.1 conversion is enabled.', kind: 'toggle' }
+      ]
+    },
+    {
+      id: 'playback-audio',
+      title: 'Audio',
+      subtitle: 'Audio language and compatibility controls.',
+      fields: [
         { path: 'playback.audio.preferredAudioLanguage', label: 'Preferred audio language', description: 'Primary synced audio preference.', kind: 'text', placeholder: 'device' },
         { path: 'playback.audio.secondaryPreferredAudioLanguage', label: 'Secondary audio language', description: 'Fallback audio language code.', kind: 'text', placeholder: 'en' },
         { path: 'playback.audio.skipSilence', label: 'Skip silence', description: 'Use silence skipping when available.', kind: 'toggle' },
@@ -235,7 +253,7 @@ export const accountGroups: Record<string, PortalGroup[]> = {
           { label: '1', value: 1 },
           { label: '2', value: 2 }
         ] },
-        { path: 'playback.audio.tunnelingEnabled', label: 'Enable tunneling', description: 'Keep tunneling consistent on supported TVs.', kind: 'toggle' }
+        { path: 'playback.audio.experimentalDtsIecPassthroughEnabled', label: 'Fire OS - Experimental Audio Compatibility', description: 'Enable the Fire OS experimental IEC compatibility path.', kind: 'toggle' }
       ]
     },
     {

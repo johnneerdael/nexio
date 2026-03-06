@@ -246,7 +246,6 @@ fun PlaybackSettingsContent(
                 },
                 onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
                 onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
-                onSetMapDV7ToHevc = { enabled -> coroutineScope.launch { viewModel.setMapDV7ToHevc(enabled) } },
                 onSetExperimentalDv7ToDv81Enabled = {
                     enabled -> coroutineScope.launch { viewModel.setExperimentalDv7ToDv81Enabled(enabled) }
                 },

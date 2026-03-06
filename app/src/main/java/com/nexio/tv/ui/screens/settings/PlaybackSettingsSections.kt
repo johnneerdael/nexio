@@ -120,7 +120,6 @@ internal fun PlaybackSettingsSections(
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
-    onSetMapDV7ToHevc: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
@@ -271,30 +270,6 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
-            item(key = "general_afr_header") {
-                PlaybackSectionHeader(
-                    title = stringResource(R.string.playback_auto_frame_rate),
-                    description = generalUi.frameRateMatchingLabel,
-                    expanded = afrExpanded,
-                    onToggle = { afrExpanded = !afrExpanded },
-                    focusRequester = afrHeaderFocus,
-                    onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer
-                )
-            }
-
-            if (afrExpanded) {
-                item(key = "general_afr_options") {
-                    FrameRateMatchingModeOptions(
-                        selectedMode = playerSettings.frameRateMatchingMode,
-                        resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
-                        onSelect = onSetFrameRateMatchingMode,
-                        onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
-                        onFocused = { focusedSection = PlaybackSection.GENERAL },
-                        enabled = !generalUi.isExternalPlayer
-                    )
-                }
-            }
         }
 
         playbackCollapsibleSection(
@@ -342,19 +317,49 @@ internal fun PlaybackSettingsSections(
             focusRequester = audioHeaderFocus,
             onHeaderFocused = { focusedSection = PlaybackSection.AUDIO }
         ) {
+            item(key = "video_afr_header") {
+                PlaybackSectionHeader(
+                    title = stringResource(R.string.playback_auto_frame_rate),
+                    description = generalUi.frameRateMatchingLabel,
+                    expanded = afrExpanded,
+                    onToggle = { afrExpanded = !afrExpanded },
+                    focusRequester = afrHeaderFocus,
+                    onFocused = { focusedSection = PlaybackSection.AUDIO },
+                    enabled = !generalUi.isExternalPlayer
+                )
+            }
+
+            if (afrExpanded) {
+                item(key = "video_afr_options") {
+                    FrameRateMatchingModeOptions(
+                        selectedMode = playerSettings.frameRateMatchingMode,
+                        resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
+                        onSelect = onSetFrameRateMatchingMode,
+                        onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
+                        onFocused = { focusedSection = PlaybackSection.AUDIO },
+                        enabled = !generalUi.isExternalPlayer
+                    )
+                }
+            }
+
+            videoSettingsItems(
+                playerSettings = playerSettings,
+                onSetTunnelingEnabled = onSetTunnelingEnabled,
+                onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
+                onSetExperimentalDv5ToDv81Enabled = onSetExperimentalDv5ToDv81Enabled,
+                onSetExperimentalDv7ToDv81PreserveMappingEnabled =
+                    onSetExperimentalDv7ToDv81PreserveMappingEnabled,
+                onItemFocused = { focusedSection = PlaybackSection.AUDIO },
+                enabled = !generalUi.isExternalPlayer
+            )
+
             audioSettingsItems(
                 playerSettings = playerSettings,
                 onShowAudioLanguageDialog = onShowAudioLanguageDialog,
                 onShowSecondaryAudioLanguageDialog = onShowSecondaryAudioLanguageDialog,
                 onShowDecoderPriorityDialog = onShowDecoderPriorityDialog,
                 onSetSkipSilence = onSetSkipSilence,
-                onSetTunnelingEnabled = onSetTunnelingEnabled,
-                onSetMapDV7ToHevc = onSetMapDV7ToHevc,
-                onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
                 onSetExperimentalDtsIecPassthroughEnabled = onSetExperimentalDtsIecPassthroughEnabled,
-                onSetExperimentalDv5ToDv81Enabled = onSetExperimentalDv5ToDv81Enabled,
-                onSetExperimentalDv7ToDv81PreserveMappingEnabled =
-                    onSetExperimentalDv7ToDv81PreserveMappingEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
                 enabled = !generalUi.isExternalPlayer
             )
