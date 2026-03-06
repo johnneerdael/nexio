@@ -22,6 +22,7 @@ import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.FireOsIec61937AudioOutputProvider
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.TextOutput
@@ -248,7 +249,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
                 subtitleDelayUsProvider = subtitleDelayUs::get,
-                safeAudioModeEnabled = safeAudioModeEnabled
+                safeAudioModeEnabled = safeAudioModeEnabled,
+                experimentalFireOsIecPassthroughEnabled =
+                    playerSettings.experimentalDtsIecPassthroughEnabled
             )
                 .setExtensionRendererMode(effectiveDecoderPriority)
                 .setEnableDecoderFallback(true)
@@ -848,7 +851,8 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
 private class SubtitleOffsetRenderersFactory(
     context: Context,
     private val subtitleDelayUsProvider: () -> Long,
-    private val safeAudioModeEnabled: Boolean
+    private val safeAudioModeEnabled: Boolean,
+    private val experimentalFireOsIecPassthroughEnabled: Boolean
 ) : DefaultRenderersFactory(context) {
 
     @Suppress("DEPRECATION")
@@ -858,10 +862,13 @@ private class SubtitleOffsetRenderersFactory(
         enableAudioOutputPlaybackParams: Boolean
     ): AudioSink {
         if (!safeAudioModeEnabled) {
-            return DefaultAudioSink.Builder(context)
+            val builder = DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-                .build()
+            if (experimentalFireOsIecPassthroughEnabled) {
+                builder.setAudioOutputProvider(FireOsIec61937AudioOutputProvider(context))
+            }
+            return builder.build()
         }
         val filteredCapabilities = buildStableAudioCapabilities(context)
         return DefaultAudioSink.Builder()
