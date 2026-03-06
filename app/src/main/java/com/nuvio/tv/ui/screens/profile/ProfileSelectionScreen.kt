@@ -124,6 +124,7 @@ fun ProfileSelectionScreen(
     var focusedAvatarColor by remember { mutableStateOf(Color(0xFF1E88E5)) }
     var showCreateProfile by remember { mutableStateOf(false) }
     var longPressedProfile by remember { mutableStateOf<UserProfile?>(null) }
+    var suppressOptionsDialogFirstKeyUp by remember { mutableStateOf(true) }
     var profileToDelete by remember { mutableStateOf<UserProfile?>(null) }
     var profileToEdit by remember { mutableStateOf<UserProfile?>(null) }
     val onProfileFocusedColorChange = remember {
@@ -182,12 +183,16 @@ fun ProfileSelectionScreen(
             onProfileFocused = onProfileFocusedColorChange,
             onProfileSelected = { profile ->
                 if (isManagementMode) {
+                    suppressOptionsDialogFirstKeyUp = false
                     longPressedProfile = profile
                 } else {
                     viewModel.selectProfile(profile.id, onComplete = onProfileSelected)
                 }
             },
-            onProfileLongPress = { profile -> longPressedProfile = profile },
+            onProfileLongPress = { profile ->
+                suppressOptionsDialogFirstKeyUp = true
+                longPressedProfile = profile
+            },
             onAddProfileClick = { showCreateProfile = true }
         )
 
@@ -225,17 +230,25 @@ fun ProfileSelectionScreen(
 
         // Long-press options dialog (Edit / Delete)
         longPressedProfile?.let { profile ->
+            val primaryDialogFocusRequester = remember(profile.id) { FocusRequester() }
+            LaunchedEffect(profile.id) {
+                repeat(2) { withFrameNanos { } }
+                runCatching { primaryDialogFocusRequester.requestFocus() }
+            }
             NuvioDialog(
                 onDismiss = { longPressedProfile = null },
                 title = stringResource(R.string.profile_selection_options_title),
-                width = 360.dp
+                width = 360.dp,
+                suppressFirstKeyUp = suppressOptionsDialogFirstKeyUp
             ) {
                 Button(
                     onClick = {
                         longPressedProfile = null
                         profileToEdit = profile
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(primaryDialogFocusRequester),
                     colors = ButtonDefaults.colors(
                         containerColor = NuvioColors.BackgroundCard,
                         contentColor = NuvioColors.TextPrimary
@@ -264,18 +277,26 @@ fun ProfileSelectionScreen(
 
         // Delete confirmation dialog
         profileToDelete?.let { profile ->
+            val primaryDialogFocusRequester = remember(profile.id) { FocusRequester() }
+            LaunchedEffect(profile.id) {
+                repeat(2) { withFrameNanos { } }
+                runCatching { primaryDialogFocusRequester.requestFocus() }
+            }
             NuvioDialog(
                 onDismiss = { profileToDelete = null },
                 title = stringResource(R.string.profile_delete_confirm_title),
                 subtitle = stringResource(R.string.profile_delete_confirm_subtitle),
-                width = 420.dp
+                width = 420.dp,
+                suppressFirstKeyUp = false
             ) {
                 Button(
                     onClick = {
                         viewModel.deleteProfile(profile.id)
                         profileToDelete = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(primaryDialogFocusRequester),
                     colors = ButtonDefaults.colors(
                         containerColor = Color(0xFF4A2323),
                         contentColor = NuvioColors.TextPrimary
@@ -714,13 +735,25 @@ private fun AddProfileCard(
                     .background(addBackgroundColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "+",
-                    color = plusColor,
-                    fontSize = 40.sp,
-                    fontWeight = FontWeight.Light,
-                    textAlign = TextAlign.Center
-                )
+                Box(
+                    modifier = Modifier.size(34.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(26.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(plusColor)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(26.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(plusColor)
+                    )
+                }
             }
         }
 
