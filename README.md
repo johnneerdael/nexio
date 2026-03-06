@@ -1,99 +1,72 @@
-<div align="center">
+# Nexio
 
-  <img src="assets/brand/app_logo_wordmark.png" alt="NEXIO" width="300" />
-  <br />
-  <br />
+Nexio is an Android TV media player built around the Stremio addon ecosystem, a synced web account portal, and a playback stack tuned for premium TV devices.
 
-  [![Contributors][contributors-shield]][contributors-url]
-  [![Forks][forks-shield]][forks-url]
-  [![Stargazers][stars-shield]][stars-url]
-  [![Issues][issues-shield]][issues-url]
-  [![License][license-shield]][license-url]
+## Highlights
 
-  <p>
-    A modern Android TV media player powered by the Stremio addon ecosystem.
-    <br />
-    Stremio Addon ecosystem • Android TV optimized • Playback-focused experience
-  </p>
+- Android TV and Fire OS focused UX
+- Account-based settings and addon sync through Supabase
+- Web portal for managing settings, addons, catalogs, and TV QR login approval
+- Native Trakt integration for auth, scrobble, check-in, and account-managed catalogs
+- Native MDBList integration for ratings and list-backed catalogs
+- TMDB metadata integration with shared account configuration
+- Advanced Media3-based playback pipeline with Dolby Vision work and Fire OS compatibility improvements
+- In-app updater backed by GitHub Releases
 
-</div>
+## Project Structure
 
-## About
+- `app/`: Android TV application
+- `nexio-web/`: web portal and landing site
+- `supabase/`: schema, functions, and setup SQL
+- `docs/`: setup guides and integration notes
+- `media/`: local Media3 fork and playback libraries
 
-NEXIO is a modern media player designed specifically for Android TV.
+## Android Development
 
-It acts as a client-side playback interface that can integrate with the Stremio addon ecosystem for content discovery and source resolution through user-installed extensions.
+Requirements:
 
-Built with Kotlin and optimized for a TV-first viewing experience.
-
-## Installation
-
-### Android TV
-
-Download the latest APK from [GitHub Releases](https://github.com/johnneerdael/NEXIO/releases/latest) and install on your Android TV device.
-
-## Development
-
-### Prerequisites
-
-- Android Studio (latest version)
+- Android Studio
 - JDK 11+
-- Android SDK (API 29+)
-- Gradle 8.0+
+- Android SDK
 
-### Setup
-
-```bash
-git clone https://github.com/johnneerdael/NEXIO.git
-cd NEXIO
-./gradlew build
-```
-
-### Running on Emulator or Device
+Build:
 
 ```bash
-# Debug build
-./gradlew installDebug
-
-# Run on connected device
-adb shell am start -n com.nexio.tv/.MainActivity
+./gradlew :app:assembleDebug
 ```
 
-## Legal & DMCA
+Install on a connected device:
 
-NEXIO functions solely as a client-side interface for browsing metadata and playing media provided by user-installed extensions and/or user-provided sources. It is intended for content the user owns or is otherwise authorized to access.
+```bash
+./gradlew :app:installDebug
+```
 
-NEXIO is not affiliated with any third-party extensions or content providers. It does not host, store, or distribute any media content.
+## Web Portal
 
-For comprehensive legal information, including our full disclaimer, third-party extension policy, and DMCA/Copyright information, please visit our **[Legal & Disclaimer Page](https://johnneerdael.github.io/NEXIO/#legal)**.
+The web portal lives in `nexio-web/` and is a Nuxt server app, not a static site.
 
-## Built With
+Build:
 
-* Kotlin
-* Jetpack Compose & TV Material3
-* ExoPlayer / Media3
-* Hilt (Dependency Injection)
-* Retrofit (Networking)
-* Gradle
+```bash
+cd nexio-web
+npm install
+npm run build
+```
 
-## Star History
+## Supabase
 
-<a href="https://www.star-history.com/#johnneerdael/NEXIO&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=johnneerdael/NEXIO&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=johnneerdael/NEXIO&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=johnneerdael/NEXIO&type=date&legend=top-left" />
- </picture>
-</a>
+Clean-install schema and setup documentation:
 
-<!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/johnneerdael/NEXIO.svg?style=for-the-badge
-[contributors-url]: https://github.com/johnneerdael/NEXIO/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/johnneerdael/NEXIO.svg?style=for-the-badge
-[forks-url]: https://github.com/johnneerdael/NEXIO/network/members
-[stars-shield]: https://img.shields.io/github/stars/johnneerdael/NEXIO.svg?style=for-the-badge
-[stars-url]: https://github.com/johnneerdael/NEXIO/stargazers
-[issues-shield]: https://img.shields.io/github/issues/johnneerdael/NEXIO.svg?style=for-the-badge
-[issues-url]: https://github.com/johnneerdael/NEXIO/issues
-[license-shield]: https://img.shields.io/github/license/johnneerdael/NEXIO.svg?style=for-the-badge
-[license-url]: http://www.gnu.org/licenses/gpl-3.0.en.html
+- `supabase/account_settings_sync.sql`
+- `supabase/tmdb_secret_upgrade_patch.sql`
+- `docs/supabase-settings-sync-guide.md`
+
+## Releases
+
+App updates are resolved from GitHub Releases for this repository:
+
+- `https://github.com/johnneerdael/nexio/releases`
+
+## Legal
+
+Nexio is a client application. It does not host or distribute media content. Media access depends on user-installed addons, services, and sources the user is authorized to use.
