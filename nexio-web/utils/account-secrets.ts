@@ -44,6 +44,23 @@ export function normalizeAddonUrl(url: string): string {
   return url.trim().replace(/\/manifest\.json$/i, '').replace(/\/$/, '')
 }
 
+export function normalizeAddonManifestUrl(baseUrl: string, manifestUrl?: string | null): string {
+  const normalizedBaseUrl = normalizeAddonUrl(baseUrl)
+  const candidate = String(manifestUrl || '').trim()
+  if (candidate) {
+    try {
+      const parsed = new URL(candidate)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.toString().replace(/\/$/, '')
+      }
+    } catch {
+      // Fall back to the canonical manifest path derived from the base URL.
+    }
+  }
+
+  return normalizedBaseUrl ? `${normalizedBaseUrl}/manifest.json` : ''
+}
+
 export function addonSecretRef(url: string): string {
   const normalized = normalizeAddonUrl(url)
   return `addon:${normalized.toLowerCase().replace(/^https?:\/\//, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`
