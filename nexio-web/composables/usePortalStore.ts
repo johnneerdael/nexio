@@ -138,6 +138,17 @@ function addonInstallCandidate(addon: AddonRecord): string {
   return query ? `${base}?${query}` : base
 }
 
+function sanitizeAddonRecord(addon: AddonRecord, index: number): AddonRecord {
+  const normalizedUrl = normalizeAddonUrl(addon.url)
+  return {
+    ...addon,
+    url: normalizedUrl,
+    manifestUrl: normalizedUrl ? `${normalizedUrl}/manifest.json` : '',
+    publicQueryParams: { ...(addon.publicQueryParams ?? {}) },
+    sortOrder: addon.sortOrder ?? index
+  }
+}
+
 function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): string {
   return JSON.stringify({
     settings,
@@ -230,7 +241,7 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
     lastSyncedAt: source.lastSyncedAt ?? new Date().toISOString(),
     session: source.session ?? readSession(),
     settings: sanitizeSettings(clone(source.settings ?? defaultSettings())),
-    addons: clone(source.addons ?? defaultAccountAddons()),
+    addons: clone(source.addons ?? defaultAccountAddons()).map((addon, index) => sanitizeAddonRecord(addon, index)),
     secretStatuses: clone(source.secretStatuses ?? []),
     secretDrafts: {},
     linkedDevices: clone(source.linkedDevices ?? []),
@@ -545,7 +556,6 @@ export function usePortalStore() {
 
         return {
           ...addon,
-          manifestUrl: inspection.manifestUrl,
           name: inspection.addonName || addon.name,
           description: inspection.description ?? addon.description,
           logo: inspection.logo ?? addon.logo
@@ -630,7 +640,7 @@ export function usePortalStore() {
       state.value.demoMode = !payload.session
       state.value.session = payload.session ?? session
       state.value.settings = sanitizeSettings(clone(payload.snapshot.settings))
-      state.value.addons = clone(payload.snapshot.addons)
+      state.value.addons = clone(payload.snapshot.addons).map((addon, index) => sanitizeAddonRecord(addon, index))
       state.value.secretStatuses = clone(payload.snapshot.secretStatuses)
       state.value.linkedDevices = clone(payload.snapshot.linkedDevices)
       state.value.syncRevision = payload.snapshot.syncRevision
@@ -819,7 +829,7 @@ export function usePortalStore() {
     state.value.addons = [
       ...state.value.addons,
       {
-        ...parsed.addon,
+        ...sanitizeAddonRecord(parsed.addon, state.value.addons.length),
         sortOrder: state.value.addons.length
       }
     ]

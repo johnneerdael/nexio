@@ -107,7 +107,12 @@ fun buildResolvedAddonUrl(
     publicQueryParams: Map<String, String>,
     secretPayload: AccountAddonSecretPayload?
 ): String {
-    var resolved = manifestUrl?.trim().orEmpty().ifBlank { "${baseUrl.trimEnd('/')}/manifest.json" }
+    var resolved = manifestUrl
+        ?.trim()
+        .orEmpty()
+        .takeIf(::isUsableManifestUrl)
+        .orEmpty()
+        .ifBlank { "${baseUrl.trimEnd('/')}/manifest.json" }
     val pathSegment = secretPayload?.pathSegment?.trim().orEmpty()
     if (pathSegment.isNotBlank() && resolved.endsWith("/manifest.json", ignoreCase = true)) {
         resolved = resolved.removeSuffix("/manifest.json").trimEnd('/') + "/$pathSegment/manifest.json"
@@ -150,6 +155,20 @@ private fun portSuffix(url: URL): String {
         443 -> ""
         else -> ":$port"
     }
+}
+
+private fun isUsableManifestUrl(url: String): Boolean {
+    val trimmed = url.trim()
+    if (trimmed.isBlank()) return false
+    if (trimmed.startsWith("http://", ignoreCase = true).not() &&
+        trimmed.startsWith("https://", ignoreCase = true).not()
+    ) {
+        return false
+    }
+
+    return runCatching { URL(trimmed) }
+        .map { parsed -> !parsed.host.equals("placeholder.nexio.tv", ignoreCase = true) }
+        .getOrDefault(false)
 }
 
 private fun String.encodeUrlComponent(): String {
