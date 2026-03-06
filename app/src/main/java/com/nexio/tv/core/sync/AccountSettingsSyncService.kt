@@ -381,6 +381,10 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applyRemoteSettings(settings: AccountSettingsPayload) {
+        Log.d(
+            TAG,
+            "Applying remote layout order keys count=${settings.layout.homeCatalogOrderKeys.size} disabled count=${settings.layout.disabledHomeCatalogKeys.size}"
+        )
         themeDataStore.setTheme(enumValueOrDefault(settings.appearance.theme, AppTheme.WHITE))
         themeDataStore.setFont(enumValueOrDefault(settings.appearance.font, AppFont.INTER))
         AppLocaleResolver.setStoredLocaleTag(

@@ -19,8 +19,8 @@ internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: 
 
 internal fun homeCatalogGlobalKey(row: CatalogRow): String {
     return when (row.addonId) {
-        TRAKT_HOME_ADDON_ID -> "$TRAKT_HOME_KEY_PREFIX${row.catalogId}"
-        MDBLIST_HOME_ADDON_ID -> "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
+        TRAKT_HOME_ADDON_ID -> if (row.catalogId.startsWith(TRAKT_HOME_KEY_PREFIX)) row.catalogId else "$TRAKT_HOME_KEY_PREFIX${row.catalogId}"
+        MDBLIST_HOME_ADDON_ID -> if (row.catalogId.startsWith(MDBLIST_HOME_KEY_PREFIX)) row.catalogId else "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
         else -> "${row.addonId}_${row.apiType}_${row.catalogId}"
     }
 }

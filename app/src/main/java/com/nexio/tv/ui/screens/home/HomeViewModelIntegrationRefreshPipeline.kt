@@ -2,12 +2,12 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
     viewModelScope.launch {
-        accountSyncRefreshNotifier.events.collectLatest {
+        accountSyncRefreshNotifier.events.collect {
             runCatching { traktDiscoveryService.ensureFresh(force = true) }
                 .onFailure { error ->
                     Log.w(HomeViewModel.TAG, "Failed to refresh Trakt discovery after account sync", error)

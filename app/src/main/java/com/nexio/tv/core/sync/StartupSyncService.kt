@@ -90,7 +90,7 @@ class StartupSyncService @Inject constructor(
                 if (result.isSuccess) {
                     lastPulledKey = key
                     syncCompleted = true
-                    return@repeat
+                    return@launch
                 }
                 Log.w(TAG, "Startup account snapshot sync attempt $attempt failed for key=$key", result.exceptionOrNull())
                 if (attempt < maxAttempts) delay(3000)
