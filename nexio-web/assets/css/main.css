@@ -299,6 +299,65 @@ button {
   gap: 0.65rem;
 }
 
+.compact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.integrations-grid {
+  align-items: start;
+}
+
+.integration-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  flex-wrap: wrap;
+}
+
+.collapsible-shell {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.collapsible-shell[open] {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.nested-collapse {
+  background: rgba(6, 15, 26, 0.42);
+}
+
+.collapsible-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.collapsible-summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-summary span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.collapsible-summary strong {
+  color: var(--text);
+}
+
+.collapsible-summary small {
+  color: var(--text-dim);
+}
+
 .device-row,
 .addon-row,
 .catalog-row {
@@ -316,6 +375,7 @@ button {
   .grid-2,
   .grid-3,
   .selection-grid,
+  .compact-grid,
   .device-row,
   .addon-row,
   .catalog-row {
@@ -324,7 +384,8 @@ button {
 
   .grid-2,
   .grid-3,
-  .selection-grid {
+  .selection-grid,
+  .compact-grid {
     grid-template-columns: 1fr;
   }
 

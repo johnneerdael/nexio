@@ -2,6 +2,7 @@ import { createError } from 'h3'
 import type { AddonRecord, SecretMetadata, SecretType } from '~/types/portal'
 
 export const secretRefs = {
+  tmdb: 'integration:tmdb',
   mdblist: 'integration:mdblist',
   rpdb: 'integration:rpdb',
   topPosters: 'integration:topposters',

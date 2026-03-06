@@ -84,7 +84,7 @@
         v-else-if="activeView === 'integrations'"
         title="Integrations sync"
         subtitle="TMDB, MDBList, Anime Skip, poster providers, and Trakt account state belong to the account, not a single TV."
-        :groups="accountGroups.integrations"
+        :groups="integrationGroups"
         :settings="state.settings"
         :secret-statuses="secretStatusMap"
         :secret-drafts="state.secretDrafts"
@@ -99,6 +99,8 @@
         show-integrations
         @persist="persistSnapshot"
         @update="updateSetting"
+        @save-tmdb-key="saveTmdbApiKey"
+        @clear-tmdb-key="clearTmdbApiKey"
         @start-trakt="startTraktDeviceFlow"
         @complete-trakt="completeTraktDeviceFlow"
         @refresh-trakt-lists="refreshTraktPopularLists"
@@ -176,6 +178,8 @@ const {
   toggleCatalog,
   unlinkDevice,
   persistSnapshot,
+  saveTmdbApiKey,
+  clearTmdbApiKey,
   setSecretDraft,
   saveDraftSecret,
   deleteSecret,
@@ -188,6 +192,8 @@ const {
   toggleTraktPopularList,
   disconnectTrakt
 } = usePortalStore()
+
+const integrationGroups = computed(() => [] as typeof accountGroups.integrations)
 
 const nav = [
   { id: 'addons', label: 'Addons' },

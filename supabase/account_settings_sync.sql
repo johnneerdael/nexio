@@ -97,10 +97,11 @@ create table if not exists public.account_secrets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   secret_type text not null check (secret_type in (
-    'addon_credential',
-    'mdblist_api_key',
-    'rpdb_api_key',
-    'top_posters_api_key',
+      'addon_credential',
+      'tmdb_api_key',
+      'mdblist_api_key',
+      'rpdb_api_key',
+      'top_posters_api_key',
     'trakt_access_token',
     'trakt_refresh_token'
   )),
@@ -927,8 +928,37 @@ $$;
 revoke all on function public.service_set_account_secret(uuid, text, text, jsonb, text, text, text) from public;
 grant execute on function public.service_set_account_secret(uuid, text, text, jsonb, text, text, text) to service_role;
 
+create or replace function public.sync_set_account_secret(
+    p_secret_type text,
+    p_secret_ref text,
+    p_secret_payload jsonb,
+    p_masked_preview text,
+    p_status text default 'configured',
+    p_source text default 'app'
+  )
+  returns jsonb
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  begin
+    return public.service_set_account_secret(
+      public.sync_owner_id(),
+      p_secret_type,
+      p_secret_ref,
+      p_secret_payload,
+      p_masked_preview,
+      p_status,
+      p_source
+    );
+  end;
+  $$;
+
+revoke all on function public.sync_set_account_secret(text, text, jsonb, text, text, text) from public;
+grant execute on function public.sync_set_account_secret(text, text, jsonb, text, text, text) to authenticated;
+
 create or replace function public.service_delete_account_secret(
-  p_user_id uuid,
+    p_user_id uuid,
   p_secret_type text,
   p_secret_ref text,
   p_source text default 'web'
@@ -965,8 +995,31 @@ $$;
 revoke all on function public.service_delete_account_secret(uuid, text, text, text) from public;
 grant execute on function public.service_delete_account_secret(uuid, text, text, text) to service_role;
 
+create or replace function public.sync_delete_account_secret(
+    p_secret_type text,
+    p_secret_ref text,
+    p_source text default 'app'
+  )
+  returns void
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  begin
+    perform public.service_delete_account_secret(
+      public.sync_owner_id(),
+      p_secret_type,
+      p_secret_ref,
+      p_source
+    );
+  end;
+  $$;
+
+revoke all on function public.sync_delete_account_secret(text, text, text) from public;
+grant execute on function public.sync_delete_account_secret(text, text, text) to authenticated;
+
 create or replace function public.service_resolve_account_secret(
-  p_user_id uuid,
+    p_user_id uuid,
   p_secret_type text,
   p_secret_ref text,
   p_source text default 'web'
@@ -1004,6 +1057,29 @@ $$;
 
 revoke all on function public.service_resolve_account_secret(uuid, text, text, text) from public;
 grant execute on function public.service_resolve_account_secret(uuid, text, text, text) to service_role;
+
+create or replace function public.sync_resolve_account_secret(
+    p_secret_type text,
+    p_secret_ref text,
+    p_source text default 'app'
+  )
+  returns jsonb
+  language plpgsql
+  security definer
+  set search_path = public
+  as $$
+  begin
+    return public.service_resolve_account_secret(
+      public.sync_owner_id(),
+      p_secret_type,
+      p_secret_ref,
+      p_source
+    );
+  end;
+  $$;
+
+revoke all on function public.sync_resolve_account_secret(text, text, text) from public;
+grant execute on function public.sync_resolve_account_secret(text, text, text) to authenticated;
 
 create or replace function public.service_get_account_addon_transport(
   p_user_id uuid,

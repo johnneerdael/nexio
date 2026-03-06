@@ -84,7 +84,6 @@ data class IntegrationSettings(
 @Serializable
 data class TmdbSyncSettings(
     val enabled: Boolean = false,
-    val apiKey: String = "",
     val useArtwork: Boolean = true,
     val useBasicInfo: Boolean = true,
     val useDetails: Boolean = true,
@@ -136,7 +135,7 @@ data class TraktAuthSyncSettings(
 data class PlaybackSettings(
     val general: PlaybackGeneralSettings = PlaybackGeneralSettings(),
     val streamSelection: StreamSelectionSettings = StreamSelectionSettings(),
-    val audioTrailer: AudioTrailerSettings = AudioTrailerSettings(),
+    val audio: AudioSettings = AudioSettings(),
     val subtitles: SubtitleSyncSettings = SubtitleSyncSettings(),
     val bufferNetwork: BufferNetworkSettings = BufferNetworkSettings()
 )
@@ -168,7 +167,7 @@ data class StreamSelectionSettings(
 )
 
 @Serializable
-data class AudioTrailerSettings(
+data class AudioSettings(
     val preferredAudioLanguage: String = "device",
     val secondaryPreferredAudioLanguage: String? = null,
     val skipSilence: Boolean = false,
@@ -217,4 +216,9 @@ data class DebugSettingsPayload(
     val accountTabEnabled: Boolean = false,
     val syncCodeFeaturesEnabled: Boolean = false,
     val bufferLogsEnabled: Boolean = false
+)
+
+@Serializable
+data class AccountSecretApiKeyPayload(
+    val apiKey: String = ""
 )
