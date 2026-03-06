@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -27,6 +28,10 @@ private val Context.addonPreferencesDataStore: DataStore<Preferences> by prefere
 class AddonPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        private const val TAG = "AddonPreferences"
+    }
+
     private val dataStore = context.addonPreferencesDataStore
     private fun store() = dataStore
 
@@ -38,13 +43,21 @@ class AddonPreferences @Inject constructor(
         return normalizeAddonInstallUrl(url)
     }
 
+    private fun safeCanonicalizeUrl(url: String, label: String): String? {
+        return runCatching { canonicalizeUrl(url) }
+            .onFailure { error ->
+                Log.w(TAG, "Dropping malformed addon URL from $label: $url", error)
+            }
+            .getOrNull()
+    }
+
     val installedAddonUrls: Flow<List<String>> = dataStore.data.map { preferences ->
         val json = preferences[orderedUrlsKey]
         if (json != null) {
             parseUrlList(json)
         } else {
             val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
-            legacySet.toList()
+            legacySet.mapNotNull { url -> safeCanonicalizeUrl(url, "legacy preferences") }.distinct()
         }
     }
 
@@ -53,8 +66,9 @@ class AddonPreferences @Inject constructor(
         val prefs = ds.data.first()
         if (prefs[orderedUrlsKey] == null) {
             val legacySet = prefs[legacyUrlsKey] ?: getDefaultAddons()
+            val migrated = legacySet.mapNotNull { url -> safeCanonicalizeUrl(url, "legacy migration") }.distinct()
             ds.edit { preferences ->
-                preferences[orderedUrlsKey] = gson.toJson(legacySet.toList())
+                preferences[orderedUrlsKey] = gson.toJson(migrated)
                 preferences.remove(legacyUrlsKey)
             }
         }
@@ -96,14 +110,15 @@ class AddonPreferences @Inject constructor(
             parseUrlList(json)
         } else {
             val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
-            legacySet.toList()
+            legacySet.mapNotNull { url -> safeCanonicalizeUrl(url, "legacy preferences") }.distinct()
         }
     }
 
     private fun parseUrlList(json: String): List<String> {
         return try {
             val type = object : TypeToken<List<String>>() {}.type
-            gson.fromJson(json, type) ?: getDefaultAddons().toList()
+            val parsed: List<String> = gson.fromJson(json, type) ?: return emptyList()
+            parsed.mapNotNull { url -> safeCanonicalizeUrl(url, "preferences") }.distinct()
         } catch (e: Exception) {
             getDefaultAddons().toList()
         }

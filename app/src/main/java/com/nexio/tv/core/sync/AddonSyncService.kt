@@ -43,8 +43,14 @@ class AddonSyncService @Inject constructor(
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val localUrls = addonPreferences.installedAddonUrls.first()
-            Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size}")
-            val parsedAddons = localUrls.map(::parseAddonInstallUrl)
+            val parsedAddons = localUrls.mapNotNull { url ->
+                runCatching { parseAddonInstallUrl(url) }
+                    .onFailure { error ->
+                        Log.w(TAG, "pushToRemote: dropping malformed local addon URL=$url", error)
+                    }
+                    .getOrNull()
+            }
+            Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size} valid=${parsedAddons.size}")
 
             parsedAddons.forEach { parsed ->
                 val secretPayload = parsed.secretPayload
