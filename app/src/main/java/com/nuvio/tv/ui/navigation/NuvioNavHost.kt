@@ -26,6 +26,7 @@ import com.nuvio.tv.ui.screens.settings.AboutScreen
 import com.nuvio.tv.ui.screens.settings.LayoutSettingsScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.screens.settings.SettingsScreen
+import com.nuvio.tv.ui.screens.settings.SupportersContributorsScreen
 import com.nuvio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nuvio.tv.ui.screens.settings.TraktScreen
 import com.nuvio.tv.ui.screens.settings.TmdbSettingsScreen
@@ -702,7 +703,10 @@ fun NuvioNavHost(
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
-                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) }
+                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
+                onNavigateToSupportersContributors = {
+                    navController.navigate(Screen.SupportersContributors.route)
+                }
             )
         }
 
@@ -732,6 +736,15 @@ fun NuvioNavHost(
 
         composable(Screen.About.route) {
             AboutScreen(
+                onBackPress = { navController.popBackStack() },
+                onNavigateToSupportersContributors = {
+                    navController.navigate(Screen.SupportersContributors.route)
+                }
+            )
+        }
+
+        composable(Screen.SupportersContributors.route) {
+            SupportersContributorsScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }
