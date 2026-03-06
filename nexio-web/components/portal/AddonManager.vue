@@ -30,7 +30,8 @@
         <div v-for="addon in addons" :key="addon.id" class="addon-row">
           <div style="display:grid; gap:0.25rem; min-width:0;">
             <strong style="font-size:1rem;">{{ addon.name }}</strong>
-            <p style="word-break: break-word;">{{ addonDisplayUrl(addon) }}</p>
+            <p>{{ addonHost(addon) }}</p>
+            <p style="word-break: break-word;">{{ addonPathLabel(addon) }}</p>
             <p v-if="addon.secretRef && secretStatuses[addon.secretRef]">
               {{ secretStatuses[addon.secretRef].maskedPreview || 'Secret configured' }}
             </p>
@@ -75,6 +76,27 @@ function addonDisplayUrl(addon: AddonRecord) {
   const base = addon.manifestUrl || `${addon.url.replace(/\/$/, '')}/manifest.json`
   const query = params.toString()
   return query ? `${base}?${query}` : base
+}
+
+function addonHost(addon: AddonRecord) {
+  try {
+    return new URL(addon.manifestUrl || `${addon.url.replace(/\/$/, '')}/manifest.json`).host
+  } catch {
+    return addon.name
+  }
+}
+
+function addonPathLabel(addon: AddonRecord) {
+  try {
+    const parsed = new URL(addonDisplayUrl(addon))
+    const path = parsed.pathname || '/manifest.json'
+    if (addon.secretRef) {
+      return `${path} · secret-backed`
+    }
+    return parsed.search ? `${path}${parsed.search}` : path
+  } catch {
+    return addon.secretRef ? 'Secret-backed install' : 'Manifest install'
+  }
 }
 
 function submitAddon() {

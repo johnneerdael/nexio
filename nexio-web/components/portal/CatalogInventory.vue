@@ -24,7 +24,7 @@
         <div style="display:grid; gap:0.2rem; min-width:0;">
           <strong style="font-size:1rem;">{{ catalog.catalogName }}</strong>
           <p>{{ sourceLabel(catalog.source) }} · {{ catalog.type }}</p>
-          <p style="word-break: break-word;">{{ catalog.key }}</p>
+          <p style="word-break: break-word;">{{ catalogKeyLabel(catalog.key) }}</p>
         </div>
         <div style="display:flex; gap:0.45rem; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
           <button class="ghost-btn" @click="emit('move-catalog', catalog.key, -1)">Up</button>
@@ -77,5 +77,9 @@ function sourceControlLabel(source: AddonCatalogRecord['source']) {
     return 'Managed in Trakt'
   }
   return 'Managed in MDBList'
+}
+
+function catalogKeyLabel(key: string) {
+  return key.replace(/_/g, ' ')
 }
 </script>

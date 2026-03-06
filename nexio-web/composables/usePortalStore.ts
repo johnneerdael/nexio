@@ -2,8 +2,7 @@ import { computed, watch } from 'vue'
 import { parseAddonInstallUrl, secretRefs } from '~/utils/account-secrets'
 import {
   defaultAccountAddons,
-  defaultSettings,
-  demoDevices
+  defaultSettings
 } from '~/utils/portal-defaults'
 import { traktCatalogLabels } from '~/utils/portal-metadata'
 import type {
@@ -222,7 +221,7 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
     addons: clone(source.addons ?? defaultAccountAddons()),
     secretStatuses: clone(source.secretStatuses ?? []),
     secretDrafts: {},
-    linkedDevices: clone(source.linkedDevices ?? demoDevices()),
+    linkedDevices: clone(source.linkedDevices ?? []),
     traktFlow: null,
     addonInspections: clone(source.addonInspections ?? {}),
     mdblistDiscovery: clone(source.mdblistDiscovery ?? {

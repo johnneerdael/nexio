@@ -13,12 +13,8 @@
     <template v-else>
       <OverviewPanel
         :title="state.session?.user.email ?? 'Nexio account'"
-        :sync-revision="state.syncRevision"
         :addons-count="state.addons.length"
-        :linked-devices="state.linkedDevices.length"
         :last-synced-at="state.lastSyncedAt"
-        :devices="state.linkedDevices"
-        @unlink-device="unlinkDevice"
       />
 
       <section class="glass" style="padding:1rem; border-radius: var(--radius-xl); display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
@@ -128,19 +124,25 @@
         @update="updateSetting"
       />
 
-      <SettingsWorkspace
-        v-else
-        title="Debug sync"
-        subtitle="Migration and developer controls while the Nexio account contract rolls out."
-        :groups="accountGroups.debug"
-        :settings="state.settings"
-        :secret-statuses="secretStatusMap"
-        :secret-drafts="state.secretDrafts"
-        :trakt-flow="state.traktFlow"
-        :busy="state.saving"
-        @persist="persistSnapshot"
-        @update="updateSetting"
-      />
+      <div v-else style="display:grid; gap:1rem;">
+        <SettingsWorkspace
+          title="Debug sync"
+          subtitle="Migration and developer controls while the Nexio account contract rolls out."
+          :groups="accountGroups.debug"
+          :settings="state.settings"
+          :secret-statuses="secretStatusMap"
+          :secret-drafts="state.secretDrafts"
+          :trakt-flow="state.traktFlow"
+          :busy="state.saving"
+          @persist="persistSnapshot"
+          @update="updateSetting"
+        />
+
+        <LinkedDevicesPanel
+          :devices="state.linkedDevices"
+          @unlink-device="unlinkDevice"
+        />
+      </div>
     </template>
   </PortalShell>
 </template>
@@ -151,6 +153,7 @@ import { useRoute, useRouter } from '#imports'
 import AddonManager from '~/components/portal/AddonManager.vue'
 import AuthPanel from '~/components/portal/AuthPanel.vue'
 import CatalogInventory from '~/components/portal/CatalogInventory.vue'
+import LinkedDevicesPanel from '~/components/portal/LinkedDevicesPanel.vue'
 import OverviewPanel from '~/components/portal/OverviewPanel.vue'
 import PortalShell from '~/components/portal/PortalShell.vue'
 import SettingsWorkspace from '~/components/portal/SettingsWorkspace.vue'

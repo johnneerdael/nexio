@@ -97,6 +97,11 @@ Run the clean install SQL from:
 
 Apply it in the Supabase SQL editor against the empty project.
 
+If you already provisioned a project from an older version of this schema and only need the TMDB secret-channel update:
+- run `supabase/tmdb_secret_upgrade_patch.sql`
+- this patch adds `tmdb_api_key` to the allowed secret types
+- it also installs the authenticated `sync_set_account_secret`, `sync_delete_account_secret`, and `sync_resolve_account_secret` RPC wrappers if your project is missing them
+
 What it creates:
 - `linked_devices`
 - `sync_codes`
