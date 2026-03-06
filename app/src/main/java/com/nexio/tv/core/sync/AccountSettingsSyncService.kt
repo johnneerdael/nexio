@@ -699,7 +699,7 @@ class AccountSettingsSyncService @Inject constructor(
                 manifestUrl = addon.manifestUrl,
                 publicQueryParams = addon.publicQueryParams,
                 secretPayload = secretPayload
-            ).removeSuffix("/manifest.json").trimEnd('/')
+            ).let(::normalizeAddonInstallUrl)
         }
     }
 

@@ -5,6 +5,7 @@ import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.CatalogRow
@@ -123,14 +124,13 @@ class CatalogRepositoryImpl @Inject constructor(
         skip: Int,
         extraArgs: Map<String, String>
     ): String {
-        val cleanBaseUrl = baseUrl.trimEnd('/')
-
         if (extraArgs.isEmpty()) {
-            return if (skip > 0) {
-                "$cleanBaseUrl/catalog/$type/$catalogId/skip=$skip.json"
+            val relativePath = if (skip > 0) {
+                "catalog/$type/$catalogId/skip=$skip.json"
             } else {
-                "$cleanBaseUrl/catalog/$type/$catalogId.json"
+                "catalog/$type/$catalogId.json"
             }
+            return buildAddonRequestUrl(baseUrl, relativePath)
         }
 
         val allArgs = LinkedHashMap<String, String>()
@@ -145,7 +145,7 @@ class CatalogRepositoryImpl @Inject constructor(
             "${encodeArg(key)}=${encodeArg(value)}"
         }
 
-        return "$cleanBaseUrl/catalog/$type/$catalogId/$encodedArgs.json"
+        return buildAddonRequestUrl(baseUrl, "catalog/$type/$catalogId/$encodedArgs.json")
     }
 
     private fun encodeArg(value: String): String {

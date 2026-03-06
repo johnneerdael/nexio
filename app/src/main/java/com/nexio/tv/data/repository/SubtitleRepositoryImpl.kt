@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
@@ -136,12 +137,11 @@ class SubtitleRepositoryImpl @Inject constructor(
         }
         
         // Build the subtitle URL with optional extra parameters
-        val baseUrl = addon.baseUrl.trimEnd('/')
         val extraParams = buildExtraParams(videoHash, videoSize, filename)
         val subtitleUrl = if (extraParams.isNotEmpty()) {
-            "$baseUrl/subtitles/$normalizedType/$actualId/$extraParams.json"
+            buildAddonRequestUrl(addon.baseUrl, "subtitles/$normalizedType/$actualId/$extraParams.json")
         } else {
-            "$baseUrl/subtitles/$normalizedType/$actualId.json"
+            buildAddonRequestUrl(addon.baseUrl, "subtitles/$normalizedType/$actualId.json")
         }
         
         Log.d(TAG, "Fetching subtitles from ${addon.name}: ${sanitizeUrlForLogs(subtitleUrl)}")

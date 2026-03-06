@@ -7,6 +7,8 @@ import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.core.sync.buildAddonRequestUrl
+import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
@@ -44,7 +46,6 @@ class AddonRepositoryImpl @Inject constructor(
         private const val TAG = "AddonRepository"
         private const val MANIFEST_CACHE_PREFS = "addon_manifest_cache"
         private const val MANIFEST_CACHE_KEY = "manifests"
-        private const val MANIFEST_SUFFIX = "/manifest.json"
     }
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -52,12 +53,7 @@ class AddonRepositoryImpl @Inject constructor(
     var isSyncingFromRemote = false
 
     private fun canonicalizeUrl(url: String): String {
-        val trimmed = url.trim().trimEnd('/')
-        return if (trimmed.endsWith(MANIFEST_SUFFIX, ignoreCase = true)) {
-            trimmed.dropLast(MANIFEST_SUFFIX.length).trimEnd('/')
-        } else {
-            trimmed
-        }
+        return normalizeAddonInstallUrl(url)
     }
 
     private fun normalizeUrl(url: String): String = canonicalizeUrl(url).lowercase()
@@ -138,7 +134,7 @@ class AddonRepositoryImpl @Inject constructor(
 
     override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> {
         val cleanBaseUrl = canonicalizeUrl(baseUrl)
-        val manifestUrl = "$cleanBaseUrl/manifest.json"
+        val manifestUrl = buildAddonRequestUrl(cleanBaseUrl, "manifest.json")
 
         return when (val result = safeApiCall { api.getManifest(manifestUrl) }) {
             is NetworkResult.Success -> {
@@ -247,4 +243,3 @@ class AddonRepositoryImpl @Inject constructor(
         }
     }
 }
-
