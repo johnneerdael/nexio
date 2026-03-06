@@ -104,7 +104,7 @@ fun SeasonTabs(
             shape = RoundedCornerShape(20.dp)
         )
     )
-    val tabScale = CardDefaults.scale(focusedScale = 1.02f)
+    val tabScale = CardDefaults.scale(focusedScale = 1.0f)
     val typography = MaterialTheme.typography
     val tabTextStyle = remember(typography) { typography.titleMedium }
     val textSecondary = NuvioTheme.extendedColors.textSecondary
@@ -484,7 +484,7 @@ private fun EpisodeCard(
             shape = shape
         )
     )
-    val cardScale = CardDefaults.scale(focusedScale = 1.02f)
+    val cardScale = CardDefaults.scale(focusedScale = 1.0f)
     val cardGlow = CardDefaults.glow()
 
     Card(

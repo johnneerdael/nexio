@@ -47,11 +47,12 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -890,18 +891,6 @@ private fun MetaDetailsContent(
     val backgroundColor = NuvioColors.Background
 
     // Pre-compute gradient brushes once
-    val bottomGradient = remember(backgroundColor) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.0f to Color.Transparent,
-                0.38f to Color.Transparent,
-                0.56f to backgroundColor.copy(alpha = 0.38f),
-                0.72f to backgroundColor.copy(alpha = 0.74f),
-                0.86f to backgroundColor.copy(alpha = 0.94f),
-                1.0f to backgroundColor.copy(alpha = 1.0f)
-            )
-        )
-    }
 
     // Stable hero play callback
     val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
@@ -968,6 +957,56 @@ private fun MetaDetailsContent(
             .build()
     }
 
+    val leftGradientBitmap = remember(backgroundColor, backdropWidthPx, backdropHeightPx) {
+        val w = backdropWidthPx.coerceAtLeast(1)
+        val transparent = backgroundColor.copy(alpha = 0f).toArgb()
+        val bmp = android.graphics.Bitmap.createBitmap(w, 1, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val shader = android.graphics.LinearGradient(
+            0f, 0f, w * 0.78f, 0f,
+            intArrayOf(
+                backgroundColor.copy(alpha = 1f).toArgb(),
+                backgroundColor.copy(alpha = 0.95f).toArgb(),
+                backgroundColor.copy(alpha = 0.84f).toArgb(),
+                backgroundColor.copy(alpha = 0.70f).toArgb(),
+                backgroundColor.copy(alpha = 0.52f).toArgb(),
+                backgroundColor.copy(alpha = 0.34f).toArgb(),
+                backgroundColor.copy(alpha = 0.18f).toArgb(),
+                backgroundColor.copy(alpha = 0.07f).toArgb(),
+                transparent
+            ),
+            floatArrayOf(0f, 0.10f, 0.22f, 0.36f, 0.52f, 0.66f, 0.78f, 0.90f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, 0f, w.toFloat(), 1f, android.graphics.Paint().apply { this.shader = shader })
+        bmp.asImageBitmap()
+    }
+    val bottomGradientBitmap = remember(backgroundColor, backdropHeightPx) {
+        val h = backdropHeightPx.coerceAtLeast(1)
+        val transparent = backgroundColor.copy(alpha = 0f).toArgb()
+        val bmp = android.graphics.Bitmap.createBitmap(1, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val startY = h * 0.38f
+        val shader = android.graphics.LinearGradient(
+            0f, startY, 0f, h.toFloat(),
+            intArrayOf(
+                transparent,
+                backgroundColor.copy(alpha = 0.05f).toArgb(),
+                backgroundColor.copy(alpha = 0.18f).toArgb(),
+                backgroundColor.copy(alpha = 0.38f).toArgb(),
+                backgroundColor.copy(alpha = 0.60f).toArgb(),
+                backgroundColor.copy(alpha = 0.78f).toArgb(),
+                backgroundColor.copy(alpha = 0.91f).toArgb(),
+                backgroundColor.copy(alpha = 0.97f).toArgb(),
+                backgroundColor.copy(alpha = 1f).toArgb()
+            ),
+            floatArrayOf(0f, 0.10f, 0.22f, 0.36f, 0.52f, 0.66f, 0.78f, 0.90f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, startY, 1f, h.toFloat(), android.graphics.Paint().apply { this.shader = shader })
+        bmp.asImageBitmap()
+    }
+
     // Animated gradient alpha (moved outside subcomposition scope)
 
     // Always-composed bottom gradient alpha (avoids add/remove during scroll)
@@ -986,7 +1025,8 @@ private fun MetaDetailsContent(
             onTrailerProgressChanged = onTrailerProgressChanged,
             onTrailerEnded = onTrailerEnded,
             isScrolledPastHero = isScrolledPastHero,
-            bottomGradient = bottomGradient,
+            leftGradient = leftGradientBitmap,
+            bottomGradient = bottomGradientBitmap,
         )
 
         // Single scrollable column with hero + content
@@ -1263,12 +1303,18 @@ private fun BackdropLayer(
     onTrailerProgressChanged: (Long, Long) -> Unit,
     onTrailerEnded: () -> Unit,
     isScrolledPastHero: Boolean,
-    bottomGradient: Brush,
+    leftGradient: ImageBitmap,
+    bottomGradient: ImageBitmap,
 ) {
     val backdropAlphaState = animateFloatAsState(
         targetValue = if (isTrailerPlaying) 0f else 1f,
         animationSpec = tween(durationMillis = 800),
         label = "backdropFade"
+    )
+    val gradientAlphaState = animateFloatAsState(
+        targetValue = if (isTrailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "gradientFade"
     )
     val bottomGradientAlphaState = animateFloatAsState(
         targetValue = if (isScrolledPastHero) 1f else 0f,
@@ -1302,7 +1348,18 @@ private fun BackdropLayer(
                 .fillMaxSize()
                 .drawWithCache {
                     onDrawBehind {
-                        drawRect(brush = bottomGradient, alpha = bottomGradientAlphaState.value)
+                        drawImage(
+                            leftGradient,
+                            dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                            alpha = gradientAlphaState.value,
+                            filterQuality = androidx.compose.ui.graphics.FilterQuality.Low
+                        )
+                        drawImage(
+                            bottomGradient,
+                            dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                            alpha = bottomGradientAlphaState.value,
+                            filterQuality = androidx.compose.ui.graphics.FilterQuality.Low
+                        )
                     }
                 }
         )
