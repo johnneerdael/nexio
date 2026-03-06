@@ -5,8 +5,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
+import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
+import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.repository.AddonRepository
@@ -29,8 +31,10 @@ class PlayerViewModel @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val geminiSettingsDataStore: GeminiSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
+    private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -44,8 +48,10 @@ class PlayerViewModel @Inject constructor(
         traktScrobbleService = traktScrobbleService,
         skipIntroRepository = skipIntroRepository,
         playerSettingsDataStore = playerSettingsDataStore,
+        geminiSettingsDataStore = geminiSettingsDataStore,
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
+        geminiSubtitleTranslationService = geminiSubtitleTranslationService,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

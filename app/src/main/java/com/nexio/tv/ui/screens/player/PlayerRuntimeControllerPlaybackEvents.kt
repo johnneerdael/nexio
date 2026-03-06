@@ -550,6 +550,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     selectedAddonSubtitle = null 
                 ) 
             }
+            refreshBuiltInAiOverlayState()
+            if (_uiState.value.aiSubtitlesEnabled) {
+                handleBuiltInCueGroupUpdate()
+            }
         }
         PlayerEvent.OnDisableSubtitles -> {
             autoSubtitleSelected = true
@@ -566,10 +570,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     selectedSubtitleTrackIndex = -1
                 ) 
             }
+            refreshBuiltInAiOverlayState()
         }
         is PlayerEvent.OnSelectAddonSubtitle -> {
             autoSubtitleSelected = true
-            selectAddonSubtitle(event.subtitle)
+            selectAddonSubtitleRespectingAi(event.subtitle)
             _uiState.update {
                 it.copy(
                     showSubtitleDialog = false,
@@ -577,6 +582,10 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     showSubtitleDelayOverlay = false
                 )
             }
+            refreshBuiltInAiOverlayState()
+        }
+        PlayerEvent.OnToggleAiSubtitles -> {
+            toggleAiSubtitles()
         }
         is PlayerEvent.OnSetPlaybackSpeed -> {
             _exoPlayer?.setPlaybackSpeed(event.speed)

@@ -5,8 +5,12 @@
 
 package com.nexio.tv.ui.screens.player
 
+import android.graphics.Typeface
+import android.util.TypedValue
 import android.util.Log
 import android.view.KeyEvent
+import android.view.View
+import android.widget.FrameLayout
 import androidx.annotation.RawRes
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -86,7 +90,10 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.media3.common.text.Cue
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.tv.material3.Card
@@ -110,6 +117,76 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+
+private const val BUILT_IN_AI_SUBTITLE_OVERLAY_TAG = "built-in-ai-subtitle-overlay"
+
+private fun applySubtitleStyle(
+    subtitleView: SubtitleView,
+    subtitleStyle: com.nexio.tv.data.local.SubtitleStyleSettings
+) {
+    val baseFontSize = 24f
+    val scaledFontSize = baseFontSize * (subtitleStyle.size / 100f)
+    subtitleView.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, scaledFontSize)
+    subtitleView.setApplyEmbeddedFontSizes(false)
+
+    val typeface = if (subtitleStyle.bold) {
+        Typeface.DEFAULT_BOLD
+    } else {
+        Typeface.DEFAULT
+    }
+    val edgeType = if (subtitleStyle.outlineEnabled) {
+        CaptionStyleCompat.EDGE_TYPE_OUTLINE
+    } else {
+        CaptionStyleCompat.EDGE_TYPE_NONE
+    }
+
+    subtitleView.setStyle(
+        CaptionStyleCompat(
+            subtitleStyle.textColor,
+            subtitleStyle.backgroundColor,
+            android.graphics.Color.TRANSPARENT,
+            edgeType,
+            subtitleStyle.outlineColor,
+            typeface
+        )
+    )
+    subtitleView.setApplyEmbeddedStyles(false)
+
+    val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
+    subtitleView.setBottomPaddingFraction(bottomPaddingFraction)
+    subtitleView.post {
+        val extraPadding = (subtitleView.height * (subtitleStyle.verticalOffset / 400f))
+            .toInt()
+            .coerceAtLeast(0)
+        subtitleView.setPadding(
+            subtitleView.paddingLeft,
+            subtitleView.paddingTop,
+            subtitleView.paddingRight,
+            extraPadding
+        )
+    }
+}
+
+private fun PlayerView.ensureBuiltInAiSubtitleOverlay(): SubtitleView? {
+    val overlayFrameLayout = overlayFrameLayout ?: return null
+    val existing = overlayFrameLayout.findViewWithTag<SubtitleView>(BUILT_IN_AI_SUBTITLE_OVERLAY_TAG)
+    if (existing != null) {
+        return existing
+    }
+
+    return SubtitleView(context).apply {
+        tag = BUILT_IN_AI_SUBTITLE_OVERLAY_TAG
+        visibility = View.GONE
+        isClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
+        overlayFrameLayout.addView(this)
+    }
+}
 
 @Composable
 fun PlayerScreen(
@@ -481,6 +558,8 @@ fun PlayerScreen(
         viewModel.exoPlayer?.let { player ->
             val subtitleStyle = uiState.subtitleStyle
             val resizeMode = uiState.resizeMode
+            val useAiOverlay = uiState.useBuiltInAiSubtitleOverlay
+            val translatedBuiltInCues = uiState.translatedBuiltInCues
             
             AndroidView(
                 factory = { context ->
@@ -493,51 +572,22 @@ fun PlayerScreen(
                 },
                 update = { playerView ->
                     Log.d("PlayerScreen", "Applying resizeMode: $resizeMode")
+                    playerView.player = player
                     playerView.resizeMode = resizeMode
-                    playerView.subtitleView?.apply {
-                        // Calculate font size based on percentage (100% = 24sp base)
-                        val baseFontSize = 24f
-                        val scaledFontSize = baseFontSize * (subtitleStyle.size / 100f)
-                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, scaledFontSize)
-                        setApplyEmbeddedFontSizes(false)
-                        
-                        // Apply bold style via typeface
-                        val typeface = if (subtitleStyle.bold) {
-                            android.graphics.Typeface.DEFAULT_BOLD
-                        } else {
-                            android.graphics.Typeface.DEFAULT
-                        }
-                        
-                        // Calculate edge type based on outline setting
-                        val edgeType = if (subtitleStyle.outlineEnabled) {
-                            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE
-                        } else {
-                            androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE
-                        }
-                        
-                        setStyle(
-                            androidx.media3.ui.CaptionStyleCompat(
-                                subtitleStyle.textColor,
-                                subtitleStyle.backgroundColor,
-                                android.graphics.Color.TRANSPARENT, // Window color
-                                edgeType,
-                                subtitleStyle.outlineColor,
-                                typeface
-                            )
-                        )
-                        
-                        setApplyEmbeddedStyles(false)
-                        
-                        // Apply vertical offset (-20 = very bottom, 0 = default, 50 = middle)
-                        // Convert percentage to fraction for bottom padding
-                        val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
-                        setBottomPaddingFraction(bottomPaddingFraction)
+                    playerView.subtitleView?.let { defaultSubtitleView ->
+                        applySubtitleStyle(defaultSubtitleView, subtitleStyle)
+                    }
 
-                        // Also apply explicit bottom padding based on view height for stronger offset effect
-                        post {
-                            val extraPadding = (height * (subtitleStyle.verticalOffset / 400f)).toInt().coerceAtLeast(0)
-                            setPadding(paddingLeft, paddingTop, paddingRight, extraPadding)
-                        }
+                    val overlaySubtitleView = playerView.ensureBuiltInAiSubtitleOverlay()
+                    overlaySubtitleView?.let { subtitleOverlay ->
+                        applySubtitleStyle(subtitleOverlay, subtitleStyle)
+                        val overlayHasTranslatedCues = useAiOverlay && translatedBuiltInCues.isNotEmpty()
+                        subtitleOverlay.visibility = if (overlayHasTranslatedCues) View.VISIBLE else View.GONE
+                        subtitleOverlay.setCues(
+                            if (overlayHasTranslatedCues) translatedBuiltInCues else emptyList<Cue>()
+                        )
+                        playerView.subtitleView?.visibility =
+                            if (overlayHasTranslatedCues) View.INVISIBLE else View.VISIBLE
                     }
                 },
                 modifier = Modifier.fillMaxSize()
@@ -942,11 +992,16 @@ fun PlayerScreen(
                 secondaryPreferredLanguage = uiState.subtitleStyle.secondaryPreferredLanguage,
                 subtitleOrganizationMode = uiState.subtitleOrganizationMode,
                 isLoadingAddons = uiState.isLoadingAddonSubtitles,
+                aiSubtitlesEnabled = uiState.aiSubtitlesEnabled,
+                aiSubtitlesAvailable = uiState.aiSubtitlesAvailable,
+                isAiSubtitleTranslating = uiState.isAiSubtitleTranslating,
+                aiSubtitleError = uiState.aiSubtitleError,
                 onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
                 onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },
                 onDisableSubtitles = { viewModel.onEvent(PlayerEvent.OnDisableSubtitles) },
                 onOpenStylePanel = { viewModel.onEvent(PlayerEvent.OnOpenSubtitleStylePanel) },
                 onOpenDelayOverlay = { viewModel.onEvent(PlayerEvent.OnShowSubtitleDelayOverlay) },
+                onToggleAiSubtitles = { viewModel.onEvent(PlayerEvent.OnToggleAiSubtitles) },
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissDialog) }
             )
         }
@@ -1944,4 +1999,3 @@ private fun formatTime(millis: Long): String {
 private fun formatSubtitleDelay(delayMs: Int): String {
     return String.format(Locale.US, "%+.3fs", delayMs / 1000f)
 }
-

@@ -3,6 +3,7 @@ import type { AddonRecord, SecretType } from '~/types/portal'
 export const secretRefs = {
   tmdb: 'integration:tmdb',
   mdblist: 'integration:mdblist',
+  gemini: 'integration:gemini',
   rpdb: 'integration:rpdb',
   topPosters: 'integration:topposters',
   trakt: 'integration:trakt'

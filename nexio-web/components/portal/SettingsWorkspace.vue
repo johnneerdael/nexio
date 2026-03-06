@@ -212,6 +212,34 @@
         >
       </div>
 
+      <div class="field-shell" style="padding:0.95rem;">
+        <div class="integration-header">
+          <div>
+            <label>Google Gemini</label>
+            <p>Translate the currently selected subtitle track to the account primary subtitle language during playback.</p>
+          </div>
+          <button :class="settings.integrations.gemini.enabled ? 'toggle-chip active' : 'toggle-chip'" @click="emit('update', 'integrations.gemini.enabled', !settings.integrations.gemini.enabled)">
+            Gemini
+          </button>
+        </div>
+        <input
+          :value="secretDrafts['integration:gemini'] || ''"
+          placeholder="Paste Google AI Studio API key"
+          @input="emit('update-secret-draft', 'integration:gemini', ($event.target as HTMLInputElement).value)"
+        >
+        <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.1rem;">
+          <button class="secondary-btn" @click="emit('save-secret', 'gemini_api_key', 'integration:gemini')">Save key</button>
+          <button
+            v-if="secretStatuses['integration:gemini']"
+            class="danger-btn"
+            @click="emit('delete-secret', 'gemini_api_key', 'integration:gemini')"
+          >
+            Clear key
+          </button>
+        </div>
+        <p v-if="secretStatuses['integration:gemini']?.maskedPreview">{{ secretStatuses['integration:gemini']?.maskedPreview }}</p>
+      </div>
+
       <div class="grid-2 integrations-grid">
         <div class="field-shell" :style="providerCardStyle('rpdb')">
           <div style="display:grid; gap:0.35rem;">

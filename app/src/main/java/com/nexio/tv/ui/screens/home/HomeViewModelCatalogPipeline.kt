@@ -63,6 +63,7 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
         return
     }
 
+    restoredCatalogSnapshotActive = true
     _fullCatalogRows.value = snapshot.fullCatalogRows
     _uiState.update { state ->
         val restoredGridItems = if (state.homeLayout == HomeLayout.GRID) {
@@ -240,9 +241,10 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     try {
         val hasRestoredContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
             _uiState.value.heroItems.isNotEmpty()
+        val shouldPreserveRestoredSnapshot = restoredCatalogSnapshotActive && hasRestoredContent
 
         if (addons.isEmpty()) {
-            if (startupGracePeriodActive && hasRestoredContent) {
+            if ((startupGracePeriodActive || shouldPreserveRestoredSnapshot) && hasRestoredContent) {
                 catalogsLoadInProgress = false
                 _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = 0) }
                 return
@@ -266,7 +268,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         rebuildCatalogOrder(addons)
 
         if (catalogOrder.isEmpty()) {
-            if (startupGracePeriodActive && hasRestoredContent) {
+            if ((startupGracePeriodActive || shouldPreserveRestoredSnapshot) && hasRestoredContent) {
                 catalogsLoadInProgress = false
                 _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
                 return
@@ -572,6 +574,24 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         replaceGridHeroItemsPipeline(baseGridItems, baseHeroItems)
     } else {
         baseGridItems
+    }
+    val currentState = _uiState.value
+    val hasCurrentRenderedContent = currentState.catalogRows.any { it.items.isNotEmpty() } ||
+        currentState.heroItems.isNotEmpty()
+    val shouldKeepRestoredSnapshot =
+        restoredCatalogSnapshotActive &&
+            hasCurrentRenderedContent &&
+            displayRows.isEmpty() &&
+            baseHeroItems.isEmpty() &&
+            fullRowsFiltered.isEmpty()
+
+    if (shouldKeepRestoredSnapshot) {
+        _uiState.update { it.copy(isLoading = catalogsLoadInProgress, error = null) }
+        return
+    }
+
+    if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
+        restoredCatalogSnapshotActive = false
     }
 
     _uiState.update { state ->

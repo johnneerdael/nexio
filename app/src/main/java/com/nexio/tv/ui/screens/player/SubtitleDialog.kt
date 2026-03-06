@@ -91,11 +91,16 @@ internal fun SubtitleSelectionDialog(
     secondaryPreferredLanguage: String?,
     subtitleOrganizationMode: SubtitleOrganizationMode,
     isLoadingAddons: Boolean,
+    aiSubtitlesEnabled: Boolean,
+    aiSubtitlesAvailable: Boolean,
+    isAiSubtitleTranslating: Boolean,
+    aiSubtitleError: String?,
     onInternalTrackSelected: (Int) -> Unit,
     onAddonSubtitleSelected: (Subtitle) -> Unit,
     onDisableSubtitles: () -> Unit,
     onOpenStylePanel: () -> Unit,
     onOpenDelayOverlay: () -> Unit,
+    onToggleAiSubtitles: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -116,7 +121,8 @@ internal fun SubtitleSelectionDialog(
         stringResource(R.string.subtitle_tab_builtin),
         addonsTabTitle,
         stringResource(R.string.subtitle_tab_style),
-        stringResource(R.string.subtitle_tab_delay)
+        stringResource(R.string.subtitle_tab_delay),
+        stringResource(R.string.subtitle_tab_ai)
     )
     val tabFocusRequesters = remember { tabs.map { FocusRequester() } }
 
@@ -152,13 +158,16 @@ internal fun SubtitleSelectionDialog(
                             3 -> {
                                 { onOpenDelayOverlay() }
                             }
+                            4 -> {
+                                { onToggleAiSubtitles() }
+                            }
                             else -> {
                                 { selectedTabIndex = index }
                             }
                         }
                         SubtitleTab(
                             title = tabs[index],
-                            isSelected = selectedTabIndex == index,
+                            isSelected = if (index == 4) aiSubtitlesEnabled else selectedTabIndex == index,
                             badgeCount = if (index == 1) uniqueLanguageCount else null,
                             focusRequester = tabFocusRequesters[index],
                             onClick = onTabClick
@@ -167,6 +176,29 @@ internal fun SubtitleSelectionDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                         }
                     }
+                }
+
+                if (isAiSubtitleTranslating) {
+                    Text(
+                        text = stringResource(R.string.subtitle_ai_translate_loading),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioColors.TextSecondary,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                } else if (!aiSubtitleError.isNullOrBlank()) {
+                    Text(
+                        text = aiSubtitleError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFFA8A8),
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                } else if (!aiSubtitlesAvailable) {
+                    Text(
+                        text = stringResource(R.string.subtitle_ai_translate_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioColors.TextSecondary,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
                 }
 
                 // Content based on selected tab

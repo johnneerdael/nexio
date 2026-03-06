@@ -87,6 +87,9 @@ export const defaultSettings = (): PortalSettings => ({
       enabled: false,
       clientId: ''
     },
+    gemini: {
+      enabled: false
+    },
     posterRatings: {
       rpdbEnabled: false,
       topPostersEnabled: false

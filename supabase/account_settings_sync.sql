@@ -100,6 +100,7 @@ create table if not exists public.account_secrets (
       'addon_credential',
       'tmdb_api_key',
       'mdblist_api_key',
+      'gemini_api_key',
       'rpdb_api_key',
       'top_posters_api_key',
     'trakt_access_token',

@@ -65,6 +65,9 @@ export const useSettings = () => {
         enabled: false,
         clientId: ''
       },
+      gemini: {
+        enabled: false
+      },
       posterRatings: {
         rpdbEnabled: false,
         topPostersEnabled: false

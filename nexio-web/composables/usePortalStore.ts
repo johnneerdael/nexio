@@ -184,6 +184,10 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
         ...defaults.integrations.animeSkip,
         ...(input?.integrations?.animeSkip ?? {})
       },
+      gemini: {
+        ...defaults.integrations.gemini,
+        ...(input?.integrations?.gemini ?? {})
+      },
       posterRatings: {
         ...defaults.integrations.posterRatings,
         ...(input?.integrations?.posterRatings ?? {})

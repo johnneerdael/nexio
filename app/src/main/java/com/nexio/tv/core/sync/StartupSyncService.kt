@@ -3,7 +3,6 @@ package com.nexio.tv.core.sync
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.repository.AddonRepositoryImpl
-import com.nexio.tv.domain.model.AuthState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,26 +32,20 @@ class StartupSyncService @Inject constructor(
 
     init {
         scope.launch {
-            authManager.authState.collect { state ->
-                when (state) {
-                    is AuthState.FullAccount -> {
-                        val force = forceSyncRequested
-                        val firstAuthForUser = lastAuthenticatedUserId != state.userId
-                        lastAuthenticatedUserId = state.userId
-                        val started = scheduleStartupPull(state.userId, force = force || firstAuthForUser)
-                        if (force && started) forceSyncRequested = false
-                    }
-
-                    is AuthState.SignedOut -> {
-                        startupPullJob?.cancel()
-                        startupPullJob = null
-                        lastPulledKey = null
-                        lastAuthenticatedUserId = null
-                        forceSyncRequested = false
-                        pendingResyncKey = null
-                    }
-
-                    is AuthState.Loading -> Unit
+            authManager.sessionUserId.collect { userId ->
+                if (userId != null) {
+                    val force = forceSyncRequested
+                    val firstAuthForUser = lastAuthenticatedUserId != userId
+                    lastAuthenticatedUserId = userId
+                    val started = scheduleStartupPull(userId, force = force || firstAuthForUser)
+                    if (force && started) forceSyncRequested = false
+                } else {
+                    startupPullJob?.cancel()
+                    startupPullJob = null
+                    lastPulledKey = null
+                    lastAuthenticatedUserId = null
+                    forceSyncRequested = false
+                    pendingResyncKey = null
                 }
             }
         }
@@ -60,13 +53,9 @@ class StartupSyncService @Inject constructor(
 
     fun requestSyncNow() {
         forceSyncRequested = true
-        when (val state = authManager.authState.value) {
-            is AuthState.FullAccount -> {
-                val started = scheduleStartupPull(state.userId, force = true)
-                if (started) forceSyncRequested = false
-            }
-
-            else -> Unit
+        authManager.currentSessionUserId?.let { userId ->
+            val started = scheduleStartupPull(userId, force = true)
+            if (started) forceSyncRequested = false
         }
     }
 

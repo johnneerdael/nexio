@@ -146,6 +146,7 @@
     <string name="settings_tmdb_subtitle">Metadata enrichment controls</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
     <string name="settings_animeskip_subtitle">Anime intro/outro skip timestamps</string>
+    <string name="settings_gemini_subtitle">AI subtitle translation with Gemini</string>
     <string name="poster_ratings_title">Poster Ratings</string>
     <string name="poster_ratings_subtitle">Use RPDB or TOPPosters rated posters</string>
     <string name="poster_ratings_api_key_title">API Key</string>
@@ -699,7 +700,29 @@
     <string name="subtitle_tab_languages">Languages</string>
     <string name="subtitle_tab_style">Style</string>
     <string name="subtitle_tab_delay">Delay</string>
+    <string name="subtitle_tab_ai">AI (New)</string>
     <string name="subtitle_none">None</string>
+    <string name="subtitle_ai_translate_title">AI subtitle translation</string>
+    <string name="subtitle_ai_translate_subtitle">Translate the selected subtitle to your primary subtitle language with Gemini.</string>
+    <string name="subtitle_ai_translate_loading">Translating subtitle…</string>
+    <string name="subtitle_ai_translate_requires_addon">AI translation currently works with addon subtitle files only.</string>
+    <string name="subtitle_ai_translate_unsupported_builtin">This built-in subtitle track uses bitmap cues and cannot be AI-translated yet.</string>
+    <string name="subtitle_ai_translate_missing_key">Configure a Google Gemini API key in Integrations first.</string>
+    <string name="subtitle_ai_translate_missing_target">Choose a primary subtitle language before enabling AI translation.</string>
+    <string name="subtitle_ai_translate_unsupported_format">This subtitle format is not supported for AI translation yet.</string>
+    <string name="subtitle_ai_translate_failed">Failed to translate subtitle.</string>
+
+    <!-- Gemini settings -->
+    <string name="gemini_title">Google Gemini</string>
+    <string name="gemini_subtitle">AI Studio key and AI subtitle translation controls</string>
+    <string name="gemini_enable_title">Enable Gemini</string>
+    <string name="gemini_enable_subtitle">Allow AI subtitle translation during playback</string>
+    <string name="gemini_api_key_title">AI Studio API Key</string>
+    <string name="gemini_api_key_subtitle">Stored through Nexio account sync and used for subtitle translation</string>
+    <string name="gemini_dialog_title">Google AI Studio API Key</string>
+    <string name="gemini_dialog_subtitle">Paste your Gemini API key from Google AI Studio</string>
+    <string name="gemini_dialog_placeholder">Enter Google AI Studio API key</string>
+    <string name="gemini_missing_api_key">Enter an API key before enabling Gemini.</string>
     <string name="subtitle_all">All</string>
     <string name="subtitle_section_core">Core</string>
     <string name="subtitle_section_advanced">Advanced</string>

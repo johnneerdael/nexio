@@ -41,6 +41,8 @@ class AuthManager @Inject constructor(
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
+    private val _sessionUserId = MutableStateFlow<String?>(null)
+    val sessionUserId: StateFlow<String?> = _sessionUserId.asStateFlow()
 
     private var cachedEffectiveUserId: String? = null
     private var cachedEffectiveUserSourceUserId: String? = null
@@ -56,6 +58,7 @@ class AuthManager @Inject constructor(
                     is SessionStatus.Authenticated -> {
                         val user = auth.currentUserOrNull()
                         if (user != null) {
+                            _sessionUserId.value = user.id
                             if (cachedEffectiveUserSourceUserId != user.id) {
                                 cachedEffectiveUserId = null
                                 cachedEffectiveUserSourceUserId = null
@@ -75,18 +78,21 @@ class AuthManager @Inject constructor(
                                 try {
                                     auth.refreshCurrentSession()
                                 } catch (e: Exception) {
+                                    _sessionUserId.value = null
                                     cachedEffectiveUserId = null
                                     cachedEffectiveUserSourceUserId = null
                                     _authState.value = AuthState.SignedOut
                                 }
                             }
                         } else {
+                            _sessionUserId.value = null
                             cachedEffectiveUserId = null
                             cachedEffectiveUserSourceUserId = null
                             _authState.value = AuthState.SignedOut
                         }
                     }
                     is SessionStatus.Initializing -> {
+                        _sessionUserId.value = auth.currentUserOrNull()?.id
                         _authState.value = AuthState.Loading
                     }
                     else -> { /* NetworkError etc. — keep current state */ }
@@ -97,6 +103,12 @@ class AuthManager @Inject constructor(
 
     val isAuthenticated: Boolean
         get() = _authState.value is AuthState.FullAccount
+
+    val hasSyncSession: Boolean
+        get() = _sessionUserId.value != null
+
+    val currentSessionUserId: String?
+        get() = _sessionUserId.value
 
     val currentUserId: String?
         get() = when (val state = _authState.value) {
@@ -110,7 +122,7 @@ class AuthManager @Inject constructor(
      * For direct users, returns their own user ID.
      */
     suspend fun getEffectiveUserId(fallbackToOwnIdOnFailure: Boolean = true): String? {
-        val userId = currentUserId ?: return null
+        val userId = currentSessionUserId ?: return null
         if (cachedEffectiveUserSourceUserId != userId) {
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
