@@ -643,11 +643,18 @@ export function usePortalStore() {
 
       await inspectAddons()
 
-      if (secretStatus(secretRefs.mdblist)?.status === 'configured') {
+      if (
+        secretStatus(secretRefs.mdblist)?.status === 'configured' &&
+        state.value.mdblistDiscovery.personalLists.length === 0 &&
+        state.value.mdblistDiscovery.topLists.length === 0
+      ) {
         await validateMDBList().catch(() => undefined)
       }
 
-      if (state.value.settings.integrations.traktAuth.connected) {
+      if (
+        state.value.settings.integrations.traktAuth.connected &&
+        state.value.traktDiscovery.popularLists.length === 0
+      ) {
         await refreshTraktPopularLists().catch(() => undefined)
       }
     } catch (error) {
@@ -1052,6 +1059,7 @@ export function usePortalStore() {
   }
 
   async function validateMDBList() {
+    const previous = clone(state.value.mdblistDiscovery)
     state.value.mdblistDiscovery.validating = true
     state.value.mdblistDiscovery.error = null
 
@@ -1081,10 +1089,10 @@ export function usePortalStore() {
     } catch (error) {
       state.value.mdblistDiscovery = {
         validating: false,
-        valid: false,
+        valid: previous.valid,
         error: error instanceof Error ? error.message : 'MDBList validation failed.',
-        personalLists: [],
-        topLists: []
+        personalLists: previous.personalLists,
+        topLists: previous.topLists
       }
       throw error
     }
@@ -1169,14 +1177,10 @@ export function usePortalStore() {
   async function refreshTraktPopularLists() {
     const token = accessToken(state.value.session)
     if (!token || !state.value.settings.integrations.traktAuth.connected) {
-      state.value.traktDiscovery = {
-        loading: false,
-        error: null,
-        popularLists: []
-      }
       return
     }
 
+    const previous = clone(state.value.traktDiscovery)
     state.value.traktDiscovery.loading = true
     state.value.traktDiscovery.error = null
     try {
@@ -1194,7 +1198,7 @@ export function usePortalStore() {
       state.value.traktDiscovery = {
         loading: false,
         error: error instanceof Error ? error.message : 'Failed to load Trakt lists.',
-        popularLists: []
+        popularLists: previous.popularLists
       }
       throw error
     }
