@@ -565,6 +565,14 @@
     <string name="profile_delete">Delete</string>
     <string name="profile_addons">addons</string>
     <string name="profile_plugins">plugins</string>
+    <string name="profile_choose_avatar">Choose Avatar</string>
+    <string name="profile_avatar_category_all">All</string>
+    <string name="profile_avatar_category_anime">Anime</string>
+    <string name="profile_avatar_category_movie">Movie</string>
+    <string name="profile_avatar_category_tv">TV</string>
+    <string name="profile_add_new">Add Profile</string>
+    <string name="profile_cancel">Cancel</string>
+    <string name="profile_save">Save</string>
 
 
     <!-- AddonManagerScreen -->
