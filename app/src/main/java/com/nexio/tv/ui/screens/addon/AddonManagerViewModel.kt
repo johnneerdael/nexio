@@ -459,7 +459,7 @@ class AddonManagerViewModel @Inject constructor(
 
         return effectiveOrder.mapNotNull { key ->
             val entry = entryByKey[key] ?: return@mapNotNull null
-            entry.copy(isDisabled = entry.disableKey in disabledKeys)
+            entry.copy(isDisabled = entry.disableKey in disabledKeys || entry.key in disabledKeys)
         }
     }
 

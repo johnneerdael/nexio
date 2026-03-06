@@ -158,7 +158,7 @@ class CatalogOrderViewModel @Inject constructor(
                 addonName = entry.addonName,
                 typeLabel = entry.typeLabel,
                 isToggleable = entry.isToggleable,
-                isDisabled = entry.disableKey in disabledKeys,
+                isDisabled = entry.disableKey in disabledKeys || entry.key in disabledKeys,
                 canMoveUp = index > 0,
                 canMoveDown = index < effectiveOrder.lastIndex
             )
@@ -228,17 +228,15 @@ class CatalogOrderViewModel @Inject constructor(
         addBuiltIn(TraktCatalogIds.RECOMMENDED_SHOWS, "Trakt Recommended Shows", "series")
         addBuiltIn(TraktCatalogIds.CALENDAR, "Trakt Calendar (Next 7 Days)", "series")
 
-        snapshot.customListCatalogs.forEach { custom ->
+        snapshot.popularLists
+            .filter { it.key in prefs.selectedPopularListKeys }
+            .forEach { list ->
             entries += CatalogOrderEntry(
-                key = syntheticKey(
-                    addonId = "trakt",
-                    type = custom.type.toApiString(),
-                    catalogId = custom.catalogId
-                ),
+                key = list.key,
                 disableKey = "",
-                catalogName = custom.catalogName,
+                catalogName = list.title,
                 addonName = "Trakt",
-                typeLabel = custom.type.toApiString(),
+                typeLabel = "custom list",
                 isToggleable = false
             )
         }
@@ -249,8 +247,6 @@ class CatalogOrderViewModel @Inject constructor(
         snapshot: MDBListDiscoverySnapshot,
         prefs: MDBListCatalogPreferences
     ): List<CatalogOrderEntry> {
-        if (snapshot.customListCatalogs.isEmpty()) return emptyList()
-
         val availableKeys = buildSet {
             addAll(
                 snapshot.personalLists
@@ -270,23 +266,18 @@ class CatalogOrderViewModel @Inject constructor(
         } else {
             prefs.catalogOrder.filter { it in availableKeys } + availableKeys.filterNot { it in prefs.catalogOrder }
         }
-        val groupedByKey = snapshot.customListCatalogs.groupBy { it.key }
+        val listsByKey = (snapshot.personalLists + snapshot.topLists).associateBy { it.key }
 
-        return orderedKeys.flatMap { key ->
-            groupedByKey[key].orEmpty().map { custom ->
-                CatalogOrderEntry(
-                    key = syntheticKey(
-                        addonId = "mdblist",
-                        type = custom.type.toApiString(),
-                        catalogId = custom.catalogId
-                    ),
-                    disableKey = "",
-                    catalogName = custom.catalogName,
-                    addonName = "MDBList",
-                    typeLabel = custom.type.toApiString(),
-                    isToggleable = false
-                )
-            }
+        return orderedKeys.mapNotNull { key ->
+            val option = listsByKey[key] ?: return@mapNotNull null
+            CatalogOrderEntry(
+                key = option.key,
+                disableKey = "",
+                catalogName = option.title,
+                addonName = "MDBList",
+                typeLabel = if (option.isPersonal) "personal list" else "top list",
+                isToggleable = false
+            )
         }
     }
 
@@ -297,7 +288,6 @@ class CatalogOrderViewModel @Inject constructor(
     private fun syntheticKey(addonId: String, type: String, catalogId: String): String {
         return when (addonId.lowercase()) {
             "trakt" -> "trakt_$catalogId"
-            "mdblist" -> "mdblist_$catalogId"
             else -> "${addonId}_${type}_$catalogId"
         }
     }
