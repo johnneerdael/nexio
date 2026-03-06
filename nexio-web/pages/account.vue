@@ -17,7 +17,7 @@
         :last-synced-at="state.lastSyncedAt"
       />
 
-      <section class="glass" style="padding:1rem; border-radius: var(--radius-xl); display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+      <section class="glass portal-sticky-nav" style="padding:1rem; border-radius: var(--radius-xl); display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
         <div style="display:flex; gap:0.65rem; flex-wrap:wrap;">
           <button v-for="item in nav" :key="item.id" :class="activeView === item.id ? 'primary-btn' : 'secondary-btn'" @click="setView(item.id)">
             {{ item.label }}
@@ -45,6 +45,7 @@
         :busy="state.saving"
         @persist="persistSnapshot"
         @move-catalog="moveCatalog"
+        @reorder-catalog="reorderCatalog"
         @toggle-catalog="toggleCatalog"
       />
 
@@ -178,6 +179,7 @@ const {
   moveAddon,
   toggleAddon,
   moveCatalog,
+  reorderCatalog,
   toggleCatalog,
   unlinkDevice,
   persistSnapshot,
