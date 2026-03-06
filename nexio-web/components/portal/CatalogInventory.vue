@@ -49,10 +49,10 @@
             <button class="ghost-btn" @click="emit('move-catalog', catalog.key, 1)">Down</button>
             <button
               v-if="catalog.source === 'addon'"
-              :class="isDisabled(catalog.key) ? 'toggle-chip' : 'toggle-chip active'"
-              @click="emit('toggle-catalog', catalog.key)"
+              :class="isDisabled(catalog) ? 'toggle-chip' : 'toggle-chip active'"
+              @click="emit('toggle-catalog', catalog.disableKey || catalog.key, catalog.key)"
             >
-              {{ isDisabled(catalog.key) ? 'Disabled' : 'Enabled' }}
+              {{ isDisabled(catalog) ? 'Disabled' : 'Enabled' }}
             </button>
             <span v-else :class="managedBadgeClass(catalog.source)">{{ sourceControlLabel(catalog.source) }}</span>
           </div>
@@ -78,7 +78,7 @@ const emit = defineEmits<{
   persist: []
   'move-catalog': [key: string, direction: -1 | 1]
   'reorder-catalogs': [orderedVisibleKeys: string[]]
-  'toggle-catalog': [key: string]
+  'toggle-catalog': [identifier: string, legacyKey?: string]
 }>()
 
 const hideDisabled = useState<boolean>('portal-catalog-hide-disabled', () => false)
@@ -88,7 +88,7 @@ const visibleCatalogs = computed(() => {
     return props.catalogs
   }
 
-  return props.catalogs.filter((catalog) => catalog.source !== 'addon' || !isDisabled(catalog.key))
+  return props.catalogs.filter((catalog) => catalog.source !== 'addon' || !isDisabled(catalog))
 })
 
 const dragCatalogs = computed({
@@ -98,8 +98,9 @@ const dragCatalogs = computed({
   }
 })
 
-function isDisabled(key: string) {
-  return props.disabledKeys.includes(key)
+function isDisabled(catalog: AddonCatalogRecord) {
+  const disableIdentifier = catalog.disableKey || catalog.key
+  return props.disabledKeys.includes(disableIdentifier) || props.disabledKeys.includes(catalog.key)
 }
 
 function sourceLabel(source: AddonCatalogRecord['source']) {

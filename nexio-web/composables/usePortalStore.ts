@@ -923,12 +923,22 @@ export function usePortalStore() {
     state.value.settings.layout.homeCatalogOrderKeys = [...nextOrder, ...trailingVisible, ...trailingHidden]
   }
 
-  function toggleCatalog(key: string) {
+  function toggleCatalog(identifier: string, legacyKey?: string) {
     const disabled = new Set(state.value.settings.layout.disabledHomeCatalogKeys)
-    if (disabled.has(key)) {
-      disabled.delete(key)
+    const canonicalKey = identifier.trim()
+    const fallbackKey = legacyKey?.trim() || ''
+
+    const currentlyDisabled =
+      disabled.has(canonicalKey) ||
+      (fallbackKey ? disabled.has(fallbackKey) : false)
+
+    if (currentlyDisabled) {
+      disabled.delete(canonicalKey)
+      if (fallbackKey) {
+        disabled.delete(fallbackKey)
+      }
     } else {
-      disabled.add(key)
+      disabled.add(canonicalKey)
     }
     state.value.settings.layout.disabledHomeCatalogKeys = [...disabled]
   }
