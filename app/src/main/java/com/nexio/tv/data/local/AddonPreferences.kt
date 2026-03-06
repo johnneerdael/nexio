@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,15 +33,9 @@ class AddonPreferences @Inject constructor(
     private val gson = Gson()
     private val orderedUrlsKey = stringPreferencesKey("installed_addon_urls_ordered")
     private val legacyUrlsKey = stringSetPreferencesKey("installed_addon_urls")
-    private val manifestSuffix = "/manifest.json"
 
     private fun canonicalizeUrl(url: String): String {
-        val trimmed = url.trim().trimEnd('/')
-        return if (trimmed.endsWith(manifestSuffix, ignoreCase = true)) {
-            trimmed.dropLast(manifestSuffix.length).trimEnd('/')
-        } else {
-            trimmed
-        }
+        return normalizeAddonInstallUrl(url)
     }
 
     val installedAddonUrls: Flow<List<String>> = dataStore.data.map { preferences ->

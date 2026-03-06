@@ -36,6 +36,41 @@ fun normalizePublicAddonBaseUrl(rawUrl: String): String {
     return parsed.publicBaseUrl
 }
 
+fun normalizeAddonInstallUrl(rawUrl: String): String {
+    val candidate = rawUrl.trim()
+    require(candidate.isNotBlank()) { "Addon URL is required." }
+
+    val parsed = URL(candidate)
+    val pathSegments = parsed.path.split('/').filter { it.isNotBlank() }
+    val normalizedSegments = if (pathSegments.lastOrNull()?.equals("manifest.json", ignoreCase = true) == true) {
+        pathSegments.dropLast(1)
+    } else {
+        pathSegments
+    }
+    val normalizedPath = if (normalizedSegments.isEmpty()) {
+        ""
+    } else {
+        "/" + normalizedSegments.joinToString("/")
+    }
+    val querySuffix = parsed.query?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+    return "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}$normalizedPath$querySuffix"
+}
+
+fun buildAddonRequestUrl(baseUrl: String, relativePath: String): String {
+    val normalizedBaseUrl = normalizeAddonInstallUrl(baseUrl)
+    val parsed = URL(normalizedBaseUrl)
+    val normalizedRelativePath = relativePath.trim().removePrefix("/")
+    val basePath = parsed.path.trimEnd('/')
+    val resolvedPath = when {
+        normalizedRelativePath.isBlank() && basePath.isBlank() -> "/"
+        normalizedRelativePath.isBlank() -> basePath
+        basePath.isBlank() -> "/$normalizedRelativePath"
+        else -> "$basePath/$normalizedRelativePath"
+    }
+    val querySuffix = parsed.query?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+    return "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}$resolvedPath$querySuffix"
+}
+
 fun addonCatalogDisableKey(addonBaseUrl: String, type: String, catalogId: String, catalogName: String): String {
     return "${normalizePublicAddonBaseUrl(addonBaseUrl)}_${type}_${catalogId}_${catalogName}"
 }

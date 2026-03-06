@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
@@ -188,10 +189,9 @@ class MetaRepositoryImpl @Inject constructor(
     }
 
     private fun buildMetaUrl(baseUrl: String, type: String, id: String): String {
-        val cleanBaseUrl = baseUrl.trimEnd('/')
         val encodedType = encodePathSegment(type)
         val encodedId = encodePathSegment(id)
-        return "$cleanBaseUrl/meta/$encodedType/$encodedId.json"
+        return buildAddonRequestUrl(baseUrl, "meta/$encodedType/$encodedId.json")
     }
 
     private fun Addon.supportsMetaType(type: String): Boolean {
@@ -238,5 +238,4 @@ class MetaRepositoryImpl @Inject constructor(
         return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
     }
 }
-
 

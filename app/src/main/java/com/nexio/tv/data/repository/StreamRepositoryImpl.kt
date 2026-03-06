@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
@@ -118,10 +119,9 @@ class StreamRepositoryImpl @Inject constructor(
         type: String,
         videoId: String
     ): NetworkResult<List<Stream>> {
-        val cleanBaseUrl = baseUrl.trimEnd('/')
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
-        val streamUrl = "$cleanBaseUrl/stream/$encodedType/$encodedVideoId.json"
+        val streamUrl = buildAddonRequestUrl(baseUrl, "stream/$encodedType/$encodedVideoId.json")
         Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=${sanitizeUrlForLogs(streamUrl)}")
 
         // First, get addon info for name and logo
