@@ -143,6 +143,8 @@ Set these runtime variables:
 - `NUXT_SUPABASE_URL`
 - `NUXT_SUPABASE_ANON_KEY`
 - `NUXT_SUPABASE_SERVICE_ROLE_KEY`
+- `NUXT_PUBLIC_SUPABASE_URL`
+- `NUXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NUXT_TRAKT_CLIENT_ID`
 - `NUXT_TRAKT_CLIENT_SECRET`
 
@@ -150,6 +152,7 @@ Notes:
 - `NUXT_SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
 - The portal server uses it for secret set/delete/resolve RPCs.
 - Clients should never receive the service key.
+- `NUXT_PUBLIC_SUPABASE_URL` and `NUXT_PUBLIC_SUPABASE_ANON_KEY` are required for the browser-side realtime subscription that refreshes the portal when the Android app pushes changes.
 - `nexio-web` reads these through Nuxt runtime config, so the `NUXT_` prefix is required in production.
 
 ## Public Table Model

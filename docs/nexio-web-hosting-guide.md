@@ -35,6 +35,8 @@ Set these on the server:
 - `NUXT_SUPABASE_URL`
 - `NUXT_SUPABASE_ANON_KEY`
 - `NUXT_SUPABASE_SERVICE_ROLE_KEY`
+- `NUXT_PUBLIC_SUPABASE_URL`
+- `NUXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NUXT_TRAKT_CLIENT_ID`
 - `NUXT_TRAKT_CLIENT_SECRET`
 - `NUXT_PUBLIC_TV_LOGIN_BASE_URL`
@@ -42,6 +44,7 @@ Set these on the server:
 Notes:
 - `NUXT_SUPABASE_SERVICE_ROLE_KEY` is server-only.
 - Never expose it to the browser.
+- `NUXT_PUBLIC_SUPABASE_URL` and `NUXT_PUBLIC_SUPABASE_ANON_KEY` are required for the portal's realtime subscription to `account_sync_events`.
 - `NUXT_PUBLIC_TV_LOGIN_BASE_URL` should be your public site URL, for example `https://nexioapp.org`.
 - These names must use the `NUXT_` prefix because `nexio-web` reads them through Nuxt runtime config in production.
 
@@ -101,6 +104,8 @@ Environment=HOST=127.0.0.1
 Environment=NUXT_SUPABASE_URL=...
 Environment=NUXT_SUPABASE_ANON_KEY=...
 Environment=NUXT_SUPABASE_SERVICE_ROLE_KEY=...
+Environment=NUXT_PUBLIC_SUPABASE_URL=...
+Environment=NUXT_PUBLIC_SUPABASE_ANON_KEY=...
 Environment=NUXT_TRAKT_CLIENT_ID=...
 Environment=NUXT_TRAKT_CLIENT_SECRET=...
 Environment=NUXT_PUBLIC_TV_LOGIN_BASE_URL=https://nexioapp.org

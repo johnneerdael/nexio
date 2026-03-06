@@ -57,6 +57,34 @@ private const val MDBLIST_RAIL_ADDON_ID = "mdblist"
 private const val MDBLIST_RAIL_ADDON_NAME = "MDBList"
 private const val MDBLIST_RAIL_ADDON_BASE_URL = "https://api.mdblist.com"
 
+internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
+    val snapshot = homeCatalogSnapshotStore.read() ?: return
+    if (snapshot.catalogRows.isEmpty() && snapshot.fullCatalogRows.isEmpty() && snapshot.heroItems.isEmpty()) {
+        return
+    }
+
+    _fullCatalogRows.value = snapshot.fullCatalogRows
+    _uiState.update { state ->
+        val restoredGridItems = if (state.homeLayout == HomeLayout.GRID) {
+            buildGridItemsFromRowsPipeline(
+                rows = snapshot.catalogRows,
+                heroItems = snapshot.heroItems,
+                heroSectionEnabled = state.heroSectionEnabled
+            )
+        } else {
+            state.gridItems
+        }
+
+        state.copy(
+            catalogRows = snapshot.catalogRows,
+            heroItems = snapshot.heroItems,
+            gridItems = restoredGridItems,
+            isLoading = false,
+            error = null
+        )
+    }
+}
+
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
@@ -209,6 +237,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             catalogsMap.clear()
             reconcilePosterStatusObserversPipeline(emptyList())
             _fullCatalogRows.value = emptyList()
+            homeCatalogSnapshotStore.clear()
             truncatedRowCache.clear()
             hasRenderedFirstCatalog = false
             prefetchedExternalMetaIds.clear()
@@ -223,6 +252,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         rebuildCatalogOrder(addons)
 
         if (catalogOrder.isEmpty()) {
+            homeCatalogSnapshotStore.clear()
             catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
             return
@@ -503,43 +533,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         }
 
         val computedGridItems = if (currentLayout == HomeLayout.GRID) {
-            buildList {
-                if (heroSectionEnabled && computedHeroItems.isNotEmpty()) {
-                    add(GridItem.Hero(computedHeroItems))
-                }
-                computedDisplayRows.filter { it.items.isNotEmpty() }.forEach { row ->
-                    add(
-                        GridItem.SectionDivider(
-                            catalogName = row.catalogName,
-                            catalogId = row.catalogId,
-                            addonBaseUrl = row.addonBaseUrl,
-                            addonId = row.addonId,
-                            type = row.apiType
-                        )
-                    )
-                    val hasEnoughForSeeAll = row.items.size >= 15
-                    val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
-                    displayItems.forEach { item ->
-                        add(
-                            GridItem.Content(
-                                item = item,
-                                addonBaseUrl = row.addonBaseUrl,
-                                catalogId = row.catalogId,
-                                catalogName = row.catalogName
-                            )
-                        )
-                    }
-                    if (hasEnoughForSeeAll) {
-                        add(
-                            GridItem.SeeAll(
-                                catalogId = row.catalogId,
-                                addonId = row.addonId,
-                                type = row.apiType
-                            )
-                        )
-                    }
-                }
-            }
+            buildGridItemsFromRowsPipeline(
+                rows = computedDisplayRows,
+                heroItems = computedHeroItems,
+                heroSectionEnabled = heroSectionEnabled
+            )
         } else {
             currentGridItems
         }
@@ -568,6 +566,16 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 recommendationRefMap
             },
             isLoading = false
+        )
+    }
+
+    if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
+        homeCatalogSnapshotStore.write(
+            com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
+                catalogRows = displayRows,
+                fullCatalogRows = fullRowsFiltered,
+                heroItems = baseHeroItems
+            )
         )
     }
 
@@ -611,6 +619,48 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     schedulePosterStatusReconcilePipeline(displayRows)
+}
+
+private fun HomeViewModel.buildGridItemsFromRowsPipeline(
+    rows: List<CatalogRow>,
+    heroItems: List<MetaPreview>,
+    heroSectionEnabled: Boolean
+): List<GridItem> = buildList {
+    if (heroSectionEnabled && heroItems.isNotEmpty()) {
+        add(GridItem.Hero(heroItems))
+    }
+    rows.filter { it.items.isNotEmpty() }.forEach { row ->
+        add(
+            GridItem.SectionDivider(
+                catalogName = row.catalogName,
+                catalogId = row.catalogId,
+                addonBaseUrl = row.addonBaseUrl,
+                addonId = row.addonId,
+                type = row.apiType
+            )
+        )
+        val hasEnoughForSeeAll = row.items.size >= 15
+        val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
+        displayItems.forEach { item ->
+            add(
+                GridItem.Content(
+                    item = item,
+                    addonBaseUrl = row.addonBaseUrl,
+                    catalogId = row.catalogId,
+                    catalogName = row.catalogName
+                )
+            )
+        }
+        if (hasEnoughForSeeAll) {
+            add(
+                GridItem.SeeAll(
+                    catalogId = row.catalogId,
+                    addonId = row.addonId,
+                    type = row.apiType
+                )
+            )
+        }
+    }
 }
 
 private fun buildSyntheticMDBListRows(

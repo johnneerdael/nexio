@@ -20,6 +20,8 @@ export default defineNuxtConfig({
     traktClientId: '',
     traktClientSecret: '',
     public: {
+      supabaseUrl: '',
+      supabaseAnonKey: '',
       tvLoginBaseUrl: ''
     }
   },
