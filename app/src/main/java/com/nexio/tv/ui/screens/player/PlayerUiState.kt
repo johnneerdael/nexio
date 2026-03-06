@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
+import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
@@ -58,6 +59,12 @@ data class PlayerUiState(
     val isLoadingAddonSubtitles: Boolean = false,
     val selectedAddonSubtitle: Subtitle? = null,
     val addonSubtitlesError: String? = null,
+    val aiSubtitlesEnabled: Boolean = false,
+    val aiSubtitlesAvailable: Boolean = false,
+    val isAiSubtitleTranslating: Boolean = false,
+    val aiSubtitleError: String? = null,
+    val useBuiltInAiSubtitleOverlay: Boolean = false,
+    val translatedBuiltInCues: List<Cue> = emptyList(),
     // Episodes/streams side panel (for series)
     val showEpisodesPanel: Boolean = false,
     val isLoadingEpisodes: Boolean = false,
@@ -156,6 +163,7 @@ sealed class PlayerEvent {
     data class OnSelectSubtitleTrack(val index: Int) : PlayerEvent()
     data object OnDisableSubtitles : PlayerEvent()
     data class OnSelectAddonSubtitle(val subtitle: Subtitle) : PlayerEvent()
+    data object OnToggleAiSubtitles : PlayerEvent()
     data class OnSetPlaybackSpeed(val speed: Float) : PlayerEvent()
     data object OnToggleControls : PlayerEvent()
     data object OnShowAudioDialog : PlayerEvent()

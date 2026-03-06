@@ -168,6 +168,14 @@ export const accountGroups: Record<string, PortalGroup[]> = {
       ]
     },
     {
+      id: 'gemini',
+      title: 'Google Gemini',
+      subtitle: 'AI subtitle translation powered by Gemini 2.5 Flash. The API key is stored separately as a secret.',
+      fields: [
+        { path: 'integrations.gemini.enabled', label: 'Enable Gemini', description: 'Allows AI subtitle translation during playback.', kind: 'toggle' }
+      ]
+    },
+    {
       id: 'poster-ratings',
       title: 'Poster Ratings',
       subtitle: 'Choose the single active poster provider. RPDB and TOP Posters keys are stored separately as secrets.',

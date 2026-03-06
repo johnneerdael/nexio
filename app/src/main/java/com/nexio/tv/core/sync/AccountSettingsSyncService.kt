@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
@@ -35,6 +36,7 @@ import com.nexio.tv.data.remote.supabase.AppearanceSettings
 import com.nexio.tv.data.remote.supabase.AudioSettings
 import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
+import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.LayoutSettings
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
@@ -48,7 +50,6 @@ import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
-import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.domain.model.HomeLayout
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.postgrest.Postgrest
@@ -74,6 +75,8 @@ private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
 private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
+private const val GEMINI_SECRET_TYPE = "gemini_api_key"
+private const val GEMINI_SECRET_REF = "integration:gemini"
 private const val RPDB_SECRET_TYPE = "rpdb_api_key"
 private const val RPDB_SECRET_REF = "integration:rpdb"
 private const val TOP_POSTERS_SECRET_TYPE = "top_posters_api_key"
@@ -91,6 +94,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
+    private val geminiSettingsDataStore: GeminiSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
@@ -138,6 +142,7 @@ class AccountSettingsSyncService @Inject constructor(
                 mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
+                geminiSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 traktAuthDataStore.state.drop(1).map { Unit },
                 traktSettingsDataStore.continueWatchingDaysCap.drop(1).map { Unit },
@@ -154,7 +159,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     private fun schedulePush() {
         if (isApplyingRemote) return
-        if (!authManager.isAuthenticated) return
+        if (!authManager.hasSyncSession) return
 
         pushJob?.cancel()
         pushJob = scope.launch {
@@ -174,7 +179,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (authManager.authState.value !is AuthState.FullAccount) {
+            if (!authManager.hasSyncSession) {
                 return@withContext Result.success(Unit)
             }
 
@@ -190,6 +195,7 @@ class AccountSettingsSyncService @Inject constructor(
 
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, geminiSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
             syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
             syncTraktSecretsToRemote()
@@ -236,6 +242,7 @@ class AccountSettingsSyncService @Inject constructor(
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
         val animeSkipEnabled = animeSkipSettingsDataStore.enabled.first()
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
+        val gemini = geminiSettingsDataStore.settings.first()
         val posterRatings = posterRatingsSettingsDataStore.settings.first()
         val traktAuth = traktAuthDataStore.state.first()
         val player = playerSettingsDataStore.playerSettings.first()
@@ -298,6 +305,9 @@ class AccountSettingsSyncService @Inject constructor(
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
                     clientId = animeSkipClientId
+                ),
+                gemini = GeminiSyncSettings(
+                    enabled = gemini.enabled
                 ),
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.rpdbEnabled,
@@ -440,6 +450,8 @@ class AccountSettingsSyncService @Inject constructor(
 
         animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
         animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
+
+        geminiSettingsDataStore.setEnabled(settings.integrations.gemini.enabled)
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
@@ -604,6 +616,7 @@ class AccountSettingsSyncService @Inject constructor(
     private suspend fun applyRemoteSecrets(settings: AccountSettingsPayload) {
         tmdbSettingsDataStore.setApiKey(resolveApiKeySecret(TMDB_SECRET_TYPE, TMDB_SECRET_REF))
         mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
+        geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
         posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
         posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))
         applyRemoteTraktSecrets(settings)

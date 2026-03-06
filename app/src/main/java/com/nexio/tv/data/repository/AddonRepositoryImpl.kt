@@ -71,8 +71,8 @@ class AddonRepositoryImpl @Inject constructor(
             Log.d(TAG, "triggerRemoteSync: skipped (syncing from remote)")
             return
         }
-        if (!authManager.isAuthenticated) {
-            Log.d(TAG, "triggerRemoteSync: skipped (not authenticated, state=${authManager.authState.value})")
+        if (!authManager.hasSyncSession) {
+            Log.d(TAG, "triggerRemoteSync: skipped (no sync session)")
             return
         }
         Log.d(TAG, "triggerRemoteSync: scheduling push in 500ms")

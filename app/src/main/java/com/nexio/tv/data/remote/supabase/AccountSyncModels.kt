@@ -85,6 +85,7 @@ data class IntegrationSettings(
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
     val mdblist: MDBListSyncSettings = MDBListSyncSettings(),
     val animeSkip: AnimeSkipSyncSettings = AnimeSkipSyncSettings(),
+    val gemini: GeminiSyncSettings = GeminiSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
     val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings()
 )
@@ -122,6 +123,11 @@ data class MDBListSyncSettings(
 data class AnimeSkipSyncSettings(
     val enabled: Boolean = false,
     val clientId: String = ""
+)
+
+@Serializable
+data class GeminiSyncSettings(
+    val enabled: Boolean = false
 )
 
 @Serializable

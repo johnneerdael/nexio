@@ -14,6 +14,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.DolbyVisionCompatibility
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -25,7 +26,9 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.FireOsIec61937AudioOutputProvider
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import androidx.media3.exoplayer.text.TextOutput
+import androidx.media3.exoplayer.text.TextRenderer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -250,6 +253,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 context = context,
                 subtitleDelayUsProvider = subtitleDelayUs::get,
                 safeAudioModeEnabled = safeAudioModeEnabled,
+                cueGroupSubtitleTranslator = builtInSubtitleCueTranslator,
                 experimentalFireOsIecPassthroughEnabled =
                     playerSettings.experimentalDtsIecPassthroughEnabled
             )
@@ -343,6 +347,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 prepare()
 
                 addListener(object : Player.Listener {
+                    override fun onCues(cueGroup: CueGroup) {
+                        currentCueGroup = cueGroup
+                        handleBuiltInCueGroupUpdate()
+                    }
+
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         val playerDuration = duration
                         if (playerDuration > lastKnownDuration) {
@@ -783,7 +792,10 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
     _uiState.update { it.copy(isLoadingAddonSubtitles = true, addonSubtitlesError = null) }
 
     val fetchedSubtitles = withTimeoutOrNull(STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS) {
-        fetchAddonSubtitlesNow()
+        fetchAddonSubtitlesNow(
+            preferredLanguageOverride = preferredLanguage,
+            secondaryLanguageOverride = secondaryLanguage
+        )
     } ?: return StartupSubtitlePreparation(
         fetchedSubtitles = emptyList(),
         attachedSubtitles = emptyList(),
@@ -852,6 +864,7 @@ private class SubtitleOffsetRenderersFactory(
     context: Context,
     private val subtitleDelayUsProvider: () -> Long,
     private val safeAudioModeEnabled: Boolean,
+    private val cueGroupSubtitleTranslator: CueGroupSubtitleTranslator?,
     private val experimentalFireOsIecPassthroughEnabled: Boolean
 ) : DefaultRenderersFactory(context) {
 
@@ -885,11 +898,17 @@ private class SubtitleOffsetRenderersFactory(
         extensionRendererMode: Int,
         out: ArrayList<Renderer>
     ) {
-        val startIndex = out.size
-        super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
-        for (index in startIndex until out.size) {
-            out[index] = SubtitleOffsetRenderer(out[index], subtitleDelayUsProvider)
-        }
+        out.add(
+            SubtitleOffsetRenderer(
+                TextRenderer(
+                    output,
+                    outputLooper,
+                    androidx.media3.exoplayer.text.SubtitleDecoderFactory.DEFAULT,
+                    cueGroupSubtitleTranslator
+                ),
+                subtitleDelayUsProvider
+            )
+        )
     }
 }
 

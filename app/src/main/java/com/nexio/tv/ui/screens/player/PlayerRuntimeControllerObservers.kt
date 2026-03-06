@@ -33,7 +33,10 @@ internal fun PlayerRuntimeController.buildSubtitleFetchRequest(): SubtitleFetchR
     )
 }
 
-internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(): List<Subtitle> {
+internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(
+    preferredLanguageOverride: String? = null,
+    secondaryLanguageOverride: String? = null
+): List<Subtitle> {
     val request = buildSubtitleFetchRequest() ?: return emptyList()
 
     // Compute hash lazily for providers that support OpenSubtitles-style matching.
@@ -63,7 +66,7 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(): List<Subt
         }
     }
 
-    return subtitleRepository.getSubtitles(
+    val fetched = subtitleRepository.getSubtitles(
         type = request.type,
         id = request.id,
         videoId = request.videoId,
@@ -71,6 +74,18 @@ internal suspend fun PlayerRuntimeController.fetchAddonSubtitlesNow(): List<Subt
         videoSize = currentVideoSize,
         filename = currentFilename
     )
+    val preferredLanguage = preferredLanguageOverride ?: _uiState.value.subtitleStyle.preferredLanguage
+    val secondaryLanguage = secondaryLanguageOverride ?: _uiState.value.subtitleStyle.secondaryPreferredLanguage
+    val filtered = filterAndSortAddonSubtitlesForPreferences(
+        subtitles = fetched,
+        preferredLanguage = preferredLanguage,
+        secondaryLanguage = secondaryLanguage
+    )
+    Log.d(
+        PlayerRuntimeController.TAG,
+        "ADDON_SUBS filtered total=${fetched.size} kept=${filtered.size} preferred=$preferredLanguage secondary=$secondaryLanguage"
+    )
+    return filtered
 }
 
 internal fun PlayerRuntimeController.fetchAddonSubtitles() {
@@ -98,6 +113,45 @@ internal fun PlayerRuntimeController.fetchAddonSubtitles() {
             }
         }
     }
+}
+
+private fun PlayerRuntimeController.filterAndSortAddonSubtitlesForPreferences(
+    subtitles: List<Subtitle>,
+    preferredLanguage: String?,
+    secondaryLanguage: String?
+): List<Subtitle> {
+    val targets = listOfNotNull(preferredLanguage, secondaryLanguage)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.equals("none", ignoreCase = true) }
+        .map(PlayerSubtitleUtils::normalizeLanguageCode)
+        .distinct()
+
+    if (targets.isEmpty()) {
+        return subtitles
+    }
+
+    fun matchRank(subtitle: Subtitle): Int {
+        val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+        return targets.indexOfFirst { target ->
+            PlayerSubtitleUtils.matchesLanguageCode(normalizedLang, target)
+        }.let { index -> if (index >= 0) index else Int.MAX_VALUE }
+    }
+
+    return subtitles
+        .mapNotNull { subtitle ->
+            val rank = matchRank(subtitle)
+            if (rank == Int.MAX_VALUE) null else subtitle to rank
+        }
+        .sortedWith(
+            compareBy<Pair<Subtitle, Int>>(
+                { it.second },
+                { PlayerSubtitleUtils.normalizeLanguageCode(it.first.lang) },
+                { it.first.addonName.lowercase() },
+                { it.first.id },
+                { it.first.url }
+            )
+        )
+        .map { it.first }
 }
 
 internal fun PlayerRuntimeController.refreshSubtitlesForCurrentEpisode() {
@@ -220,6 +274,35 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     _uiState.update { it.copy(skipIntervalDismissed = false) }
                     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
                 }
+            }
+        }
+    }
+}
+
+internal fun PlayerRuntimeController.observeGeminiSettings() {
+    scope.launch {
+        geminiSettingsDataStore.settings.collectLatest { settings ->
+            geminiEnabled = settings.enabled
+            geminiApiKey = settings.apiKey.trim()
+            val configured = geminiEnabled && geminiApiKey.isNotBlank()
+            val wasEnabled = _uiState.value.aiSubtitlesEnabled
+            if (!configured && wasEnabled) {
+                disableAiSubtitles()
+            }
+            _uiState.update { state ->
+                state.copy(
+                    aiSubtitlesAvailable = configured,
+                    aiSubtitlesEnabled = if (configured) state.aiSubtitlesEnabled else false,
+                    isAiSubtitleTranslating = if (configured) state.isAiSubtitleTranslating else false,
+                    aiSubtitleError = if (configured) state.aiSubtitleError else null
+                )
+            }
+            if (!configured) {
+                aiSubtitleTranslationJob?.cancel()
+            }
+            refreshBuiltInAiOverlayState()
+            if (configured) {
+                handleBuiltInCueGroupUpdate()
             }
         }
     }

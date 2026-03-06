@@ -204,12 +204,11 @@ internal fun PlayerRuntimeController.toSubtitleConfiguration(subtitle: Subtitle)
         .build()
 }
 
-internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
+internal fun PlayerRuntimeController.selectAddonSubtitle(
+    subtitle: Subtitle,
+    selectedSubtitle: Subtitle = subtitle
+) {
     _exoPlayer?.let { player ->
-        val currentlySelected = _uiState.value.selectedAddonSubtitle
-        if (currentlySelected?.id == subtitle.id && currentlySelected.url == subtitle.url) {
-            return@let
-        }
         Log.d(PlayerRuntimeController.TAG, "Selecting ADDON subtitle lang=${subtitle.lang} id=${subtitle.id}")
 
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
@@ -229,7 +228,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
 
             _uiState.update {
                 it.copy(
-                    selectedAddonSubtitle = subtitle,
+                    selectedAddonSubtitle = selectedSubtitle,
                     selectedSubtitleTrackIndex = -1
                 )
             }
@@ -272,9 +271,9 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
         
         _uiState.update { 
             it.copy(
-                selectedAddonSubtitle = subtitle,
+                selectedAddonSubtitle = selectedSubtitle,
                 selectedSubtitleTrackIndex = -1 
-            )
+            ) 
         }
     }
 }

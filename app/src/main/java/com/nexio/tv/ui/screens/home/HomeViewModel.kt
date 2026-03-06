@@ -123,6 +123,8 @@ class HomeViewModel @Inject constructor(
     internal var externalMetaPrefetchEnabled: Boolean = false
     @Volatile
     internal var startupGracePeriodActive: Boolean = true
+    @Volatile
+    internal var restoredCatalogSnapshotActive: Boolean = false
 
     init {
         restorePersistedCatalogSnapshot()

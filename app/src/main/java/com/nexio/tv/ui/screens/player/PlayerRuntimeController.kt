@@ -5,14 +5,17 @@ import android.content.Context
 import android.media.audiofx.LoudnessEnhancer
 import androidx.lifecycle.SavedStateHandle
 import androidx.media3.common.C
+import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
+import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
+import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.Video
@@ -27,6 +30,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 
@@ -40,8 +44,10 @@ class PlayerRuntimeController(
     internal val traktScrobbleService: TraktScrobbleService,
     internal val skipIntroRepository: SkipIntroRepository,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
+    internal val geminiSettingsDataStore: GeminiSettingsDataStore,
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
+    internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -126,6 +132,37 @@ class PlayerRuntimeController(
     )
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    internal val builtInSubtitleCueTranslator = GeminiBuiltInSubtitleCueTranslator(
+        scope = scope,
+        translationService = geminiSubtitleTranslationService,
+        isEnabledProvider = { shouldUseBuiltInAiTranslation() },
+        apiKeyProvider = { geminiApiKey },
+        targetLanguageProvider = { _uiState.value.subtitleStyle.preferredLanguage },
+        onTranslatingChanged = { isTranslating ->
+            _uiState.update { state ->
+                state.copy(
+                    isAiSubtitleTranslating = if (shouldUseBuiltInAiTranslation()) {
+                        isTranslating
+                    } else {
+                        false
+                    }
+                )
+            }
+        },
+        onTranslationError = { message ->
+            _uiState.update { state ->
+                if (!shouldUseBuiltInAiTranslation()) {
+                    state.copy(
+                        isAiSubtitleTranslating = false,
+                        aiSubtitleError = null
+                    )
+                } else {
+                    state.copy(aiSubtitleError = message)
+                }
+            }
+        }
+    )
+
     internal var _exoPlayer: ExoPlayer? = null
     val exoPlayer: ExoPlayer?
         get() = _exoPlayer
@@ -145,6 +182,7 @@ class PlayerRuntimeController(
     internal var nextEpisodeAutoPlayJob: Job? = null
     internal var sourceStreamsJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
+    internal var aiSubtitleTranslationJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
     internal var hostActivityRef: WeakReference<Activity>? = null
     internal var initialPlaybackStarted: Boolean = false
@@ -182,6 +220,11 @@ class PlayerRuntimeController(
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
     internal var currentStreamBingeGroup: String? = navigationArgs.bingeGroup
     internal var hasAppliedRememberedAudioSelection: Boolean = false
+    internal var geminiEnabled: Boolean = false
+    internal var geminiApiKey: String = ""
+    internal var aiTranslationSelectionGeneration: Long = 0L
+    internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
+    internal var builtInAiCueGeneration: Long = 0L
 
     internal var lastBufferLogTimeMs: Long = 0L
     internal var lastVodTelemetryRefreshTimeMs: Long = 0L
@@ -255,6 +298,7 @@ class PlayerRuntimeController(
             loadSavedProgressFor(currentSeason, currentEpisode)
         }
         observeSubtitleSettings()
+        observeGeminiSettings()
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()
         observeEpisodeWatchProgress()
