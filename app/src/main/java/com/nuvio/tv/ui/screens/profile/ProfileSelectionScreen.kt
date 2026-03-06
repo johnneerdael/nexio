@@ -56,12 +56,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -104,12 +101,20 @@ private object ProfileSelectionSpacing {
 
 private val ProfileCardFocusEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
+enum class ProfileSelectionMode {
+    Selection,
+    Management
+}
+
 @Composable
 fun ProfileSelectionScreen(
     onProfileSelected: () -> Unit,
+    screenMode: ProfileSelectionMode = ProfileSelectionMode.Selection,
+    onBackPress: (() -> Unit)? = null,
     viewModel: ProfileSelectionViewModel = hiltViewModel()
 ) {
     val profiles by viewModel.profiles.collectAsState()
+    val activeProfileId by viewModel.activeProfileId.collectAsState()
     val avatarCatalog by viewModel.avatarCatalog.collectAsState()
     val isCreating by viewModel.isCreating.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
@@ -126,10 +131,32 @@ fun ProfileSelectionScreen(
             focusedAvatarColor = parseProfileColor(colorHex)
         }
     }
+    val isManagementMode = screenMode == ProfileSelectionMode.Management
+    val screenTitle = if (isManagementMode) {
+        stringResource(R.string.profile_manage_title)
+    } else {
+        stringResource(R.string.profile_selection_title)
+    }
+    val screenSubtitle = if (isManagementMode) {
+        stringResource(R.string.profile_manage_subtitle)
+    } else {
+        stringResource(R.string.profile_selection_subtitle)
+    }
+    val screenHint = if (isManagementMode) {
+        stringResource(R.string.profile_manage_hint)
+    } else {
+        stringResource(R.string.profile_selection_hint)
+    }
 
-    LaunchedEffect(profiles) {
-        if (profiles.isNotEmpty()) {
-            focusedAvatarColor = parseProfileColor(profiles.first().avatarColorHex)
+    if (onBackPress != null) {
+        BackHandler(onBack = onBackPress)
+    }
+
+    LaunchedEffect(profiles, activeProfileId) {
+        profiles.firstOrNull { it.id == activeProfileId }?.let { activeProfile ->
+            focusedAvatarColor = parseProfileColor(activeProfile.avatarColorHex)
+        } ?: profiles.firstOrNull()?.let { firstProfile ->
+            focusedAvatarColor = parseProfileColor(firstProfile.avatarColorHex)
         }
     }
 
@@ -144,12 +171,21 @@ fun ProfileSelectionScreen(
         ProfileSelectionBackground(focusedAvatarColor = focusedAvatarColor)
 
         ProfileSelectionMainContent(
+            screenTitle = screenTitle,
+            screenSubtitle = screenSubtitle,
+            screenHint = screenHint,
+            isManagementMode = isManagementMode,
             profiles = profiles,
+            activeProfileId = activeProfileId,
             canAddProfile = viewModel.canAddProfile,
             avatarImageUrlsById = avatarImageUrlsById,
             onProfileFocused = onProfileFocusedColorChange,
-            onProfileSelected = { id ->
-                viewModel.selectProfile(id, onComplete = onProfileSelected)
+            onProfileSelected = { profile ->
+                if (isManagementMode) {
+                    longPressedProfile = profile
+                } else {
+                    viewModel.selectProfile(profile.id, onComplete = onProfileSelected)
+                }
             },
             onProfileLongPress = { profile -> longPressedProfile = profile },
             onAddProfileClick = { showCreateProfile = true }
@@ -294,11 +330,16 @@ private fun ProfileSelectionBackground(
 
 @Composable
 private fun ProfileSelectionMainContent(
+    screenTitle: String,
+    screenSubtitle: String,
+    screenHint: String,
+    isManagementMode: Boolean,
     profiles: List<UserProfile>,
+    activeProfileId: Int,
     canAddProfile: Boolean,
     avatarImageUrlsById: Map<String, String>,
     onProfileFocused: (String) -> Unit,
-    onProfileSelected: (Int) -> Unit,
+    onProfileSelected: (UserProfile) -> Unit,
     onProfileLongPress: (UserProfile) -> Unit,
     onAddProfileClick: () -> Unit
 ) {
@@ -323,7 +364,7 @@ private fun ProfileSelectionMainContent(
         Spacer(modifier = Modifier.height(ProfileSelectionSpacing.LogoToHeading))
 
         Text(
-            text = stringResource(R.string.profile_selection_title),
+            text = screenTitle,
             color = NuvioColors.TextPrimary,
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
@@ -333,7 +374,7 @@ private fun ProfileSelectionMainContent(
         Spacer(modifier = Modifier.height(ProfileSelectionSpacing.HeadingToSubheading))
 
         Text(
-            text = stringResource(R.string.profile_selection_subtitle),
+            text = screenSubtitle,
             color = NuvioColors.TextSecondary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Medium
@@ -343,6 +384,8 @@ private fun ProfileSelectionMainContent(
 
         ProfileGrid(
             profiles = profiles,
+            activeProfileId = activeProfileId,
+            isManagementMode = isManagementMode,
             canAddProfile = canAddProfile,
             avatarImageUrlsById = avatarImageUrlsById,
             onProfileFocused = onProfileFocused,
@@ -354,7 +397,7 @@ private fun ProfileSelectionMainContent(
         Spacer(modifier = Modifier.weight(1f, fill = true))
 
         Text(
-            text = stringResource(R.string.profile_selection_hint),
+            text = screenHint,
             color = NuvioColors.TextTertiary.copy(alpha = 0.9f),
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium
@@ -365,22 +408,29 @@ private fun ProfileSelectionMainContent(
 @Composable
 private fun ProfileGrid(
     profiles: List<UserProfile>,
+    activeProfileId: Int,
+    isManagementMode: Boolean,
     canAddProfile: Boolean,
     avatarImageUrlsById: Map<String, String>,
     onProfileFocused: (String) -> Unit,
-    onProfileSelected: (Int) -> Unit,
+    onProfileSelected: (UserProfile) -> Unit,
     onProfileLongPress: (UserProfile) -> Unit,
     onAddProfileClick: () -> Unit
 ) {
     val totalItems = profiles.size + if (canAddProfile) 1 else 0
+    val initialFocusIndex = remember(profiles, activeProfileId, canAddProfile) {
+        profiles.indexOfFirst { it.id == activeProfileId }
+            .takeIf { it >= 0 }
+            ?: if (profiles.isNotEmpty()) 0 else if (canAddProfile) 0 else -1
+    }
     val focusRequesters = remember(totalItems) {
         List(totalItems) { FocusRequester() }
     }
 
-    LaunchedEffect(totalItems) {
+    LaunchedEffect(totalItems, initialFocusIndex, isManagementMode) {
         repeat(2) { withFrameNanos { } }
-        if (focusRequesters.isNotEmpty()) {
-            runCatching { focusRequesters.first().requestFocus() }
+        if (focusRequesters.isNotEmpty() && initialFocusIndex in focusRequesters.indices) {
+            runCatching { focusRequesters[initialFocusIndex].requestFocus() }
         }
     }
 
@@ -407,7 +457,7 @@ private fun ProfileGrid(
                         avatarImageUrl = profile.avatarId?.let(avatarImageUrlsById::get),
                         focusRequester = focusRequesters[index],
                         onFocused = { onProfileFocused(profile.avatarColorHex) },
-                        onClick = { onProfileSelected(profile.id) },
+                        onClick = { onProfileSelected(profile) },
                         onLongPress = { onProfileLongPress(profile) }
                     )
                 }

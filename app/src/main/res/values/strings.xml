@@ -549,6 +549,10 @@
     <!-- ProfileSettingsContent -->
     <string name="profile_title">Profiles</string>
     <string name="profile_subtitle">Manage user profiles for this account.</string>
+    <string name="profile_manage_button">Manage Profiles</string>
+    <string name="profile_manage_title">Manage Profiles</string>
+    <string name="profile_manage_subtitle">Select a profile to edit, switch, or create a new one</string>
+    <string name="profile_manage_hint">Select a profile to manage</string>
     <string name="profile_primary_label">Primary</string>
     <string name="profile_shares_primary">Shares primary\'s %1$s</string>
     <string name="profile_edit_label">Edit</string>

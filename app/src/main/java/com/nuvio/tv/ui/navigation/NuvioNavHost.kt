@@ -35,6 +35,8 @@ import com.nuvio.tv.ui.screens.home.ContinueWatchingItem
 import com.nuvio.tv.ui.screens.account.AuthSignInScreen
 import com.nuvio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nuvio.tv.ui.screens.cast.CastDetailScreen
+import com.nuvio.tv.ui.screens.profile.ProfileSelectionMode
+import com.nuvio.tv.ui.screens.profile.ProfileSelectionScreen
 
 @Composable
 fun NuvioNavHost(
@@ -758,9 +760,18 @@ fun NuvioNavHost(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToTrakt = { navController.navigate(Screen.Trakt.route) },
                 onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
+                onNavigateToManageProfiles = { navController.navigate(Screen.ManageProfiles.route) },
                 onNavigateToSupportersContributors = {
                     navController.navigate(Screen.SupportersContributors.route)
                 }
+            )
+        }
+
+        composable(Screen.ManageProfiles.route) {
+            ProfileSelectionScreen(
+                onProfileSelected = {},
+                screenMode = ProfileSelectionMode.Management,
+                onBackPress = { navController.popBackStack() }
             )
         }
 

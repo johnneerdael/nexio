@@ -23,6 +23,7 @@ class ProfileSelectionViewModel @Inject constructor(
 ) : ViewModel() {
     private var isAvatarCatalogLoading = false
 
+    val activeProfileId: StateFlow<Int> = profileManager.activeProfileId
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
     val canAddProfile: Boolean
