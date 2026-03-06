@@ -667,6 +667,15 @@ class TmdbMetadataService @Inject constructor(
         return department != "acting" && department != "actors"
     }
 
+    fun clearCache() {
+        enrichmentCache.clear()
+        episodeCache.clear()
+        personCache.clear()
+        moreLikeThisCache.clear()
+        collectionCache.clear()
+        Log.d(TAG, "Metadata cache cleared")
+    }
+
     private fun mapMovieCreditsFromCast(cast: List<TmdbPersonCreditCast>): List<MetaPreview> {
         val seenMovieIds = mutableSetOf<Int>()
         return cast

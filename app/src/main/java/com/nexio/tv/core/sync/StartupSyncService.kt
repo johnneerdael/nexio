@@ -19,7 +19,8 @@ private const val TAG = "StartupSyncService"
 class StartupSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val accountSettingsSyncService: AccountSettingsSyncService,
-    private val addonRepository: AddonRepositoryImpl
+    private val addonRepository: AddonRepositoryImpl,
+    private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
@@ -114,6 +115,7 @@ class StartupSyncService @Inject constructor(
                 remoteUrls = remoteAddonUrls,
                 removeMissingLocal = true
             )
+            accountSyncRefreshNotifier.notifyRefreshRequired()
             Log.d(TAG, "Pulled account snapshot with ${remoteAddonUrls.size} addons from remote")
             Result.success(Unit)
         } catch (e: Exception) {
