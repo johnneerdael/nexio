@@ -752,6 +752,7 @@ private fun CreateProfileOverlay(
     var profileName by remember { mutableStateOf("") }
     var selectedColorHex by remember { mutableStateOf("#1E88E5") }
     var selectedAvatarId by remember { mutableStateOf<String?>(null) }
+    var focusedAvatarName by remember { mutableStateOf<String?>(null) }
     val selectedAvatar = remember(avatarCatalog, selectedAvatarId) {
         avatarCatalog.find { it.id == selectedAvatarId }
     }
@@ -801,7 +802,9 @@ private fun CreateProfileOverlay(
         ) {
             // Header row: title left, create button right
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -898,7 +901,19 @@ private fun CreateProfileOverlay(
                                     avatar.bgColor?.let { selectedColorHex = it }
                                 }
                             },
+                            onAvatarFocused = { avatar ->
+                                focusedAvatarName = avatar?.displayName
+                            },
                             modifier = Modifier.heightIn(max = 320.dp)
+                        )
+
+                        Text(
+                            text = focusedAvatarName ?: stringResource(R.string.profile_avatar_focus_hint),
+                            modifier = Modifier.fillMaxWidth(),
+                            color = if (focusedAvatarName != null) NuvioColors.TextPrimary else NuvioColors.TextTertiary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
                     } else {
                         Box(
@@ -947,6 +962,7 @@ private fun EditProfileOverlay(
     var selectedAvatarId by remember(profile.id, profile.avatarId) {
         mutableStateOf(profile.avatarId)
     }
+    var focusedAvatarName by remember { mutableStateOf<String?>(null) }
     val selectedAvatar = remember(avatarCatalog, selectedAvatarId) {
         avatarCatalog.find { it.id == selectedAvatarId }
     }
@@ -1001,7 +1017,9 @@ private fun EditProfileOverlay(
         ) {
             // Header row: title left, save button right
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1112,7 +1130,19 @@ private fun EditProfileOverlay(
                                     avatar.bgColor?.let { selectedColorHex = it }
                                 }
                             },
+                            onAvatarFocused = { avatar ->
+                                focusedAvatarName = avatar?.displayName
+                            },
                             modifier = Modifier.heightIn(max = 320.dp)
+                        )
+
+                        Text(
+                            text = focusedAvatarName ?: stringResource(R.string.profile_avatar_focus_hint),
+                            modifier = Modifier.fillMaxWidth(),
+                            color = if (focusedAvatarName != null) NuvioColors.TextPrimary else NuvioColors.TextTertiary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
                     } else {
                         Box(

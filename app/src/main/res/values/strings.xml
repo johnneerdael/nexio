@@ -570,10 +570,14 @@
     <string name="profile_addons">addons</string>
     <string name="profile_plugins">plugins</string>
     <string name="profile_choose_avatar">Choose Avatar</string>
+    <string name="profile_avatar_none_selected">No avatar selected</string>
+    <string name="profile_avatar_focus_hint">Focus an avatar to view its name</string>
     <string name="profile_avatar_category_all">All</string>
     <string name="profile_avatar_category_anime">Anime</string>
+    <string name="profile_avatar_category_animation">Animation</string>
     <string name="profile_avatar_category_movie">Movie</string>
     <string name="profile_avatar_category_tv">TV</string>
+    <string name="profile_avatar_category_gaming">Gaming</string>
     <string name="profile_add_new">Add Profile</string>
     <string name="profile_cancel">Cancel</string>
     <string name="profile_save">Save</string>

@@ -59,13 +59,14 @@ import com.nuvio.tv.R
 import com.nuvio.tv.data.remote.supabase.AvatarCatalogItem
 import com.nuvio.tv.ui.theme.NuvioColors
 
-private val PinnedAvatarCategories = listOf("anime", "tv", "movie")
+private val PinnedAvatarCategories = listOf("anime", "animation", "tv", "movie", "gaming")
 
 @Composable
 fun AvatarPickerGrid(
     avatars: List<AvatarCatalogItem>,
     selectedAvatarId: String?,
     onAvatarSelected: (AvatarCatalogItem) -> Unit,
+    onAvatarFocused: ((AvatarCatalogItem?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val categories = remember(avatars) {
@@ -163,6 +164,7 @@ fun AvatarPickerGrid(
                         isSelected = avatar.id == selectedAvatarId,
                         focusRequester = avatarRequesters.getValue(avatar.id),
                         upFocusRequester = if (index < columnCount) selectedCategoryRequester else null,
+                        onFocused = { focused -> if (focused) onAvatarFocused?.invoke(avatar) },
                         onClick = { onAvatarSelected(avatar) }
                     )
                 }
@@ -255,6 +257,7 @@ private fun AvatarGridItem(
     isSelected: Boolean,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester?,
+    onFocused: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -298,7 +301,10 @@ private fun AvatarGridItem(
                     Modifier
                 }
             )
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged {
+                isFocused = it.isFocused
+                onFocused(it.isFocused)
+            }
             .clip(CircleShape)
             .border(borderWidth, borderColor, CircleShape)
             .clickable(
@@ -331,8 +337,10 @@ private fun categoryLabel(category: String): String {
     return when (category) {
         "all" -> stringResource(R.string.profile_avatar_category_all)
         "anime" -> stringResource(R.string.profile_avatar_category_anime)
+        "animation" -> stringResource(R.string.profile_avatar_category_animation)
         "movie" -> stringResource(R.string.profile_avatar_category_movie)
         "tv" -> stringResource(R.string.profile_avatar_category_tv)
+        "gaming" -> stringResource(R.string.profile_avatar_category_gaming)
         else -> category.replaceFirstChar { it.uppercase() }
     }
 }
