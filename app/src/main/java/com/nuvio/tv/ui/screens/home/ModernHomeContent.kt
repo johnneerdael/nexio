@@ -153,6 +153,7 @@ fun ModernHomeContent(
     val strTypeMovie = stringResource(R.string.type_movie)
     val strTypeSeries = stringResource(R.string.type_series)
     val rowBuildCache = remember { ModernCarouselRowBuildCache() }
+    val context = LocalContext.current
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
@@ -184,7 +185,7 @@ fun ModernHomeContent(
                                 useLandscapePosters = useLandscapePosters,
                                 airsDateTemplate = strAirsDate,
                                 upcomingLabel = strUpcoming,
-                                context = LocalContext.current
+                                context = context
                             )
                         }
                     )
