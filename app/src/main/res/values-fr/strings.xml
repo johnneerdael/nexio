@@ -320,8 +320,6 @@
   <string name="tmdb_subtitle">Choisir les champs de métadonnées provenant de TMDB</string>
   <string name="tmdb_enable_title">Activer l\'enrichissement TMDB</string>
   <string name="tmdb_enable_subtitle">Utiliser TMDB comme source de métadonnées pour enrichir les données de l\'addon</string>
-  <string name="tmdb_language_title">Langue</string>
-  <string name="tmdb_language_subtitle">Langue des métadonnées TMDB pour le titre, le logo et les champs activés</string>
   <string name="tmdb_artwork_title">Illustrations</string>
   <string name="tmdb_artwork_subtitle">Logo et images d\'arrière-plan depuis TMDB</string>
   <string name="tmdb_basic_info_title">Informations de base</string>
@@ -338,7 +336,6 @@
   <string name="tmdb_episodes_subtitle">Titres, résumés, miniatures et durée des épisodes depuis TMDB</string>
   <string name="tmdb_more_like_this_title">Similaires</string>
   <string name="tmdb_more_like_this_subtitle">Arrière-plans de recommandations TMDB sur la page de détail</string>
-  <string name="tmdb_language_dialog_title">Langue TMDB</string>
   <!-- TraktScreen -->
   <string name="trakt_description">Synchronisez votre liste de suivi, votre progression, vos visionnages en cours, vos scrobbles et vos listes personnelles avec Trakt.</string>
   <string name="trakt_connected_as">Connecté en tant que %1$s</string>

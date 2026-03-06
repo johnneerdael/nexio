@@ -317,8 +317,6 @@
   <string name="tmdb_subtitle">Elige de qué campos de metadatos deben proceder de TMDB</string>
   <string name="tmdb_enable_title">Habilitar enriquecimiento de TMDB</string>
   <string name="tmdb_enable_subtitle">Usa TMDB como fuente de metadatos para mejorar datos de complemento</string>
-  <string name="tmdb_language_title">Idioma</string>
-  <string name="tmdb_language_subtitle">Idioma de metadatos de TMDB para título, logotipo y campos habilitados</string>
   <string name="tmdb_artwork_title">Ilustración</string>
   <string name="tmdb_artwork_subtitle">Imágenes de logotipo y telón de fondo de TMDB</string>
   <string name="tmdb_basic_info_title">Información básica</string>
@@ -335,7 +333,6 @@
   <string name="tmdb_episodes_subtitle">Títulos de episodios, descripciones, miniaturas y duración de TMDB</string>
   <string name="tmdb_more_like_this_title">Más parecido a esto</string>
   <string name="tmdb_more_like_this_subtitle">Telones de fondo recomendados de TMDB en página de detalles</string>
-  <string name="tmdb_language_dialog_title">Idioma de TMDB</string>
   <!-- TraktScreen -->
   <string name="trakt_description">Sincroniza tu lista de deseos, progreso de visualización, continuar viendo, scrobbles y listas personales con Trakt.</string>
   <string name="trakt_connected_as">Conectado como %1$s</string>
