@@ -3,6 +3,7 @@ package com.nexio.tv.core.di
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
@@ -23,7 +24,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Cache
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.io.File
@@ -53,10 +53,6 @@ object NetworkModule {
         .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
-                    else HttpLoggingInterceptor.Level.NONE
-        })
         .build()
 
     @Provides
@@ -80,13 +76,10 @@ object NetworkModule {
             }
 
             val requestId = TraktHttpTrace.nextRequestId()
-            val target = buildString {
-                append(newRequest.url.encodedPath)
-                newRequest.url.encodedQuery?.let { query ->
-                    append('?')
-                    append(query)
-                }
-            }
+            val target = sanitizeRequestTargetForLogs(
+                encodedPath = newRequest.url.encodedPath,
+                encodedQuery = newRequest.url.encodedQuery
+            )
             val startNs = System.nanoTime()
             Log.d("TraktHttp", "REQ #$requestId ${newRequest.method} $target")
 

@@ -24,6 +24,7 @@ class StartupSyncService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
     private var lastPulledKey: String? = null
+    private var lastAuthenticatedUserId: String? = null
     @Volatile
     private var forceSyncRequested: Boolean = false
     @Volatile
@@ -35,7 +36,9 @@ class StartupSyncService @Inject constructor(
                 when (state) {
                     is AuthState.FullAccount -> {
                         val force = forceSyncRequested
-                        val started = scheduleStartupPull(state.userId, force = force)
+                        val firstAuthForUser = lastAuthenticatedUserId != state.userId
+                        lastAuthenticatedUserId = state.userId
+                        val started = scheduleStartupPull(state.userId, force = force || firstAuthForUser)
                         if (force && started) forceSyncRequested = false
                     }
 
@@ -43,6 +46,7 @@ class StartupSyncService @Inject constructor(
                         startupPullJob?.cancel()
                         startupPullJob = null
                         lastPulledKey = null
+                        lastAuthenticatedUserId = null
                         forceSyncRequested = false
                         pendingResyncKey = null
                     }

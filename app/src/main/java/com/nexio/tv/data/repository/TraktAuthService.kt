@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.api.TraktApi
@@ -406,12 +407,9 @@ class TraktAuthService @Inject constructor(
 
     private fun responseTarget(response: Response<*>): String {
         val requestUrl = response.raw().request.url
-        return buildString {
-            append(requestUrl.encodedPath)
-            requestUrl.encodedQuery?.let {
-                append('?')
-                append(it)
-            }
-        }
+        return sanitizeRequestTargetForLogs(
+            encodedPath = requestUrl.encodedPath,
+            encodedQuery = requestUrl.encodedQuery
+        )
     }
 }

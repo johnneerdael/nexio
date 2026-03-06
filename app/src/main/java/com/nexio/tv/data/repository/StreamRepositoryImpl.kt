@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.mapper.toDomain
@@ -121,7 +122,7 @@ class StreamRepositoryImpl @Inject constructor(
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
         val streamUrl = "$cleanBaseUrl/stream/$encodedType/$encodedVideoId.json"
-        Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=$streamUrl")
+        Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=${sanitizeUrlForLogs(streamUrl)}")
 
         // First, get addon info for name and logo
         val addonResult = addonRepository.fetchAddon(baseUrl)
@@ -139,13 +140,13 @@ class StreamRepositoryImpl @Inject constructor(
                 val streams = result.data.streams?.map { 
                     it.toDomain(addonName, addonLogo) 
                 } ?: emptyList()
-                Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=$streamUrl")
+                Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=${sanitizeUrlForLogs(streamUrl)}")
                 NetworkResult.Success(streams)
             }
             is NetworkResult.Error -> {
                 Log.w(
                     TAG,
-                    "Streams failed addon=$addonName code=${result.code} message=${result.message} url=$streamUrl"
+                    "Streams failed addon=$addonName code=${result.code} message=${result.message} url=${sanitizeUrlForLogs(streamUrl)}"
                 )
                 result
             }

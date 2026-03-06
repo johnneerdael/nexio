@@ -13,6 +13,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,10 +27,6 @@ class AddonSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val addonPreferences: AddonPreferences
 ) {
-    private fun publicAddonUrl(rawUrl: String): String {
-        return rawUrl.substringBefore('?').substringBefore('#').trim().removeSuffix("/")
-    }
-
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
         return try {
             block()
@@ -45,14 +44,49 @@ class AddonSyncService @Inject constructor(
         try {
             val localUrls = addonPreferences.installedAddonUrls.first()
             Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size}")
+            val parsedAddons = localUrls.map(::parseAddonInstallUrl)
+
+            parsedAddons.forEach { parsed ->
+                val secretPayload = parsed.secretPayload
+                val secretRef = parsed.secretRef
+                if (secretPayload != null && !secretRef.isNullOrBlank()) {
+                    withJwtRefreshRetry {
+                        postgrest.rpc(
+                            "sync_set_account_secret",
+                            buildJsonObject {
+                                put("p_secret_type", "addon_credential")
+                                put("p_secret_ref", secretRef)
+                                put(
+                                    "p_secret_payload",
+                                    Json.encodeToJsonElement(
+                                        com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload.serializer(),
+                                        secretPayload
+                                    )
+                                )
+                                put(
+                                    "p_masked_preview",
+                                    "Configured ••••${
+                                        (secretPayload.params.values.firstOrNull()?.takeLast(4)
+                                            ?: secretPayload.pathSegment?.takeLast(4).orEmpty())
+                                    }"
+                                )
+                                put("p_status", "configured")
+                                put("p_source", "app")
+                            }
+                        )
+                    }
+                }
+            }
 
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
-                    localUrls.forEachIndexed { index, url ->
-                        val publicUrl = publicAddonUrl(url)
+                    parsedAddons.forEachIndexed { index, addon ->
                         addJsonObject {
-                            put("url", publicUrl)
-                            put("manifest_url", "${publicUrl.trimEnd('/')}/manifest.json")
+                            put("url", addon.publicBaseUrl)
+                            put("manifest_url", addon.manifestUrl)
+                            put("public_query_params", Json.encodeToJsonElement(MapSerializer(String.serializer(), String.serializer()), addon.publicQueryParams))
+                            put("install_kind", addon.installKind)
+                            addon.secretRef?.let { put("secret_ref", it) }
                             put("sort_order", index)
                         }
                     }

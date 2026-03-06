@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.local.AddonPreferences
@@ -143,7 +144,7 @@ class SubtitleRepositoryImpl @Inject constructor(
             "$baseUrl/subtitles/$normalizedType/$actualId.json"
         }
         
-        Log.d(TAG, "Fetching subtitles from ${addon.name}: $subtitleUrl")
+        Log.d(TAG, "Fetching subtitles from ${addon.name}: ${sanitizeUrlForLogs(subtitleUrl)}")
         
         return try {
             when (val result = safeApiCall { api.getSubtitles(subtitleUrl) }) {

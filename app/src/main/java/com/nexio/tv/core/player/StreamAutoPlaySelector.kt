@@ -1,5 +1,7 @@
 package com.nexio.tv.core.player
 
+import android.util.Log
+import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.domain.model.AddonStreams
@@ -8,6 +10,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object StreamAutoPlaySelector {
+    private const val TAG = "StreamAutoPlaySelector"
+
     fun orderAddonStreams(
         streams: List<AddonStreams>,
         installedOrder: List<String>
@@ -133,7 +137,7 @@ object StreamAutoPlaySelector {
                 // 2. Try each matching stream until one works
                 for (stream in matchingStreams) {
                     val resolved = resolvePlayableUrl(stream) ?: continue
-                    println("Trying resolved stream: $resolved")
+                    Log.d(TAG, "Trying resolved stream ${sanitizeUrlForLogs(resolved)}")
                     if (urlWorks(resolved)) return stream
 
                 }

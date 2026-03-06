@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.addon
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.sync.addonCatalogDisableKey
 import com.nexio.tv.R
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.qr.QrCodeGenerator
@@ -506,7 +507,7 @@ class AddonManagerViewModel @Inject constructor(
         catalogId: String,
         catalogName: String
     ): String {
-        return "${addonBaseUrl}_${type}_${catalogId}_${catalogName}"
+        return addonCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName)
     }
 
     private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
