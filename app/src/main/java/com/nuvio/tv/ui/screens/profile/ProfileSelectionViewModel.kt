@@ -21,6 +21,7 @@ class ProfileSelectionViewModel @Inject constructor(
     private val profileSyncService: ProfileSyncService,
     private val avatarRepository: AvatarRepository
 ) : ViewModel() {
+    private var isAvatarCatalogLoading = false
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
@@ -33,12 +34,23 @@ class ProfileSelectionViewModel @Inject constructor(
     private val _isCreating = MutableStateFlow(false)
     val isCreating: StateFlow<Boolean> = _isCreating.asStateFlow()
 
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
+    init {
+        loadAvatarCatalog()
+    }
+
     fun loadAvatarCatalog() {
+        if (isAvatarCatalogLoading || _avatarCatalog.value.isNotEmpty()) return
         viewModelScope.launch {
+            isAvatarCatalogLoading = true
             try {
                 _avatarCatalog.value = avatarRepository.getAvatarCatalog()
             } catch (e: Exception) {
                 Log.e("ProfileSelectionVM", "Failed to load avatar catalog", e)
+            } finally {
+                isAvatarCatalogLoading = false
             }
         }
     }
@@ -72,6 +84,24 @@ class ProfileSelectionViewModel @Inject constructor(
                 profileSyncService.pushToRemote()
             }
             _isCreating.value = false
+        }
+    }
+
+    fun updateProfile(profile: UserProfile) {
+        if (_isSaving.value) return
+        viewModelScope.launch {
+            _isSaving.value = true
+            profileManager.updateProfile(profile)
+            profileSyncService.pushToRemote()
+            _isSaving.value = false
+        }
+    }
+
+    fun deleteProfile(id: Int) {
+        viewModelScope.launch {
+            profileManager.deleteProfile(id)
+            profileSyncService.deleteProfileData(id)
+            profileSyncService.pushToRemote()
         }
     }
 }

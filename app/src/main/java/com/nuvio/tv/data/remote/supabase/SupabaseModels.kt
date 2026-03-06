@@ -141,5 +141,6 @@ data class SupabaseAvatarCatalogItem(
     @SerialName("display_name") val displayName: String,
     @SerialName("storage_path") val storagePath: String,
     val category: String,
-    @SerialName("sort_order") val sortOrder: Int = 0
+    @SerialName("sort_order") val sortOrder: Int = 0,
+    @SerialName("bg_color") val bgColor: String? = null
 )
