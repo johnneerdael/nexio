@@ -104,7 +104,7 @@ fun SeasonTabs(
             shape = RoundedCornerShape(20.dp)
         )
     )
-    val tabScale = CardDefaults.scale(focusedScale = 1.0f)
+    val tabScale = CardDefaults.scale(focusedScale = 1.02f)
     val typography = MaterialTheme.typography
     val tabTextStyle = remember(typography) { typography.titleMedium }
     val textSecondary = NuvioTheme.extendedColors.textSecondary
@@ -112,7 +112,7 @@ fun SeasonTabs(
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .focusRestorer { selectedTabFocusRequester },
+            .focusRestorer(selectedTabFocusRequester),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -484,7 +484,7 @@ private fun EpisodeCard(
             shape = shape
         )
     )
-    val cardScale = CardDefaults.scale(focusedScale = 1.0f)
+    val cardScale = CardDefaults.scale(focusedScale = 1.02f)
     val cardGlow = CardDefaults.glow()
 
     Card(

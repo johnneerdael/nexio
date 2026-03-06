@@ -25,7 +25,7 @@ import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -890,20 +890,6 @@ private fun MetaDetailsContent(
     val backgroundColor = NuvioColors.Background
 
     // Pre-compute gradient brushes once
-    val leftGradient = remember(backgroundColor) {
-        Brush.horizontalGradient(
-            colorStops = arrayOf(
-                0.0f to backgroundColor,
-                0.20f to backgroundColor.copy(alpha = 0.95f),
-                0.35f to backgroundColor.copy(alpha = 0.8f),
-                0.45f to backgroundColor.copy(alpha = 0.6f),
-                0.55f to backgroundColor.copy(alpha = 0.4f),
-                0.65f to backgroundColor.copy(alpha = 0.2f),
-                0.75f to Color.Transparent,
-                1.0f to Color.Transparent
-            )
-        )
-    }
     val bottomGradient = remember(backgroundColor) {
         Brush.verticalGradient(
             colorStops = arrayOf(
@@ -916,7 +902,6 @@ private fun MetaDetailsContent(
             )
         )
     }
-    val dimColor = remember(backgroundColor) { backgroundColor.copy(alpha = 0.08f) }
 
     // Stable hero play callback
     val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
@@ -1001,8 +986,6 @@ private fun MetaDetailsContent(
             onTrailerProgressChanged = onTrailerProgressChanged,
             onTrailerEnded = onTrailerEnded,
             isScrolledPastHero = isScrolledPastHero,
-            dimColor = dimColor,
-            leftGradient = leftGradient,
             bottomGradient = bottomGradient,
         )
 
@@ -1280,19 +1263,12 @@ private fun BackdropLayer(
     onTrailerProgressChanged: (Long, Long) -> Unit,
     onTrailerEnded: () -> Unit,
     isScrolledPastHero: Boolean,
-    dimColor: Color,
-    leftGradient: Brush,
     bottomGradient: Brush,
 ) {
     val backdropAlphaState = animateFloatAsState(
         targetValue = if (isTrailerPlaying) 0f else 1f,
         animationSpec = tween(durationMillis = 800),
         label = "backdropFade"
-    )
-    val gradientAlphaState = animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0f else 1f,
-        animationSpec = tween(durationMillis = 800),
-        label = "gradientFade"
     )
     val bottomGradientAlphaState = animateFloatAsState(
         targetValue = if (isScrolledPastHero) 1f else 0f,
@@ -1326,8 +1302,6 @@ private fun BackdropLayer(
                 .fillMaxSize()
                 .drawWithCache {
                     onDrawBehind {
-                        drawRect(color = dimColor)
-                        drawRect(brush = leftGradient, alpha = gradientAlphaState.value)
                         drawRect(brush = bottomGradient, alpha = bottomGradientAlphaState.value)
                     }
                 }
@@ -1353,9 +1327,7 @@ private fun PeopleSectionTabs(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 20.dp, start = 48.dp, end = 48.dp)
-            .focusRestorer {
-                restorerRequester
-            },
+            .focusRestorer(restorerRequester),
         verticalAlignment = Alignment.CenterVertically
     ) {
         tabs.forEachIndexed { index, item ->
@@ -1583,7 +1555,7 @@ private fun LibraryListPickerDialog(
             }
         }
 
-        Divider(color = NuvioColors.Border, thickness = 1.dp)
+        HorizontalDivider(color = NuvioColors.Border, thickness = 1.dp)
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Button(
