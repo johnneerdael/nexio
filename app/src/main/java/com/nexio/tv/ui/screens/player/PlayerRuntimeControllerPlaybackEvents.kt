@@ -351,7 +351,7 @@ fun PlayerRuntimeController.scheduleHideControls() {
     hideControlsJob = scope.launch {
         delay(3000)
         if (_uiState.value.isPlaying && !_uiState.value.showAudioDialog &&
-            !_uiState.value.showSubtitleDialog && !_uiState.value.showSubtitleStylePanel &&
+            !_uiState.value.showSubtitleDialog &&
             !_uiState.value.showSpeedDialog && !_uiState.value.showMoreDialog &&
             !_uiState.value.showSubtitleDelayOverlay &&
             !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel) {
@@ -368,7 +368,6 @@ internal fun PlayerRuntimeController.showSubtitleDelayOverlay() {
             showSubtitleDelayOverlay = true,
             showAudioDialog = false,
             showSubtitleDialog = false,
-            showSubtitleStylePanel = false,
             showSpeedDialog = false
         )
     }
@@ -419,9 +418,8 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
     pauseOverlayJob = scope.launch {
         delay(pauseOverlayDelayMs)
         val s = _uiState.value
-        val anyPanelOpen = s.showSubtitleDialog || s.showSubtitleStylePanel ||
-            s.showSpeedDialog || s.showMoreDialog || s.showEpisodesPanel ||
-            s.showSourcesPanel || s.showAudioDialog
+        val anyPanelOpen = s.showSubtitleDialog || s.showSpeedDialog || s.showMoreDialog ||
+            s.showEpisodesPanel || s.showSourcesPanel || s.showAudioDialog
         if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
         }
@@ -545,7 +543,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update { 
                 it.copy(
                     showSubtitleDialog = false,
-                    showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false,
                     selectedAddonSubtitle = null 
                 ) 
@@ -564,7 +561,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update { 
                 it.copy(
                     showSubtitleDialog = false,
-                    showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false,
                     selectedAddonSubtitle = null,
                     selectedSubtitleTrackIndex = -1
@@ -578,7 +574,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update {
                 it.copy(
                     showSubtitleDialog = false,
-                    showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false
                 )
             }
@@ -610,7 +605,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update {
                 it.copy(
                     showAudioDialog = true,
-                    showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
                     showControls = true
@@ -621,27 +615,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update {
                 it.copy(
                     showSubtitleDialog = true,
-                    showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
                     showControls = true
                 )
             }
-        }
-        PlayerEvent.OnOpenSubtitleStylePanel -> {
-            _uiState.update {
-                it.copy(
-                    showSubtitleDialog = false,
-                    showSubtitleStylePanel = true,
-                    showMoreDialog = false,
-                    showSubtitleDelayOverlay = false,
-                    showControls = true
-                )
-            }
-        }
-        PlayerEvent.OnDismissSubtitleStylePanel -> {
-            _uiState.update { it.copy(showSubtitleStylePanel = false) }
-            scheduleHideControls()
         }
         PlayerEvent.OnShowSubtitleDelayOverlay -> {
             showSubtitleDelayOverlay()
@@ -656,7 +634,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update {
                 it.copy(
                     showSpeedDialog = true,
-                    showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
                     showControls = true
@@ -669,7 +646,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                     showMoreDialog = true,
                     showAudioDialog = false,
                     showSubtitleDialog = false,
-                    showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false,
                     showSpeedDialog = false,
                     showControls = true
@@ -729,7 +705,6 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 it.copy(
                     showAudioDialog = false, 
                     showSubtitleDialog = false, 
-                    showSubtitleStylePanel = false,
                     showSpeedDialog = false,
                     showSubtitleDelayOverlay = false,
                     showMoreDialog = false
