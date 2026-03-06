@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
@@ -151,7 +152,7 @@ class MetaRepositoryImpl @Inject constructor(
             val url = buildMetaUrl(addon.baseUrl, candidateType, id)
             Log.d(
                 TAG,
-                "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=$url"
+                "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=${sanitizeUrlForLogs(url)}"
             )
             when (val result = safeApiCall { api.getMeta(url) }) {
                 is NetworkResult.Success -> {

@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.addon
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.sync.addonCatalogDisableKey
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -307,7 +308,7 @@ class CatalogOrderViewModel @Inject constructor(
         catalogId: String,
         catalogName: String
     ): String {
-        return "${addonBaseUrl}_${type}_${catalogId}_${catalogName}"
+        return addonCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName)
     }
 
     private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {

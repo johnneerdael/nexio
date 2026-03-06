@@ -20,6 +20,7 @@ data class AccountSyncMutationResult(
 
 @Serializable
 data class AccountAddonPayload(
+    val id: String? = null,
     val url: String,
     @SerialName("manifest_url") val manifestUrl: String? = null,
     val name: String? = null,
@@ -29,6 +30,13 @@ data class AccountAddonPayload(
     @SerialName("install_kind") val installKind: String = "manifest",
     @SerialName("secret_ref") val secretRef: String? = null,
     @SerialName("sort_order") val sortOrder: Int = 0
+)
+
+@Serializable
+data class AccountAddonSecretPayload(
+    val kind: String = "query_params",
+    val params: Map<String, String> = emptyMap(),
+    @SerialName("pathSegment") val pathSegment: String? = null
 )
 
 @Serializable
@@ -221,4 +229,17 @@ data class DebugSettingsPayload(
 @Serializable
 data class AccountSecretApiKeyPayload(
     val apiKey: String = ""
+)
+
+@Serializable
+data class AccountTraktAccessSecretPayload(
+    val accessToken: String = "",
+    val tokenType: String = "bearer",
+    val createdAt: Long = 0L,
+    val expiresIn: Int = 0
+)
+
+@Serializable
+data class AccountTraktRefreshSecretPayload(
+    val refreshToken: String = ""
 )

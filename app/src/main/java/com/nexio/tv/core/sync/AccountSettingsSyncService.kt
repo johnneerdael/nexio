@@ -21,10 +21,15 @@ import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
+import com.nexio.tv.data.remote.supabase.AccountAddonPayload
+import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
 import com.nexio.tv.data.remote.supabase.AccountSecretApiKeyPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
+import com.nexio.tv.data.remote.supabase.AccountTraktAccessSecretPayload
+import com.nexio.tv.data.remote.supabase.AccountTraktRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.AppearanceSettings
 import com.nexio.tv.data.remote.supabase.AudioSettings
@@ -67,6 +72,15 @@ import javax.inject.Singleton
 private const val TAG = "AccountSettingsSync"
 private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
+private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
+private const val MDBLIST_SECRET_REF = "integration:mdblist"
+private const val RPDB_SECRET_TYPE = "rpdb_api_key"
+private const val RPDB_SECRET_REF = "integration:rpdb"
+private const val TOP_POSTERS_SECRET_TYPE = "top_posters_api_key"
+private const val TOP_POSTERS_SECRET_REF = "integration:topposters"
+private const val TRAKT_ACCESS_SECRET_TYPE = "trakt_access_token"
+private const val TRAKT_REFRESH_SECRET_TYPE = "trakt_refresh_token"
+private const val TRAKT_SECRET_REF = "integration:trakt"
 
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
@@ -174,7 +188,11 @@ class AccountSettingsSyncService @Inject constructor(
                 postgrest.rpc("sync_push_account_settings", params).decodeList<AccountSyncMutationResult>()
             }
 
-            syncTmdbSecretToRemote()
+            syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
+            syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
+            syncTraktSecretsToRemote()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -192,7 +210,7 @@ class AccountSettingsSyncService @Inject constructor(
             isApplyingRemote = true
             try {
                 applyRemoteSettings(snapshot.settings)
-                applyRemoteTmdbSecret()
+                applyRemoteSecrets(snapshot.settings)
             } finally {
                 isApplyingRemote = false
             }
@@ -200,7 +218,8 @@ class AccountSettingsSyncService @Inject constructor(
             Result.success(
                 snapshot.addons
                     .sortedBy { it.sortOrder }
-                    .map { it.url.trim().removeSuffix("/") }
+                    .filter { it.enabled }
+                    .mapNotNull { resolveRemoteAddonUrl(it).getOrNull() }
                     .filter { it.isNotBlank() }
             )
         } catch (e: Exception) {
@@ -476,16 +495,16 @@ class AccountSettingsSyncService @Inject constructor(
         debugSettingsDataStore.setSyncCodeFeaturesEnabled(settings.debug.syncCodeFeaturesEnabled)
     }
 
-    private suspend fun syncTmdbSecretToRemote() {
-        val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+    private suspend fun syncApiKeySecretToRemote(secretType: String, secretRef: String, rawApiKey: String) {
+        val apiKey = rawApiKey.trim()
 
         if (apiKey.isBlank()) {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_delete_account_secret",
                     buildJsonObject {
-                        put("p_secret_type", TMDB_SECRET_TYPE)
-                        put("p_secret_ref", TMDB_SECRET_REF)
+                        put("p_secret_type", secretType)
+                        put("p_secret_ref", secretRef)
                         put("p_source", "app")
                     }
                 )
@@ -497,8 +516,8 @@ class AccountSettingsSyncService @Inject constructor(
             postgrest.rpc(
                 "sync_set_account_secret",
                 buildJsonObject {
-                    put("p_secret_type", TMDB_SECRET_TYPE)
-                    put("p_secret_ref", TMDB_SECRET_REF)
+                    put("p_secret_type", secretType)
+                    put("p_secret_ref", secretRef)
                     put("p_secret_payload", Json.encodeToJsonElement(AccountSecretApiKeyPayload.serializer(), AccountSecretApiKeyPayload(apiKey)))
                     put("p_masked_preview", "Stored ••••${apiKey.takeLast(4)}")
                     put("p_status", "configured")
@@ -508,21 +527,176 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteTmdbSecret() {
+    private suspend fun syncTraktSecretsToRemote() {
+        val traktState = traktAuthDataStore.state.first()
+        val accessToken = traktState.accessToken?.trim().orEmpty()
+        val refreshToken = traktState.refreshToken?.trim().orEmpty()
+
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", TRAKT_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
+                        put("p_secret_ref", TRAKT_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+            }
+            return
+        }
+
+        withJwtRefreshRetry {
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
+                    put("p_secret_ref", TRAKT_SECRET_REF)
+                    put(
+                        "p_secret_payload",
+                        Json.encodeToJsonElement(
+                            AccountTraktAccessSecretPayload.serializer(),
+                            AccountTraktAccessSecretPayload(
+                                accessToken = accessToken,
+                                tokenType = traktState.tokenType ?: "bearer",
+                                createdAt = traktState.createdAt ?: 0L,
+                                expiresIn = traktState.expiresIn ?: 0
+                            )
+                        )
+                    )
+                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
+                    put("p_secret_ref", TRAKT_SECRET_REF)
+                    put(
+                        "p_secret_payload",
+                        Json.encodeToJsonElement(
+                            AccountTraktRefreshSecretPayload.serializer(),
+                            AccountTraktRefreshSecretPayload(refreshToken = refreshToken)
+                        )
+                    )
+                    put("p_masked_preview", "Stored ••••${refreshToken.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+        }
+    }
+
+    private suspend fun applyRemoteSecrets(settings: AccountSettingsPayload) {
+        tmdbSettingsDataStore.setApiKey(resolveApiKeySecret(TMDB_SECRET_TYPE, TMDB_SECRET_REF))
+        mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
+        posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
+        posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))
+        applyRemoteTraktSecrets(settings)
+    }
+
+    private suspend fun resolveApiKeySecret(secretType: String, secretRef: String): String {
         val payload = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_resolve_account_secret",
                     buildJsonObject {
-                        put("p_secret_type", TMDB_SECRET_TYPE)
-                        put("p_secret_ref", TMDB_SECRET_REF)
+                        put("p_secret_type", secretType)
+                        put("p_secret_ref", secretRef)
                         put("p_source", "app")
                     }
                 ).decodeAs<AccountSecretApiKeyPayload>()
             }
         }.getOrNull()
+        return payload?.apiKey?.trim().orEmpty()
+    }
 
-        tmdbSettingsDataStore.setApiKey(payload?.apiKey?.trim().orEmpty())
+    private suspend fun applyRemoteTraktSecrets(settings: AccountSettingsPayload) {
+        val accessPayload = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TRAKT_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", TRAKT_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountTraktAccessSecretPayload>()
+            }
+        }.getOrNull()
+
+        val refreshPayload = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TRAKT_REFRESH_SECRET_TYPE)
+                        put("p_secret_ref", TRAKT_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountTraktRefreshSecretPayload>()
+            }
+        }.getOrNull()
+
+        val accessToken = accessPayload?.accessToken?.trim().orEmpty()
+        val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            traktAuthDataStore.clearAuth()
+            return
+        }
+
+        traktAuthDataStore.saveToken(
+            TraktTokenResponseDto(
+                accessToken = accessToken,
+                tokenType = accessPayload?.tokenType?.ifBlank { "bearer" } ?: "bearer",
+                expiresIn = accessPayload?.expiresIn ?: 0,
+                refreshToken = refreshToken,
+                createdAt = accessPayload?.createdAt ?: 0L
+            )
+        )
+        traktAuthDataStore.saveUser(
+            username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
+            userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() }
+        )
+        if (!settings.integrations.traktAuth.pending) {
+            traktAuthDataStore.clearDeviceFlow()
+        }
+    }
+
+    private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {
+        return runCatching {
+            val secretPayload = addon.secretRef
+                ?.takeIf { it.isNotBlank() }
+                ?.let { secretRef ->
+                    withJwtRefreshRetry {
+                        postgrest.rpc(
+                            "sync_resolve_account_secret",
+                            buildJsonObject {
+                                put("p_secret_type", "addon_credential")
+                                put("p_secret_ref", secretRef)
+                                put("p_source", "app")
+                            }
+                        ).decodeAs<AccountAddonSecretPayload>()
+                    }
+                }
+
+            buildResolvedAddonUrl(
+                baseUrl = addon.url,
+                manifestUrl = addon.manifestUrl,
+                publicQueryParams = addon.publicQueryParams,
+                secretPayload = secretPayload
+            ).removeSuffix("/manifest.json").trimEnd('/')
+        }
     }
 
     private inline fun <reified T : Enum<T>> enumValueOrDefault(value: String, default: T): T {

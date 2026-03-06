@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.local.AddonPreferences
@@ -147,7 +148,10 @@ class AddonRepositoryImpl @Inject constructor(
                 NetworkResult.Success(addon)
             }
             is NetworkResult.Error -> {
-                Log.w(TAG, "Failed to fetch addon manifest for url=$cleanBaseUrl code=${result.code} message=${result.message}")
+                Log.w(
+                    TAG,
+                    "Failed to fetch addon manifest for url=${sanitizeUrlForLogs(cleanBaseUrl)} code=${result.code} message=${result.message}"
+                )
                 result
             }
             NetworkResult.Loading -> NetworkResult.Loading

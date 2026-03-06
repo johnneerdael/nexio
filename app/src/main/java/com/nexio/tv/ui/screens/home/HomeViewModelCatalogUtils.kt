@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.sync.addonCatalogDisableKey
+import com.nexio.tv.core.sync.normalizePublicAddonBaseUrl
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -27,7 +29,7 @@ internal fun HomeViewModel.buildHomeCatalogLoadSignature(addons: List<Addon>): S
     val addonCatalogSignature = addons
         .flatMap { addon ->
             addon.catalogs.map { catalog ->
-                "${addon.id}|${addon.baseUrl}|${catalog.apiType}|${catalog.id}|${catalog.name}"
+                "${addon.id}|${normalizePublicAddonBaseUrl(addon.baseUrl)}|${catalog.apiType}|${catalog.id}|${catalog.name}"
             }
         }
         .sorted()
@@ -121,7 +123,7 @@ internal fun HomeViewModel.disableCatalogKey(
     catalogId: String,
     catalogName: String
 ): String {
-    return "${addonBaseUrl}_${type}_${catalogId}_${catalogName}"
+    return addonCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName)
 }
 
 internal fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
