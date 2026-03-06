@@ -293,6 +293,29 @@ button {
   transform: translateY(-1px);
 }
 
+.overview-strip {
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-xl);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.overview-strip__lead,
+.overview-strip__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.overview-pill {
+  cursor: default;
+  pointer-events: none;
+}
+
 .selection-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -369,6 +392,10 @@ button {
   border-radius: 16px;
   border: 1px solid var(--stroke);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.device-row--compact {
+  padding: 0.8rem 0.9rem;
 }
 
 @media (max-width: 1100px) {

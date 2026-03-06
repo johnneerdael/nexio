@@ -1,6 +1,6 @@
 import { bearerToken, okJson, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
 import { mapSecretRows } from '~/server/utils/account-secrets'
-import { defaultAccountAddons, defaultSettings, demoDevices } from '~/utils/portal-defaults'
+import { defaultAccountAddons, defaultSettings } from '~/utils/portal-defaults'
 import type { AddonRecord, BootstrapPayload, LinkedDevice, PortalSettings, SecretType } from '~/types/portal'
 
 type SnapshotRpcPayload = {
@@ -71,7 +71,7 @@ export default defineEventHandler(async (event) => {
   let secretStatuses = [] as BootstrapPayload['snapshot']['secretStatuses']
   let syncRevision = 1
   let lastSyncedAt: string | null = null
-  let linkedDevices: LinkedDevice[] = demoDevices()
+  let linkedDevices: LinkedDevice[] = []
 
   try {
     const snapshot = await supabaseFetch<SnapshotRpcPayload>('/rest/v1/rpc/sync_pull_account_snapshot', {
@@ -147,7 +147,7 @@ export default defineEventHandler(async (event) => {
       }))
     }
   } catch {
-    // Keep linked device fallback data in place until the schema is expanded.
+    // Leave linked devices empty until the schema is available.
   }
 
   const payload: BootstrapPayload = {

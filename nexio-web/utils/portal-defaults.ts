@@ -1,7 +1,6 @@
 import type {
   AddonRecord,
   CatalogId,
-  LinkedDevice,
   PortalSettings,
   SyncExclusion
 } from '~/types/portal'
@@ -197,24 +196,5 @@ export const defaultAccountAddons = (): AddonRecord[] => [
     publicQueryParams: {},
     secretRef: null,
     sortOrder: 1
-  }
-]
-
-export const demoDevices = (): LinkedDevice[] => [
-  {
-    id: 'device-living-room',
-    name: 'Living Room TV',
-    model: 'Fire TV Cube',
-    platform: 'Fire OS',
-    status: 'online',
-    lastSeenAt: new Date().toISOString()
-  },
-  {
-    id: 'device-bedroom',
-    name: 'Bedroom OLED',
-    model: 'Chromecast 4K',
-    platform: 'Android TV',
-    status: 'idle',
-    lastSeenAt: new Date(Date.now() - 1000 * 60 * 14).toISOString()
   }
 ]
