@@ -27,8 +27,17 @@ const sensitiveQueryKeys = new Set([
 ])
 
 export type AddonSecretPayload = {
-  kind: 'query_params' | 'query_token'
-  params: Record<string, string>
+  kind: 'query_params' | 'path_segment' | 'composite'
+  params?: Record<string, string>
+  pathSegment?: string
+}
+
+function looksSensitivePathSegment(segment: string) {
+  const value = segment.trim()
+  if (value.length < 24) {
+    return false
+  }
+  return /^[A-Za-z0-9._~+=-]+$/.test(value)
 }
 
 export function normalizeAddonUrl(url: string): string {
@@ -52,7 +61,15 @@ export function parseAddonInstallUrl(rawUrl: string): {
   }
 
   const parsed = new URL(candidate)
-  const normalized = normalizeAddonUrl(`${parsed.origin}${parsed.pathname}`)
+  const pathSegments = parsed.pathname.split('/').filter(Boolean)
+  const hasManifestPath = pathSegments[pathSegments.length - 1]?.toLowerCase() === 'manifest.json'
+  const pathSecretSegment = hasManifestPath ? pathSegments[pathSegments.length - 2] ?? null : null
+  const hasPathSecret = Boolean(pathSecretSegment && looksSensitivePathSegment(pathSecretSegment))
+  const publicPathSegments = hasPathSecret
+    ? [...pathSegments.slice(0, -2), 'manifest.json']
+    : pathSegments
+  const publicPathname = publicPathSegments.length > 0 ? `/${publicPathSegments.join('/')}` : '/manifest.json'
+  const normalized = normalizeAddonUrl(`${parsed.origin}${publicPathname}`)
   const publicQueryParams: Record<string, string> = {}
   const secretParams: Record<string, string> = {}
 
@@ -64,7 +81,15 @@ export function parseAddonInstallUrl(rawUrl: string): {
     publicQueryParams[key] = value
   })
 
-  const secretRef = Object.keys(secretParams).length > 0 ? addonSecretRef(normalized) : null
+  const hasQuerySecrets = Object.keys(secretParams).length > 0
+  const secretRef = hasQuerySecrets || hasPathSecret ? addonSecretRef(normalized) : null
+  const secretPayload = secretRef
+    ? {
+        kind: hasQuerySecrets && hasPathSecret ? 'composite' : hasPathSecret ? 'path_segment' : 'query_params',
+        ...(hasQuerySecrets ? { params: secretParams } : {}),
+        ...(hasPathSecret ? { pathSegment: pathSecretSegment as string } : {})
+      }
+    : null
 
   return {
     addon: {
@@ -80,6 +105,6 @@ export function parseAddonInstallUrl(rawUrl: string): {
     },
     secretType: secretRef ? 'addon_credential' : null,
     secretRef,
-    secretPayload: secretRef ? { kind: 'query_params', params: secretParams } : null
+    secretPayload
   }
 }

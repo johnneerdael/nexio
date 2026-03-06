@@ -126,6 +126,12 @@ function normalizeAddonUrl(url: string): string {
   return url.trim().replace(/\/manifest\.json$/i, '').replace(/\/$/, '')
 }
 
+function addonInstallCandidate(addon: AddonRecord): string {
+  const base = addon.manifestUrl?.trim() || `${addon.url.replace(/\/$/, '')}/manifest.json`
+  const query = new URLSearchParams(addon.publicQueryParams ?? {}).toString()
+  return query ? `${base}?${query}` : base
+}
+
 function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): string {
   return JSON.stringify({
     settings,
@@ -456,6 +462,54 @@ export function usePortalStore() {
     }
   }
 
+  async function migrateLegacyAddonSecrets() {
+    if (!state.value.session || state.value.addons.length === 0) {
+      return
+    }
+
+    let changed = false
+    const nextAddons = [...state.value.addons]
+
+    for (let index = 0; index < nextAddons.length; index += 1) {
+      const addon = nextAddons[index]
+      const parsed = parseAddonInstallUrl(addonInstallCandidate(addon))
+      const needsSanitizing =
+        parsed.addon.url !== addon.url ||
+        parsed.addon.manifestUrl !== addon.manifestUrl ||
+        JSON.stringify(parsed.addon.publicQueryParams ?? {}) !== JSON.stringify(addon.publicQueryParams ?? {}) ||
+        (parsed.secretRef ?? null) !== (addon.secretRef ?? null)
+
+      if (!parsed.secretType || !parsed.secretRef || !parsed.secretPayload || !needsSanitizing) {
+        continue
+      }
+
+      nextAddons[index] = {
+        ...addon,
+        url: parsed.addon.url,
+        manifestUrl: parsed.addon.manifestUrl,
+        publicQueryParams: parsed.addon.publicQueryParams,
+        installKind: 'configured',
+        secretRef: parsed.secretRef
+      }
+      changed = true
+
+      if (!secretStatus(parsed.secretRef, 'addon_credential')) {
+        await saveSecret({
+          secretType: 'addon_credential',
+          secretRef: parsed.secretRef,
+          secretPayload: parsed.secretPayload
+        })
+      }
+    }
+
+    if (!changed) {
+      return
+    }
+
+    state.value.addons = nextAddons
+    await persistSnapshot()
+  }
+
   async function bootstrap() {
     if (state.value.bootstrapped || state.value.loading) {
       return
@@ -487,6 +541,8 @@ export function usePortalStore() {
       state.value.syncRevision = payload.snapshot.syncRevision
       state.value.lastSyncedAt = payload.snapshot.lastSyncedAt
       writeSession(state.value.session)
+
+      await migrateLegacyAddonSecrets()
       remoteSignature = snapshotSignature(state.value.settings, state.value.addons)
 
       await inspectAddons()
