@@ -10,6 +10,7 @@ Pull requests are currently intended for:
 - Small stability improvements
 - Minor maintenance work
 - Small documentation fixes that improve accuracy
+- Translation updates
 
 Pull requests are generally **not** accepted for:
 
@@ -20,6 +21,8 @@ Pull requests are generally **not** accepted for:
 - Refactors without a clear user-facing or maintenance benefit
 
 For feature ideas and bigger changes, please open an issue first. Feature implementation is usually kept in-house unless it has been discussed and explicitly approved beforehand.
+
+Translation PRs are allowed, as long as they stay focused on translation/localization work and do not bundle unrelated feature or UI changes.
 
 ## Where to ask questions
 
@@ -65,7 +68,7 @@ Please make sure your PR is all of the following:
 - Small in scope
 - Focused on one problem
 - Clearly aligned with the current direction of the project
-- Not cosmetic-only
+- Not cosmetic-only, unless it is a translation PR
 - Not a new major feature unless it was discussed and approved first
 
 PRs that do not fit this policy will usually be closed without merge so review time can stay focused on bugs, regressions, and small improvements.

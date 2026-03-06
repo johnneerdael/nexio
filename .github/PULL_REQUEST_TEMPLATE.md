@@ -8,6 +8,7 @@
 - Bug fix
 - Small maintenance improvement
 - Docs fix
+- Translation update
 - Approved larger change (link approval below)
 
 ## Why
@@ -17,7 +18,7 @@
 ## Policy check
 
 <!-- Confirm these before requesting review -->
-- [ ] This PR is not cosmetic-only.
+ - [ ] This PR is not cosmetic-only, unless it is a translation PR.
 - [ ] This PR does not add a new major feature without prior approval.
 - [ ] This PR is small in scope and focused on one problem.
 - [ ] If this is a larger or directional change, I linked the issue where it was approved.
