@@ -108,7 +108,8 @@ fun ThemeSettingsContent(
             "sl" to "Slovenščina",
             "ro" to "Română",
             "ja" to "日本語",
-            "nl" to "Nederlands"
+            "nl" to "Nederlands",
+            "vi" to "Tiếng Việt"
         )
     }
     var selectedTag by remember {
