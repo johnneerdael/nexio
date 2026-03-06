@@ -1,6 +1,6 @@
 import { createError } from 'h3'
-import { bearerToken, readJsonBody, okJson, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
-import { buildResolvedManifestUrl, type AddonTransportPayload } from '~/server/utils/account-secrets'
+import { bearerToken, readJsonBody, okJson, supabaseUser } from '~/server/utils/supabase'
+import { resolveAddonTransport, resolvedAddonManifestUrl } from '~/server/utils/account-addon-transport'
 import type { AddonManifestInspection, AddonRecord } from '~/types/portal'
 
 type InspectBody = {
@@ -64,21 +64,8 @@ async function inspectAddon(addon: AddonRecord, userId?: string | null): Promise
 
   try {
     if (userId && addon.secretRef) {
-      const transport = await supabaseFetch<AddonTransportPayload>('/rest/v1/rpc/service_get_account_addon_transport', {
-        method: 'POST',
-        body: JSON.stringify({
-          p_user_id: userId,
-          p_addon_id: addon.id,
-          p_source: 'web-inspect'
-        })
-      }, undefined, true)
-
-      resolvedManifestUrl = buildResolvedManifestUrl({
-        manifestUrl: transport.manifest_url,
-        baseUrl: transport.base_url,
-        publicQueryParams: transport.public_query_params ?? addon.publicQueryParams ?? {},
-        secretPayload: transport.secret_payload ?? null
-      })
+      const transport = await resolveAddonTransport(userId, addon, 'web-inspect')
+      resolvedManifestUrl = resolvedAddonManifestUrl(transport)
     }
 
     const response = await fetch(resolvedManifestUrl)

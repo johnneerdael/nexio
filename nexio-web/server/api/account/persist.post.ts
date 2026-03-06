@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     body: JSON.stringify({
       p_addons: (body.addons ?? []).map((addon, index) => ({
         url: normalizeAddonUrl(addon.url),
-        manifest_url: `${normalizeAddonUrl(addon.url)}/manifest.json`,
+        manifest_url: String(addon.manifestUrl || '').trim() || `${normalizeAddonUrl(addon.url)}/manifest.json`,
         name: addon.name,
         description: addon.description ?? null,
         enabled: addon.enabled,

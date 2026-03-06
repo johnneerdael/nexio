@@ -51,17 +51,18 @@ type RpcMutationResult = Array<{
 function toAddonRecords(addons: SnapshotRpcPayload['addons']): AddonRecord[] {
   return (addons ?? []).map((addon, index) => {
     const normalizedUrl = normalizeAddonUrl(String(addon.url || ''))
+    const manifestUrl = String(addon.manifest_url || '').trim() || (normalizedUrl ? `${normalizedUrl}/manifest.json` : '')
     return {
-    id: addon.id ?? crypto.randomUUID(),
-    url: normalizedUrl,
-    manifestUrl: normalizedUrl ? `${normalizedUrl}/manifest.json` : '',
-    name: addon.name ?? addon.url ?? 'Addon',
-    enabled: addon.enabled ?? true,
-    description: addon.description ?? undefined,
-    publicQueryParams: addon.public_query_params ?? {},
-    installKind: addon.install_kind ?? 'manifest',
-    secretRef: addon.secret_ref ?? null,
-    sortOrder: addon.sort_order ?? index
+      id: addon.id ?? crypto.randomUUID(),
+      url: normalizedUrl,
+      manifestUrl,
+      name: addon.name ?? addon.url ?? 'Addon',
+      enabled: addon.enabled ?? true,
+      description: addon.description ?? undefined,
+      publicQueryParams: addon.public_query_params ?? {},
+      installKind: addon.install_kind ?? 'manifest',
+      secretRef: addon.secret_ref ?? null,
+      sortOrder: addon.sort_order ?? index
     }
   }).filter((addon) => addon.url)
 }
