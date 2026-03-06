@@ -224,8 +224,6 @@ fun PlayerScreen(
             viewModel.onEvent(PlayerEvent.OnDismissMoreDialog)
         } else if (uiState.showSubtitleDelayOverlay) {
             viewModel.onEvent(PlayerEvent.OnHideSubtitleDelayOverlay)
-        } else if (uiState.showSubtitleStylePanel) {
-            viewModel.onEvent(PlayerEvent.OnDismissSubtitleStylePanel)
         } else if (uiState.showSourcesPanel) {
             viewModel.onEvent(PlayerEvent.OnDismissSourcesPanel)
         } else if (uiState.showEpisodesPanel) {
@@ -325,7 +323,6 @@ fun PlayerScreen(
         uiState.showControls,
         uiState.showEpisodesPanel,
         uiState.showSourcesPanel,
-        uiState.showSubtitleStylePanel,
         uiState.showSubtitleDelayOverlay,
         uiState.showAudioDialog,
         uiState.showSubtitleDialog,
@@ -333,7 +330,7 @@ fun PlayerScreen(
     ) {
         if (uiState.showControls && !uiState.showEpisodesPanel && !uiState.showSourcesPanel &&
             !uiState.showAudioDialog && !uiState.showSubtitleDialog &&
-            !uiState.showSubtitleStylePanel && !uiState.showSubtitleDelayOverlay &&
+            !uiState.showSubtitleDelayOverlay &&
             !uiState.showSpeedDialog
         ) {
             // Wait for AnimatedVisibility animation to complete before focusing play/pause button
@@ -399,7 +396,6 @@ fun PlayerScreen(
                     !uiState.showSourcesPanel &&
                     !uiState.showAudioDialog &&
                     !uiState.showSubtitleDialog &&
-                    !uiState.showSubtitleStylePanel &&
                     !uiState.showSpeedDialog
                 ) {
                     viewModel.onEvent(PlayerEvent.OnShowSubtitleDialog)
@@ -438,7 +434,7 @@ fun PlayerScreen(
                 // When a side panel or dialog is open, let it handle all keys
                 val panelOrDialogOpen = uiState.showEpisodesPanel || uiState.showSourcesPanel ||
                         uiState.showAudioDialog || uiState.showSubtitleDialog ||
-                        uiState.showSubtitleStylePanel || uiState.showSpeedDialog ||
+                        uiState.showSpeedDialog ||
                         uiState.showSubtitleDelayOverlay || uiState.showMoreDialog
                 if (panelOrDialogOpen) return@onKeyEvent false
 
@@ -670,7 +666,6 @@ fun PlayerScreen(
                 !uiState.showSourcesPanel &&
                 !uiState.showAudioDialog &&
                 !uiState.showSubtitleDialog &&
-                !uiState.showSubtitleStylePanel &&
                 !uiState.showSubtitleDelayOverlay &&
                 !uiState.showSpeedDialog &&
                 !uiState.showMoreDialog,
@@ -709,7 +704,6 @@ fun PlayerScreen(
             !uiState.showSourcesPanel &&
             !uiState.showAudioDialog &&
             !uiState.showSubtitleDialog &&
-            !uiState.showSubtitleStylePanel &&
             !uiState.showSpeedDialog &&
             !uiState.showMoreDialog &&
             !uiState.showDisplayModeInfo
@@ -733,7 +727,6 @@ fun PlayerScreen(
         AnimatedVisibility(
             visible = uiState.showControls && uiState.error == null &&
                 !uiState.showLoadingOverlay && !uiState.showPauseOverlay &&
-                !uiState.showSubtitleStylePanel &&
                 !uiState.showSubtitleDelayOverlay &&
                 !uiState.showEpisodesPanel &&
                 !uiState.showSourcesPanel &&
@@ -824,7 +817,6 @@ fun PlayerScreen(
                 uiState.error == null &&
                 !uiState.showLoadingOverlay &&
                 !uiState.showPauseOverlay &&
-                !uiState.showSubtitleStylePanel &&
                 !uiState.showEpisodesPanel &&
                 !uiState.showSourcesPanel &&
                 !uiState.showAudioDialog &&
@@ -934,43 +926,6 @@ fun PlayerScreen(
             }
         }
 
-        // Subtitle style panel scrim
-        AnimatedVisibility(
-            visible = uiState.showSubtitleStylePanel && uiState.error == null,
-            enter = fadeIn(animationSpec = tween(120)),
-            exit = fadeOut(animationSpec = tween(120))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f))
-            )
-        }
-
-        // Subtitle style panel
-        AnimatedVisibility(
-            visible = uiState.showSubtitleStylePanel && uiState.error == null,
-            enter = slideInVertically(
-                animationSpec = tween(220),
-                initialOffsetY = { -it }
-            ),
-            exit = slideOutVertically(
-                animationSpec = tween(220),
-                targetOffsetY = { -it }
-            )
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                SubtitleStyleSidePanel(
-                    subtitleStyle = uiState.subtitleStyle,
-                    onEvent = { viewModel.onEvent(it) },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                )
-            }
-        }
-
         // Audio track dialog
         if (uiState.showAudioDialog) {
             AudioSelectionDialog(
@@ -999,7 +954,6 @@ fun PlayerScreen(
                 onInternalTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectSubtitleTrack(it)) },
                 onAddonSubtitleSelected = { viewModel.onEvent(PlayerEvent.OnSelectAddonSubtitle(it)) },
                 onDisableSubtitles = { viewModel.onEvent(PlayerEvent.OnDisableSubtitles) },
-                onOpenStylePanel = { viewModel.onEvent(PlayerEvent.OnOpenSubtitleStylePanel) },
                 onOpenDelayOverlay = { viewModel.onEvent(PlayerEvent.OnShowSubtitleDelayOverlay) },
                 onToggleAiSubtitles = { viewModel.onEvent(PlayerEvent.OnToggleAiSubtitles) },
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissDialog) }

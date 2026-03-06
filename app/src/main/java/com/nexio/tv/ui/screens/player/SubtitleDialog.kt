@@ -98,7 +98,6 @@ internal fun SubtitleSelectionDialog(
     onInternalTrackSelected: (Int) -> Unit,
     onAddonSubtitleSelected: (Subtitle) -> Unit,
     onDisableSubtitles: () -> Unit,
-    onOpenStylePanel: () -> Unit,
     onOpenDelayOverlay: () -> Unit,
     onToggleAiSubtitles: () -> Unit,
     onDismiss: () -> Unit
@@ -120,7 +119,6 @@ internal fun SubtitleSelectionDialog(
     val tabs = listOf(
         stringResource(R.string.subtitle_tab_builtin),
         addonsTabTitle,
-        stringResource(R.string.subtitle_tab_style),
         stringResource(R.string.subtitle_tab_delay),
         stringResource(R.string.subtitle_tab_ai)
     )
@@ -153,12 +151,9 @@ internal fun SubtitleSelectionDialog(
                     tabs.forEachIndexed { index, _ ->
                         val onTabClick = when (index) {
                             2 -> {
-                                { onOpenStylePanel() }
-                            }
-                            3 -> {
                                 { onOpenDelayOverlay() }
                             }
-                            4 -> {
+                            3 -> {
                                 { onToggleAiSubtitles() }
                             }
                             else -> {
@@ -221,8 +216,7 @@ internal fun SubtitleSelectionDialog(
                         isLoading = isLoadingAddons,
                         onSubtitleSelected = onAddonSubtitleSelected
                     )
-                    2 -> Unit
-                    3 -> Unit
+                    else -> Unit
                 }
             }
         }
