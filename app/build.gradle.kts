@@ -61,8 +61,8 @@ android {
         applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "0.4.9-beta"
+        versionCode = 28
+        versionName = "0.10"
 
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${localProperties.getProperty("TRAKT_CLIENT_ID", "")}\"")
@@ -87,7 +87,7 @@ android {
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"johnneerdael\"")
-        buildConfigField("String", "GITHUB_REPO", "\"NEXIO\"")
+        buildConfigField("String", "GITHUB_REPO", "\"nexio\"")
     }
 
     if (enableDoviNative) {
