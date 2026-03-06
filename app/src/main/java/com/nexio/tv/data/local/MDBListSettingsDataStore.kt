@@ -24,8 +24,15 @@ data class MDBListCatalogPreferences(
     val selectedTopListKeys: Set<String> = emptySet(),
     val catalogOrder: List<String> = emptyList()
 ) {
-    fun isPersonalListEnabled(listKey: String): Boolean = listKey !in hiddenPersonalListKeys
-    fun isTopListSelected(listKey: String): Boolean = listKey in selectedTopListKeys
+    fun isPersonalListEnabled(listKey: String): Boolean {
+        val target = canonicalMDBListKey(listKey)
+        return hiddenPersonalListKeys.none { canonicalMDBListKey(it) == target }
+    }
+
+    fun isTopListSelected(listKey: String): Boolean {
+        val target = canonicalMDBListKey(listKey)
+        return selectedTopListKeys.any { canonicalMDBListKey(it) == target }
+    }
 }
 
 @Singleton
@@ -164,9 +171,10 @@ class MDBListSettingsDataStore @Inject constructor(
 
     fun sanitizeCatalogOrder(rawOrder: List<String>, availableKeys: Set<String>): List<String> {
         if (availableKeys.isEmpty()) return emptyList()
+        val availableByCanonical = availableKeys.associateBy { canonicalMDBListKey(it) }
         val uniqueKnown = rawOrder.asSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() && it in availableKeys }
+            .map { availableByCanonical[canonicalMDBListKey(it)] ?: "" }
+            .filter { it.isNotBlank() }
             .distinct()
             .toList()
         return uniqueKnown + availableKeys.filterNot { it in uniqueKnown }
@@ -179,5 +187,18 @@ class MDBListSettingsDataStore @Inject constructor(
             ?.filter { it.isNotBlank() }
             ?.distinct()
             ?: emptyList()
+    }
+}
+
+private fun canonicalMDBListKey(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return ""
+    val prefix = trimmed.substringBefore(':').lowercase()
+    val payload = trimmed.substringAfter(':', "")
+    val listId = payload.substringAfterLast('/').trim().lowercase()
+    return if (prefix.isBlank() || listId.isBlank()) {
+        trimmed.lowercase()
+    } else {
+        "$prefix:$listId"
     }
 }
