@@ -4,7 +4,7 @@
       <p class="badge">Portal Access</p>
       <h2 class="section-title" style="font-size: 2rem; margin: 0.8rem 0 0.4rem;">Sign in to control every screen.</h2>
       <p style="margin: 0; color: var(--text-soft); line-height: 1.6;">
-        The redesigned portal signs into Supabase, syncs settings instantly, and approves TV QR sessions without falling back to the legacy page.
+        The redesigned portal signs into Nexio, syncs settings instantly, and approves TV QR sessions without falling back to the legacy page.
       </p>
     </div>
 

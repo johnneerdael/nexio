@@ -30,7 +30,7 @@
 
       <section v-else class="field-shell">
         <label>Approve TV login</label>
-        <p>Once approved, the TV can exchange the session and immediately pull the latest account settings and addon state from Supabase.</p>
+        <p>Once approved, the TV can exchange the session and immediately pull the latest account settings and addon state from Nexio Live.</p>
         <div style="display:flex; gap:0.8rem; flex-wrap:wrap;">
           <button class="primary-btn" :disabled="approving" @click="approve">{{ approving ? 'Approving...' : 'Approve This TV' }}</button>
           <NuxtLink class="secondary-btn" to="/account">Open account dashboard</NuxtLink>

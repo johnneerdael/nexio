@@ -34,6 +34,7 @@ type SecretRow = {
 
 type DeviceRow = {
   id: string
+  device_user_id?: string | null
   device_name?: string | null
   device_model?: string | null
   device_platform?: string | null
@@ -133,10 +134,11 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const rows = await supabaseFetch<DeviceRow[]>(`/rest/v1/linked_devices?owner_id=eq.${encodeURIComponent(user.id)}&select=id,device_name,device_model,device_platform,last_seen_at,status`, {}, token, true)
+    const rows = await supabaseFetch<DeviceRow[]>(`/rest/v1/linked_devices?owner_id=eq.${encodeURIComponent(user.id)}&select=id,device_user_id,device_name,device_model,device_platform,last_seen_at,status`, {}, token, true)
     if (rows.length > 0) {
       linkedDevices = rows.map((row) => ({
-        id: row.id,
+        id: row.device_user_id ?? row.id,
+        deviceUserId: row.device_user_id ?? row.id,
         name: row.device_name ?? 'Linked TV',
         model: row.device_model ?? 'Unknown model',
         platform: row.device_platform ?? 'Android TV',

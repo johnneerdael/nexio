@@ -119,7 +119,7 @@
           <span class="badge">Cloud Account</span>
           <h2 class="section-title">Complete settings sync between the web and every linked addon instance.</h2>
           <p>
-            The portal now mirrors the addon settings surface instead of acting like a basic login utility. Appearance, layout, playback behavior, addon stack, repositories, catalogs, poster providers, and integration state all move through a single account snapshot.
+            The portal now mirrors the addon settings surface instead of acting like a basic login utility. Appearance, layout, playback behavior, addon stack, catalogs, poster providers, and integration state all move through a single account snapshot.
           </p>
         </div>
         <div class="story-visual sync-visual">
@@ -129,7 +129,7 @@
           </div>
           <div class="sync-line" />
           <div class="sync-node active">
-            <strong>Supabase account core</strong>
+            <strong>Secret-backed account core</strong>
             <span>Public sync state plus Vault-backed secrets</span>
           </div>
           <div class="sync-line" />

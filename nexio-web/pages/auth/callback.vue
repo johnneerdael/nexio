@@ -5,7 +5,7 @@
         <p class="badge">Portal Access</p>
         <h1 class="section-title" style="font-size:2.15rem; margin:0.8rem 0 0.4rem;">Completing sign in.</h1>
         <p style="margin:0; color: var(--text-soft); line-height:1.65;">
-          Finalizing your Supabase session and loading the account portal.
+          Finalizing your Nexio session and loading the account portal.
         </p>
       </div>
 
@@ -29,7 +29,7 @@ import type { PortalSession } from '~/types/portal'
 const route = useRoute()
 const router = useRouter()
 const error = ref('')
-const status = ref('Waiting for Supabase redirect payload...')
+const status = ref('Waiting for Nexio redirect payload...')
 const { signedIn, signOut, completeOAuthSession } = usePortalStore()
 
 function readHashPayload() {

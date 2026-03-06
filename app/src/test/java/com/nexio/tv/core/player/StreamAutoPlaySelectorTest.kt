@@ -32,7 +32,6 @@ class StreamAutoPlaySelectorTest {
             source = StreamAutoPlaySource.ALL_SOURCES,
             installedAddonNames = setOf("AddonA", "AddonB"),
             selectedAddons = emptySet(),
-            selectedPlugins = emptySet(),
             preferredBingeGroup = "same-group"
         )
 
@@ -61,7 +60,6 @@ class StreamAutoPlaySelectorTest {
             source = StreamAutoPlaySource.ALL_SOURCES,
             installedAddonNames = setOf("AddonA", "AddonB"),
             selectedAddons = emptySet(),
-            selectedPlugins = emptySet(),
             preferredBingeGroup = "missing-group"
         )
 
@@ -69,30 +67,29 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
-    fun `bingeGroup-first respects source and addon plugin filters`() {
+    fun `bingeGroup-first respects installed addon source filter`() {
         val filteredOutAddonMatch = stream(
             addonName = "AddonFilteredOut",
             url = "https://example.com/addon-match.m3u8",
             bingeGroup = "same-group"
         )
-        val allowedPluginMatch = stream(
-            addonName = "PluginAllowed",
-            url = "https://example.com/plugin-match.m3u8",
+        val allowedAddonMatch = stream(
+            addonName = "AddonAllowed",
+            url = "https://example.com/addon-allowed.m3u8",
             bingeGroup = "same-group"
         )
 
         val selected = StreamAutoPlaySelector.selectAutoPlayStream(
-            streams = listOf(filteredOutAddonMatch, allowedPluginMatch),
+            streams = listOf(filteredOutAddonMatch, allowedAddonMatch),
             mode = StreamAutoPlayMode.FIRST_STREAM,
             regexPattern = "",
-            source = StreamAutoPlaySource.ENABLED_PLUGINS_ONLY,
-            installedAddonNames = setOf("AddonFilteredOut"),
+            source = StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,
+            installedAddonNames = setOf("AddonAllowed"),
             selectedAddons = emptySet(),
-            selectedPlugins = setOf("PluginAllowed"),
             preferredBingeGroup = "same-group"
         )
 
-        assertEquals(allowedPluginMatch, selected)
+        assertEquals(allowedAddonMatch, selected)
     }
 
     @Test
@@ -115,7 +112,6 @@ class StreamAutoPlaySelectorTest {
             source = StreamAutoPlaySource.ALL_SOURCES,
             installedAddonNames = setOf("AddonA", "AddonB"),
             selectedAddons = emptySet(),
-            selectedPlugins = emptySet(),
             preferredBingeGroup = "unmatched-group"
         )
 
@@ -142,7 +138,6 @@ class StreamAutoPlaySelectorTest {
             source = StreamAutoPlaySource.ALL_SOURCES,
             installedAddonNames = setOf("AddonA", "AddonB"),
             selectedAddons = emptySet(),
-            selectedPlugins = emptySet(),
             preferredBingeGroup = "   "
         )
 
@@ -164,7 +159,6 @@ class StreamAutoPlaySelectorTest {
             source = StreamAutoPlaySource.ALL_SOURCES,
             installedAddonNames = setOf("AddonA"),
             selectedAddons = emptySet(),
-            selectedPlugins = emptySet(),
             preferredBingeGroup = "same-group"
         )
 

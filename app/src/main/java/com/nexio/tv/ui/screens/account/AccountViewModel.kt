@@ -12,13 +12,8 @@ import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.core.sync.AddonSyncService
 import com.nexio.tv.core.sync.AccountSettingsSyncService
 import com.nexio.tv.data.repository.AddonRepositoryImpl
-import com.nexio.tv.data.repository.LibraryRepositoryImpl
-import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.domain.repository.SyncRepository
-import io.github.jan.supabase.postgrest.Postgrest
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,9 +36,6 @@ class AccountViewModel @Inject constructor(
     private val addonSyncService: AddonSyncService,
     private val accountSettingsSyncService: AccountSettingsSyncService,
     private val addonRepository: AddonRepositoryImpl,
-    private val watchProgressRepository: WatchProgressRepositoryImpl,
-    private val libraryRepository: LibraryRepositoryImpl,
-    private val postgrest: Postgrest,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -69,7 +61,6 @@ class AccountViewModel @Inject constructor(
                 updateEffectiveOwnerId(state)
                 if (state is AuthState.FullAccount) {
                     loadConnectedStats()
-                    loadSyncOverview()
                 }
             }
         }
@@ -182,6 +173,7 @@ class AccountViewModel @Inject constructor(
             syncRepository.getLinkedDevices().fold(
                 onSuccess = { devices ->
                     _uiState.update { it.copy(linkedDevices = devices) }
+                    loadConnectedStats()
                 },
                 onFailure = { /* silently handle */ }
             )
@@ -331,12 +323,9 @@ class AccountViewModel @Inject constructor(
 
             val stats = runCatching {
                 val addonsCount = addonRepository.getInstalledAddons().first().size
-                val libraryCount = libraryRepository.libraryItems.first().size
-                val watchProgressCount = watchProgressRepository.allProgress.first().size
                 AccountConnectedStats(
                     addons = addonsCount,
-                    library = libraryCount,
-                    watchProgress = watchProgressCount
+                    linkedDevices = _uiState.value.linkedDevices.size
                 )
             }.getOrNull()
 
@@ -344,69 +333,6 @@ class AccountViewModel @Inject constructor(
                 it.copy(
                     connectedStats = stats ?: it.connectedStats,
                     isStatsLoading = false
-                )
-            }
-        }
-    }
-
-    @Serializable
-    private data class SyncOverviewResponse(
-        val addons: Map<String, Int> = emptyMap(),
-        @SerialName("library_items") val libraryItems: Map<String, Int> = emptyMap(),
-        @SerialName("watch_progress") val watchProgress: Map<String, Int> = emptyMap(),
-        @SerialName("watched_items") val watchedItems: Map<String, Int> = emptyMap(),
-        val profiles: Map<String, ProfileInfo> = emptyMap()
-    ) {
-        @Serializable
-        data class ProfileInfo(
-            val name: String,
-            val color: String
-        )
-    }
-
-    fun loadSyncOverview() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isSyncOverviewLoading = true) }
-
-            val overview = runCatching {
-                val response = postgrest.rpc("get_sync_overview")
-                    .decodeAs<SyncOverviewResponse>()
-
-                val allProfileIds = (response.addons.keys +
-                    response.libraryItems.keys + response.watchProgress.keys +
-                    response.watchedItems.keys + response.profiles.keys)
-                    .mapNotNull { it.toIntOrNull() }
-                    .distinct()
-                    .sorted()
-
-                val perProfile = allProfileIds.map { pid ->
-                    val pidStr = pid.toString()
-                    val remote = response.profiles[pidStr]
-                    ProfileSyncStats(
-                        profileId = pid,
-                        profileName = remote?.name ?: "Profile $pid",
-                        avatarColorHex = remote?.color ?: "#1E88E5",
-                        addons = response.addons[pidStr] ?: 0,
-                        library = response.libraryItems[pidStr] ?: 0,
-                        watchProgress = response.watchProgress[pidStr] ?: 0,
-                        watchedItems = response.watchedItems[pidStr] ?: 0
-                    )
-                }
-
-                SyncOverview(
-                    profileCount = response.profiles.size,
-                    totalAddons = response.addons.values.sum(),
-                    totalLibrary = response.libraryItems.values.sum(),
-                    totalWatchProgress = response.watchProgress.values.sum(),
-                    totalWatchedItems = response.watchedItems.values.sum(),
-                    perProfile = perProfile
-                )
-            }.getOrNull()
-
-            _uiState.update {
-                it.copy(
-                    syncOverview = overview ?: it.syncOverview,
-                    isSyncOverviewLoading = false
                 )
             }
         }

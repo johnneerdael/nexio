@@ -5,7 +5,6 @@
   - Account
   - Appearance
   - Layout
-  - Plugins
   - Integration
     - TMDB
     - MDBList
@@ -46,11 +45,6 @@
 - poster_card_width_dp (`104|112|120|126|134|140`, default `126`)
 - poster_card_corner_radius_dp (`0|4|8|12|16`, default `12`)
 
-## Plugins
-- plugins_enabled (default `true`)
-- repositories (managed list)
-- scraper enabled states (managed list)
-
 ## Integration / TMDB
 - tmdb_enabled (default `false`)
 - tmdb_language (default `en`)
@@ -66,7 +60,7 @@
 
 ## Integration / MDBList
 - mdblist_enabled (default `false`)
-- mdblist_api_key
+- mdblist_api_key (secret-backed, not stored in the public sync payload)
 - mdblist_show_trakt (default `true`)
 - mdblist_show_imdb (default `true`)
 - mdblist_show_tmdb (default `true`)
@@ -84,9 +78,9 @@
 
 ## Integration / Poster Ratings
 - poster_ratings_rpdb_enabled (default `false`)
-- poster_ratings_rpdb_api_key
+- poster_ratings_rpdb_api_key (secret-backed)
 - poster_ratings_top_enabled (default `false`)
-- poster_ratings_top_api_key
+- poster_ratings_top_api_key (secret-backed)
 - Rule: RPDB and TOPPosters are mutually exclusive.
 
 ## Playback / General
@@ -102,9 +96,8 @@
 - stream_reuse_last_link_enabled (default `false`)
 - stream_reuse_last_link_cache_hours (`1|6|12|24|48|72|168`, default `24`)
 - stream_auto_play_mode (`MANUAL|FIRST_STREAM|REGEX_MATCH`, default `MANUAL`)
-- stream_auto_play_source (`ALL_SOURCES|INSTALLED_ADDONS_ONLY|ENABLED_PLUGINS_ONLY`, default `ALL_SOURCES`)
+- stream_auto_play_source (`ALL_SOURCES|INSTALLED_ADDONS_ONLY`, default `ALL_SOURCES`)
 - stream_auto_play_selected_addons (string[])
-- stream_auto_play_selected_plugins (string[])
 - stream_auto_play_regex
 - stream_auto_play_next_episode_enabled (default `false`)
 - stream_auto_play_prefer_binge_group_for_next_episode (default `true`)

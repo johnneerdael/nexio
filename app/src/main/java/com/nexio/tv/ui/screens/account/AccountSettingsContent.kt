@@ -5,8 +5,6 @@ package com.nexio.tv.ui.screens.account
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,11 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,10 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,10 +41,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.R
 import com.nexio.tv.domain.model.AuthState
 import com.nexio.tv.ui.theme.NexioColors
-import androidx.compose.ui.res.stringResource
-import com.nexio.tv.R
 
 @Composable
 fun AccountSettingsContent(
@@ -93,175 +89,9 @@ fun AccountSettingsContent(
                 item(key = "account_status") {
                     StatusCard(label = stringResource(R.string.account_signed_in_label), value = authState.email)
                 }
-
-                val overview = uiState.syncOverview
-                if (overview != null) {
-                    item(key = "account_sync_overview") { SyncOverviewCard(overview) }
-                } else if (uiState.isSyncOverviewLoading) {
-                    item(key = "account_sync_overview_loading") { SyncOverviewLoadingCard() }
-                }
-
                 item(key = "account_sign_out") { SignOutSettingsButton(onClick = { viewModel.signOut() }) }
             }
-
         }
-    }
-}
-
-@Composable
-private fun SyncOverviewCard(overview: SyncOverview) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = NexioColors.BackgroundCard,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .padding(10.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            // Totals row — layout matches ProfileSyncRow columns
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = NexioColors.BackgroundElevated,
-                        shape = RoundedCornerShape(6.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.account_total_label),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NexioColors.Secondary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.width(100.dp)
-                )
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    ProfileStatValue(overview.totalAddons, stringResource(R.string.account_stat_addons))
-                    ProfileStatValue(overview.totalLibrary, stringResource(R.string.account_stat_library))
-                    ProfileStatValue(overview.totalWatchProgress, stringResource(R.string.account_stat_progress))
-                    ProfileStatValue(overview.totalWatchedItems, stringResource(R.string.account_stat_watched))
-                }
-            }
-
-            // Per-profile breakdown
-            if (overview.perProfile.isNotEmpty()) {
-                overview.perProfile.forEach { profile ->
-                    ProfileSyncRow(profile)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SyncStatChip(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = NexioColors.Secondary,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            color = NexioColors.TextTertiary
-        )
-    }
-}
-
-@Composable
-private fun ProfileSyncRow(profile: ProfileSyncStats) {
-    val color = runCatching { Color(android.graphics.Color.parseColor(profile.avatarColorHex)) }
-        .getOrDefault(Color(0xFF1E88E5))
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = NexioColors.BackgroundElevated,
-                shape = RoundedCornerShape(6.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(22.dp)
-                .clip(CircleShape)
-                .background(color),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = profile.profileName.firstOrNull()?.uppercase() ?: "?",
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Text(
-            text = profile.profileName,
-            style = MaterialTheme.typography.bodySmall,
-            color = NexioColors.TextPrimary,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(70.dp)
-        )
-
-        Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            ProfileStatValue(profile.addons, stringResource(R.string.account_stat_addons))
-            ProfileStatValue(profile.library, stringResource(R.string.account_stat_library))
-            ProfileStatValue(profile.watchProgress, stringResource(R.string.account_stat_progress))
-            ProfileStatValue(profile.watchedItems, stringResource(R.string.account_stat_watched))
-        }
-    }
-}
-
-@Composable
-private fun ProfileStatValue(count: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = count.toString(),
-            fontSize = 12.sp,
-            color = if (count > 0) NexioColors.TextPrimary else NexioColors.TextTertiary,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            text = label,
-            fontSize = 8.sp,
-            color = NexioColors.TextTertiary
-        )
-    }
-}
-
-@Composable
-private fun SyncOverviewLoadingCard() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = NexioColors.BackgroundCard,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .padding(10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = stringResource(R.string.account_loading_sync),
-            style = MaterialTheme.typography.bodySmall,
-            color = NexioColors.TextSecondary
-        )
     }
 }
 
@@ -305,7 +135,7 @@ private fun SettingsActionButton(
                 tint = if (isFocused) NexioColors.Primary else NexioColors.TextSecondary
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
@@ -393,4 +223,3 @@ private fun SignOutSettingsButton(onClick: () -> Unit) {
         }
     }
 }
-

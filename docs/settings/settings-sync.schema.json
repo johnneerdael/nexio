@@ -4,7 +4,7 @@
   "title": "NEXIO Settings Sync Payload",
   "type": "object",
   "additionalProperties": false,
-  "required": ["appearance", "layout", "plugins", "integrations", "playback", "trakt", "debug"],
+  "required": ["appearance", "layout", "integrations", "playback", "trakt", "debug"],
   "properties": {
     "appearance": {
       "type": "object",
@@ -41,27 +41,6 @@
         "posterCardCornerRadiusDp": {"type": "integer", "enum": [0, 4, 8, 12, 16], "default": 12}
       }
     },
-    "plugins": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["pluginsEnabled"],
-      "properties": {
-        "pluginsEnabled": {"type": "boolean", "default": true},
-        "repositories": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["url"],
-            "properties": {
-              "url": {"type": "string", "minLength": 1},
-              "enabledScraperIds": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "default": []}
-            }
-          }
-        }
-      }
-    },
     "integrations": {
       "type": "object",
       "additionalProperties": false,
@@ -88,10 +67,9 @@
         "mdblist": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "apiKey", "showTrakt", "showImdb", "showTmdb", "showLetterboxd", "showTomatoes", "showAudience", "showMetacritic", "hiddenPersonalListKeys", "selectedTopListKeys", "catalogOrder"],
+          "required": ["enabled", "showTrakt", "showImdb", "showTmdb", "showLetterboxd", "showTomatoes", "showAudience", "showMetacritic", "hiddenPersonalListKeys", "selectedTopListKeys", "catalogOrder"],
           "properties": {
             "enabled": {"type": "boolean", "default": false},
-            "apiKey": {"type": "string", "default": ""},
             "showTrakt": {"type": "boolean", "default": true},
             "showImdb": {"type": "boolean", "default": true},
             "showTmdb": {"type": "boolean", "default": true},
@@ -116,12 +94,10 @@
         "posterRatings": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["rpdbEnabled", "rpdbApiKey", "topPostersEnabled", "topPostersApiKey"],
+          "required": ["rpdbEnabled", "topPostersEnabled"],
           "properties": {
             "rpdbEnabled": {"type": "boolean", "default": false},
-            "rpdbApiKey": {"type": "string", "default": ""},
-            "topPostersEnabled": {"type": "boolean", "default": false},
-            "topPostersApiKey": {"type": "string", "default": ""}
+            "topPostersEnabled": {"type": "boolean", "default": false}
           },
           "allOf": [
             {"if": {"properties": {"rpdbEnabled": {"const": true}}}, "then": {"properties": {"topPostersEnabled": {"const": false}}}},
@@ -151,15 +127,14 @@
         "streamSelection": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["playerPreference", "streamReuseLastLinkEnabled", "streamReuseLastLinkCacheHours", "streamAutoPlayMode", "streamAutoPlaySource", "streamAutoPlaySelectedAddons", "streamAutoPlaySelectedPlugins", "streamAutoPlayRegex", "streamAutoPlayNextEpisodeEnabled", "streamAutoPlayPreferBingeGroupForNextEpisode", "nextEpisodeThresholdMode", "nextEpisodeThresholdPercent", "nextEpisodeThresholdMinutesBeforeEnd"],
+          "required": ["playerPreference", "streamReuseLastLinkEnabled", "streamReuseLastLinkCacheHours", "streamAutoPlayMode", "streamAutoPlaySource", "streamAutoPlaySelectedAddons", "streamAutoPlayRegex", "streamAutoPlayNextEpisodeEnabled", "streamAutoPlayPreferBingeGroupForNextEpisode", "nextEpisodeThresholdMode", "nextEpisodeThresholdPercent", "nextEpisodeThresholdMinutesBeforeEnd"],
           "properties": {
             "playerPreference": {"type": "string", "enum": ["INTERNAL", "EXTERNAL", "ASK_EVERY_TIME"], "default": "INTERNAL"},
             "streamReuseLastLinkEnabled": {"type": "boolean", "default": false},
             "streamReuseLastLinkCacheHours": {"type": "integer", "enum": [1, 6, 12, 24, 48, 72, 168], "default": 24},
             "streamAutoPlayMode": {"type": "string", "enum": ["MANUAL", "FIRST_STREAM", "REGEX_MATCH"], "default": "MANUAL"},
-            "streamAutoPlaySource": {"type": "string", "enum": ["ALL_SOURCES", "INSTALLED_ADDONS_ONLY", "ENABLED_PLUGINS_ONLY"], "default": "ALL_SOURCES"},
+            "streamAutoPlaySource": {"type": "string", "enum": ["ALL_SOURCES", "INSTALLED_ADDONS_ONLY"], "default": "ALL_SOURCES"},
             "streamAutoPlaySelectedAddons": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []},
-            "streamAutoPlaySelectedPlugins": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "default": []},
             "streamAutoPlayRegex": {"type": "string", "default": ""},
             "streamAutoPlayNextEpisodeEnabled": {"type": "boolean", "default": false},
             "streamAutoPlayPreferBingeGroupForNextEpisode": {"type": "boolean", "default": true},

@@ -6,27 +6,7 @@ import com.nexio.tv.domain.model.AuthState
 
 data class AccountConnectedStats(
     val addons: Int = 0,
-    val library: Int = 0,
-    val watchProgress: Int = 0
-)
-
-data class ProfileSyncStats(
-    val profileId: Int,
-    val profileName: String,
-    val avatarColorHex: String,
-    val addons: Int = 0,
-    val library: Int = 0,
-    val watchProgress: Int = 0,
-    val watchedItems: Int = 0
-)
-
-data class SyncOverview(
-    val profileCount: Int = 0,
-    val totalAddons: Int = 0,
-    val totalLibrary: Int = 0,
-    val totalWatchProgress: Int = 0,
-    val totalWatchedItems: Int = 0,
-    val perProfile: List<ProfileSyncStats> = emptyList()
+    val linkedDevices: Int = 0
 )
 
 data class AccountUiState(
@@ -39,8 +19,6 @@ data class AccountUiState(
     val linkedDevices: List<SupabaseLinkedDevice> = emptyList(),
     val effectiveOwnerId: String? = null,
     val connectedStats: AccountConnectedStats? = null,
-    val syncOverview: SyncOverview? = null,
-    val isSyncOverviewLoading: Boolean = false,
     val qrLoginCode: String? = null,
     val qrLoginUrl: String? = null,
     val qrLoginNonce: String? = null,

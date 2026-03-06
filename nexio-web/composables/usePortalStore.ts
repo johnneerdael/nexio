@@ -3,7 +3,6 @@ import { parseAddonInstallUrl, secretRefs } from '~/utils/account-secrets'
 import {
   defaultAccountAddons,
   defaultSettings,
-  defaultSyncExclusions,
   demoDevices
 } from '~/utils/portal-defaults'
 import type {
@@ -13,7 +12,6 @@ import type {
   BootstrapPayload,
   LinkedDevice,
   MDBListListOption,
-  PluginRepository,
   PortalSession,
   PortalSettings,
   SecretMetadata,
@@ -142,6 +140,73 @@ function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): str
   })
 }
 
+function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSettings {
+  const defaults = defaultSettings()
+
+  return {
+    appearance: {
+      ...defaults.appearance,
+      ...(input?.appearance ?? {})
+    },
+    layout: {
+      ...defaults.layout,
+      ...(input?.layout ?? {})
+    },
+    integrations: {
+      tmdb: {
+        ...defaults.integrations.tmdb,
+        ...(input?.integrations?.tmdb ?? {})
+      },
+      mdblist: {
+        ...defaults.integrations.mdblist,
+        ...(input?.integrations?.mdblist ?? {})
+      },
+      animeSkip: {
+        ...defaults.integrations.animeSkip,
+        ...(input?.integrations?.animeSkip ?? {})
+      },
+      posterRatings: {
+        ...defaults.integrations.posterRatings,
+        ...(input?.integrations?.posterRatings ?? {})
+      },
+      traktAuth: {
+        ...defaults.integrations.traktAuth,
+        ...(input?.integrations?.traktAuth ?? {})
+      }
+    },
+    playback: {
+      general: {
+        ...defaults.playback.general,
+        ...(input?.playback?.general ?? {})
+      },
+      streamSelection: {
+        ...defaults.playback.streamSelection,
+        ...(input?.playback?.streamSelection ?? {})
+      },
+      audioTrailer: {
+        ...defaults.playback.audioTrailer,
+        ...(input?.playback?.audioTrailer ?? {})
+      },
+      subtitles: {
+        ...defaults.playback.subtitles,
+        ...(input?.playback?.subtitles ?? {})
+      },
+      bufferNetwork: {
+        ...defaults.playback.bufferNetwork,
+        ...(input?.playback?.bufferNetwork ?? {})
+      }
+    },
+    trakt: {
+      ...defaults.trakt,
+      ...(input?.trakt ?? {})
+    },
+    debug: {
+      ...defaults.debug,
+      ...(input?.debug ?? {})
+    }
+  }
+}
+
 function normalizeSnapshot(source: Partial<StoreState>): StoreState {
   return {
     bootstrapped: false,
@@ -152,7 +217,7 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
     syncRevision: source.syncRevision ?? 1,
     lastSyncedAt: source.lastSyncedAt ?? new Date().toISOString(),
     session: source.session ?? readSession(),
-    settings: clone(source.settings ?? defaultSettings()),
+    settings: sanitizeSettings(clone(source.settings ?? defaultSettings())),
     addons: clone(source.addons ?? defaultAccountAddons()),
     secretStatuses: clone(source.secretStatuses ?? []),
     secretDrafts: {},
@@ -231,123 +296,26 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
   return (await response.json()) as T
 }
 
-function traktBuiltInCatalogs(settings: PortalSettings): AddonCatalogRecord[] {
-  const labels: Record<string, { name: string; type: string }> = {
-    trakt_up_next: { name: 'Trakt Up Next', type: 'series' },
-    trakt_trending_movies: { name: 'Trakt Trending Movies', type: 'movie' },
-    trakt_trending_shows: { name: 'Trakt Trending Shows', type: 'series' },
-    trakt_popular_movies: { name: 'Trakt Popular Movies', type: 'movie' },
-    trakt_popular_shows: { name: 'Trakt Popular Shows', type: 'series' },
-    trakt_recommended_movies: { name: 'Trakt Recommended Movies', type: 'movie' },
-    trakt_recommended_shows: { name: 'Trakt Recommended Shows', type: 'series' },
-    trakt_calendar_next_7_days: { name: 'Trakt Calendar (Next 7 Days)', type: 'series' }
-  }
+function orderedAddonCatalogs(catalogs: AddonCatalogRecord[], settings: PortalSettings): AddonCatalogRecord[] {
+  const order = settings.layout.homeCatalogOrderKeys
+  const orderIndex = new Map(order.map((key, index) => [key, index]))
+  const uniqueCatalogs = new Map(catalogs.map((catalog) => [catalog.key, catalog]))
 
-  return settings.trakt.catalogOrder
-    .filter((catalogId) => settings.trakt.catalogEnabledSet.includes(catalogId))
-    .map((catalogId) => ({
-      key: catalogId,
-      disableKey: '',
-      addonId: 'trakt',
-      addonName: 'Trakt',
-      addonUrl: 'trakt',
-      catalogId,
-      catalogName: labels[catalogId]?.name ?? catalogId,
-      type: labels[catalogId]?.type ?? 'series',
-      source: 'trakt' as const,
-      isSearchOnly: false
-    }))
-}
-
-function traktPopularListCatalogs(
-  settings: PortalSettings,
-  lists: TraktPopularListOption[]
-): AddonCatalogRecord[] {
-  const selected = new Set(settings.trakt.selectedPopularListKeys)
-  return lists
-    .filter((list) => selected.has(list.key))
-    .flatMap((list) => ([
-      {
-        key: `trakt_${list.catalogIdBase}_movies`,
-        disableKey: '',
-        addonId: 'trakt',
-        addonName: 'Trakt',
-        addonUrl: 'trakt',
-        catalogId: `${list.catalogIdBase}_movies`,
-        catalogName: `${list.title} (Movies)`,
-        type: 'movie',
-        source: 'trakt' as const,
-        isSearchOnly: false
-      },
-      {
-        key: `trakt_${list.catalogIdBase}_shows`,
-        disableKey: '',
-        addonId: 'trakt',
-        addonName: 'Trakt',
-        addonUrl: 'trakt',
-        catalogId: `${list.catalogIdBase}_shows`,
-        catalogName: `${list.title} (Shows)`,
-        type: 'series',
-        source: 'trakt' as const,
-        isSearchOnly: false
+  return [...uniqueCatalogs.values()]
+    .sort((left, right) => {
+      const leftIndex = orderIndex.get(left.key)
+      const rightIndex = orderIndex.get(right.key)
+      if (leftIndex == null && rightIndex == null) {
+        return left.catalogName.localeCompare(right.catalogName)
       }
-    ]))
-}
-
-function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'custom'
-}
-
-function mdblistCatalogs(
-  settings: PortalSettings,
-  personalLists: MDBListListOption[],
-  topLists: MDBListListOption[]
-): AddonCatalogRecord[] {
-  const hidden = new Set(settings.integrations.mdblist.hiddenPersonalListKeys)
-  const selectedTop = new Set(settings.integrations.mdblist.selectedTopListKeys)
-
-  const active = [
-    ...personalLists.filter((list) => !hidden.has(list.key)),
-    ...topLists.filter((list) => selectedTop.has(list.key))
-  ]
-
-  const order = settings.integrations.mdblist.catalogOrder
-  const ordered = order.length > 0
-    ? [
-        ...order.map((key) => active.find((list) => list.key === key)).filter(Boolean) as MDBListListOption[],
-        ...active.filter((list) => !order.includes(list.key))
-      ]
-    : active
-
-  return ordered.flatMap((list) => {
-    const base = `mdblist_list_${slugify(list.key)}`
-    return [
-      {
-        key: `mdblist_${base}_movies`,
-        disableKey: '',
-        addonId: 'mdblist',
-        addonName: 'MDBList',
-        addonUrl: 'mdblist',
-        catalogId: `${base}_movies`,
-        catalogName: `${list.title} (Movies)`,
-        type: 'movie',
-        source: 'mdblist' as const,
-        isSearchOnly: false
-      },
-      {
-        key: `mdblist_${base}_shows`,
-        disableKey: '',
-        addonId: 'mdblist',
-        addonName: 'MDBList',
-        addonUrl: 'mdblist',
-        catalogId: `${base}_shows`,
-        catalogName: `${list.title} (Shows)`,
-        type: 'series',
-        source: 'mdblist' as const,
-        isSearchOnly: false
+      if (leftIndex == null) {
+        return 1
       }
-    ]
-  })
+      if (rightIndex == null) {
+        return -1
+      }
+      return leftIndex - rightIndex
+    })
 }
 
 export function usePortalStore() {
@@ -440,7 +408,7 @@ export function usePortalStore() {
       state.value.bootstrapped = true
       state.value.demoMode = !payload.session
       state.value.session = payload.session ?? session
-      state.value.settings = clone(payload.snapshot.settings)
+      state.value.settings = sanitizeSettings(clone(payload.snapshot.settings))
       state.value.addons = clone(payload.snapshot.addons)
       state.value.secretStatuses = clone(payload.snapshot.secretStatuses)
       state.value.linkedDevices = clone(payload.snapshot.linkedDevices)
@@ -672,42 +640,65 @@ export function usePortalStore() {
     )
   }
 
-  function addRepository(url: string, label: string) {
-    const cleanUrl = url.trim()
-    const cleanLabel = label.trim() || 'Repository'
-    if (!cleanUrl) {
+  function moveCatalog(key: string, direction: -1 | 1) {
+    const availableKeys = orderedAddonCatalogs(
+      Object.values(state.value.addonInspections)
+        .flatMap((inspection) => inspection.catalogs)
+        .filter((catalog) => !catalog.isSearchOnly),
+      state.value.settings
+    ).map((catalog) => catalog.key)
+
+    if (!availableKeys.includes(key)) {
       return
     }
 
-    state.value.settings.plugins.repositories = [
-      ...state.value.settings.plugins.repositories,
-      {
-        id: crypto.randomUUID(),
-        label: cleanLabel,
-        url: cleanUrl,
-        enabledScraperIds: []
-      }
+    const fullOrder = [
+      ...state.value.settings.layout.homeCatalogOrderKeys,
+      ...availableKeys.filter((catalogKey) => !state.value.settings.layout.homeCatalogOrderKeys.includes(catalogKey))
     ]
+    const addonPositions = fullOrder
+      .map((catalogKey, index) => availableKeys.includes(catalogKey) ? index : -1)
+      .filter((index) => index !== -1)
+    const currentAddonIndex = addonPositions.findIndex((position) => fullOrder[position] === key)
+    if (currentAddonIndex === -1) {
+      return
+    }
+
+    const targetAddonIndex = Math.max(0, Math.min(addonPositions.length - 1, currentAddonIndex + direction))
+    if (targetAddonIndex === currentAddonIndex) {
+      return
+    }
+
+    const from = addonPositions[currentAddonIndex]
+    const to = addonPositions[targetAddonIndex]
+    const nextOrder = [...fullOrder]
+    ;[nextOrder[from], nextOrder[to]] = [nextOrder[to], nextOrder[from]]
+    state.value.settings.layout.homeCatalogOrderKeys = nextOrder
   }
 
-  function removeRepository(id: string) {
-    state.value.settings.plugins.repositories = state.value.settings.plugins.repositories.filter(
-      (repository) => repository.id !== id
-    )
+  function toggleCatalog(key: string) {
+    const disabled = new Set(state.value.settings.layout.disabledHomeCatalogKeys)
+    if (disabled.has(key)) {
+      disabled.delete(key)
+    } else {
+      disabled.add(key)
+    }
+    state.value.settings.layout.disabledHomeCatalogKeys = [...disabled]
   }
 
-  function setRepositoryScrapers(id: string, value: string) {
-    state.value.settings.plugins.repositories = state.value.settings.plugins.repositories.map(
-      (repository) =>
-        repository.id === id
-          ? {
-              ...repository,
-              enabledScraperIds: value
-                .split(',')
-                .map((entry) => entry.trim())
-                .filter(Boolean)
-            }
-          : repository
+  async function unlinkDevice(deviceUserId: string) {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before unlinking a TV.')
+    }
+
+    await apiFetch('/api/account/devices/unlink', {
+      method: 'POST',
+      body: JSON.stringify({ deviceUserId })
+    }, token)
+
+    state.value.linkedDevices = state.value.linkedDevices.filter((device) =>
+      (device.deviceUserId ?? device.id) !== deviceUserId
     )
   }
 
@@ -741,7 +732,7 @@ export function usePortalStore() {
       remoteSignature = snapshotSignature(state.value.settings, state.value.addons)
     } catch (error) {
       state.value.demoMode = true
-      state.value.error = error instanceof Error ? error.message : 'Failed to sync to Supabase.'
+      state.value.error = error instanceof Error ? error.message : 'Failed to sync to Nexio Live.'
       throw error
     } finally {
       state.value.saving = false
@@ -1010,61 +1001,27 @@ export function usePortalStore() {
     )
   }
 
-  const syncScopeLabel = computed(() => `${state.value.addons.length} addons, ${defaultSyncExclusions.length} device-only exclusions`)
   const signedIn = computed(() => Boolean(state.value.session))
-  const repositories = computed<PluginRepository[]>(() => state.value.settings.plugins.repositories)
   const secretStatusMap = computed<Record<string, SecretMetadata>>(() =>
     Object.fromEntries(state.value.secretStatuses.map((entry) => [entry.secretRef, entry]))
   )
   const catalogInventory = computed<AddonCatalogRecord[]>(() => {
-    const disabled = new Set(state.value.settings.layout.disabledHomeCatalogKeys)
     const addonCatalogs = Object.values(state.value.addonInspections)
       .flatMap((inspection) => inspection.catalogs)
       .filter((catalog) => !catalog.isSearchOnly)
-    const traktCatalogs = traktBuiltInCatalogs(state.value.settings)
-    const traktPopularCatalogs = traktPopularListCatalogs(state.value.settings, state.value.traktDiscovery.popularLists)
-    const mdblistDerivedCatalogs = mdblistCatalogs(
-      state.value.settings,
-      state.value.mdblistDiscovery.personalLists,
-      state.value.mdblistDiscovery.topLists
-    )
-
-    return [...addonCatalogs, ...traktCatalogs, ...traktPopularCatalogs, ...mdblistDerivedCatalogs]
-      .map((catalog) => ({
-        ...catalog,
-        disableKey: catalog.disableKey,
-        addonName: catalog.addonName
-      }))
-      .sort((left, right) => {
-        const leftIndex = state.value.settings.layout.homeCatalogOrderKeys.indexOf(left.key)
-        const rightIndex = state.value.settings.layout.homeCatalogOrderKeys.indexOf(right.key)
-        if (leftIndex === -1 && rightIndex === -1) {
-          return left.catalogName.localeCompare(right.catalogName)
-        }
-        if (leftIndex === -1) {
-          return 1
-        }
-        if (rightIndex === -1) {
-          return -1
-        }
-        return leftIndex - rightIndex
-      })
+    return orderedAddonCatalogs(addonCatalogs, state.value.settings)
       .map((catalog) => ({
         ...catalog,
         disableKey: catalog.disableKey || '',
-        key: catalog.key || `${catalog.addonId}_${catalog.catalogId}`,
-        addonName: disabled.has(catalog.disableKey) ? `${catalog.addonName} · disabled` : catalog.addonName
+        key: catalog.key || `${catalog.addonId}_${catalog.catalogId}`
       }))
   })
 
   return {
     state,
-    syncScopeLabel,
     signedIn,
-    repositories,
     secretStatusMap,
     catalogInventory,
-    defaultSyncExclusions,
     bootstrap,
     signIn,
     signUp,
@@ -1076,9 +1033,9 @@ export function usePortalStore() {
     removeAddon,
     moveAddon,
     toggleAddon,
-    addRepository,
-    removeRepository,
-    setRepositoryScrapers,
+    moveCatalog,
+    toggleCatalog,
+    unlinkDevice,
     persistSnapshot,
     secretStatus,
     setSecretDraft,

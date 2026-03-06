@@ -511,7 +511,7 @@
   <string name="library_empty_trakt_subtitle">Usa + en detalles para añadir elementos a lista de deseos o listas</string>
   <!-- AccountSettingsContent -->
   <string name="account_loading">Cargando\u2026</string>
-  <string name="account_sync_description">Sincroniza tu biblioteca, progreso de visualización, complementos y complementos en dispositivos.</string>
+  <string name="account_sync_description">Sincroniza la configuración de tu cuenta y tus addons entre dispositivos.</string>
   <string name="account_signin_qr_title">Iniciar sesión con QR</string>
   <string name="account_signin_qr_subtitle">Escanea un código QR y completa el inicio de sesión de correo electrónico en tu teléfono</string>
   <string name="account_signed_in_label">Conectado</string>
@@ -565,7 +565,7 @@
   <string name="update_unknown_sources">Permite instalaciones de fuentes desconocidas para continuar.</string>
   <!-- AccountScreen -->
   <string name="account_title">Cuenta</string>
-  <string name="account_sign_in_description">Inicia sesión para sincronizar tu biblioteca, progreso de visualización, complementos y complementos en dispositivos. La sincronización de biblioteca y progreso de visualización solo ocurre cuando Trakt no está conectado.</string>
+  <string name="account_sign_in_description">Inicia sesión para sincronizar la configuración de tu cuenta y tus addons entre dispositivos.</string>
   <string name="account_sync_code_title">Código de sincronización</string>
   <string name="account_sync_code_description">Sincroniza entre dispositivos sin crear una cuenta.</string>
   <string name="account_linked_devices">Dispositivos vinculados (%1$d)</string>
