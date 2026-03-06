@@ -738,9 +738,10 @@ export function usePortalStore() {
     state.value.settings.layout.homeCatalogOrderKeys = nextOrder
   }
 
-  function reorderCatalog(draggedKey: string, targetKey: string) {
+  function reorderCatalogs(orderedVisibleKeys: string[]) {
     const availableKeys = catalogInventory.value.map((catalog) => catalog.key)
-    if (!availableKeys.includes(draggedKey) || !availableKeys.includes(targetKey) || draggedKey === targetKey) {
+    const visibleKeys = orderedVisibleKeys.filter((key) => availableKeys.includes(key))
+    if (visibleKeys.length === 0) {
       return
     }
 
@@ -748,17 +749,25 @@ export function usePortalStore() {
       ...state.value.settings.layout.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
       ...availableKeys.filter((catalogKey) => !state.value.settings.layout.homeCatalogOrderKeys.includes(catalogKey))
     ]
+    const visibleKeySet = new Set(visibleKeys)
+    const hiddenKeys = fullOrder.filter((key) => !visibleKeySet.has(key))
+    const nextOrder: string[] = []
+    let visibleIndex = 0
+    let hiddenIndex = 0
 
-    const fromIndex = fullOrder.indexOf(draggedKey)
-    const toIndex = fullOrder.indexOf(targetKey)
-    if (fromIndex === -1 || toIndex === -1) {
-      return
+    for (const key of fullOrder) {
+      if (visibleKeySet.has(key)) {
+        nextOrder.push(visibleKeys[visibleIndex] ?? key)
+        visibleIndex += 1
+      } else {
+        nextOrder.push(hiddenKeys[hiddenIndex] ?? key)
+        hiddenIndex += 1
+      }
     }
 
-    const nextOrder = [...fullOrder]
-    const [moved] = nextOrder.splice(fromIndex, 1)
-    nextOrder.splice(toIndex, 0, moved)
-    state.value.settings.layout.homeCatalogOrderKeys = nextOrder
+    const trailingVisible = visibleKeys.slice(visibleIndex)
+    const trailingHidden = hiddenKeys.slice(hiddenIndex)
+    state.value.settings.layout.homeCatalogOrderKeys = [...nextOrder, ...trailingVisible, ...trailingHidden]
   }
 
   function toggleCatalog(key: string) {
@@ -1137,7 +1146,7 @@ export function usePortalStore() {
     moveAddon,
     toggleAddon,
     moveCatalog,
-    reorderCatalog,
+    reorderCatalogs,
     toggleCatalog,
     unlinkDevice,
     persistSnapshot,
