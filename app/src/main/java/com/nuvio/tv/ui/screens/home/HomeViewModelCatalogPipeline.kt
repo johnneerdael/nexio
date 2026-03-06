@@ -3,7 +3,6 @@ package com.nuvio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
-import com.nuvio.tv.data.repository.movieLookupKeys
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
 import com.nuvio.tv.domain.model.CatalogRow
@@ -76,17 +75,6 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
     }
 }
 
-internal fun HomeViewModel.observeWatchedMovieIdsPipeline() {
-    viewModelScope.launch {
-        watchProgressRepository.observeWatchedMovieIds()
-            .distinctUntilChanged()
-            .collectLatest { watchedIds ->
-                watchedMovieIds = watchedIds
-                syncMovieWatchedStatusForRowsPipeline(_fullCatalogRows.value)
-            }
-    }
-}
-
 internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     addons: List<Addon>,
     forceReload: Boolean = false
@@ -111,7 +99,6 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     posterStatusReconcileJob?.cancel()
     reconcilePosterStatusObserversPipeline(emptyList())
     _fullCatalogRows.value = emptyList()
-    syncMovieWatchedStatusForRowsPipeline(emptyList())
     truncatedRowCache.clear()
     hasRenderedFirstCatalog = false
     trailerPreviewLoadingIds.clear()
@@ -454,7 +441,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     _fullCatalogRows.update { rows ->
         if (rows == fullRowsFiltered) rows else fullRowsFiltered
     }
-    syncMovieWatchedStatusForRowsPipeline(fullRowsFiltered)
 
     val nextGridItems = if (currentLayout == HomeLayout.GRID) {
         replaceGridHeroItemsPipeline(baseGridItems, baseHeroItems)
@@ -553,11 +539,19 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             }
         }
     val desiredKeys = desiredItemsByKey.keys
+    val desiredMovieKeys = desiredItemsByKey
+        .filterValues { (_, itemType) -> itemType.equals("movie", ignoreCase = true) }
+        .keys
 
     posterLibraryObserverJobs.keys
         .filterNot { it in desiredKeys }
         .forEach { staleKey ->
             posterLibraryObserverJobs.remove(staleKey)?.cancel()
+        }
+    movieWatchedObserverJobs.keys
+        .filterNot { it in desiredMovieKeys }
+        .forEach { staleKey ->
+            movieWatchedObserverJobs.remove(staleKey)?.cancel()
         }
 
     desiredItemsByKey.forEach { (statusKey, itemRef) ->
@@ -581,49 +575,51 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
                     }
             }
         }
+
+        if (itemType.equals("movie", ignoreCase = true)) {
+            if (statusKey !in movieWatchedObserverJobs) {
+                movieWatchedObserverJobs[statusKey] = viewModelScope.launch {
+                    watchProgressRepository.isWatched(contentId = itemId)
+                        .distinctUntilChanged()
+                        .collectLatest { watched ->
+                            _uiState.update { state ->
+                                if (state.movieWatchedStatus[statusKey] == watched) {
+                                    state
+                                } else {
+                                    state.copy(
+                                        movieWatchedStatus = state.movieWatchedStatus + (statusKey to watched)
+                                    )
+                                }
+                            }
+                        }
+                }
+            }
+        }
     }
 
     _uiState.update { state ->
         val trimmedLibraryMembership =
             state.posterLibraryMembership.filterKeys { it in desiredKeys }
+        val trimmedMovieWatchedStatus =
+            state.movieWatchedStatus.filterKeys { it in desiredMovieKeys }
         val trimmedLibraryPending =
             state.posterLibraryPending.filterTo(linkedSetOf()) { it in desiredKeys }
+        val trimmedMovieWatchedPending =
+            state.movieWatchedPending.filterTo(linkedSetOf()) { it in desiredMovieKeys }
 
         if (
             trimmedLibraryMembership == state.posterLibraryMembership &&
-            trimmedLibraryPending == state.posterLibraryPending
+            trimmedMovieWatchedStatus == state.movieWatchedStatus &&
+            trimmedLibraryPending == state.posterLibraryPending &&
+            trimmedMovieWatchedPending == state.movieWatchedPending
         ) {
             state
         } else {
             state.copy(
                 posterLibraryMembership = trimmedLibraryMembership,
-                posterLibraryPending = trimmedLibraryPending
-            )
-        }
-    }
-}
-
-internal fun HomeViewModel.syncMovieWatchedStatusForRowsPipeline(rows: List<CatalogRow>) {
-    val watchedStatus = linkedMapOf<String, Boolean>()
-    rows.asSequence()
-        .flatMap { row -> row.items.asSequence() }
-        .filter { item -> item.apiType.equals("movie", ignoreCase = true) }
-        .forEach { item ->
-            val statusKey = homeItemStatusKey(item.id, item.apiType)
-            if (statusKey !in watchedStatus) {
-                watchedStatus[statusKey] = movieLookupKeys(item.id).any { it in watchedMovieIds }
-            }
-        }
-
-    val watchedKeys = watchedStatus.keys
-    _uiState.update { state ->
-        val trimmedPending = state.movieWatchedPending.filterTo(linkedSetOf()) { it in watchedKeys }
-        if (state.movieWatchedStatus == watchedStatus && state.movieWatchedPending == trimmedPending) {
-            state
-        } else {
-            state.copy(
-                movieWatchedStatus = watchedStatus,
-                movieWatchedPending = trimmedPending
+                movieWatchedStatus = trimmedMovieWatchedStatus,
+                posterLibraryPending = trimmedLibraryPending,
+                movieWatchedPending = trimmedMovieWatchedPending
             )
         }
     }
