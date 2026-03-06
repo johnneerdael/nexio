@@ -210,7 +210,7 @@ class CatalogOrderViewModel @Inject constructor(
         fun addBuiltIn(catalogId: String, catalogName: String, typeLabel: String) {
             if (catalogId !in prefs.enabledCatalogs) return
             entries += CatalogOrderEntry(
-                key = syntheticKey(addonId = "trakt", type = typeLabel, catalogId = catalogId),
+                key = catalogId,
                 disableKey = "",
                 catalogName = catalogName,
                 addonName = "Trakt",
@@ -283,13 +283,6 @@ class CatalogOrderViewModel @Inject constructor(
 
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {
         return "${addonId}_${type}_${catalogId}"
-    }
-
-    private fun syntheticKey(addonId: String, type: String, catalogId: String): String {
-        return when (addonId.lowercase()) {
-            "trakt" -> "trakt_$catalogId"
-            else -> "${addonId}_${type}_$catalogId"
-        }
     }
 
     private fun disableKey(

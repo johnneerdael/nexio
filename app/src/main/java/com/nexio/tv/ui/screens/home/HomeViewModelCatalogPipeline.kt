@@ -406,6 +406,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
         val savedOrderSet = savedOrderKeys.toSet()
         val effectiveOrderKeys = savedOrderKeys + defaultOrderKeys.filterNot { it in savedOrderSet }
+        Log.d(
+            HomeViewModel.TAG,
+            "Catalog order reconciliation saved=${savedOrderKeys.size} default=${defaultOrderKeys.size} effective=${effectiveOrderKeys.size}"
+        )
         val combinedRows = buildList {
             effectiveOrderKeys.forEach { key ->
                 syntheticRowsByKey[key]?.let { addAll(it) } ?: rawRowsByKey[key]?.let { add(it) }
