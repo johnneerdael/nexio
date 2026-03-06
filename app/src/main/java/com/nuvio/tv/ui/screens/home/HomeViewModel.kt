@@ -117,7 +117,7 @@ class HomeViewModel @Inject constructor(
     internal var externalMetaPrefetchJob: Job? = null
     internal var pendingExternalMetaPrefetchItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
-    internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
+    internal var watchedMovieIds: Set<String> = emptySet()
     internal var activePosterListPickerInput: LibraryEntryInput? = null
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
@@ -134,6 +134,7 @@ class HomeViewModel @Inject constructor(
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
         observeLibraryState()
+        observeWatchedMovieIds()
         observeTmdbSettings()
         loadContinueWatching()
         observeInstalledAddons()
@@ -231,6 +232,8 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
 
+    private fun observeWatchedMovieIds() = observeWatchedMovieIdsPipeline()
+
     internal var posterStatusReconcileJob: Job? = null
 
     private fun schedulePosterStatusReconcile(rows: List<CatalogRow>) =
@@ -238,6 +241,9 @@ class HomeViewModel @Inject constructor(
 
     private fun reconcilePosterStatusObservers(rows: List<CatalogRow>) =
         reconcilePosterStatusObserversPipeline(rows)
+
+    private fun syncMovieWatchedStatusForRows(rows: List<CatalogRow>) =
+        syncMovieWatchedStatusForRowsPipeline(rows)
 
     private fun navigateToDetail(itemId: String, itemType: String) {
         _uiState.update { it.copy(selectedItemId = itemId) }
@@ -308,9 +314,7 @@ class HomeViewModel @Inject constructor(
         posterStatusReconcileJob?.cancel()
         cancelInFlightCatalogLoads()
         posterLibraryObserverJobs.values.forEach { it.cancel() }
-        movieWatchedObserverJobs.values.forEach { it.cancel() }
         posterLibraryObserverJobs.clear()
-        movieWatchedObserverJobs.clear()
         super.onCleared()
     }
 }
