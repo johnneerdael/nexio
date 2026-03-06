@@ -76,7 +76,7 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
     catalogOrder.addAll(mergedOrder)
 }
 
-private fun resolveHomeOrderedKey(rawKey: String, availableKeys: Set<String>): String? {
+internal fun resolveHomeOrderedKey(rawKey: String, availableKeys: Set<String>): String? {
     if (rawKey in availableKeys) {
         return rawKey
     }
@@ -89,7 +89,7 @@ private fun resolveHomeOrderedKey(rawKey: String, availableKeys: Set<String>): S
     return availableKeys.firstOrNull { canonicalSyntheticCatalogOrderKey(it) == canonical }
 }
 
-private fun canonicalSyntheticCatalogOrderKey(value: String): String {
+internal fun canonicalSyntheticCatalogOrderKey(value: String): String {
     val trimmed = value.trim()
     if (trimmed.isBlank()) return ""
     return when {
