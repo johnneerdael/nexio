@@ -68,7 +68,7 @@ internal fun LazyListScope.audioSettingsItems(
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
-    item(key = "audio_header") {
+    item(key = "audio_section_intro") {
         Text(
             text = stringResource(R.string.audio_section),
             style = MaterialTheme.typography.titleMedium,

@@ -81,8 +81,30 @@ internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
         mdbListDiscoveryService.observeSnapshot().collectLatest { snapshot ->
             mdbListDiscoverySnapshot = snapshot
+            Log.d(
+                HomeViewModel.TAG,
+                "MDBList snapshot personal=${snapshot.personalLists.size} top=${snapshot.topLists.size} custom=${snapshot.customListCatalogs.size}"
+            )
             scheduleUpdateCatalogRows()
         }
+    }
+}
+
+internal fun HomeViewModel.observeMDBListSettingsPipeline() {
+    viewModelScope.launch {
+        mdbListSettingsDataStore.settings
+            .distinctUntilChanged()
+            .collectLatest { settings ->
+                if (settings.enabled && settings.apiKey.isNotBlank()) {
+                    runCatching { mdbListDiscoveryService.ensureFresh(force = true) }
+                        .onFailure { error ->
+                            Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
+                        }
+                } else if (!settings.enabled || settings.apiKey.isBlank()) {
+                    mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+                    scheduleUpdateCatalogRows()
+                }
+            }
     }
 }
 
@@ -177,22 +199,22 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     cancelInFlightCatalogLoads()
 
     _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
-    catalogOrder.clear()
-    catalogsMap.clear()
     posterStatusReconcileJob?.cancel()
-    reconcilePosterStatusObserversPipeline(emptyList())
-    _fullCatalogRows.value = emptyList()
-    truncatedRowCache.clear()
-    hasRenderedFirstCatalog = false
-    prefetchedExternalMetaIds.clear()
-    externalMetaPrefetchInFlightIds.clear()
     externalMetaPrefetchJob?.cancel()
     pendingExternalMetaPrefetchItemId = null
-    lastHeroEnrichmentSignature = null
-    lastHeroEnrichedItems = emptyList()
 
     try {
         if (addons.isEmpty()) {
+            catalogOrder.clear()
+            catalogsMap.clear()
+            reconcilePosterStatusObserversPipeline(emptyList())
+            _fullCatalogRows.value = emptyList()
+            truncatedRowCache.clear()
+            hasRenderedFirstCatalog = false
+            prefetchedExternalMetaIds.clear()
+            externalMetaPrefetchInFlightIds.clear()
+            lastHeroEnrichmentSignature = null
+            lastHeroEnrichedItems = emptyList()
             catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = "No addons installed") }
             return
@@ -621,6 +643,11 @@ private fun buildSyntheticMDBListRows(
     return orderedKeys.mapNotNull { key ->
         val rows = groupedByKey[key].orEmpty().mapNotNull { custom -> custom.toCatalogRow() }
         if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = key, rows = rows)
+    }.also { groups ->
+        Log.d(
+            HomeViewModel.TAG,
+            "MDBList synthetic rows available=${availableKeys.size} grouped=${groupedByKey.size} emitted=${groups.size}"
+        )
     }
 }
 
