@@ -238,7 +238,15 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     pendingExternalMetaPrefetchItemId = null
 
     try {
+        val hasRestoredContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
+            _uiState.value.heroItems.isNotEmpty()
+
         if (addons.isEmpty()) {
+            if (startupGracePeriodActive && hasRestoredContent) {
+                catalogsLoadInProgress = false
+                _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = 0) }
+                return
+            }
             catalogOrder.clear()
             catalogsMap.clear()
             reconcilePosterStatusObserversPipeline(emptyList())
@@ -258,6 +266,11 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         rebuildCatalogOrder(addons)
 
         if (catalogOrder.isEmpty()) {
+            if (startupGracePeriodActive && hasRestoredContent) {
+                catalogsLoadInProgress = false
+                _uiState.update { it.copy(isLoading = true, error = null, installedAddonsCount = addons.size) }
+                return
+            }
             homeCatalogSnapshotStore.clear()
             catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }

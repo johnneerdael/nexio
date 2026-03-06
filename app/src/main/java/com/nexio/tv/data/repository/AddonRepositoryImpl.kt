@@ -56,6 +56,14 @@ class AddonRepositoryImpl @Inject constructor(
         return normalizeAddonInstallUrl(url)
     }
 
+    private fun safeCanonicalizeUrl(url: String, label: String): String? {
+        return runCatching { canonicalizeUrl(url) }
+            .onFailure { error ->
+                Log.w(TAG, "Dropping malformed addon URL from $label: ${sanitizeUrlForLogs(url)}", error)
+            }
+            .getOrNull()
+    }
+
     private fun normalizeUrl(url: String): String = canonicalizeUrl(url).lowercase()
 
     private fun triggerRemoteSync() {
@@ -108,14 +116,16 @@ class AddonRepositoryImpl @Inject constructor(
     override fun getInstalledAddons(): Flow<List<Addon>> =
         preferences.installedAddonUrls.flatMapLatest { urls ->
             flow {
+                val validUrls = urls.mapNotNull { url -> safeCanonicalizeUrl(url, "preferences flow") }
+
                 // Emit cached addons immediately (now includes disk-persisted cache)
-                val cached = urls.mapNotNull { manifestCache[canonicalizeUrl(it)] }
+                val cached = validUrls.mapNotNull { manifestCache[it] }
                 if (cached.isNotEmpty()) {
                     emit(applyDisplayNames(cached))
                 }
 
                 val fresh = coroutineScope {
-                    urls.map { url ->
+                    validUrls.map { url ->
                         async {
                             when (val result = fetchAddon(url)) {
                                 is NetworkResult.Success -> result.data
