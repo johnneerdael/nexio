@@ -1,9 +1,12 @@
 import { createError } from 'h3'
-import { bearerToken, okJson, readJsonBody, supabaseFetch, supabaseUser } from '~/server/utils/supabase'
-import { buildResolvedManifestUrl, type AddonTransportPayload } from '~/server/utils/account-secrets'
+import { bearerToken, okJson, readJsonBody, supabaseUser } from '~/server/utils/supabase'
+import { resolveAddonTransport, resolvedAddonManifestUrl } from '~/server/utils/account-addon-transport'
+import { normalizeAddonUrl } from '~/server/utils/account-secrets'
 
 type ResolveAddonBody = {
   addonId?: string
+  addonUrl?: string
+  secretRef?: string | null
 }
 
 export default defineEventHandler(async (event) => {
@@ -11,31 +14,26 @@ export default defineEventHandler(async (event) => {
   const user = await supabaseUser(event)
   const body = await readJsonBody<ResolveAddonBody>(event)
   const addonId = body.addonId?.trim()
-  if (!addonId) {
-    throw createError({ statusCode: 400, statusMessage: 'addonId is required.' })
+  const addonUrl = body.addonUrl?.trim()
+  if (!addonId && !addonUrl) {
+    throw createError({ statusCode: 400, statusMessage: 'addonId or addonUrl is required.' })
   }
 
-  const payload = await supabaseFetch<AddonTransportPayload>(
-    '/rest/v1/rpc/service_get_account_addon_transport',
+  const normalizedUrl = normalizeAddonUrl(addonUrl || '')
+  const payload = await resolveAddonTransport(
+    user.id,
     {
-      method: 'POST',
-      body: JSON.stringify({
-        p_user_id: user.id,
-        p_addon_id: addonId,
-        p_source: 'web'
-      })
+      id: addonId || '',
+      url: normalizedUrl,
+      manifestUrl: normalizedUrl ? `${normalizedUrl}/manifest.json` : '',
+      publicQueryParams: {},
+      secretRef: body.secretRef?.trim() || null
     },
-    undefined,
-    true
+    'web'
   )
 
   return okJson({
-    addonId,
-    resolvedManifestUrl: buildResolvedManifestUrl({
-      manifestUrl: payload.manifest_url,
-      baseUrl: payload.base_url,
-      publicQueryParams: payload.public_query_params ?? {},
-      secretPayload: payload.secret_payload ?? null
-    })
+    addonId: addonId || payload.addon_id || null,
+    resolvedManifestUrl: resolvedAddonManifestUrl(payload)
   })
 })
