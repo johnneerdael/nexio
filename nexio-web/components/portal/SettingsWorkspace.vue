@@ -86,7 +86,7 @@
           <div class="integration-header">
             <div>
               <label>TMDB</label>
-              <p>Enable TMDB metadata and manage the shared API key from one compact panel.</p>
+              <p>Enable TMDB metadata and store the API key from one compact panel.</p>
             </div>
             <button :class="settings.integrations.tmdb.enabled ? 'toggle-chip active' : 'toggle-chip'" @click="emit('update', 'integrations.tmdb.enabled', !settings.integrations.tmdb.enabled)">
               TMDB
@@ -117,7 +117,7 @@
           <div class="integration-header">
             <div>
               <label>MDBList</label>
-              <p>Store the shared API key separately, then discover personal and top-list rails without keeping the page open and expanded.</p>
+              <p>Store the MDBList API key and load custom catalogs and ratings.</p>
             </div>
             <button :class="settings.integrations.mdblist.enabled ? 'toggle-chip active' : 'toggle-chip'" @click="emit('update', 'integrations.mdblist.enabled', !settings.integrations.mdblist.enabled)">
               MDBList
