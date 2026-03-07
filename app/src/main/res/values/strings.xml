@@ -917,6 +917,8 @@
     <!-- UpdatePromptDialog -->
     <string name="update_title">App Update</string>
     <string name="update_downloading">Downloading update</string>
+    <string name="update_download">Download</string>
+    <string name="update_downloading_ellipsis">Downloading…</string>
     <string name="update_unknown_sources">Allow installs from unknown sources to continue.</string>
     <!-- AccountScreen -->
     <string name="account_title">Account</string>
