@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
@@ -56,6 +57,7 @@ import coil.request.ImageRequest
 
 private val SidebarLeadingVisualSize = 34.dp
 private val SidebarContentGap = 14.dp
+private val SidebarProfileContentGap = 18.dp
 
 @Composable
 internal fun ModernSidebarBlurPanel(
@@ -343,14 +345,16 @@ private fun SidebarProfileItem(
                 avatarImageUrl = profileAvatarImageUrl
             )
         }
-        Spacer(modifier = Modifier.width(SidebarContentGap))
+        Spacer(modifier = Modifier.width(SidebarProfileContentGap))
         Text(
             text = profileName,
             color = Color.White,
             modifier = Modifier
                 .weight(1f)
                 .graphicsLayer { alpha = labelAlpha },
-            style = androidx.tv.material3.MaterialTheme.typography.titleLarge,
+            style = androidx.tv.material3.MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

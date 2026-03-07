@@ -84,7 +84,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -617,7 +619,7 @@ private fun LegacySidebarScaffold(
                         val profileItemShape = RoundedCornerShape(32.dp)
                         val profileLeadingInset = 18.dp
                         val profileAvatarSize = 34.dp
-                        val profileLabelStart = 54.dp
+                        val profileLabelStart = 60.dp
                         val profileGapAfterAvatar =
                             (profileLabelStart - profileLeadingInset - profileAvatarSize).coerceAtLeast(0.dp)
                         val profileBgColor by animateColorAsState(
@@ -653,7 +655,9 @@ private fun LegacySidebarScaffold(
                                     text = activeProfileName,
                                     color = if (isProfileFocused) NuvioColors.TextPrimary else NuvioColors.TextSecondary,
                                     maxLines = 1,
-                                    textAlign = TextAlign.Start
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Start,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
@@ -746,7 +750,7 @@ private fun LegacySidebarButton(
     val backgroundColor by animateColorAsState(
         targetValue = when {
             isFocused -> NuvioColors.FocusBackground
-            selected -> NuvioColors.Secondary
+            expanded && selected -> NuvioColors.Secondary
             else -> Color.Transparent
         },
         label = "legacySidebarItemBackground"
@@ -754,10 +758,20 @@ private fun LegacySidebarButton(
     val contentColor by animateColorAsState(
         targetValue = when {
             isFocused -> NuvioColors.TextPrimary
-            selected -> NuvioColors.OnSecondary
+            expanded && selected -> NuvioColors.OnSecondary
             else -> NuvioColors.TextSecondary
         },
         label = "legacySidebarItemContent"
+    )
+    val iconTint by animateColorAsState(
+        targetValue = when {
+            isFocused -> NuvioColors.TextPrimary
+            expanded && selected -> NuvioColors.OnSecondary
+            selected -> NuvioColors.Secondary
+            !expanded -> NuvioColors.TextTertiary
+            else -> NuvioColors.TextSecondary
+        },
+        label = "legacySidebarItemIconTint"
     )
 
     Box(
@@ -772,7 +786,7 @@ private fun LegacySidebarButton(
         DrawerItemIcon(
             iconRes = iconRes,
             icon = icon,
-            tint = contentColor,
+            tint = iconTint,
             modifier = if (expanded) {
                 Modifier
                     .size(22.dp)
