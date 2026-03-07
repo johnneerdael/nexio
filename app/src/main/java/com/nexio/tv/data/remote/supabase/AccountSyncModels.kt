@@ -173,6 +173,8 @@ data class StreamSelectionSettings(
     val groupStreamsAcrossAddonsEnabled: Boolean = false,
     val deduplicateGroupedStreamsEnabled: Boolean = false,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
+    val filterEpisodeMismatchStreamsEnabled: Boolean = false,
+    val filterMovieYearMismatchStreamsEnabled: Boolean = false,
     val streamAutoPlayMode: String = "MANUAL",
     val streamAutoPlaySource: String = "ALL_SOURCES",
     val streamAutoPlaySelectedAddons: List<String> = emptyList(),

@@ -115,6 +115,8 @@ internal fun PlaybackSettingsSections(
     onSetGroupStreamsAcrossAddonsEnabled: (Boolean) -> Unit,
     onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
+    onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
+    onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
@@ -311,6 +313,8 @@ internal fun PlaybackSettingsSections(
                 onSetGroupStreamsAcrossAddonsEnabled = onSetGroupStreamsAcrossAddonsEnabled,
                 onSetDeduplicateGroupedStreamsEnabled = onSetDeduplicateGroupedStreamsEnabled,
                 onSetFilterWebDolbyVisionStreamsEnabled = onSetFilterWebDolbyVisionStreamsEnabled,
+                onSetFilterEpisodeMismatchStreamsEnabled = onSetFilterEpisodeMismatchStreamsEnabled,
+                onSetFilterMovieYearMismatchStreamsEnabled = onSetFilterMovieYearMismatchStreamsEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
             )
         }

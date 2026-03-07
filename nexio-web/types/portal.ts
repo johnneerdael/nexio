@@ -222,6 +222,8 @@ export type PortalSettings = {
       groupStreamsAcrossAddonsEnabled: boolean
       deduplicateGroupedStreamsEnabled: boolean
       filterWebDolbyVisionStreamsEnabled: boolean
+      filterEpisodeMismatchStreamsEnabled: boolean
+      filterMovieYearMismatchStreamsEnabled: boolean
       streamAutoPlayMode: StreamAutoPlayMode
       streamAutoPlaySource: StreamAutoPlaySource
       streamAutoPlaySelectedAddons: string[]

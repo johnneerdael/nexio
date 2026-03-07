@@ -478,6 +478,7 @@ fun PlayerScreen(
                                 false
                             }
                         }
+                        KeyEvent.KEYCODE_DPAD_LEFT,
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             if (!uiState.showControls) {
                                 val repeatCount = keyEvent.nativeKeyEvent.repeatCount
@@ -486,7 +487,13 @@ fun PlayerScreen(
                                     repeatCount >= 3 -> 20_000L
                                     else -> 10_000L
                                 }
-                                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(deltaMs))
+                                val signedDeltaMs =
+                                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                                        -deltaMs
+                                    } else {
+                                        deltaMs
+                                    }
+                                viewModel.onEvent(PlayerEvent.OnPreviewSeekBy(signedDeltaMs))
                                 true
                             } else {
                                 // Let focus system handle navigation when controls are visible

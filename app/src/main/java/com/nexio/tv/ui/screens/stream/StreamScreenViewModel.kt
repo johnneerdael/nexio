@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamPresentationEngine
+import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
@@ -285,7 +286,8 @@ class StreamScreenViewModel @Inject constructor(
                         streams = allStreams,
                         availableAddons = availableAddons,
                         selectedAddonFilter = selectedFilter,
-                        flags = streamFeatureFlags
+                        flags = streamFeatureFlags,
+                        requestContext = buildStreamRequestContext()
                     )
                     OrganizedStreamPayload(
                         orderedAddonStreams = orderedAddonStreams,
@@ -606,7 +608,8 @@ class StreamScreenViewModel @Inject constructor(
                     streams = state.allStreams,
                     availableAddons = state.availableAddons,
                     selectedAddonFilter = addonName,
-                    flags = streamFeatureFlags
+                    flags = streamFeatureFlags,
+                    requestContext = buildStreamRequestContext()
                 )
             }
             updateUiStateIfChanged {
@@ -677,6 +680,16 @@ class StreamScreenViewModel @Inject constructor(
         sourceChipErrorDismissJob?.cancel()
     }
 
+    private fun buildStreamRequestContext(): StreamRequestContext {
+        return StreamRequestContext(
+            contentType = contentType,
+            title = title,
+            year = year ?: _uiState.value.year,
+            season = season,
+            episode = episode,
+            episodeTitle = episodeName
+        )
+    }
 }
 
 private data class OrganizedStreamPayload(
@@ -692,7 +705,9 @@ private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
         uniformFormattingEnabled = uniformStreamFormattingEnabled,
         groupAcrossAddonsEnabled = groupStreamsAcrossAddonsEnabled,
         deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
-        filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled
+        filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled,
+        filterEpisodeMismatchStreamsEnabled = filterEpisodeMismatchStreamsEnabled,
+        filterMovieYearMismatchStreamsEnabled = filterMovieYearMismatchStreamsEnabled
     )
 }
 

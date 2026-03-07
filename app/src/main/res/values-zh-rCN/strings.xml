@@ -133,4 +133,8 @@
   <string name="streams_deduplicate_grouped_sub">Hide likely duplicate results when grouped stream mode is enabled.</string>
   <string name="streams_filter_dv5_webdl_title">Filter WEB-DL Dolby Vision</string>
   <string name="streams_filter_dv5_webdl_sub">Hide WEB-DL streams tagged DV or DoVi to avoid problematic DV5 playback.</string>
+  <string name="streams_filter_wrong_episodes_title">Filter Wrong Episodes</string>
+  <string name="streams_filter_wrong_episodes_sub">Hide episodic streams whose parsed season or episode tags do not match the requested episode.</string>
+  <string name="streams_filter_wrong_movie_year_title">Filter Wrong Movie Year</string>
+  <string name="streams_filter_wrong_movie_year_sub">Hide movie-like streams whose parsed year does not match the requested title year.</string>
 </resources>

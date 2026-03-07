@@ -119,6 +119,8 @@ export const defaultSettings = (): PortalSettings => ({
       groupStreamsAcrossAddonsEnabled: false,
       deduplicateGroupedStreamsEnabled: false,
       filterWebDolbyVisionStreamsEnabled: false,
+      filterEpisodeMismatchStreamsEnabled: false,
+      filterMovieYearMismatchStreamsEnabled: false,
       streamAutoPlayMode: 'MANUAL',
       streamAutoPlaySource: 'ALL_SOURCES',
       streamAutoPlaySelectedAddons: [],

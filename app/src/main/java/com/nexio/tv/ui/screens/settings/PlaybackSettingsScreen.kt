@@ -245,6 +245,12 @@ fun PlaybackSettingsContent(
                 onSetFilterWebDolbyVisionStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFilterWebDolbyVisionStreamsEnabled(enabled) }
                 },
+                onSetFilterEpisodeMismatchStreamsEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setFilterEpisodeMismatchStreamsEnabled(enabled) }
+                },
+                onSetFilterMovieYearMismatchStreamsEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setFilterMovieYearMismatchStreamsEnabled(enabled) }
+                },
                 onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
                 onSetOsdClockEnabled = { enabled -> coroutineScope.launch { viewModel.setOsdClockEnabled(enabled) } },

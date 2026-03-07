@@ -88,6 +88,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetGroupStreamsAcrossAddonsEnabled: (Boolean) -> Unit,
     onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
+    onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
+    onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
     item(key = "autoplay_reuse_last_link") {
@@ -155,6 +157,28 @@ internal fun LazyListScope.autoPlaySettingsItems(
             subtitle = stringResource(R.string.streams_filter_dv5_webdl_sub),
             isChecked = playerSettings.filterWebDolbyVisionStreamsEnabled,
             onCheckedChange = onSetFilterWebDolbyVisionStreamsEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "streams_filter_wrong_episodes") {
+        ToggleSettingsItem(
+            icon = Icons.Default.FilterAlt,
+            title = stringResource(R.string.streams_filter_wrong_episodes_title),
+            subtitle = stringResource(R.string.streams_filter_wrong_episodes_sub),
+            isChecked = playerSettings.filterEpisodeMismatchStreamsEnabled,
+            onCheckedChange = onSetFilterEpisodeMismatchStreamsEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "streams_filter_wrong_movie_year") {
+        ToggleSettingsItem(
+            icon = Icons.Default.FilterAlt,
+            title = stringResource(R.string.streams_filter_wrong_movie_year_title),
+            subtitle = stringResource(R.string.streams_filter_wrong_movie_year_sub),
+            isChecked = playerSettings.filterMovieYearMismatchStreamsEnabled,
+            onCheckedChange = onSetFilterMovieYearMismatchStreamsEnabled,
             onFocused = onItemFocused
         )
     }

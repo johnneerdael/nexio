@@ -10,7 +10,19 @@ data class StreamFeatureFlags(
     val uniformFormattingEnabled: Boolean = false,
     val groupAcrossAddonsEnabled: Boolean = false,
     val deduplicateGroupedStreamsEnabled: Boolean = false,
-    val filterWebDolbyVisionStreamsEnabled: Boolean = false
+    val filterWebDolbyVisionStreamsEnabled: Boolean = false,
+    val filterEpisodeMismatchStreamsEnabled: Boolean = false,
+    val filterMovieYearMismatchStreamsEnabled: Boolean = false
+)
+
+@Immutable
+data class StreamRequestContext(
+    val contentType: String? = null,
+    val title: String? = null,
+    val year: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val episodeTitle: String? = null
 )
 
 enum class StreamTransportKind {
@@ -148,7 +160,8 @@ object StreamPresentationEngine {
         streams: List<Stream>,
         availableAddons: List<String>,
         selectedAddonFilter: String?,
-        flags: StreamFeatureFlags
+        flags: StreamFeatureFlags,
+        requestContext: StreamRequestContext = StreamRequestContext()
     ): OrganizedStreams {
         val parsed = streams.map { stream ->
             val parsedInfo = AioStyleStreamParser.parse(stream)
@@ -161,10 +174,18 @@ object StreamPresentationEngine {
             )
         }
 
+        val filteredByRequest = parsed.filterNot { item ->
+            shouldFilterForRequest(
+                parsed = item.parsed,
+                requestContext = requestContext,
+                flags = flags
+            )
+        }
+
         val filteredByDv = if (flags.filterWebDolbyVisionStreamsEnabled) {
-            parsed.filterNot { it.parsed.isWebDl && it.parsed.isDolbyVision }
+            filteredByRequest.filterNot { it.parsed.isWebDl && it.parsed.isDolbyVision }
         } else {
-            parsed
+            filteredByRequest
         }
 
         if (!flags.groupAcrossAddonsEnabled) {
@@ -445,8 +466,19 @@ object StreamPresentationEngine {
         val seasons = parsed.seasons
         val episodes = parsed.episodes
         if (seasons.isEmpty() && episodes.isEmpty()) return null
+        if (seasons.size == 1 && episodes.isNotEmpty()) {
+            val season = seasons.first().toString().padStart(2, '0')
+            return "🎬 ${episodes.joinToString(" • ") { episode ->
+                "S${season}E${episode.toString().padStart(2, '0')}"
+            }}"
+        }
+        if (seasons.isNotEmpty() && episodes.size == seasons.size) {
+            return "🎬 ${seasons.zip(episodes).joinToString(" • ") { (season, episode) ->
+                "S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}"
+            }}"
+        }
         if (seasons.isNotEmpty() && episodes.isNotEmpty()) {
-            return "🎬 ${seasons.joinToString(",") { "S${it.toString().padStart(2, '0')}" }} - ${
+            return "🎬 ${seasons.joinToString(",") { "S${it.toString().padStart(2, '0')}" }} | ${
                 episodes.joinToString(",") { "E${it.toString().padStart(2, '0')}" }
             }"
         }
@@ -542,9 +574,96 @@ object StreamPresentationEngine {
             else -> 0
         }
     }
+
+    private fun shouldFilterForRequest(
+        parsed: ParsedStreamInfo,
+        requestContext: StreamRequestContext,
+        flags: StreamFeatureFlags
+    ): Boolean {
+        return shouldFilterEpisodeMismatch(parsed, requestContext, flags) ||
+            shouldFilterMovieYearMismatch(parsed, requestContext, flags)
+    }
+
+    private fun shouldFilterEpisodeMismatch(
+        parsed: ParsedStreamInfo,
+        requestContext: StreamRequestContext,
+        flags: StreamFeatureFlags
+    ): Boolean {
+        if (!flags.filterEpisodeMismatchStreamsEnabled) return false
+
+        val requestSeason = requestContext.season ?: return false
+        val requestEpisode = requestContext.episode ?: return false
+        if (requestSeason <= 0 || requestEpisode <= 0) return false
+
+        if (parsed.seasons.isEmpty() && parsed.episodes.isEmpty()) {
+            if (requestSeason == 0) return false
+            if (matchesEpisodeTitleOnly(parsed, requestContext.episodeTitle)) return false
+            return looksStandaloneMovieCandidate(parsed)
+        }
+
+        if (parsed.seasons.isNotEmpty() && requestSeason !in parsed.seasons) {
+            return true
+        }
+        if (parsed.episodes.isNotEmpty() && requestEpisode !in parsed.episodes) {
+            return true
+        }
+        return false
+    }
+
+    private fun shouldFilterMovieYearMismatch(
+        parsed: ParsedStreamInfo,
+        requestContext: StreamRequestContext,
+        flags: StreamFeatureFlags
+    ): Boolean {
+        if (!flags.filterMovieYearMismatchStreamsEnabled) return false
+
+        val requestYear = requestContext.year?.toIntOrNull() ?: return false
+        val parsedYear = parsed.year?.toIntOrNull() ?: return false
+        if (requestYear == parsedYear) return false
+
+        val isMovieRequest = requestContext.contentType.equals("movie", ignoreCase = true)
+        if (isMovieRequest) {
+            return true
+        }
+
+        val isEpisodeRequest = (requestContext.season ?: 0) > 0 && (requestContext.episode ?: 0) > 0
+        if (!isEpisodeRequest) {
+            return false
+        }
+
+        return parsed.seasons.isEmpty() && parsed.episodes.isEmpty()
+    }
+
+    private fun matchesEpisodeTitleOnly(
+        parsed: ParsedStreamInfo,
+        episodeTitle: String?
+    ): Boolean {
+        val expected = normalizeMatchKey(episodeTitle).takeIf { it.isNotBlank() } ?: return false
+        val parsedTitle = normalizeMatchKey(parsed.title)
+        val parsedFilename = normalizeMatchKey(parsed.filename)
+        return parsedTitle.contains(expected) || parsedFilename.contains(expected)
+    }
+
+    private fun normalizeMatchKey(value: String?): String {
+        return value
+            ?.lowercase(Locale.US)
+            ?.replace(Regex("""[^\p{L}\p{N}]+"""), "")
+            .orEmpty()
+    }
+
+    private fun looksStandaloneMovieCandidate(parsed: ParsedStreamInfo): Boolean {
+        if (parsed.year != null) return true
+        val rawText = listOfNotNull(parsed.title, parsed.filename).joinToString(" ")
+        if (rawText.isBlank()) return false
+        return Regex("""\b(19|20)\d{2}\b""").containsMatchIn(rawText)
+    }
 }
 
 private object AioStyleStreamParser {
+    private val seasonEpisodeTokenRegex = Regex("""(?i)^s\d{1,2}e\d{1,2}$""")
+    private val seasonOnlyTokenRegex = Regex("""(?i)^s\d{1,2}$""")
+    private val episodeOnlyTokenRegex = Regex("""(?i)^e\d{1,2}$""")
+
     private fun tokenRegex(pattern: String): Regex {
         return Regex("""(?i)(?:^|[\s(\[._-])(?:$pattern)(?=$|[\s)\].,_-])""")
     }
@@ -720,7 +839,13 @@ private object AioStyleStreamParser {
             .trim()
         return truncated.takeIf { it.isNotBlank() }?.split(' ')
             ?.joinToString(" ") { token ->
-                token.lowercase(Locale.US).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }
+                when {
+                    seasonEpisodeTokenRegex.matches(token) -> token.uppercase(Locale.US)
+                    seasonOnlyTokenRegex.matches(token) -> token.uppercase(Locale.US)
+                    episodeOnlyTokenRegex.matches(token) -> token.uppercase(Locale.US)
+                    else -> token.lowercase(Locale.US)
+                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }
+                }
             }
     }
 

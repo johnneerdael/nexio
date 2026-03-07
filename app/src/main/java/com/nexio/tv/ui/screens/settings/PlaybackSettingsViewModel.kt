@@ -357,6 +357,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(enabled)
     }
 
+    suspend fun setFilterEpisodeMismatchStreamsEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setFilterEpisodeMismatchStreamsEnabled(enabled)
+    }
+
+    suspend fun setFilterMovieYearMismatchStreamsEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setFilterMovieYearMismatchStreamsEnabled(enabled)
+    }
+
     suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
         playerSettingsDataStore.setVodCacheSizeMode(mode)
     }

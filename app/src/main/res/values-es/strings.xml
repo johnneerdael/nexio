@@ -733,4 +733,8 @@
   <string name="streams_deduplicate_grouped_sub">Hide likely duplicate results when grouped stream mode is enabled.</string>
   <string name="streams_filter_dv5_webdl_title">Filter WEB-DL Dolby Vision</string>
   <string name="streams_filter_dv5_webdl_sub">Hide WEB-DL streams tagged DV or DoVi to avoid problematic DV5 playback.</string>
+  <string name="streams_filter_wrong_episodes_title">Filtrar episodios incorrectos</string>
+  <string name="streams_filter_wrong_episodes_sub">Oculta flujos episodicos cuyas etiquetas de temporada o episodio no coinciden con el episodio solicitado.</string>
+  <string name="streams_filter_wrong_movie_year_title">Filtrar ano de pelicula incorrecto</string>
+  <string name="streams_filter_wrong_movie_year_sub">Oculta flujos tipo pelicula cuyo ano analizado no coincide con el ano solicitado para el titulo.</string>
 </resources>
