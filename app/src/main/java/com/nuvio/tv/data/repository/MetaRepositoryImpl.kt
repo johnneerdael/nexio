@@ -71,7 +71,7 @@ class MetaRepositoryImpl @Inject constructor(
                     metaCache[cacheKey] = meta
                     emit(NetworkResult.Success(meta))
                 } else {
-                    emit(NetworkResult.Error("Meta not found"))
+                    emit(NetworkResult.Error(context.getString(R.string.error_meta_not_found)))
                 }
             }
             is NetworkResult.Error -> emit(result)
@@ -158,7 +158,7 @@ class MetaRepositoryImpl @Inject constructor(
             }
 
             val fallbackMessage = if (fallbackAddons.isEmpty()) {
-                "No installed addon supports metadata for \"$requestedType\"."
+                context.getString(R.string.error_meta_no_supported_addon, requestedType)
             } else {
                 buildAggregateFailureMessage(
                     type = requestedType,
@@ -304,14 +304,14 @@ class MetaRepositoryImpl @Inject constructor(
         failures: List<MetaAttemptFailure>
     ): String {
         if (attemptedAddonNames.isEmpty()) {
-            return "No installed addon could provide metadata for id=$id (type=$type)."
+            return context.getString(R.string.error_meta_no_addon_for_id, id, type)
         }
 
         val triedAddons = attemptedAddonNames.joinToString(", ")
         val missingOnly = failures.isNotEmpty() && failures.all { it.kind == MetaFailureKind.MISSING }
 
         return if (missingOnly) {
-            "Tried meta addons: $triedAddons. None of them provided metadata for id=$id (type=$type)."
+            context.getString(R.string.error_meta_tried_none, triedAddons, id, type)
         } else {
             val issueSummary = failures
                 .filter { it.kind == MetaFailureKind.REQUEST_FAILED }
@@ -319,9 +319,9 @@ class MetaRepositoryImpl @Inject constructor(
                 .take(3)
                 .joinToString("; ") { "${it.addonName}: ${it.detail}" }
             if (issueSummary.isBlank()) {
-                "Tried meta addons: $triedAddons. Metadata could not be loaded for id=$id (type=$type)."
+                context.getString(R.string.error_meta_tried_generic, triedAddons, id, type)
             } else {
-                "Tried meta addons: $triedAddons. Metadata could not be loaded for id=$id (type=$type). Issues: $issueSummary."
+                context.getString(R.string.error_meta_tried_issues, triedAddons, id, type, issueSummary)
             }
         }
     }
