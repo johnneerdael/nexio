@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import com.nexio.tv.domain.model.Stream
+import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
@@ -59,7 +60,7 @@ internal fun StreamSourcesSidePanel(
 ) {
     // Only request focus when loading finishes (not on addon filter changes)
     LaunchedEffect(uiState.isLoadingSourceStreams) {
-        if (!uiState.isLoadingSourceStreams && uiState.sourceFilteredStreams.isNotEmpty()) {
+        if (!uiState.isLoadingSourceStreams && uiState.sourcePresentedStreams.isNotEmpty()) {
             try {
                 streamsFocusRequester.requestFocus()
             } catch (_: Exception) {
@@ -134,8 +135,10 @@ internal fun StreamSourcesSidePanel(
             Spacer(modifier = Modifier.height(16.dp))
 
             AnimatedVisibility(
-                visible = uiState.sourceChips.isNotEmpty() ||
-                    (!uiState.isLoadingSourceStreams && uiState.sourceAvailableAddons.isNotEmpty()),
+                visible = uiState.showSourceAddonFilters && (
+                    uiState.sourceChips.isNotEmpty() ||
+                    (!uiState.isLoadingSourceStreams && uiState.sourceAvailableAddons.isNotEmpty())
+                ),
                 enter = fadeIn(animationSpec = tween(200)),
                 exit = fadeOut(animationSpec = tween(120))
             ) {
@@ -171,7 +174,7 @@ internal fun StreamSourcesSidePanel(
                     )
                 }
 
-                uiState.sourceFilteredStreams.isEmpty() -> {
+                uiState.sourcePresentedStreams.isEmpty() -> {
                     Text(
                         text = stringResource(R.string.sources_no_streams),
                         style = MaterialTheme.typography.bodyLarge,
@@ -183,12 +186,12 @@ internal fun StreamSourcesSidePanel(
                     val currentStreamUrl = uiState.currentStreamUrl
                     val currentStreamName = uiState.currentStreamName
                     val currentStreamIndex = findCurrentStreamIndex(
-                        streams = uiState.sourceFilteredStreams,
+                        streams = uiState.sourcePresentedStreams,
                         currentStreamUrl = currentStreamUrl,
                         currentStreamName = currentStreamName
                     )
-                    val initialFocusStream = uiState.sourceFilteredStreams.getOrNull(currentStreamIndex)
-                        ?: uiState.sourceFilteredStreams.firstOrNull()
+                    val initialFocusStream = uiState.sourcePresentedStreams.getOrNull(currentStreamIndex)
+                        ?: uiState.sourcePresentedStreams.firstOrNull()
 
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -217,13 +220,13 @@ internal fun StreamSourcesSidePanel(
                                 }
                             }
                     ) {
-                        itemsIndexed(uiState.sourceFilteredStreams) { index, stream ->
+                        itemsIndexed(uiState.sourcePresentedStreams) { index, item ->
                             StreamItem(
-                                stream = stream,
+                                item = item,
                                 focusRequester = streamsFocusRequester,
-                                requestInitialFocus = stream == initialFocusStream,
+                                requestInitialFocus = item == initialFocusStream,
                                 isCurrentStream = index == currentStreamIndex,
-                                onClick = { onStreamSelected(stream) },
+                                onClick = { onStreamSelected(item.stream) },
                                 onUpKey = if (index == 0 && chipFocusRequesters.isNotEmpty()) {{
                                     val selected = uiState.sourceSelectedAddonFilter
                                     val idx = if (selected == null) 0 else orderedAddonNames.indexOf(selected) + 1
@@ -241,7 +244,7 @@ internal fun StreamSourcesSidePanel(
 }
 
 private fun findCurrentStreamIndex(
-    streams: List<Stream>,
+    streams: List<StreamCardModel>,
     currentStreamUrl: String?,
     currentStreamName: String?
 ): Int {
@@ -252,26 +255,25 @@ private fun findCurrentStreamIndex(
 
     if (hasUrl && hasName) {
         val bothMatch = streams.indexOfFirst { stream ->
-            stream.getStreamUrl() == currentStreamUrl &&
-                stream.getDisplayName().equals(currentStreamName, ignoreCase = true)
+            stream.stream.getStreamUrl() == currentStreamUrl &&
+                stream.title.equals(currentStreamName, ignoreCase = true)
         }
         if (bothMatch >= 0) return bothMatch
     }
 
     if (hasUrl) {
         val urlMatch = streams.indexOfFirst { stream ->
-            stream.getStreamUrl() == currentStreamUrl
+            stream.stream.getStreamUrl() == currentStreamUrl
         }
         if (urlMatch >= 0) return urlMatch
     }
 
     if (hasName) {
         val nameMatch = streams.indexOfFirst { stream ->
-            stream.getDisplayName().equals(currentStreamName, ignoreCase = true)
+            stream.title.equals(currentStreamName, ignoreCase = true)
         }
         if (nameMatch >= 0) return nameMatch
     }
 
     return -1
 }
-

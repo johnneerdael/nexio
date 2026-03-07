@@ -334,6 +334,10 @@ class AccountSettingsSyncService @Inject constructor(
                     playerPreference = player.playerPreference.name,
                     streamReuseLastLinkEnabled = player.streamReuseLastLinkEnabled,
                     streamReuseLastLinkCacheHours = player.streamReuseLastLinkCacheHours,
+                    uniformStreamFormattingEnabled = player.uniformStreamFormattingEnabled,
+                    groupStreamsAcrossAddonsEnabled = player.groupStreamsAcrossAddonsEnabled,
+                    deduplicateGroupedStreamsEnabled = player.deduplicateGroupedStreamsEnabled,
+                    filterWebDolbyVisionStreamsEnabled = player.filterWebDolbyVisionStreamsEnabled,
                     streamAutoPlayMode = player.streamAutoPlayMode.name,
                     streamAutoPlaySource = player.streamAutoPlaySource.name,
                     streamAutoPlaySelectedAddons = player.streamAutoPlaySelectedAddons.toList(),
@@ -354,7 +358,7 @@ class AccountSettingsSyncService @Inject constructor(
                 subtitles = SubtitleSyncSettings(
                     preferredLanguage = player.subtitleStyle.preferredLanguage,
                     secondaryPreferredLanguage = player.subtitleStyle.secondaryPreferredLanguage,
-                    subtitleOrganizationMode = player.subtitleOrganizationMode.name,
+                    subtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE.name,
                     addonSubtitleStartupMode = player.addonSubtitleStartupMode.name,
                     size = player.subtitleStyle.size,
                     verticalOffset = player.subtitleStyle.verticalOffset,
@@ -465,6 +469,10 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setPlayerPreference(enumValueOrDefault(settings.playback.streamSelection.playerPreference, PlayerPreference.INTERNAL))
         playerSettingsDataStore.setStreamReuseLastLinkEnabled(settings.playback.streamSelection.streamReuseLastLinkEnabled)
         playerSettingsDataStore.setStreamReuseLastLinkCacheHours(settings.playback.streamSelection.streamReuseLastLinkCacheHours)
+        playerSettingsDataStore.setUniformStreamFormattingEnabled(settings.playback.streamSelection.uniformStreamFormattingEnabled)
+        playerSettingsDataStore.setGroupStreamsAcrossAddonsEnabled(settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled)
+        playerSettingsDataStore.setDeduplicateGroupedStreamsEnabled(settings.playback.streamSelection.deduplicateGroupedStreamsEnabled)
+        playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(settings.playback.streamSelection.filterWebDolbyVisionStreamsEnabled)
         playerSettingsDataStore.setStreamAutoPlayMode(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlayMode, StreamAutoPlayMode.MANUAL))
         playerSettingsDataStore.setStreamAutoPlaySource(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlaySource, StreamAutoPlaySource.ALL_SOURCES))
         playerSettingsDataStore.setStreamAutoPlaySelectedAddons(settings.playback.streamSelection.streamAutoPlaySelectedAddons.toSet())
@@ -481,7 +489,7 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setTunnelingEnabled(settings.playback.audio.tunnelingEnabled)
         playerSettingsDataStore.setSubtitlePreferredLanguage(settings.playback.subtitles.preferredLanguage)
         playerSettingsDataStore.setSubtitleSecondaryLanguage(settings.playback.subtitles.secondaryPreferredLanguage)
-        playerSettingsDataStore.setSubtitleOrganizationMode(enumValueOrDefault(settings.playback.subtitles.subtitleOrganizationMode, SubtitleOrganizationMode.NONE))
+        playerSettingsDataStore.setSubtitleOrganizationMode(SubtitleOrganizationMode.BY_LANGUAGE)
         playerSettingsDataStore.setAddonSubtitleStartupMode(enumValueOrDefault(settings.playback.subtitles.addonSubtitleStartupMode, AddonSubtitleStartupMode.ALL_SUBTITLES))
         playerSettingsDataStore.setSubtitleSize(settings.playback.subtitles.size)
         playerSettingsDataStore.setSubtitleVerticalOffset(settings.playback.subtitles.verticalOffset)

@@ -478,6 +478,11 @@
   <string name="subtitle_text_color">Couleur du texte</string>
   <string name="subtitle_outline_color">Couleur du contour</string>
   <string name="subtitle_reset_defaults">Réinitialiser les paramètres par défaut</string>
+  <string name="subtitle_tab_builtin">Intégrés</string>
+  <string name="subtitle_tab_languages">Langues</string>
+  <string name="subtitle_tab_subtitles">Sous-titres</string>
+  <string name="subtitle_tab_delay">Décalage</string>
+  <string name="subtitle_auto_translate">Traduction automatique</string>
   <string name="subtitle_style_title">Style des sous-titres</string>
   <string name="subtitle_style_color">Couleur</string>
   <string name="subtitle_style_reset">Réinitialiser</string>
@@ -716,4 +721,12 @@
   <string name="tmdb_api_key_subtitle">Requise pour activer l\'intégration TMDB</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - Compatibilité audio expérimentale</string>
   <string name="animeskip_dialog_subtitle">Créez votre Client ID sur anime-skip.com/account/settings</string>
+  <string name="streams_uniform_formatting_title">Uniform Stream Formatting</string>
+  <string name="streams_uniform_formatting_sub">Parse stream metadata and render stream cards consistently across addons.</string>
+  <string name="streams_group_across_addons_title">Group Streams Across Addons</string>
+  <string name="streams_group_across_addons_sub">Show one merged stream list instead of separate addon tabs. Results appear as soon as each addon responds.</string>
+  <string name="streams_deduplicate_grouped_title">Deduplicate Grouped Streams</string>
+  <string name="streams_deduplicate_grouped_sub">Hide likely duplicate results when grouped stream mode is enabled.</string>
+  <string name="streams_filter_dv5_webdl_title">Filter WEB-DL Dolby Vision</string>
+  <string name="streams_filter_dv5_webdl_sub">Hide WEB-DL streams tagged DV or DoVi to avoid problematic DV5 playback.</string>
 </resources>

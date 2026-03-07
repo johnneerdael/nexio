@@ -173,7 +173,11 @@ data class PlayerSettings(
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
-    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
+    val uniformStreamFormattingEnabled: Boolean = false,
+    val groupStreamsAcrossAddonsEnabled: Boolean = false,
+    val deduplicateGroupedStreamsEnabled: Boolean = false,
+    val filterWebDolbyVisionStreamsEnabled: Boolean = false,
+    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
     // Networking
     val vodCacheSizeMode: VodCacheSizeMode = DEFAULT_VOD_CACHE_SIZE_MODE,
     val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
@@ -307,6 +311,10 @@ class PlayerSettingsDataStore @Inject constructor(
     private val nextEpisodeThresholdMinutesBeforeEndKey = floatPreferencesKey("next_episode_threshold_minutes_before_end_v2")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
+    private val uniformStreamFormattingEnabledKey = booleanPreferencesKey("uniform_stream_formatting_enabled")
+    private val groupStreamsAcrossAddonsEnabledKey = booleanPreferencesKey("group_streams_across_addons_enabled")
+    private val deduplicateGroupedStreamsEnabledKey = booleanPreferencesKey("deduplicate_grouped_streams_enabled")
+    private val filterWebDolbyVisionStreamsEnabledKey = booleanPreferencesKey("filter_web_dolby_vision_streams_enabled")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
     private val vodCacheSizeModeKey = stringPreferencesKey("vod_cache_size_mode")
     private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
@@ -555,6 +563,10 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
+                uniformStreamFormattingEnabled = prefs[uniformStreamFormattingEnabledKey] ?: false,
+                groupStreamsAcrossAddonsEnabled = prefs[groupStreamsAcrossAddonsEnabledKey] ?: false,
+                deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: false,
+                filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
                 vodCacheSizeMode = parseVodCacheSizeMode(prefs[vodCacheSizeModeKey]),
                 vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
@@ -796,9 +808,36 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setUniformStreamFormattingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[uniformStreamFormattingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setGroupStreamsAcrossAddonsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[groupStreamsAcrossAddonsEnabledKey] = enabled
+            if (!enabled) {
+                prefs[deduplicateGroupedStreamsEnabledKey] = false
+            }
+        }
+    }
+
+    suspend fun setDeduplicateGroupedStreamsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[deduplicateGroupedStreamsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setFilterWebDolbyVisionStreamsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[filterWebDolbyVisionStreamsEnabledKey] = enabled
+        }
+    }
+
     suspend fun setSubtitleOrganizationMode(mode: SubtitleOrganizationMode) {
         store().edit { prefs ->
-            prefs[subtitleOrganizationModeKey] = mode.name
+            prefs[subtitleOrganizationModeKey] = SubtitleOrganizationMode.BY_LANGUAGE.name
         }
     }
 
@@ -809,12 +848,7 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     private fun parseSubtitleOrganizationMode(value: String?): SubtitleOrganizationMode {
-        return when (value) {
-            null, "NONE" -> SubtitleOrganizationMode.NONE
-            "BY_LANGUAGE" -> SubtitleOrganizationMode.BY_LANGUAGE
-            "BY_ADDON" -> SubtitleOrganizationMode.BY_ADDON
-            else -> SubtitleOrganizationMode.NONE
-        }
+        return SubtitleOrganizationMode.BY_LANGUAGE
     }
 
     private fun parseAddonSubtitleStartupMode(value: String?): AddonSubtitleStartupMode {

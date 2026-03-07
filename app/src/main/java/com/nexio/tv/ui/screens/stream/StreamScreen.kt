@@ -73,6 +73,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.nexio.tv.core.player.ExternalPlayerLauncher
+import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.ui.components.SourceChipItem
@@ -226,17 +227,19 @@ fun StreamScreen(
                 RightStreamSection(
                     isLoading = uiState.isLoading,
                     error = uiState.error,
-                    streams = uiState.filteredStreams,
+                    streams = uiState.presentedStreams,
                     availableAddons = uiState.availableAddons,
                     sourceChips = uiState.sourceChips,
                     selectedAddonFilter = uiState.selectedAddonFilter,
+                    showAddonFilters = uiState.showAddonFilters,
                     onAddonFilterSelected = { viewModel.onEvent(StreamScreenEvent.OnAddonFilterSelected(it)) },
-                    onStreamSelected = { stream ->
-                        val currentIndex = uiState.filteredStreams.indexOfFirst {
-                            it.url == stream.url &&
-                                it.infoHash == stream.infoHash &&
-                                it.ytId == stream.ytId &&
-                                it.addonName == stream.addonName
+                    onStreamSelected = { item ->
+                        val stream = item.stream
+                        val currentIndex = uiState.presentedStreams.indexOfFirst {
+                            it.stream.url == stream.url &&
+                                it.stream.infoHash == stream.infoHash &&
+                                it.stream.ytId == stream.ytId &&
+                                it.stream.addonName == stream.addonName
                         }
                         if (currentIndex >= 0) {
                             focusedStreamIndex = currentIndex
@@ -475,12 +478,13 @@ private fun LeftContentSection(
 private fun RightStreamSection(
     isLoading: Boolean,
     error: String?,
-    streams: List<Stream>,
+    streams: List<StreamCardModel>,
     availableAddons: List<String>,
     sourceChips: List<SourceChipItem>,
     selectedAddonFilter: String?,
+    showAddonFilters: Boolean,
     onAddonFilterSelected: (String?) -> Unit,
-    onStreamSelected: (Stream) -> Unit,
+    onStreamSelected: (StreamCardModel) -> Unit,
     focusedStreamIndex: Int,
     shouldRestoreFocusedStream: Boolean,
     onRestoreFocusedStreamHandled: () -> Unit,
@@ -533,7 +537,7 @@ private fun RightStreamSection(
         // Addon filter chips
         Box(modifier = Modifier.height(chipRowHeight)) {
             androidx.compose.animation.AnimatedVisibility(
-                visible = sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty()),
+                visible = showAddonFilters && (sourceChips.isNotEmpty() || (!isLoading && availableAddons.isNotEmpty())),
                 enter = fadeIn(animationSpec = tween(300)),
                 exit = fadeOut(animationSpec = tween(300))
             ) {
@@ -753,8 +757,8 @@ private fun EmptyState() {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun StreamsList(
-    streams: List<Stream>,
-    onStreamSelected: (Stream) -> Unit,
+    streams: List<StreamCardModel>,
+    onStreamSelected: (StreamCardModel) -> Unit,
     focusedStreamIndex: Int = 0,
     shouldRestoreFocusedStream: Boolean = false,
     onRestoreFocusedStreamHandled: () -> Unit = {},
@@ -770,7 +774,7 @@ private fun StreamsList(
     val firstCardFocusRequester = remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
     val firstStreamKey = streams.firstOrNull()?.let { first ->
-        "${first.addonName}_${first.url ?: first.infoHash ?: first.ytId ?: "unknown"}"
+        "${first.stream.addonName}_${first.stream.url ?: first.stream.infoHash ?: first.stream.ytId ?: "unknown"}"
     }
 
     LaunchedEffect(requestInitialFocus, firstStreamKey) {
@@ -820,12 +824,12 @@ private fun StreamsList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
     ) {
-        itemsIndexed(streams, key = { index, stream ->
-            "${stream.addonName}_${stream.url ?: stream.infoHash ?: stream.ytId ?: "unknown"}_$index"
-        }) { index, stream ->
+        itemsIndexed(streams, key = { index, item ->
+            "${item.stream.addonName}_${item.stream.url ?: item.stream.infoHash ?: item.stream.ytId ?: "unknown"}_$index"
+        }) { index, item ->
             StreamCard(
-                stream = stream,
-                onClick = { onStreamSelected(stream) },
+                item = item,
+                onClick = { onStreamSelected(item) },
                 focusRequester = when {
                     shouldRestoreFocusedStream && index == focusedStreamIndex.coerceIn(0, (streams.lastIndex).coerceAtLeast(0)) -> restoreFocusRequester
                     index == 0 -> firstCardFocusRequester
@@ -846,14 +850,16 @@ private fun StreamsList(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun StreamCard(
-    stream: Stream,
+    item: StreamCardModel,
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
     onUpKey: (() -> Unit)? = null
 ) {
+    val stream = item.stream
     val context = LocalContext.current
-    val streamName = remember(stream) { stream.getDisplayName() }
-    val streamDescription = remember(stream) { stream.getDisplayDescription() }
+    val streamName = remember(item) { item.title }
+    val streamSubtitle = remember(item) { item.subtitle }
+    val detailLines = remember(item) { item.detailLines }
     val addonLogoModel = remember(context, stream.addonLogo) {
         stream.addonLogo?.let { logo ->
             ImageRequest.Builder(context)
@@ -897,14 +903,22 @@ private fun StreamCard(
                     color = NexioColors.TextPrimary
                 )
 
-                streamDescription?.let { description ->
-                    if (description != streamName) {
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NexioTheme.extendedColors.textSecondary
-                        )
-                    }
+                streamSubtitle?.takeIf { it != streamName }?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioTheme.extendedColors.textSecondary
+                    )
+                }
+
+                detailLines.forEach { detail ->
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioTheme.extendedColors.textSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Row(
@@ -1070,4 +1084,3 @@ private fun PlayerChoiceDialog(
         }
     }
 }
-

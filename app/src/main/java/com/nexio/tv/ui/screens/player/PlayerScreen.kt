@@ -945,7 +945,6 @@ fun PlayerScreen(
                 selectedAddonSubtitle = uiState.selectedAddonSubtitle,
                 preferredLanguage = uiState.subtitleStyle.preferredLanguage,
                 secondaryPreferredLanguage = uiState.subtitleStyle.secondaryPreferredLanguage,
-                subtitleOrganizationMode = uiState.subtitleOrganizationMode,
                 isLoadingAddons = uiState.isLoadingAddonSubtitles,
                 aiSubtitlesEnabled = uiState.aiSubtitlesEnabled,
                 aiSubtitlesAvailable = uiState.aiSubtitlesAvailable,

@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
+import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleStyleSettings
@@ -52,7 +53,7 @@ data class PlayerUiState(
     val showMoreDialog: Boolean = false,
     // Subtitle style settings
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
-    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.NONE,
+    val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
     // Addon subtitles
     val addonSubtitles: List<Subtitle> = emptyList(),
     val isLoadingAddonSubtitles: Boolean = false,
@@ -96,8 +97,10 @@ data class PlayerUiState(
     val sourceAllStreams: List<Stream> = emptyList(),
     val sourceSelectedAddonFilter: String? = null, // null means "All"
     val sourceFilteredStreams: List<Stream> = emptyList(),
+    val sourcePresentedStreams: List<StreamCardModel> = emptyList(),
     val sourceAvailableAddons: List<String> = emptyList(),
     val sourceChips: List<SourceChipItem> = emptyList(),
+    val showSourceAddonFilters: Boolean = true,
     val error: String? = null,
     val pendingSeekPosition: Long? = null,  // For resuming from saved progress
     // Skip intro

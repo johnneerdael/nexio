@@ -49,6 +49,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.nexio.tv.core.stream.StreamCardModel
+import com.nexio.tv.core.stream.StreamFeatureFlags
+import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
@@ -67,6 +70,34 @@ internal fun StreamItem(
     onClick: () -> Unit,
     onUpKey: (() -> Unit)? = null
 ) {
+    val fallbackItem = remember(stream) {
+        StreamPresentationEngine.organize(
+            streams = listOf(stream),
+            availableAddons = emptyList(),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(uniformFormattingEnabled = false)
+        ).items.first()
+    }
+    StreamItem(
+        item = fallbackItem,
+        focusRequester = focusRequester,
+        requestInitialFocus = requestInitialFocus,
+        isCurrentStream = isCurrentStream,
+        onClick = onClick,
+        onUpKey = onUpKey
+    )
+}
+
+@Composable
+internal fun StreamItem(
+    item: StreamCardModel,
+    focusRequester: FocusRequester,
+    requestInitialFocus: Boolean,
+    isCurrentStream: Boolean = false,
+    onClick: () -> Unit,
+    onUpKey: (() -> Unit)? = null
+) {
+    val stream = item.stream
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -114,7 +145,7 @@ internal fun StreamItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = stream.getDisplayName(),
+                        text = item.title,
                         style = MaterialTheme.typography.titleMedium,
                         color = NexioColors.TextPrimary
                     )
@@ -135,14 +166,24 @@ internal fun StreamItem(
                     }
                 }
 
-                stream.getDisplayDescription()?.let { description ->
-                    if (description != stream.getDisplayName()) {
+                item.subtitle?.let { description ->
+                    if (description != item.title) {
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
                             color = NexioTheme.extendedColors.textSecondary
                         )
                     }
+                }
+
+                item.detailLines.forEach { detail ->
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioTheme.extendedColors.textSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Row(

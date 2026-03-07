@@ -17,6 +17,25 @@
         <BaseSelect v-model="settings.playback.streamSelection.playerPreference" :options="playerOptions" />
       </SettingRow>
 
+      <SettingRow label="Uniform Stream Formatting" description="Use the normalized stream parser and formatter across addons.">
+        <BaseToggle v-model="settings.playback.streamSelection.uniformStreamFormattingEnabled" />
+      </SettingRow>
+
+      <SettingRow label="Group Streams Across Addons" description="Show one merged stream list instead of addon tabs.">
+        <BaseToggle v-model="settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled" />
+      </SettingRow>
+
+      <SettingRow label="Deduplicate Grouped Streams" description="Hide likely duplicates when grouped mode is enabled.">
+        <BaseToggle
+          v-model="settings.playback.streamSelection.deduplicateGroupedStreamsEnabled"
+          :disabled="!settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled"
+        />
+      </SettingRow>
+
+      <SettingRow label="Filter WEB-DL Dolby Vision" description="Hide WEB-DL streams tagged DV or DoVi.">
+        <BaseToggle v-model="settings.playback.streamSelection.filterWebDolbyVisionStreamsEnabled" />
+      </SettingRow>
+
       <SettingRow label="Auto-Play Mode" description="Automatically select a stream for TV shows.">
         <BaseSelect v-model="settings.playback.streamSelection.streamAutoPlayMode" :options="autoPlayOptions" />
       </SettingRow>

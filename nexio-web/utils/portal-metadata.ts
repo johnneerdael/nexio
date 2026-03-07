@@ -202,6 +202,10 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         ] },
         { path: 'playback.streamSelection.streamReuseLastLinkEnabled', label: 'Reuse last stream', description: 'Prefer the last successful stream link.', kind: 'toggle' },
         { path: 'playback.streamSelection.streamReuseLastLinkCacheHours', label: 'Reuse cache window', description: 'How long previous stream links stay reusable.', kind: 'select', options: [1, 6, 12, 24, 48, 72, 168].map((value) => ({ label: `${value}h`, value })) },
+        { path: 'playback.streamSelection.uniformStreamFormattingEnabled', label: 'Uniform stream formatting', description: 'Use the normalized stream parser and formatter for consistent stream cards across addons.', kind: 'toggle' },
+        { path: 'playback.streamSelection.groupStreamsAcrossAddonsEnabled', label: 'Group streams across addons', description: 'Show one merged source list instead of separate addon tabs.', kind: 'toggle' },
+        { path: 'playback.streamSelection.deduplicateGroupedStreamsEnabled', label: 'Deduplicate grouped streams', description: 'Hide likely duplicate results when grouped stream mode is enabled.', kind: 'toggle' },
+        { path: 'playback.streamSelection.filterWebDolbyVisionStreamsEnabled', label: 'Filter WEB-DL Dolby Vision', description: 'Hide WEB-DL streams tagged DV/DoVi to avoid DV5 playback issues.', kind: 'toggle' },
         { path: 'playback.streamSelection.streamAutoPlayMode', label: 'Auto-play mode', description: 'Pick the account-wide stream selection behavior.', kind: 'select', options: [
           { label: 'Manual', value: 'MANUAL' },
           { label: 'First stream', value: 'FIRST_STREAM' },
@@ -263,11 +267,6 @@ export const accountGroups: Record<string, PortalGroup[]> = {
       fields: [
         { path: 'playback.subtitles.preferredLanguage', label: 'Preferred subtitle language', description: 'Primary subtitle language code.', kind: 'text', placeholder: 'en' },
         { path: 'playback.subtitles.secondaryPreferredLanguage', label: 'Secondary subtitle language', description: 'Secondary subtitle language code.', kind: 'text', placeholder: 'es' },
-        { path: 'playback.subtitles.subtitleOrganizationMode', label: 'Subtitle grouping', description: 'Choose how subtitle tracks are grouped.', kind: 'select', options: [
-          { label: 'None', value: 'NONE' },
-          { label: 'By language', value: 'BY_LANGUAGE' },
-          { label: 'By addon', value: 'BY_ADDON' }
-        ] },
         { path: 'playback.subtitles.addonSubtitleStartupMode', label: 'Addon subtitle startup', description: 'Control how subtitle rails load at playback startup.', kind: 'select', options: [
           { label: 'Fast startup', value: 'FAST_STARTUP' },
           { label: 'Preferred only', value: 'PREFERRED_ONLY' },

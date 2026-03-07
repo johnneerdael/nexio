@@ -6,9 +6,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.core.stream.StreamFeatureFlags
+import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
+import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -54,6 +57,7 @@ class StreamScreenViewModel @Inject constructor(
     private var directAutoPlayFlowEnabledForSession = false
     private var streamLoadJob: Job? = null
     private var sourceChipErrorDismissJob: Job? = null
+    private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
 
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
@@ -166,6 +170,7 @@ class StreamScreenViewModel @Inject constructor(
         sourceChipErrorDismissJob?.cancel()
         streamLoadJob = viewModelScope.launch {
             val playerSettings = playerSettingsDataStore.playerSettings.first()
+            streamFeatureFlags = playerSettings.toStreamFeatureFlags()
             if (manualSelection) {
                 directAutoPlayModeInitializedForSession = true
                 directAutoPlayFlowEnabledForSession = false
@@ -245,6 +250,7 @@ class StreamScreenViewModel @Inject constructor(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
                     showDirectAutoPlayOverlay = if (directFlowActive) true else it.showDirectAutoPlayOverlay
                 )
             }
@@ -275,20 +281,23 @@ class StreamScreenViewModel @Inject constructor(
                     resolvedAutoPlayTarget = true
                 }
 
-                val currentFilter = _uiState.value.selectedAddonFilter
-                val filteredStreams = if (currentFilter == null) {
-                    allStreams
-                } else {
-                    allStreams.filter { it.addonName == currentFilter }
-                }
+                val organizedStreams = StreamPresentationEngine.organize(
+                    streams = allStreams,
+                    availableAddons = availableAddons,
+                    selectedAddonFilter = _uiState.value.selectedAddonFilter,
+                    flags = streamFeatureFlags
+                )
 
                 updateUiStateIfChanged {
                     it.copy(
                         isLoading = false,
                         addonStreams = orderedAddonStreams,
                         allStreams = allStreams,
-                        filteredStreams = filteredStreams,
-                        availableAddons = availableAddons,
+                        filteredStreams = organizedStreams.items.map { item -> item.stream },
+                        presentedStreams = organizedStreams.items,
+                        availableAddons = organizedStreams.availableAddons,
+                        selectedAddonFilter = organizedStreams.selectedAddonFilter,
+                        showAddonFilters = organizedStreams.showAddonFilters,
                         sourceChips = mergeSourceChipStatuses(
                             existing = _uiState.value.sourceChips,
                             succeededNames = orderedAddonStreams.map { it.addonName }
@@ -356,6 +365,7 @@ class StreamScreenViewModel @Inject constructor(
                         updateUiStateIfChanged {
                             it.copy(
                                 isLoading = true,
+                                showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
                                 showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
                                     true
                                 } else {
@@ -397,7 +407,12 @@ class StreamScreenViewModel @Inject constructor(
             .map { it.displayName }
             .distinct()
         if (orderedNames.isEmpty()) {
-            updateUiStateIfChanged { it.copy(sourceChips = emptyList()) }
+            updateUiStateIfChanged {
+                it.copy(
+                    sourceChips = emptyList(),
+                    showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled
+                )
+            }
             return
         }
 
@@ -405,7 +420,8 @@ class StreamScreenViewModel @Inject constructor(
             state.copy(
                 sourceChips = orderedNames.map { name ->
                     SourceChipItem(name = name, status = SourceChipStatus.LOADING)
-                }
+                },
+                showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled
             )
         }
     }
@@ -573,14 +589,18 @@ class StreamScreenViewModel @Inject constructor(
             if (state.selectedAddonFilter == addonName) {
                 state
             } else {
-                val filteredStreams = if (addonName == null) {
-                    state.allStreams
-                } else {
-                    state.allStreams.filter { it.addonName == addonName }
-                }
-                state.copy(
+                val organizedStreams = StreamPresentationEngine.organize(
+                    streams = state.allStreams,
+                    availableAddons = state.availableAddons,
                     selectedAddonFilter = addonName,
-                    filteredStreams = filteredStreams
+                    flags = streamFeatureFlags
+                )
+                state.copy(
+                    selectedAddonFilter = organizedStreams.selectedAddonFilter,
+                    filteredStreams = organizedStreams.items.map { it.stream },
+                    presentedStreams = organizedStreams.items,
+                    availableAddons = organizedStreams.availableAddons,
+                    showAddonFilters = organizedStreams.showAddonFilters
                 )
             }
         }
@@ -643,6 +663,16 @@ class StreamScreenViewModel @Inject constructor(
     }
 
 }
+
+private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
+    return StreamFeatureFlags(
+        uniformFormattingEnabled = uniformStreamFormattingEnabled,
+        groupAcrossAddonsEnabled = groupStreamsAcrossAddonsEnabled,
+        deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
+        filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled
+    )
+}
+
 
 data class StreamPlaybackInfo(
     val url: String?,
