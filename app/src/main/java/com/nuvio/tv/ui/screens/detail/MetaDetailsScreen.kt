@@ -152,6 +152,8 @@ private fun resolveDetailReturnEpisodeFocusTarget(
     val isCompleted = episodeProgressMap[requestedSeason to requestedEpisode]?.isCompleted() == true ||
         watchedEpisodes.contains(requestedSeason to requestedEpisode)
 
+    android.util.Log.d("NAV_DEBUG", "resolveTarget: request=S${requestedSeason}E${requestedEpisode} isCompleted=$isCompleted -> ${if (isCompleted) "next" else "same"}")
+
     return if (isCompleted) {
         orderedEpisodes.getOrNull(matchedIndex + 1) ?: orderedEpisodes[matchedIndex]
     } else {
@@ -359,7 +361,7 @@ fun MetaDetailsScreen(
                     detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
                         season = returnFocusSeason,
                         episode = returnFocusEpisode
-                    ),
+                    ).also { android.util.Log.d("NAV_DEBUG", "Detail focus request: season=$returnFocusSeason episode=$returnFocusEpisode") },
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
                     episodesForSeason = uiState.episodesForSeason,
@@ -691,7 +693,7 @@ private fun MetaDetailsContent(
     var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
     var showHeroPlayOptionsDialog by rememberSaveable(meta.id) { mutableStateOf(false) }
-    var initialDetailReturnFocusHandled by rememberSaveable(
+    var initialDetailReturnFocusHandled by remember(
         meta.id,
         detailReturnEpisodeFocusRequest?.season,
         detailReturnEpisodeFocusRequest?.episode
@@ -1053,7 +1055,7 @@ private fun MetaDetailsContent(
         val w = backdropWidthPx.coerceAtLeast(1)
         val h = backdropHeightPx.coerceAtLeast(1)
         val transparent = backgroundColor.copy(alpha = 0f).toArgb()
-        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val bmp = android.graphics.Bitmap.createBitmap(w, 2, android.graphics.Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bmp)
         val shader = android.graphics.LinearGradient(
             0f, 0f, w * 0.78f, 0f,
@@ -1071,18 +1073,16 @@ private fun MetaDetailsContent(
             floatArrayOf(0f, 0.10f, 0.22f, 0.36f, 0.52f, 0.66f, 0.78f, 0.90f, 1f),
             android.graphics.Shader.TileMode.CLAMP
         )
-        canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), android.graphics.Paint().apply {
+        canvas.drawRect(0f, 0f, w.toFloat(), 2f, android.graphics.Paint().apply {
             this.shader = shader
-            isDither = true
         })
-        applyDither(bmp)
         bmp.asImageBitmap()
     }
     val bottomGradientBitmap = remember(backgroundColor, backdropWidthPx, backdropHeightPx) {
         val w = backdropWidthPx.coerceAtLeast(1)
         val h = backdropHeightPx.coerceAtLeast(1)
         val transparent = backgroundColor.copy(alpha = 0f).toArgb()
-        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val bmp = android.graphics.Bitmap.createBitmap(2, h, android.graphics.Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bmp)
         val startY = h * 0.38f
         val shader = android.graphics.LinearGradient(
@@ -1101,11 +1101,9 @@ private fun MetaDetailsContent(
             floatArrayOf(0f, 0.10f, 0.22f, 0.36f, 0.52f, 0.66f, 0.78f, 0.90f, 1f),
             android.graphics.Shader.TileMode.CLAMP
         )
-        canvas.drawRect(0f, startY, w.toFloat(), h.toFloat(), android.graphics.Paint().apply {
+        canvas.drawRect(0f, 0f, 2f, h.toFloat(), android.graphics.Paint().apply {
             this.shader = shader
-            isDither = true
         })
-        applyDither(bmp)
         bmp.asImageBitmap()
     }
 
