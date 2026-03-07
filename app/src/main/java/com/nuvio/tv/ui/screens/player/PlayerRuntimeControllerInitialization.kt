@@ -66,7 +66,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
             )
             val startupSubtitlePreparation = prepareStreamStartSubtitles(playerSettings)
-            val useLibass = playerSettings.useLibass
+            requestedUseLibassByUser = playerSettings.useLibass
+            val useLibass = when {
+                !requestedUseLibassByUser -> false
+                libassPipelineOverrideForCurrentStream != null -> libassPipelineOverrideForCurrentStream == true
+                else -> true
+            }
             val requestedLibassRenderType = playerSettings.libassRenderType.toAssRenderType()
             val libassRenderType = when {
                 !useLibass -> requestedLibassRenderType
@@ -172,6 +177,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             } else {
                 buildDefaultPlayer()
             }
+            activePlayerUsesLibass = useLibass
+            libassPipelineSwitchInFlight = false
 
             _exoPlayer?.apply {
                 
@@ -477,6 +484,12 @@ internal fun PlayerRuntimeController.resetAddonSubtitleStateForNewStream() {
 internal suspend fun PlayerRuntimeController.prepareStreamStartSubtitles(
     playerSettings: PlayerSettings
 ): StartupSubtitlePreparation {
+    requestedUseLibassByUser = playerSettings.useLibass
+    if (libassPipelineDecisionStreamUrl != currentStreamUrl) {
+        libassPipelineDecisionStreamUrl = currentStreamUrl
+        libassPipelineOverrideForCurrentStream = null
+        libassPipelineSwitchInFlight = false
+    }
     resetAddonSubtitleStateForNewStream()
     return prepareStartupSubtitles(
         mode = playerSettings.addonSubtitleStartupMode,
