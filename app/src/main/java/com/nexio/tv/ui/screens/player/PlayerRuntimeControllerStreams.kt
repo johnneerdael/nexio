@@ -1,8 +1,11 @@
 package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.util.UnstableApi
+import com.nexio.tv.core.stream.StreamFeatureFlags
+import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
+import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.domain.model.Stream
@@ -97,13 +100,16 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                 sourceAllStreams = if (forceRefresh || targetChanged) emptyList() else it.sourceAllStreams,
                 sourceSelectedAddonFilter = if (forceRefresh || targetChanged) null else it.sourceSelectedAddonFilter,
                 sourceFilteredStreams = if (forceRefresh || targetChanged) emptyList() else it.sourceFilteredStreams,
+                sourcePresentedStreams = if (forceRefresh || targetChanged) emptyList() else it.sourcePresentedStreams,
                 sourceAvailableAddons = if (forceRefresh || targetChanged) emptyList() else it.sourceAvailableAddons,
-                sourceChips = if (forceRefresh || targetChanged) emptyList() else it.sourceChips
+                sourceChips = if (forceRefresh || targetChanged) emptyList() else it.sourceChips,
+                showSourceAddonFilters = !sourceStreamFeatureFlags.groupAcrossAddonsEnabled && it.showSourceAddonFilters
             )
         }
 
         val installedAddons = addonRepository.getInstalledAddons().first()
         val installedAddonOrder = installedAddons.map { it.displayName }
+        sourceStreamFeatureFlags = playerSettingsDataStore.playerSettings.first().toStreamFeatureFlags()
         updateSourceChipsForFetchStart(type, installedAddons)
 
         streamRepository.getStreamsFromAllAddons(
@@ -117,18 +123,26 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                     val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
+                    val organizedStreams = StreamPresentationEngine.organize(
+                        streams = allStreams,
+                        availableAddons = availableAddons,
+                        selectedAddonFilter = _uiState.value.sourceSelectedAddonFilter,
+                        flags = sourceStreamFeatureFlags
+                    )
                     _uiState.update {
                         it.copy(
                             isLoadingSourceStreams = false,
                             sourceAllStreams = allStreams,
-                            sourceSelectedAddonFilter = null,
-                            sourceFilteredStreams = allStreams,
-                            sourceAvailableAddons = availableAddons,
+                            sourceSelectedAddonFilter = organizedStreams.selectedAddonFilter,
+                            sourceFilteredStreams = organizedStreams.items.map { item -> item.stream },
+                            sourcePresentedStreams = organizedStreams.items,
+                            sourceAvailableAddons = organizedStreams.availableAddons,
                             sourceChips = mergeSourceChipStatuses(
                                 existing = it.sourceChips,
                                 succeededNames = addonStreams.map { group -> group.addonName }
                             ),
-                            sourceStreamsError = null
+                            sourceStreamsError = null,
+                            showSourceAddonFilters = organizedStreams.showAddonFilters
                         )
                     }
                 }
@@ -156,7 +170,8 @@ internal fun PlayerRuntimeController.dismissSourcesPanel() {
         it.copy(
             showSourcesPanel = false,
             isLoadingSourceStreams = false,
-            sourceChips = emptyList()
+            sourceChips = emptyList(),
+            sourcePresentedStreams = emptyList()
         )
     }
     sourceChipErrorDismissJob?.cancel()
@@ -164,16 +179,20 @@ internal fun PlayerRuntimeController.dismissSourcesPanel() {
 }
 
 internal fun PlayerRuntimeController.filterSourceStreamsByAddon(addonName: String?) {
-    val allStreams = _uiState.value.sourceAllStreams
-    val filteredStreams = if (addonName == null) {
-        allStreams
-    } else {
-        allStreams.filter { it.addonName == addonName }
-    }
+    val state = _uiState.value
+    val organizedStreams = StreamPresentationEngine.organize(
+        streams = state.sourceAllStreams,
+        availableAddons = state.sourceAvailableAddons,
+        selectedAddonFilter = addonName,
+        flags = sourceStreamFeatureFlags
+    )
     _uiState.update {
         it.copy(
-            sourceSelectedAddonFilter = addonName,
-            sourceFilteredStreams = filteredStreams
+            sourceSelectedAddonFilter = organizedStreams.selectedAddonFilter,
+            sourceFilteredStreams = organizedStreams.items.map { item -> item.stream },
+            sourcePresentedStreams = organizedStreams.items,
+            sourceAvailableAddons = organizedStreams.availableAddons,
+            showSourceAddonFilters = organizedStreams.showAddonFilters
         )
     }
 }
@@ -188,7 +207,8 @@ private suspend fun PlayerRuntimeController.updateSourceChipsForFetchStart(
         .distinct()
     _uiState.update {
         it.copy(
-            sourceChips = ordered.map { name -> SourceChipItem(name, SourceChipStatus.LOADING) }
+            sourceChips = ordered.map { name -> SourceChipItem(name, SourceChipStatus.LOADING) },
+            showSourceAddonFilters = !sourceStreamFeatureFlags.groupAcrossAddonsEnabled
         )
     }
 }
@@ -247,6 +267,15 @@ private fun com.nexio.tv.domain.model.Addon.supportsStreamResourceForChip(type: 
         resource.name == "stream" &&
             (resource.types.isEmpty() || resource.types.any { it.equals(type, ignoreCase = true) })
     }
+}
+
+private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
+    return StreamFeatureFlags(
+        uniformFormattingEnabled = uniformStreamFormattingEnabled,
+        groupAcrossAddonsEnabled = groupStreamsAcrossAddonsEnabled,
+        deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
+        filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled
+    )
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)

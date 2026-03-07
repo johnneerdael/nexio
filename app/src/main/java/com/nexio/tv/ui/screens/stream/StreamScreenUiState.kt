@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.stream
 
+import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.ui.components.SourceChipItem
@@ -28,7 +29,9 @@ data class StreamScreenUiState(
     val allStreams: List<Stream> = emptyList(),
     val selectedAddonFilter: String? = null, // null means "All"
     val filteredStreams: List<Stream> = emptyList(),
+    val presentedStreams: List<StreamCardModel> = emptyList(),
     val availableAddons: List<String> = emptyList(),
+    val showAddonFilters: Boolean = true,
     val sourceChips: List<SourceChipItem> = emptyList(),
     val autoPlayStream: Stream? = null,
     val autoPlayPlaybackInfo: StreamPlaybackInfo? = null,

@@ -8,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.domain.model.Subtitle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -209,7 +210,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
 
                 state.copy(
                     subtitleStyle = settings.subtitleStyle,
-                    subtitleOrganizationMode = settings.subtitleOrganizationMode,
+                    subtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
                     loadingOverlayEnabled = settings.loadingOverlayEnabled,
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,

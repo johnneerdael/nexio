@@ -218,6 +218,10 @@ export type PortalSettings = {
       playerPreference: PlayerPreference
       streamReuseLastLinkEnabled: boolean
       streamReuseLastLinkCacheHours: number
+      uniformStreamFormattingEnabled: boolean
+      groupStreamsAcrossAddonsEnabled: boolean
+      deduplicateGroupedStreamsEnabled: boolean
+      filterWebDolbyVisionStreamsEnabled: boolean
       streamAutoPlayMode: StreamAutoPlayMode
       streamAutoPlaySource: StreamAutoPlaySource
       streamAutoPlaySelectedAddons: string[]

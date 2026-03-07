@@ -29,6 +29,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,6 +84,10 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
+    onSetUniformStreamFormattingEnabled: (Boolean) -> Unit,
+    onSetGroupStreamsAcrossAddonsEnabled: (Boolean) -> Unit,
+    onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
+    onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
     item(key = "autoplay_reuse_last_link") {
@@ -103,6 +111,52 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
+    }
+
+    item(key = "streams_uniform_formatting") {
+        ToggleSettingsItem(
+            icon = Icons.Default.AutoAwesome,
+            title = stringResource(R.string.streams_uniform_formatting_title),
+            subtitle = stringResource(R.string.streams_uniform_formatting_sub),
+            isChecked = playerSettings.uniformStreamFormattingEnabled,
+            onCheckedChange = onSetUniformStreamFormattingEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "streams_group_across_addons") {
+        ToggleSettingsItem(
+            icon = Icons.Default.ViewAgenda,
+            title = stringResource(R.string.streams_group_across_addons_title),
+            subtitle = stringResource(R.string.streams_group_across_addons_sub),
+            isChecked = playerSettings.groupStreamsAcrossAddonsEnabled,
+            onCheckedChange = onSetGroupStreamsAcrossAddonsEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    if (playerSettings.groupStreamsAcrossAddonsEnabled) {
+        item(key = "streams_deduplicate_grouped") {
+            ToggleSettingsItem(
+                icon = Icons.Default.ContentCopy,
+                title = stringResource(R.string.streams_deduplicate_grouped_title),
+                subtitle = stringResource(R.string.streams_deduplicate_grouped_sub),
+                isChecked = playerSettings.deduplicateGroupedStreamsEnabled,
+                onCheckedChange = onSetDeduplicateGroupedStreamsEnabled,
+                onFocused = onItemFocused
+            )
+        }
+    }
+
+    item(key = "streams_filter_dv5_webdl") {
+        ToggleSettingsItem(
+            icon = Icons.Default.FilterAlt,
+            title = stringResource(R.string.streams_filter_dv5_webdl_title),
+            subtitle = stringResource(R.string.streams_filter_dv5_webdl_sub),
+            isChecked = playerSettings.filterWebDolbyVisionStreamsEnabled,
+            onCheckedChange = onSetFilterWebDolbyVisionStreamsEnabled,
+            onFocused = onItemFocused
+        )
     }
 
     item(key = "autoplay_mode") {

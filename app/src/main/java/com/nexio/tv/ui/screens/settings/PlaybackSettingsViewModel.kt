@@ -341,6 +341,22 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamReuseLastLinkCacheHours(hours)
     }
 
+    suspend fun setUniformStreamFormattingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setUniformStreamFormattingEnabled(enabled)
+    }
+
+    suspend fun setGroupStreamsAcrossAddonsEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setGroupStreamsAcrossAddonsEnabled(enabled)
+    }
+
+    suspend fun setDeduplicateGroupedStreamsEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setDeduplicateGroupedStreamsEnabled(enabled)
+    }
+
+    suspend fun setFilterWebDolbyVisionStreamsEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(enabled)
+    }
+
     suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
         playerSettingsDataStore.setVodCacheSizeMode(mode)
     }

@@ -8,6 +8,7 @@ import androidx.media3.common.C
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -218,6 +219,7 @@ class PlayerRuntimeController(
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     internal var nextEpisodeThresholdPercentSetting: Float = 98f
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
+    internal var sourceStreamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     internal var currentStreamBingeGroup: String? = navigationArgs.bingeGroup
     internal var hasAppliedRememberedAudioSelection: Boolean = false
     internal var geminiEnabled: Boolean = false
