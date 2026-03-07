@@ -12,12 +12,14 @@ import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal fun PlayerRuntimeController.showEpisodesPanel() {
     _uiState.update {
@@ -123,12 +125,15 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                     val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
                     val allStreams = addonStreams.flatMap { it.streams }
                     val availableAddons = addonStreams.map { it.addonName }
-                    val organizedStreams = StreamPresentationEngine.organize(
-                        streams = allStreams,
-                        availableAddons = availableAddons,
-                        selectedAddonFilter = _uiState.value.sourceSelectedAddonFilter,
-                        flags = sourceStreamFeatureFlags
-                    )
+                    val selectedFilter = _uiState.value.sourceSelectedAddonFilter
+                    val organizedStreams = withContext(Dispatchers.Default) {
+                        StreamPresentationEngine.organize(
+                            streams = allStreams,
+                            availableAddons = availableAddons,
+                            selectedAddonFilter = selectedFilter,
+                            flags = sourceStreamFeatureFlags
+                        )
+                    }
                     _uiState.update {
                         it.copy(
                             isLoadingSourceStreams = false,
@@ -180,20 +185,24 @@ internal fun PlayerRuntimeController.dismissSourcesPanel() {
 
 internal fun PlayerRuntimeController.filterSourceStreamsByAddon(addonName: String?) {
     val state = _uiState.value
-    val organizedStreams = StreamPresentationEngine.organize(
-        streams = state.sourceAllStreams,
-        availableAddons = state.sourceAvailableAddons,
-        selectedAddonFilter = addonName,
-        flags = sourceStreamFeatureFlags
-    )
-    _uiState.update {
-        it.copy(
-            sourceSelectedAddonFilter = organizedStreams.selectedAddonFilter,
-            sourceFilteredStreams = organizedStreams.items.map { item -> item.stream },
-            sourcePresentedStreams = organizedStreams.items,
-            sourceAvailableAddons = organizedStreams.availableAddons,
-            showSourceAddonFilters = organizedStreams.showAddonFilters
-        )
+    scope.launch {
+        val organizedStreams = withContext(Dispatchers.Default) {
+            StreamPresentationEngine.organize(
+                streams = state.sourceAllStreams,
+                availableAddons = state.sourceAvailableAddons,
+                selectedAddonFilter = addonName,
+                flags = sourceStreamFeatureFlags
+            )
+        }
+        _uiState.update {
+            it.copy(
+                sourceSelectedAddonFilter = organizedStreams.selectedAddonFilter,
+                sourceFilteredStreams = organizedStreams.items.map { item -> item.stream },
+                sourcePresentedStreams = organizedStreams.items,
+                sourceAvailableAddons = organizedStreams.availableAddons,
+                showSourceAddonFilters = organizedStreams.showAddonFilters
+            )
+        }
     }
 }
 

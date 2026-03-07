@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.remote.api.MDBListApi
@@ -50,7 +51,8 @@ data class MDBListDiscoverySnapshot(
 class MDBListDiscoveryService @Inject constructor(
     private val mdbListApi: MDBListApi,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val snapshotStore: MDBListDiscoverySnapshotStore
 ) {
     private val snapshotState = MutableStateFlow(MDBListDiscoverySnapshot())
     private val refreshMutex = Mutex()
@@ -59,6 +61,13 @@ class MDBListDiscoveryService @Inject constructor(
     private val maxItemsPerRail = 20
     @Volatile
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
+
+    init {
+        snapshotStore.read()?.let { persisted ->
+            snapshotState.value = persisted
+            lastRefreshMs = persisted.updatedAtMs
+        }
+    }
 
     fun observeSnapshot(): Flow<MDBListDiscoverySnapshot> {
         return snapshotState.onStart { ensureFresh(force = false) }
@@ -71,6 +80,7 @@ class MDBListDiscoveryService @Inject constructor(
         if (!settings.enabled || apiKey.isBlank()) {
             Log.d("MDBListDiscovery", "Skipping refresh enabled=${settings.enabled} apiKeyPresent=${apiKey.isNotBlank()}")
             snapshotState.value = MDBListDiscoverySnapshot()
+            snapshotStore.clear()
             return
         }
 
@@ -109,6 +119,7 @@ class MDBListDiscoveryService @Inject constructor(
                 customListCatalogs = customCatalogs,
                 updatedAtMs = System.currentTimeMillis()
             )
+            snapshotStore.write(snapshotState.value)
             lastRefreshMs = System.currentTimeMillis()
         }
     }

@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import android.util.Log
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
@@ -81,7 +82,8 @@ class TraktDiscoveryService @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository,
     private val traktSettingsDataStore: TraktSettingsDataStore,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val snapshotStore: TraktDiscoverySnapshotStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(TraktDiscoverySnapshot())
@@ -96,6 +98,11 @@ class TraktDiscoveryService @Inject constructor(
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
 
     init {
+        snapshotStore.read()?.let { persisted ->
+            rawSnapshotState.value = persisted
+            snapshotState.value = persisted
+            lastRefreshMs = persisted.updatedAtMs
+        }
         scope.launch {
             combine(
                 rawSnapshotState,
@@ -135,6 +142,7 @@ class TraktDiscoveryService @Inject constructor(
     suspend fun ensureFresh(force: Boolean) {
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) {
             rawSnapshotState.value = TraktDiscoverySnapshot()
+            snapshotStore.clear()
             return
         }
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
@@ -220,6 +228,7 @@ class TraktDiscoveryService @Inject constructor(
                 recommendationRefsByStatusKey = refs,
                 updatedAtMs = System.currentTimeMillis()
             )
+            snapshotStore.write(rawSnapshotState.value)
             lastRefreshMs = System.currentTimeMillis()
         }
     }
