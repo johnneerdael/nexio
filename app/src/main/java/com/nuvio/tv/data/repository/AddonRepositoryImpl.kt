@@ -41,7 +41,8 @@ class AddonRepositoryImpl @Inject constructor(
     companion object {
         private const val TAG = "AddonRepository"
         private const val MANIFEST_CACHE_PREFS = "addon_manifest_cache"
-        private const val MANIFEST_CACHE_KEY = "manifests"
+        private const val MANIFEST_CACHE_KEY = "manifests_v2"
+        private const val LEGACY_MANIFEST_CACHE_KEY = "manifests"
         private const val MANIFEST_SUFFIX = "/manifest.json"
     }
 
@@ -88,6 +89,9 @@ class AddonRepositoryImpl @Inject constructor(
     private fun loadManifestCacheFromDisk() {
         try {
             val prefs = context.getSharedPreferences(MANIFEST_CACHE_PREFS, Context.MODE_PRIVATE)
+            if (prefs.contains(LEGACY_MANIFEST_CACHE_KEY)) {
+                prefs.edit().remove(LEGACY_MANIFEST_CACHE_KEY).apply()
+            }
             val json = prefs.getString(MANIFEST_CACHE_KEY, null) ?: return
             val type = object : TypeToken<Map<String, Addon>>() {}.type
             val cached: Map<String, Addon> = gson.fromJson(json, type) ?: return

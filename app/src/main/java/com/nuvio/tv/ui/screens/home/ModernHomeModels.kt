@@ -31,8 +31,14 @@ internal data class HeroPreview(
     val logo: String?,
     val description: String?,
     val contentTypeText: String?,
+    val isSeries: Boolean = false,
     val yearText: String?,
+    val runtimeText: String? = null,
     val imdbText: String?,
+    val ageRatingText: String? = null,
+    val statusText: String? = null,
+    val countryText: String? = null,
+    val languageText: String? = null,
     val genres: List<String>,
     val poster: String?,
     val backdrop: String?,
@@ -146,6 +152,7 @@ internal fun buildContinueWatchingItem(
                 logo = item.progress.logo,
                 description = item.episodeDescription ?: item.progress.episodeTitle,
                 contentTypeText = episodeLabel,
+                isSeries = isSeries,
                 yearText = extractYear(item.releaseInfo),
                 imdbText = item.episodeImdbRating?.let { String.format("%.1f", it) },
                 genres = item.genres,
@@ -169,6 +176,7 @@ internal fun buildContinueWatchingItem(
                     ?: item.info.episodeTitle
                     ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
                 contentTypeText = episodeLabel,
+                isSeries = true,
                 yearText = extractYear(item.info.releaseInfo),
                 imdbText = item.info.imdbRating?.let { String.format("%.1f", it) },
                 genres = item.info.genres,
@@ -242,15 +250,21 @@ internal fun buildCatalogItem(
         logo = item.logo,
         description = item.description,
         contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
+        isSeries = isSeriesType(item.apiType),
         yearText = extractYear(item.releaseInfo),
+        runtimeText = formatHeroRuntime(item.runtime),
         imdbText = item.imdbRating?.let { String.format("%.1f", it) },
+        ageRatingText = item.ageRating,
+        statusText = item.status,
+        countryText = item.country,
+        languageText = item.language?.uppercase(),
         genres = item.genres.take(3),
         poster = item.poster,
-        backdrop = item.background,
+        backdrop = item.backdropUrl,
         imageUrl = if (useLandscapePosters) {
-            item.background ?: item.poster
+            item.backdropUrl ?: item.poster
         } else {
-            item.poster ?: item.background
+            item.poster ?: item.backdropUrl
         }
     )
 
@@ -259,9 +273,9 @@ internal fun buildCatalogItem(
         title = item.name,
         subtitle = item.releaseInfo,
         imageUrl = if (useLandscapePosters) {
-            item.background ?: item.poster
+            item.backdropUrl ?: item.poster
         } else {
-            item.poster ?: item.background
+            item.poster ?: item.backdropUrl
         },
         heroPreview = heroPreview,
         payload = ModernPayload.Catalog(
@@ -321,6 +335,24 @@ internal fun firstNonBlank(vararg candidates: String?): String? {
 internal fun extractYear(releaseInfo: String?): String? {
     if (releaseInfo.isNullOrBlank()) return null
     return YEAR_REGEX.find(releaseInfo)?.value
+}
+
+private fun formatHeroRuntime(runtime: String?): String? {
+    val normalized = runtime?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
+    val hours = "(\\d+)\\s*h".toRegex().find(normalized)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    val minutes = "(\\d+)\\s*m(?:in)?".toRegex().find(normalized)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    val totalMinutes = when {
+        hours != null || minutes != null -> (hours ?: 0) * 60 + (minutes ?: 0)
+        else -> normalized.filter(Char::isDigit).toIntOrNull()
+    } ?: return runtime
+
+    val wholeHours = totalMinutes / 60
+    val remainingMinutes = totalMinutes % 60
+    return when {
+        wholeHours > 0 && remainingMinutes > 0 -> "${wholeHours}h ${remainingMinutes}m"
+        wholeHours > 0 -> "${wholeHours}h"
+        else -> "${remainingMinutes}m"
+    }
 }
 
 internal fun ContinueWatchingItem.contentId(): String {

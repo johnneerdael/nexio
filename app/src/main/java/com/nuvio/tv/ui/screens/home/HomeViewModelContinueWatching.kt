@@ -414,7 +414,7 @@ private suspend fun HomeViewModel.buildNextUpItem(
     val nextEpisodeNumber = requireNotNull(video.episode)
 
     val existingPoster = meta.poster.normalizeImageUrl()
-    val existingBackdrop = meta.background.normalizeImageUrl()
+    val existingBackdrop = meta.backdropUrl.normalizeImageUrl()
     val existingLogo = meta.logo.normalizeImageUrl()
     val existingThumbnail = video.thumbnail.normalizeImageUrl()
     val artworkFallback = if (

@@ -2,7 +2,9 @@ package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -239,9 +241,13 @@ internal fun HeroTitleBlock(
             }
             val hasLeadingMeta = leadingMetaText.isNotBlank()
 
+            val runtimeText = preview.runtimeText
             val yearText = preview.yearText
             val imdbText = preview.imdbText
-            val hasYearOrImdb = !yearText.isNullOrBlank() || !imdbText.isNullOrBlank()
+            val showImdbInPrimary = !preview.isSeries
+            val hasTrailingMeta = !runtimeText.isNullOrBlank() ||
+                !yearText.isNullOrBlank() ||
+                (showImdbInPrimary && !imdbText.isNullOrBlank())
 
             if (hasLeadingMeta) {
                 Text(
@@ -250,7 +256,7 @@ internal fun HeroTitleBlock(
                     color = NuvioColors.TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = if (hasYearOrImdb) {
+                    modifier = if (hasTrailingMeta) {
                         Modifier.weight(1f, fill = false)
                     } else {
                         Modifier
@@ -258,7 +264,7 @@ internal fun HeroTitleBlock(
                 )
             }
 
-            if (hasYearOrImdb) {
+            if (hasTrailingMeta) {
                 if (hasLeadingMeta) {
                     HeroMetaDivider(metaScale)
                 }
@@ -266,6 +272,14 @@ internal fun HeroTitleBlock(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(metaSpacing)
                 ) {
+                    if (!runtimeText.isNullOrBlank()) {
+                        Text(
+                            text = runtimeText,
+                            style = labelMedium,
+                            color = NuvioColors.TextSecondary,
+                            maxLines = 1
+                        )
+                    }
                     if (!yearText.isNullOrBlank()) {
                         Text(
                             text = yearText,
@@ -274,25 +288,87 @@ internal fun HeroTitleBlock(
                             maxLines = 1
                         )
                     }
-                    if (!imdbText.isNullOrBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(imdbMetaSpacing)
-                        ) {
-                            AsyncImage(
-                                model = imdbLogoModel,
-                                contentDescription = "IMDb",
-                                modifier = Modifier.size(30.dp * metaScale),
-                                contentScale = ContentScale.Fit
-                            )
-                            Text(
-                                text = imdbText,
-                                style = labelMedium,
-                                color = NuvioColors.TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    if (showImdbInPrimary && !imdbText.isNullOrBlank()) {
+                        HeroImdbMeta(
+                            imdbText = imdbText,
+                            imdbLogoModel = imdbLogoModel,
+                            textStyle = labelMedium,
+                            textColor = NuvioColors.TextSecondary,
+                            logoSize = 30.dp * metaScale,
+                            spacing = imdbMetaSpacing
+                        )
+                    }
+                }
+            }
+        }
+
+        val secondaryMeta = remember(
+            preview.ageRatingText,
+            preview.statusText,
+            preview.languageText
+        ) {
+            val ageRating = preview.ageRatingText?.trim()?.takeIf { it.isNotBlank() }
+            val status = preview.statusText?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
+            val details = buildList {
+                preview.languageText?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
+            }
+            Triple(ageRating, status, details)
+        }
+
+        val ageRatingBadge = secondaryMeta.first
+        val statusBadge = secondaryMeta.second
+        val secondaryDetails = secondaryMeta.third
+        val showImdbInSecondary = preview.isSeries && !preview.imdbText.isNullOrBlank()
+
+        if (ageRatingBadge != null || showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(metaSpacing)
+            ) {
+                ageRatingBadge?.let { badge ->
+                    HeroMetaBadge(
+                        text = badge,
+                        textStyle = labelMedium,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                }
+                if (ageRatingBadge != null && (showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty())) {
+                    HeroMetaDivider(metaScale)
+                }
+                if (showImdbInSecondary) {
+                    HeroImdbMeta(
+                        imdbText = preview.imdbText.orEmpty(),
+                        imdbLogoModel = imdbLogoModel,
+                        textStyle = labelMedium,
+                        textColor = NuvioColors.TextSecondary,
+                        logoSize = 30.dp * metaScale,
+                        spacing = imdbMetaSpacing
+                    )
+                }
+                if (showImdbInSecondary && (statusBadge != null || secondaryDetails.isNotEmpty())) {
+                    HeroMetaDivider(metaScale)
+                }
+                statusBadge?.let { badge ->
+                    HeroMetaBadge(
+                        text = badge,
+                        textStyle = labelMedium,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                }
+                if (statusBadge != null && secondaryDetails.isNotEmpty()) {
+                    HeroMetaDivider(metaScale)
+                }
+                secondaryDetails.forEachIndexed { index, value ->
+                    Text(
+                        text = value,
+                        style = labelMedium,
+                        color = NuvioColors.TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (index < secondaryDetails.lastIndex) {
+                        HeroMetaDivider(metaScale)
                     }
                 }
             }
@@ -307,6 +383,61 @@ internal fun HeroTitleBlock(
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+@Composable
+private fun HeroImdbMeta(
+    imdbText: String,
+    imdbLogoModel: Any,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    textColor: Color,
+    logoSize: androidx.compose.ui.unit.Dp,
+    spacing: androidx.compose.ui.unit.Dp
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        AsyncImage(
+            model = imdbLogoModel,
+            contentDescription = "IMDb",
+            modifier = Modifier.size(logoSize),
+            contentScale = ContentScale.Fit
+        )
+        Text(
+            text = imdbText,
+            style = textStyle,
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun HeroMetaBadge(
+    text: String,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    contentColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .border(
+                border = BorderStroke(1.dp, contentColor.copy(alpha = 0.55f)),
+                shape = RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = textStyle.copy(fontWeight = FontWeight.SemiBold),
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

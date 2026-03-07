@@ -9,8 +9,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -579,9 +582,14 @@ private fun MetaInfoRow(
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
-    val secondaryItems = remember(meta.ageRating, meta.country, meta.language) {
+    val ageRatingBadge = remember(meta.ageRating) {
+        meta.ageRating?.trim()?.takeIf { it.isNotBlank() }
+    }
+    val statusBadge = remember(meta.status) {
+        meta.status?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
+    }
+    val secondaryItems = remember(meta.country, meta.language) {
         buildList<String> {
-            meta.ageRating?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
             meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
             meta.language?.trim()?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
         }
@@ -646,11 +654,23 @@ private fun MetaInfoRow(
         }
 
         // Secondary row: Age Rating, Country, Language
-        if (secondaryItems.isNotEmpty()) {
+        if (ageRatingBadge != null || statusBadge != null || secondaryItems.isNotEmpty()) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                ageRatingBadge?.let { badge ->
+                    HeroMetaBadge(text = badge)
+                }
+                statusBadge?.let { badge ->
+                    HeroMetaBadge(
+                        text = badge,
+                        contentColor = NuvioColors.TextPrimary
+                    )
+                }
+                if ((ageRatingBadge != null || statusBadge != null) && secondaryItems.isNotEmpty()) {
+                    MetaInfoDivider()
+                }
                 secondaryItems.forEachIndexed { index, value ->
                     Text(
                         text = value,
@@ -663,6 +683,29 @@ private fun MetaInfoRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HeroMetaBadge(
+    text: String,
+    contentColor: Color = NuvioColors.TextSecondary
+) {
+    Box(
+        modifier = Modifier
+            .border(
+                border = BorderStroke(1.dp, contentColor.copy(alpha = 0.55f)),
+                shape = RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor,
+            maxLines = 1
+        )
     }
 }
 
