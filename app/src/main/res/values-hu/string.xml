@@ -6,7 +6,7 @@
 
     <!-- HomeScreen -->
     <string name="home_no_addons">Nincsenek telepített bővítmények. A kezdéshez adj hozzá egyet.</string>
-    <string name="home_no_catalog_addons">Nincsenek katalógus bővítmények. Telepíts egyet a tartalom megtekintéséhez.</string>
+    <string name="home_no_catalog_addons">Nincsenek katalógusbővítmények. Telepíts egyet a tartalom megtekintéséhez.</string>
     <string name="error_generic">Hiba történt</string>
 
     <!-- ErrorState -->
@@ -70,7 +70,7 @@
     <string name="detail_movie_marked_unwatched">Megjelölve nem megnézettként</string>
     <string name="detail_all_episodes_watched">Minden epizód megnézve</string>
     <string name="detail_no_watched_episodes">Nincsenek megnézett epizódok ebben az évadban</string>
-    <string name="detail_all_previous_watched">Minden korábbi epizód mmegnézve</string>
+    <string name="detail_all_previous_watched">Minden korábbi epizód megnézve</string>
     <string name="detail_marked_episodes_watched">Megnézettként megjelölt epizódok: %1$d</string>
     <string name="detail_marked_episodes_unwatched">Nem megnézettként megjelölt epizódok: %1$d</string>
     <string name="detail_marked_previous_watched">Megnézettként megjelölt korábbi epizódok: %1$d</string>
@@ -286,7 +286,7 @@
     <string name="sub_startup_mode_fast">Gyors indítás</string>
     <string name="sub_startup_mode_preferred">Preferált nyelvek</string>
     <string name="sub_startup_mode_all">Összes kiegészítő felirat</string>
-    <string name="sub_startup_mode_fast_desc">A lejátszás azonnali indítása. Az kiegészítő feliratok kiválasztása egyszer újraindíthatja a lejátszót.</string>
+    <string name="sub_startup_mode_fast_desc">A lejátszás azonnali indítása. A kiegészítő feliratok kiválasztása egyszer újraindíthatja a lejátszót.</string>
     <string name="sub_startup_mode_preferred_desc">Kiegészítő feliratok előtöltése lejátszás előtt, az elsődleges és másodlagos nyelvi sávok csatolásával.</string>
     <string name="sub_startup_mode_all_desc">Az összes kiegészítő felirat előtöltése és csatolása lejátszás előtt. Ez a leglassabb indítási mód.</string>
 
@@ -294,10 +294,10 @@
     <string name="autoplay_reuse_last_link">Utolsó link újrafelhasználása</string>
     <string name="autoplay_reuse_last_link_sub">A legutóbb működő forrás automatikus lejátszása ugyanahhoz a filmhez/epizódhoz, ha a gyorsítótár még érvényes</string>
     <string name="autoplay_last_link_cache">Utolsó forrás gyorsítótárának ideje</string>
-    <string name="autoplay_mode_manual">Kézi forrás választás</string>
+    <string name="autoplay_mode_manual">Kézi forrásválasztás</string>
     <string name="autoplay_mode_first">Első forrás automatikus lejátszása</string>
     <string name="autoplay_mode_regex">Regex találat automatikus lejátszása</string>
-    <string name="autoplay_stream_selection">Automatikus forrás választás</string>
+    <string name="autoplay_stream_selection">Automatikus forrásválasztás</string>
     <string name="autoplay_next_episode">Következő epizód automatikus lejátszása</string>
     <string name="autoplay_next_episode_sub">Következő epizód automatikus indítása a felugró ablak megjelenésekor.</string>
     <string name="autoplay_prefer_binge_group">Binge-csoport előnyben részesítése (Következő epizód)</string>
@@ -468,7 +468,7 @@
     <string name="tmdb_basic_info_subtitle">Leírás, műfajok és értékelés a TMDB-ről</string>
     <string name="tmdb_details_title">Részletek</string>
     <string name="tmdb_details_subtitle">Hossz, premier dátuma, ország és nyelv a TMDB-ről</string>
-    <string name="tmdb_credits_title">Szereplők és stáb<string>
+    <string name="tmdb_credits_title">Szereplők és stáb</string>
     <string name="tmdb_credits_subtitle">Szereplők (fotókkal), rendező és író a TMDB-ről</string>
     <string name="tmdb_productions_title">Gyártók</string>
     <string name="tmdb_productions_subtitle">Gyártó cégek a TMDB-ről</string>
@@ -611,7 +611,7 @@
     <string name="addon_confirm_confirm">Megerősítés</string>
 
     <!-- CatalogOrderScreen -->
-    <string name="catalog_order_title">Kezdőlap katalógusok sorrendje</string>
+    <string name="catalog_order_title">A kezdőlap katalógusainak sorrendje</string>
     <string name="catalog_order_subtitle">A kezdőlap katalógusainak sorrendjét módosítja (Klasszikus + Modern + Rács).</string>
     <string name="catalog_order_empty">Még nincsenek elérhető katalógusok.</string>
     <string name="catalog_order_disabled_on_home">Letiltva a kezdőlapon</string>
@@ -725,7 +725,7 @@
     <!-- NextEpisodeCardOverlay -->
     <string name="next_episode_label">Következő epizód</string>
     <string name="next_episode_finding_source">Forrás keresése…</string>
-    <string name="next_episode_playing_via">Lejátszás (%1$s) %2$ds múlva</string>
+    <string name="next_episode_playing_via">Lejátszás (%1$s) %2$d mp múlva</string>
     <string name="next_episode_play">Lejátszás</string>
     <string name="next_episode_unaired">Még nem vetített</string>
     <string name="next_episode_not_aired_yet">A következő epizód még nem került vetítésre</string>
