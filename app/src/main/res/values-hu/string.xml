@@ -2,6 +2,7 @@
     <string name="app_name">Nuvio</string>
     <string name="type_movie">Film</string>
     <string name="type_series">Sorozat</string>
+    <string name="type_unknown">Ismeretlen</string>
 
     <!-- HomeScreen -->
     <string name="home_no_addons">Nincsenek telepített bővítmények. A kezdéshez adj hozzá egyet.</string>
@@ -119,6 +120,8 @@
     <string name="about_check_updates_subtitle">A legújabb verzió letöltése</string>
     <string name="about_privacy_policy">Adatvédelmi irányelvek</string>
     <string name="about_privacy_policy_subtitle">Adatvédelmi irányelvek megtekintése</string>
+    <string name="about_supporters_contributors">Támogatók és közreműködők</string>
+    <string name="about_supporters_contributors_subtitle">A projekt támogatóinak és közreműködőinek listája</string>
 
     <!-- SettingsScreen categories -->
     <string name="settings_account">Fiók</string>
@@ -156,6 +159,33 @@
     <string name="cd_increase">Növelés</string>
     <string name="action_cancel">Mégse</string>
     <string name="action_none">Nincs</string>
+    <string name="action_close">Bezárás</string>
+
+    <!-- SupportersContributorsScreen -->
+    <string name="supporters_contributors_title">Támogatók és közreműködők</string>
+    <string name="supporters_contributors_subtitle">A Nuvio támogatói, valamint a TV-s és mobil platformokon dolgozó közreműködők.</string>
+    <string name="supporters_contributors_supporters_copy">A közreműködők és támogatók (adományozók) segítenek a projekt fenntartásában, az infrastruktúra finanszírozásában és az ambiciózus funkciók megvalósításában.</string>
+    <string name="supporters_contributors_donate_copy">A Nuvio ingyenes és nyílt forráskódú marad. Ha szeretnéd támogatni a projektet, segíthetsz a ráfordított idő és az infrastruktúra költségeinek fedezésében.</string>
+    <string name="supporters_contributors_donate_button">Nuvio támogatása</string>
+    <string name="supporters_contributors_qr_title">Beolvasás a támogatáshoz</string>
+    <string name="supporters_contributors_qr_subtitle">Nyisd meg a linket a telefonodon, és támogasd a Nuviót Ko-fi-n keresztül.</string>
+    <string name="supporters_contributors_qr_hint">Irányítsd a kamerád a QR-kódra, vagy használd az alábbi gombot.</string>
+    <string name="supporters_contributors_back_button">Vissza a részletekhez</string>
+    <string name="supporters_tab">Támogatók</string>
+    <string name="contributors_tab">Közreműködők</string>
+    <string name="supporters_loading">Támogatók betöltése…</string>
+    <string name="supporters_empty">Még nincsenek támogatók.</string>
+    <string name="supporters_error_title">A támogatók betöltése sikertelen</string>
+    <string name="supporters_no_message">Nem érkezett üzenet.</string>
+    <string name="supporters_open_donations">Támogatási oldal megnyitása</string>
+    <string name="contributors_loading">GitHub közreműködők betöltése…</string>
+    <string name="contributors_empty">Még nincsenek közreműködők.</string>
+    <string name="contributors_error_title">A közreműködők betöltése sikertelen</string>
+    <string name="contributors_total_contributions">Összesen %1$d hozzájárulás</string>
+    <string name="contributors_open_github">GitHub profil megnyitása</string>
+    <string name="contributors_show_kofi_qr">Ko-fi QR-kód megjelenítése</string>
+    <string name="contributors_hide_kofi_qr">Ko-fi QR-kód elrejtése</string>
+    <string name="contributors_profile_unavailable">A GitHub profil linkje nem érhető el.</string>
 
     <!-- PlaybackSettingsSections -->
     <string name="playback_section_general">Általános</string>
@@ -515,12 +545,16 @@
     <string name="debug_error_dialog_title">Lejátszási hiba</string>
     <string name="debug_error_dialog_subtitle">Hiba történt a lejátszás során.\n\nHiba: Szimulált teszthiba – ez nem valódi összeomlás. A forrás HTTP 503 (Service Unavailable) kódot küldött.</string>
     <string name="debug_dismiss">Bezárás</string>
-	
-    <!-- ProfileSettingsContent -->
+
+<!-- ProfileSettingsContent -->
     <string name="profile_title">Profilok</string>
-    <string name="profile_subtitle">A fiókhoz tartozó felhasználói profilok kezelése.</string>
+    <string name="profile_subtitle">Fiókhoz tartozó felhasználói profilok kezelése.</string>
+    <string name="profile_manage_button">Profilok kezelése</string>
+    <string name="profile_manage_title">Profilok kezelése</string>
+    <string name="profile_manage_subtitle">Válassz ki egy profil szerkesztéshez, váltáshoz vagy új létrehozásához</string>
+    <string name="profile_manage_hint">Válassz ki egy kezelni kívánt profilt</string>
     <string name="profile_primary_label">Elsődleges</string>
-    <string name="profile_shares_primary">Megosztva az elsődleges profil %1$s-ával</string>
+    <string name="profile_shares_primary">Osztozik az elsődleges profil %1$s beállításain</string>
     <string name="profile_edit_label">Szerkesztés</string>
     <string name="profile_add">Profil hozzáadása</string>
     <string name="profile_create_title">Profil létrehozása</string>
@@ -528,15 +562,27 @@
     <string name="profile_name_placeholder">Profil neve</string>
     <string name="profile_avatar_color">Avatar színe</string>
     <string name="profile_use_primary_addons">Elsődleges profil bővítményeinek használata</string>
-    <string name="profile_use_primary_plugins">Elsődleges profil pluginjeinek használata</string>
+    <string name="profile_use_primary_plugins">Elsődleges profil pluginjainak használata</string>
     <string name="profile_creating">Létrehozás\u2026</string>
     <string name="profile_create_btn">Létrehozás</string>
     <string name="profile_confirm">Megerősítés</string>
     <string name="profile_delete">Törlés</string>
     <string name="profile_addons">bővítmények</string>
-    <string name="profile_plugins">pluginek</string>
+    <string name="profile_plugins">pluginok</string>
+    <string name="profile_choose_avatar">Avatar választása</string>
+    <string name="profile_avatar_none_selected">Nincs avatar kiválasztva</string>
+    <string name="profile_avatar_focus_hint">Jelölj ki egy avatart a név megjelenítéséhez</string>
+    <string name="profile_avatar_category_all">Összes</string>
+    <string name="profile_avatar_category_anime">Anime</string>
+    <string name="profile_avatar_category_animation">Animáció</string>
+    <string name="profile_avatar_category_movie">Film</string>
+    <string name="profile_avatar_category_tv">TV</string>
+    <string name="profile_avatar_category_gaming">Játékok</string>
+    <string name="profile_add_new">Új profil</string>
+    <string name="profile_cancel">Mégse</string>
+    <string name="profile_save">Mentés</string>
 
-
+	
     <!-- AddonManagerScreen -->
     <string name="addon_title">Bővítmények</string>
     <string name="addon_readonly_notice">Az elsődleges profil bővítményeit használod, ezek nem módosíthatók</string>
@@ -702,12 +748,17 @@
     <string name="search_voice_failed">A hangfelismerés nem sikerült. Próbáld újra.</string>
     <string name="search_voice_unavailable">A hangalapú keresés nem érhető el ezen az eszközön.</string>
 
-    <!-- LibraryScreen -->
+<!-- LibraryScreen -->
     <string name="library_syncing">Trakt könyvtár szinkronizálása\u2026</string>
     <string name="library_title">Könyvtár</string>
     <string name="library_filter_list">Lista</string>
     <string name="library_filter_type">Típus</string>
     <string name="library_filter_sort">Rendezés</string>
+    <string name="library_sort_trakt_order">Trakt sorrend</string>
+    <string name="library_sort_added_desc">Hozzáadva ↓</string>
+    <string name="library_sort_added_asc">Hozzáadva ↑</string>
+    <string name="library_sort_title_asc">Cím A-Z</string>
+    <string name="library_sort_title_desc">Cím Z-A</string>
     <string name="library_manage_lists">Listák kezelése</string>
     <string name="library_manage_trakt_lists">Trakt listák kezelése</string>
     <string name="library_no_lists">Még nincsenek saját listák.</string>
@@ -721,15 +772,15 @@
     <string name="library_list_description_label">Leírás</string>
     <string name="library_list_privacy">Adatvédelem</string>
     <string name="library_delete_title">Törlöd ezt a listát?</string>
-    <string name="library_delete_subtitle">Ez törli a listát és annak minden elemét a Trakt-ról.</string>
+    <string name="library_delete_subtitle">Ez eltávolítja a listát és annak minden elemét a Trakt-ról.</string>
     <string name="library_delete_confirm">Törlés</string>
     <string name="library_source_local">HELYI</string>
-    <string name="library_type_all">Mind</string>
+    <string name="library_type_all">Összes</string>
     <string name="library_type_items">elem</string>
-    <string name="library_empty_local_title">Nincs még %1$s</string>
-    <string name="library_empty_trakt_title">Ezen a listán nincs %1$s</string>
-    <string name="library_empty_local_subtitle">Mentsd el a kedvenceidet, hogy itt láthasd őket</string>
-    <string name="library_empty_trakt_subtitle">A részletek oldalon a + gombbal adhatsz elemeket a várólistádhoz vagy más listákhoz</string>
+    <string name="library_empty_local_title">Még nincs %1$s</string>
+    <string name="library_empty_trakt_title">Nincs %1$s ebben a listában</string>
+	<string name="library_empty_local_subtitle">Mentsd el a kedvenc tartalmaidat, hogy itt láthasd őket</string>
+    <string name="library_empty_trakt_subtitle">Használd a + gombot a részletek oldalon, hogy elemeket adj a várólistádhoz vagy más listákhoz</string>
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Betöltés\u2026</string>
@@ -807,12 +858,18 @@
     <string name="plugin_updated_format">Frissítve: %1$s</string>
     <string name="plugin_test_btn">Tesztelés</string>
     <string name="plugin_test_results">Teszteredmények (%1$d forrás)</string>
+    
     <!-- ProfileSelectionScreen -->
     <string name="profile_selection_title">Ki nézi?</string>
     <string name="profile_selection_subtitle">Válassz egy profilt a folytatáshoz</string>
-    <string name="profile_selection_hint">Használd az irányválasztót (D-pad) a profil kiválasztásához</string>
+    <string name="profile_selection_hint">Tartsd lenyomva a profil kezeléséhez</string>
     <string name="profile_selection_empty">Nem találhatók profilok</string>
     <string name="profile_selection_primary_badge">ELSŐDLEGES</string>
+    <string name="profile_selection_options_title">Profil beállításai</string>
+    <string name="profile_delete_confirm_title">Törlöd a profilt?</string>
+    <string name="profile_delete_confirm_subtitle">Ez véglegesen törli a profilt és annak minden adatát, beleértve a könyvtárat, az előzményeket és az addon beállításokat. Ez a művelet nem vonható vissza.</string>
+    <string name="profile_delete_btn">Profil törlése</string>
+    <string name="profile_saving">Mentés\u2026</string>
 
     <!-- CastDetailScreen -->
     <string name="cast_detail_error">Valami hiba történt</string>
@@ -833,7 +890,6 @@
     <string name="update_title">Alkalmazásfrissítés</string>
     <string name="update_downloading">Frissítés letöltése</string>
     <string name="update_unknown_sources">A folytatáshoz engedélyezd a telepítést ismeretlen forrásokból.</string>
-
     <!-- AccountScreen -->
     <string name="account_title">Fiók</string>
     <string name="account_sign_in_description">Jelentkezz be a könyvtár, a megtekintési előzmények és a bővítmények eszközök közötti szinkronizálásához. A könyvtár és az előzmények szinkronizálása csak akkor működik, ha a Trakt nincs csatlakoztatva.</string>
@@ -846,7 +902,8 @@
     <!-- EpisodeRatingsSection -->
     <string name="ratings_loading">Epizódértékelések betöltése…</string>
     <string name="ratings_unavailable">Az epizódértékelések nem érhetők el.</string>
-    <string name="ratings_season_summary">%1$d. évad – %2$d epizód</string>
+    <string name="ratings_load_error">Nem sikerült betölteni az értékeléseket.</string>
+    <string name="ratings_season_summary">%1$d. évad – %2$d rész</string>
 
     <!-- SearchDiscoverSection -->
     <string name="discover_title">Felfedezés</string>
