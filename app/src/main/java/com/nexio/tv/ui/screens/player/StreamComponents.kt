@@ -71,12 +71,33 @@ internal fun StreamItem(
     onUpKey: (() -> Unit)? = null
 ) {
     val fallbackItem = remember(stream) {
-        StreamPresentationEngine.organize(
-            streams = listOf(stream),
-            availableAddons = emptyList(),
-            selectedAddonFilter = null,
-            flags = StreamFeatureFlags(uniformFormattingEnabled = false)
-        ).items.first()
+        StreamCardModel(
+            stream = stream,
+            parsed = com.nexio.tv.core.stream.ParsedStreamInfo(
+                stream = stream,
+                title = stream.title ?: stream.name ?: stream.description,
+                filename = stream.behaviorHints?.filename,
+                sizeBytes = stream.behaviorHints?.videoSize,
+                resolution = null,
+                quality = null,
+                encode = null,
+                visualTags = emptyList(),
+                audioTags = emptyList(),
+                audioChannels = emptyList(),
+                languages = emptyList(),
+                year = null,
+                seasons = emptyList(),
+                episodes = emptyList(),
+                releaseGroup = null,
+                serviceId = null,
+                isCached = null,
+                durationMs = null,
+                transportKind = com.nexio.tv.core.stream.StreamTransportKind.OTHER
+            ),
+            title = stream.getDisplayName(),
+            subtitle = stream.getDisplayDescription()?.takeIf { it != stream.getDisplayName() },
+            detailLines = emptyList()
+        )
     }
     StreamItem(
         item = fallbackItem,

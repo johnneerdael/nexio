@@ -447,6 +447,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val traktPrefs = traktCatalogPreferences
     val mdbListSnapshot = mdbListDiscoverySnapshot
     val mdbListPrefs = mdbListCatalogPreferences
+    val currentVisibleFullRows = _fullCatalogRows.value
     val traktUpNextItems = continueWatchingItems
         .filterIsInstance<ContinueWatchingItem.NextUp>()
         .take(20)
@@ -475,6 +476,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
             syntheticGroups.forEach { group -> put(group.orderKey, group.rows) }
         }
+        val rowOrderKeyByGlobalKey = linkedMapOf<String, String>().apply {
+            rawRowsByKey.keys.forEach { globalKey -> put(globalKey, globalKey) }
+            syntheticGroups.forEach { group ->
+                group.rows.forEach { row ->
+                    put(homeCatalogGlobalKey(row), group.orderKey)
+                }
+            }
+        }
 
         val defaultOrderKeys = buildList {
             addAll(syntheticGroups.map { it.orderKey })
@@ -498,7 +507,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 syntheticRowsByKey[key]?.let { addAll(it) } ?: rawRowsByKey[key]?.let { add(it) }
             }
         }
-        val orderedRows = if (hideUnreleased) {
+        val liveOrderedRows = if (hideUnreleased) {
             val today = LocalDate.now()
             combinedRows.map { row ->
                 if (row.addonId == TRAKT_RAIL_ADDON_ID) row else row.filterReleasedItems(today)
@@ -506,9 +515,30 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         } else {
             combinedRows
         }
+
+        val preservationState = CachedHomePreservationState(
+            preserveAddonRows = hasPersistedCatalogSnapshot && (startupRefreshPending || catalogsLoadInProgress),
+            preserveTraktRows = shouldPreserveTraktCachedRows(
+                prefs = traktPrefs,
+                snapshot = traktSnapshot,
+                refreshInProgress = startupRefreshPending || traktDiscoveryRefreshInProgress
+            ),
+            preserveMDBListRows = shouldPreserveMDBListCachedRows(
+                prefs = mdbListPrefs,
+                snapshot = mdbListSnapshot,
+                refreshInProgress = startupRefreshPending || mdbListDiscoveryRefreshInProgress
+            )
+        )
+        val effectiveOrderedRows = mergeCachedRowsWithLiveRows(
+            cachedRows = currentVisibleFullRows,
+            liveRows = liveOrderedRows,
+            preservationState = preservationState,
+            orderedGroupKeys = effectiveOrderKeys,
+            rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey
+        )
         val selectedHeroCatalogSet = heroCatalogKeys.toSet()
         val selectedHeroRows = if (selectedHeroCatalogSet.isNotEmpty()) {
-            orderedRows.filter { row ->
+            effectiveOrderedRows.filter { row ->
                 val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
                 key in selectedHeroCatalogSet
             }
@@ -527,7 +557,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             .take(7)
             .toList()
 
-        val fallbackHeroItemsWithArtwork = orderedRows
+        val fallbackHeroItemsWithArtwork = effectiveOrderedRows
             .asSequence()
             .flatMap { it.items.asSequence() }
             .filter { it.hasHeroArtwork() }
@@ -541,7 +571,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             else -> emptyList()
         }
 
-        val computedDisplayRows = orderedRows.map { row ->
+        val computedDisplayRows = effectiveOrderedRows.map { row ->
             val shouldKeepFullRowInModern = currentLayout == HomeLayout.MODERN && row.supportsSkip
             if (row.items.size > 25 && !shouldKeepFullRowInModern) {
                 val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
@@ -573,7 +603,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             currentGridItems
         }
 
-        CatalogUpdateResult(computedDisplayRows, computedHeroItems, computedGridItems, orderedRows)
+        CatalogUpdateResult(computedDisplayRows, computedHeroItems, computedGridItems, effectiveOrderedRows)
     }
 
     _fullCatalogRows.update { rows ->
@@ -679,6 +709,137 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     schedulePosterStatusReconcilePipeline(displayRows)
+}
+
+private data class CachedHomePreservationState(
+    val preserveAddonRows: Boolean,
+    val preserveTraktRows: Boolean,
+    val preserveMDBListRows: Boolean
+)
+
+private fun shouldPreserveTraktCachedRows(
+    prefs: TraktCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    refreshInProgress: Boolean
+): Boolean {
+    return refreshInProgress || shouldRefreshTraktDiscoveryForState(prefs, snapshot)
+}
+
+private fun shouldPreserveMDBListCachedRows(
+    prefs: MDBListCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
+    refreshInProgress: Boolean
+): Boolean {
+    return refreshInProgress || shouldRefreshMDBListDiscoveryForState(prefs, snapshot)
+}
+
+private fun mergeCachedRowsWithLiveRows(
+    cachedRows: List<CatalogRow>,
+    liveRows: List<CatalogRow>,
+    preservationState: CachedHomePreservationState,
+    orderedGroupKeys: List<String>,
+    rowOrderKeyByGlobalKey: Map<String, String>
+): List<CatalogRow> {
+    val mergedRowsInRetentionOrder = when {
+        cachedRows.isEmpty() -> liveRows
+        liveRows.isEmpty() -> cachedRows.filter { row -> shouldPreserveCachedRow(row, preservationState) }
+        else -> {
+            val liveByKey = liveRows.associateBy(::homeCatalogGlobalKey)
+            val usedKeys = mutableSetOf<String>()
+            val mergedRows = cachedRows.mapNotNull { cachedRow ->
+                val key = homeCatalogGlobalKey(cachedRow)
+                val liveReplacement = liveByKey[key]
+                when {
+                    liveReplacement != null -> {
+                        usedKeys += key
+                        liveReplacement
+                    }
+                    shouldPreserveCachedRow(cachedRow, preservationState) -> cachedRow
+                    else -> null
+                }
+            }.toMutableList()
+
+            liveRows.forEach { liveRow ->
+                val key = homeCatalogGlobalKey(liveRow)
+                if (usedKeys.add(key)) {
+                    mergedRows += liveRow
+                }
+            }
+            mergedRows
+        }
+    }
+
+    if (mergedRowsInRetentionOrder.isEmpty()) {
+        return emptyList()
+    }
+
+    val groupedRows = linkedMapOf<String, MutableList<CatalogRow>>()
+    val unresolvedRows = mutableListOf<CatalogRow>()
+    mergedRowsInRetentionOrder.forEach { row ->
+        val groupKey = resolveMergedRowOrderKey(
+            row = row,
+            orderedGroupKeys = orderedGroupKeys,
+            rowOrderKeyByGlobalKey = rowOrderKeyByGlobalKey
+        )
+        if (groupKey == null) {
+            unresolvedRows += row
+        } else {
+            groupedRows.getOrPut(groupKey) { mutableListOf() }.add(row)
+        }
+    }
+
+    val orderedRows = buildList {
+        orderedGroupKeys.forEach { groupKey ->
+            groupedRows[groupKey]?.let { addAll(it) }
+        }
+        addAll(unresolvedRows)
+    }
+    return orderedRows
+}
+
+private fun resolveMergedRowOrderKey(
+    row: CatalogRow,
+    orderedGroupKeys: List<String>,
+    rowOrderKeyByGlobalKey: Map<String, String>
+): String? {
+    val globalKey = homeCatalogGlobalKey(row)
+    rowOrderKeyByGlobalKey[globalKey]?.let { return it }
+
+    if (globalKey in orderedGroupKeys) {
+        return globalKey
+    }
+    if (row.catalogId in orderedGroupKeys) {
+        return row.catalogId
+    }
+
+    return when (row.addonId) {
+        TRAKT_RAIL_ADDON_ID -> {
+            val prefixedCatalogId = "trakt_${row.catalogId}"
+            when {
+                prefixedCatalogId in orderedGroupKeys -> prefixedCatalogId
+                else -> null
+            }
+        }
+        MDBLIST_RAIL_ADDON_ID -> {
+            val prefixedCatalogId = "mdblist_${row.catalogId}"
+            when {
+                prefixedCatalogId in orderedGroupKeys -> prefixedCatalogId
+                else -> null
+            }
+        }
+        else -> null
+    }
+}
+
+private fun shouldPreserveCachedRow(
+    row: CatalogRow,
+    preservationState: CachedHomePreservationState
+): Boolean {
+    return when (row.addonId) {
+        TRAKT_RAIL_ADDON_ID -> preservationState.preserveTraktRows
+        MDBLIST_RAIL_ADDON_ID -> preservationState.preserveMDBListRows
+        else -> preservationState.preserveAddonRows
+    }
 }
 
 private fun HomeViewModel.buildGridItemsFromRowsPipeline(

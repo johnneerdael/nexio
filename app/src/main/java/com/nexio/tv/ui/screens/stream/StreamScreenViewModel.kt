@@ -26,6 +26,7 @@ import com.nexio.tv.ui.components.SourceChipStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 private const val TAG = "StreamScreenViewModel"
@@ -258,49 +260,60 @@ class StreamScreenViewModel @Inject constructor(
             val installedAddons = addonRepository.getInstalledAddons().first()
             val installedAddonOrder = installedAddons.map { it.displayName }
 
-            fun applySuccess(addonStreamGroups: List<AddonStreams>) {
-                val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
-                    addonStreamGroups,
-                    installedAddonOrder
-                )
-                val allStreams = orderedAddonStreams.flatMap { it.streams }
-                val availableAddons = orderedAddonStreams.map { it.addonName }
-                val selectedAutoPlayStream = if (autoPlayHandledForSession) {
-                    null
-                } else {
-                    StreamAutoPlaySelector.selectAutoPlayStream(
+            suspend fun applySuccess(addonStreamGroups: List<AddonStreams>) {
+                val selectedFilter = _uiState.value.selectedAddonFilter
+                val organizedResult = withContext(Dispatchers.Default) {
+                    val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
+                        addonStreamGroups,
+                        installedAddonOrder
+                    )
+                    val allStreams = orderedAddonStreams.flatMap { it.streams }
+                    val availableAddons = orderedAddonStreams.map { it.addonName }
+                    val selectedAutoPlayStream = if (autoPlayHandledForSession) {
+                        null
+                    } else {
+                        StreamAutoPlaySelector.selectAutoPlayStream(
+                            streams = allStreams,
+                            mode = playerSettings.streamAutoPlayMode,
+                            regexPattern = playerSettings.streamAutoPlayRegex,
+                            source = playerSettings.streamAutoPlaySource,
+                            installedAddonNames = installedAddonOrder.toSet(),
+                            selectedAddons = playerSettings.streamAutoPlaySelectedAddons
+                        )
+                    }
+                    val organizedStreams = StreamPresentationEngine.organize(
                         streams = allStreams,
-                        mode = playerSettings.streamAutoPlayMode,
-                        regexPattern = playerSettings.streamAutoPlayRegex,
-                        source = playerSettings.streamAutoPlaySource,
-                        installedAddonNames = installedAddonOrder.toSet(),
-                        selectedAddons = playerSettings.streamAutoPlaySelectedAddons
+                        availableAddons = availableAddons,
+                        selectedAddonFilter = selectedFilter,
+                        flags = streamFeatureFlags
+                    )
+                    OrganizedStreamPayload(
+                        orderedAddonStreams = orderedAddonStreams,
+                        allStreams = allStreams,
+                        availableAddons = availableAddons,
+                        organizedStreams = organizedStreams,
+                        selectedAutoPlayStream = selectedAutoPlayStream
                     )
                 }
+
+                val selectedAutoPlayStream = organizedResult.selectedAutoPlayStream
                 if (selectedAutoPlayStream != null) {
                     resolvedAutoPlayTarget = true
                 }
 
-                val organizedStreams = StreamPresentationEngine.organize(
-                    streams = allStreams,
-                    availableAddons = availableAddons,
-                    selectedAddonFilter = _uiState.value.selectedAddonFilter,
-                    flags = streamFeatureFlags
-                )
-
                 updateUiStateIfChanged {
                     it.copy(
                         isLoading = false,
-                        addonStreams = orderedAddonStreams,
-                        allStreams = allStreams,
-                        filteredStreams = organizedStreams.items.map { item -> item.stream },
-                        presentedStreams = organizedStreams.items,
-                        availableAddons = organizedStreams.availableAddons,
-                        selectedAddonFilter = organizedStreams.selectedAddonFilter,
-                        showAddonFilters = organizedStreams.showAddonFilters,
+                        addonStreams = organizedResult.orderedAddonStreams,
+                        allStreams = organizedResult.allStreams,
+                        filteredStreams = organizedResult.organizedStreams.items.map { item -> item.stream },
+                        presentedStreams = organizedResult.organizedStreams.items,
+                        availableAddons = organizedResult.organizedStreams.availableAddons,
+                        selectedAddonFilter = organizedResult.organizedStreams.selectedAddonFilter,
+                        showAddonFilters = organizedResult.organizedStreams.showAddonFilters,
                         sourceChips = mergeSourceChipStatuses(
                             existing = _uiState.value.sourceChips,
-                            succeededNames = orderedAddonStreams.map { it.addonName }
+                            succeededNames = organizedResult.orderedAddonStreams.map { it.addonName }
                         ),
                         autoPlayStream = selectedAutoPlayStream,
                         error = null,
@@ -585,19 +598,21 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun filterByAddon(addonName: String?) {
-        updateUiStateIfChanged { state ->
-            if (state.selectedAddonFilter == addonName) {
-                state
-            } else {
-                val organizedStreams = StreamPresentationEngine.organize(
+        val state = _uiState.value
+        if (state.selectedAddonFilter == addonName) return
+        viewModelScope.launch {
+            val organizedStreams = withContext(Dispatchers.Default) {
+                StreamPresentationEngine.organize(
                     streams = state.allStreams,
                     availableAddons = state.availableAddons,
                     selectedAddonFilter = addonName,
                     flags = streamFeatureFlags
                 )
-                state.copy(
+            }
+            updateUiStateIfChanged {
+                it.copy(
                     selectedAddonFilter = organizedStreams.selectedAddonFilter,
-                    filteredStreams = organizedStreams.items.map { it.stream },
+                    filteredStreams = organizedStreams.items.map { item -> item.stream },
                     presentedStreams = organizedStreams.items,
                     availableAddons = organizedStreams.availableAddons,
                     showAddonFilters = organizedStreams.showAddonFilters
@@ -663,6 +678,14 @@ class StreamScreenViewModel @Inject constructor(
     }
 
 }
+
+private data class OrganizedStreamPayload(
+    val orderedAddonStreams: List<AddonStreams>,
+    val allStreams: List<Stream>,
+    val availableAddons: List<String>,
+    val organizedStreams: com.nexio.tv.core.stream.OrganizedStreams,
+    val selectedAutoPlayStream: Stream?
+)
 
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
     return StreamFeatureFlags(
