@@ -113,6 +113,8 @@ fun ModernHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
+    onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit = {},
+    showContinueWatchingManualPlayOption: Boolean = false,
     onRequestTrailerPreview: (String, String, String?, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
@@ -151,6 +153,7 @@ fun ModernHomeContent(
     val strTypeMovie = stringResource(R.string.type_movie)
     val strTypeSeries = stringResource(R.string.type_series)
     val rowBuildCache = remember { ModernCarouselRowBuildCache() }
+    val context = LocalContext.current
     val carouselRows = remember(
         uiState.continueWatchingItems,
         visibleCatalogRows,
@@ -181,7 +184,8 @@ fun ModernHomeContent(
                                 item = item,
                                 useLandscapePosters = useLandscapePosters,
                                 airsDateTemplate = strAirsDate,
-                                upcomingLabel = strUpcoming
+                                upcomingLabel = strUpcoming,
+                                context = context
                             )
                         }
                     )
@@ -810,6 +814,11 @@ fun ModernHomeContent(
             },
             onStartFromBeginning = {
                 onContinueWatchingStartFromBeginning(selectedOptionsItem)
+                optionsItem = null
+            },
+            showPlayManually = showContinueWatchingManualPlayOption,
+            onPlayManually = {
+                onContinueWatchingPlayManually(selectedOptionsItem)
                 optionsItem = null
             }
         )
