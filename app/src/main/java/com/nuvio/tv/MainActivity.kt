@@ -545,7 +545,7 @@ private fun LegacySidebarScaffold(
     }
 
     val closedDrawerWidth = if (sidebarCollapsed) 0.dp else 72.dp
-    val openDrawerWidth = 216.dp
+    val openDrawerWidth = 196.dp
 
     val focusManager = LocalFocusManager.current
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
@@ -609,7 +609,7 @@ private fun LegacySidebarScaffold(
                         }
                 ) {
                     val isExpanded = drawerValue == DrawerValue.Open
-                    val itemWidth = if (isExpanded) 176.dp else 48.dp
+                    val itemWidth = if (isExpanded) 156.dp else 48.dp
 
                     if (isExpanded && showProfileSelector && activeProfileName.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(30.dp))
