@@ -338,6 +338,8 @@ class AccountSettingsSyncService @Inject constructor(
                     groupStreamsAcrossAddonsEnabled = player.groupStreamsAcrossAddonsEnabled,
                     deduplicateGroupedStreamsEnabled = player.deduplicateGroupedStreamsEnabled,
                     filterWebDolbyVisionStreamsEnabled = player.filterWebDolbyVisionStreamsEnabled,
+                    filterEpisodeMismatchStreamsEnabled = player.filterEpisodeMismatchStreamsEnabled,
+                    filterMovieYearMismatchStreamsEnabled = player.filterMovieYearMismatchStreamsEnabled,
                     streamAutoPlayMode = player.streamAutoPlayMode.name,
                     streamAutoPlaySource = player.streamAutoPlaySource.name,
                     streamAutoPlaySelectedAddons = player.streamAutoPlaySelectedAddons.toList(),
@@ -473,6 +475,8 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setGroupStreamsAcrossAddonsEnabled(settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled)
         playerSettingsDataStore.setDeduplicateGroupedStreamsEnabled(settings.playback.streamSelection.deduplicateGroupedStreamsEnabled)
         playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(settings.playback.streamSelection.filterWebDolbyVisionStreamsEnabled)
+        playerSettingsDataStore.setFilterEpisodeMismatchStreamsEnabled(settings.playback.streamSelection.filterEpisodeMismatchStreamsEnabled)
+        playerSettingsDataStore.setFilterMovieYearMismatchStreamsEnabled(settings.playback.streamSelection.filterMovieYearMismatchStreamsEnabled)
         playerSettingsDataStore.setStreamAutoPlayMode(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlayMode, StreamAutoPlayMode.MANUAL))
         playerSettingsDataStore.setStreamAutoPlaySource(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlaySource, StreamAutoPlaySource.ALL_SOURCES))
         playerSettingsDataStore.setStreamAutoPlaySelectedAddons(settings.playback.streamSelection.streamAutoPlaySelectedAddons.toSet())

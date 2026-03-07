@@ -206,6 +206,8 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'playback.streamSelection.groupStreamsAcrossAddonsEnabled', label: 'Group streams across addons', description: 'Show one merged source list instead of separate addon tabs.', kind: 'toggle' },
         { path: 'playback.streamSelection.deduplicateGroupedStreamsEnabled', label: 'Deduplicate grouped streams', description: 'Hide likely duplicate results when grouped stream mode is enabled.', kind: 'toggle' },
         { path: 'playback.streamSelection.filterWebDolbyVisionStreamsEnabled', label: 'Filter WEB-DL Dolby Vision', description: 'Hide WEB-DL streams tagged DV/DoVi to avoid DV5 playback issues.', kind: 'toggle' },
+        { path: 'playback.streamSelection.filterEpisodeMismatchStreamsEnabled', label: 'Filter wrong episodes', description: 'Hide episodic streams whose parsed season or episode tags do not match the requested episode.', kind: 'toggle' },
+        { path: 'playback.streamSelection.filterMovieYearMismatchStreamsEnabled', label: 'Filter wrong movie year', description: 'Hide movie-like streams whose parsed year does not match the requested title year.', kind: 'toggle' },
         { path: 'playback.streamSelection.streamAutoPlayMode', label: 'Auto-play mode', description: 'Pick the account-wide stream selection behavior.', kind: 'select', options: [
           { label: 'Manual', value: 'MANUAL' },
           { label: 'First stream', value: 'FIRST_STREAM' },

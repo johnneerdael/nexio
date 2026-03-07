@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamPresentationEngine
+import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerSettings
@@ -131,7 +132,8 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                             streams = allStreams,
                             availableAddons = availableAddons,
                             selectedAddonFilter = selectedFilter,
-                            flags = sourceStreamFeatureFlags
+                            flags = sourceStreamFeatureFlags,
+                            requestContext = buildSourceStreamRequestContext(type, seasonArg, episodeArg)
                         )
                     }
                     _uiState.update {
@@ -191,7 +193,12 @@ internal fun PlayerRuntimeController.filterSourceStreamsByAddon(addonName: Strin
                 streams = state.sourceAllStreams,
                 availableAddons = state.sourceAvailableAddons,
                 selectedAddonFilter = addonName,
-                flags = sourceStreamFeatureFlags
+                flags = sourceStreamFeatureFlags,
+                requestContext = buildSourceStreamRequestContext(
+                    type = contentType,
+                    season = currentSeason,
+                    episode = currentEpisode
+                )
             )
         }
         _uiState.update {
@@ -283,7 +290,24 @@ private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
         uniformFormattingEnabled = uniformStreamFormattingEnabled,
         groupAcrossAddonsEnabled = groupStreamsAcrossAddonsEnabled,
         deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
-        filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled
+        filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled,
+        filterEpisodeMismatchStreamsEnabled = filterEpisodeMismatchStreamsEnabled,
+        filterMovieYearMismatchStreamsEnabled = filterMovieYearMismatchStreamsEnabled
+    )
+}
+
+private fun PlayerRuntimeController.buildSourceStreamRequestContext(
+    type: String?,
+    season: Int?,
+    episode: Int?
+): StreamRequestContext {
+    return StreamRequestContext(
+        contentType = type,
+        title = contentName ?: _uiState.value.title,
+        year = navigationArgs.year,
+        season = season,
+        episode = episode,
+        episodeTitle = navigationArgs.initialEpisodeTitle ?: currentEpisodeTitle
     )
 }
 

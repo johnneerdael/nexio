@@ -36,6 +36,14 @@
         <BaseToggle v-model="settings.playback.streamSelection.filterWebDolbyVisionStreamsEnabled" />
       </SettingRow>
 
+      <SettingRow label="Filter Wrong Episodes" description="Hide episodic streams whose parsed season or episode does not match the requested episode.">
+        <BaseToggle v-model="settings.playback.streamSelection.filterEpisodeMismatchStreamsEnabled" />
+      </SettingRow>
+
+      <SettingRow label="Filter Wrong Movie Year" description="Hide movie-like streams whose parsed year does not match the requested title year.">
+        <BaseToggle v-model="settings.playback.streamSelection.filterMovieYearMismatchStreamsEnabled" />
+      </SettingRow>
+
       <SettingRow label="Auto-Play Mode" description="Automatically select a stream for TV shows.">
         <BaseSelect v-model="settings.playback.streamSelection.streamAutoPlayMode" :options="autoPlayOptions" />
       </SettingRow>
