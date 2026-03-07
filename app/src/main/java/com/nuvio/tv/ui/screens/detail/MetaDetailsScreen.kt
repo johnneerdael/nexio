@@ -152,8 +152,6 @@ private fun resolveDetailReturnEpisodeFocusTarget(
     val isCompleted = episodeProgressMap[requestedSeason to requestedEpisode]?.isCompleted() == true ||
         watchedEpisodes.contains(requestedSeason to requestedEpisode)
 
-    android.util.Log.d("NAV_DEBUG", "resolveTarget: request=S${requestedSeason}E${requestedEpisode} isCompleted=$isCompleted -> ${if (isCompleted) "next" else "same"}")
-
     return if (isCompleted) {
         orderedEpisodes.getOrNull(matchedIndex + 1) ?: orderedEpisodes[matchedIndex]
     } else {
@@ -361,7 +359,7 @@ fun MetaDetailsScreen(
                     detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
                         season = returnFocusSeason,
                         episode = returnFocusEpisode
-                    ).also { android.util.Log.d("NAV_DEBUG", "Detail focus request: season=$returnFocusSeason episode=$returnFocusEpisode") },
+                    ),
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
                     episodesForSeason = uiState.episodesForSeason,

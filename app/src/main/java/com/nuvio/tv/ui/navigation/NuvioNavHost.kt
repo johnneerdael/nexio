@@ -368,13 +368,10 @@ fun NuvioNavHost(
                         streamContentType.equals("series", ignoreCase = true) &&
                         streamContentId.isNotBlank()
                     ) {
-                        android.util.Log.d("NAV_DEBUG", "Stream onBack: season=${streamArgs?.getString("season")} prev=${navController.previousBackStackEntry?.destination?.route}")
-                        android.util.Log.d("NAV_DEBUG", "Backstack: ${navController.currentBackStack.value.map { it.destination.route }}")
                         val season = streamArgs?.getString("season")?.toIntOrNull()
                         val episode = streamArgs?.getString("episode")?.toIntOrNull()
                         navController.previousBackStackEntry?.savedStateHandle?.set("returnFocusSeason", season)
                         navController.previousBackStackEntry?.savedStateHandle?.set("returnFocusEpisode", episode)
-                        android.util.Log.d("NAV_DEBUG", "Set on savedStateHandle: season=$season ep=$episode handle=${navController.previousBackStackEntry?.savedStateHandle}")
                         navController.popBackStack()
                     } else {
                         navController.popBackStack()
