@@ -235,7 +235,7 @@
     <string name="sub_outline_color">Outline Color</string>
     <string name="sub_advanced_section">Advanced Subtitle Rendering</string>
     <string name="sub_libass">Use libass for ASS/SSA subtitles</string>
-    <string name="sub_libass_sub">Temporarily disabled for maintenance</string>
+    <string name="sub_libass_sub">Experimental: advanced ASS/SSA rendering (styles, positioning, animations)</string>
     <string name="sub_libass_mode">Libass Render Mode</string>
     <string name="sub_mode_overlay_gl">Overlay OpenGL (Recommended)</string>
     <string name="sub_mode_overlay_gl_sub">Best quality with HDR support. Renders subtitles on a separate thread.</string>
