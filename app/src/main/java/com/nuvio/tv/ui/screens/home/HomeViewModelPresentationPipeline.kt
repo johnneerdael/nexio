@@ -314,6 +314,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 
             if (enrichment != null) {
                 prefetchedTmdbIds.add(item.id)
+                prefetchedExternalMetaIds.add(item.id)
                 updateCatalogItemWithTmdb(item.id, enrichment)
                 return@launch
             }
