@@ -163,7 +163,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         for (type in typeCandidates) {
             for (candidateId in idCandidates) {
                 val result = withTimeoutOrNull(3500) {
-                    metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
+                    metaRepository.getMetaFromPrimaryAddon(type = type, id = candidateId)
                         .first { it !is NetworkResult.Loading }
                 } ?: continue
 
