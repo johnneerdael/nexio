@@ -274,6 +274,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             }
                             // Re-evaluate subtitle auto-selection once player is ready.
                             tryAutoSelectPreferredSubtitleFromAvailableTracks()
+
+                            trackSelectionParameters = trackSelectionParameters.buildUpon().build()
                         }
                     
                         
