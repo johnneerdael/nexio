@@ -635,7 +635,7 @@ private suspend fun HomeViewModel.resolveMetaForProgress(
         for (type in typeCandidates) {
             for (candidateId in idCandidates) {
                 val result = withTimeoutOrNull(2500) {
-                    metaRepository.getMetaFromAllAddons(
+                    metaRepository.getMetaFromPrimaryAddon(
                         type = type,
                         id = candidateId
                     ).first { it !is NetworkResult.Loading }

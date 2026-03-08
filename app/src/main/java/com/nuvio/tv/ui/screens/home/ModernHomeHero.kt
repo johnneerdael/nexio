@@ -45,6 +45,13 @@ import coil.request.ImageRequest
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
 
+private data class ModernHeroSecondaryMeta(
+    val highlightText: String?,
+    val ageRating: String?,
+    val status: String?,
+    val details: List<String>
+)
+
 @Composable
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
@@ -230,24 +237,30 @@ internal fun HeroTitleBlock(
         }
 
         val secondaryMeta = remember(
+            preview.secondaryHighlightText,
             preview.ageRatingText,
             preview.statusText,
             preview.languageText
         ) {
-            val ageRating = preview.ageRatingText?.trim()?.takeIf { it.isNotBlank() }
-            val status = preview.statusText?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
-            val details = buildList {
-                preview.languageText?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
-            }
-            Triple(ageRating, status, details)
+            ModernHeroSecondaryMeta(
+                highlightText = preview.secondaryHighlightText?.trim()?.takeIf { it.isNotBlank() },
+                ageRating = preview.ageRatingText?.trim()?.takeIf { it.isNotBlank() },
+                status = preview.statusText?.trim()?.takeIf { it.isNotBlank() }?.uppercase(),
+                details = buildList {
+                    preview.languageText?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
+                }
+            )
         }
 
-        val ageRatingBadge = secondaryMeta.first
-        val statusBadge = secondaryMeta.second
-        val secondaryDetails = secondaryMeta.third
+        val secondaryHighlightText = secondaryMeta.highlightText
+        val ageRatingBadge = secondaryMeta.ageRating
+        val statusBadge = secondaryMeta.status
+        val secondaryDetails = secondaryMeta.details
         val hasSecondaryBadge = ageRatingBadge != null || statusBadge != null
         val showImdbInPrimary = !preview.isSeries && !hasSecondaryBadge && !preview.imdbText.isNullOrBlank()
-        val showImdbInSecondary = !preview.imdbText.isNullOrBlank() && (preview.isSeries || hasSecondaryBadge)
+        val showImdbInPrimaryWithHighlight = showImdbInPrimary && secondaryHighlightText == null
+        val showImdbInSecondary = !preview.imdbText.isNullOrBlank() &&
+            (preview.isSeries || hasSecondaryBadge || secondaryHighlightText != null)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -267,7 +280,7 @@ internal fun HeroTitleBlock(
             val imdbText = preview.imdbText
             val hasTrailingMeta = !runtimeText.isNullOrBlank() ||
                 !yearText.isNullOrBlank() ||
-                showImdbInPrimary
+                showImdbInPrimaryWithHighlight
 
             if (hasLeadingMeta) {
                 Text(
@@ -308,7 +321,7 @@ internal fun HeroTitleBlock(
                             maxLines = 1
                         )
                     }
-                    if (showImdbInPrimary && !imdbText.isNullOrBlank()) {
+                    if (showImdbInPrimaryWithHighlight && !imdbText.isNullOrBlank()) {
                         HeroImdbMeta(
                             imdbText = imdbText,
                             imdbLogoModel = imdbLogoModel,
@@ -322,12 +335,24 @@ internal fun HeroTitleBlock(
             }
         }
 
-        if (ageRatingBadge != null || showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
+        if (secondaryHighlightText != null || ageRatingBadge != null || showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(metaSpacing)
             ) {
+                secondaryHighlightText?.let { text ->
+                    Text(
+                        text = text,
+                        style = labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = NuvioColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (secondaryHighlightText != null && (hasSecondaryBadge || showImdbInSecondary || secondaryDetails.isNotEmpty())) {
+                    HeroMetaDivider(metaScale)
+                }
                 if (ageRatingBadge != null && statusBadge != null) {
                     HeroCombinedMetaBadge(
                         leftText = ageRatingBadge,

@@ -590,15 +590,16 @@ private fun MetaInfoRow(
         meta.status?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
     }
     Log.d("HeroBadge", "name=${meta.name} ageRating=${meta.ageRating} status=${meta.status} ageRatingBadge=$ageRatingBadge statusBadge=$statusBadge")
-    val secondaryItems = remember(meta.country, meta.language) {
+    val secondaryItems = remember(runtimeText, meta.country, meta.language) {
         buildList<String> {
-            meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+            runtimeText?.takeIf { it.isNotBlank() }?.let { add(it) }
+            meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(normalizeCountryLabel(it)) }
             meta.language?.trim()?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Primary row: Genres, Runtime, Release, Ratings
+        // Primary row: Genres, Release, Ratings
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -610,17 +611,9 @@ private fun MetaInfoRow(
                     style = MaterialTheme.typography.labelLarge,
                     color = NuvioTheme.extendedColors.textSecondary
                 )
-                MetaInfoDivider()
-            }
-
-            // Runtime
-            runtimeText?.let { text ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = NuvioTheme.extendedColors.textSecondary
-                )
-                MetaInfoDivider()
+                if (yearText != null || shouldShowImdbRating) {
+                    MetaInfoDivider()
+                }
             }
 
             yearText?.let { year ->
@@ -655,7 +648,7 @@ private fun MetaInfoRow(
             }
         }
 
-        // Secondary row: Age Rating, Country, Language
+        // Secondary row: Runtime, Age Rating, Status, Country, Language
         if (ageRatingBadge != null || statusBadge != null || secondaryItems.isNotEmpty()) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -757,6 +750,19 @@ private fun CombinedMetaBadge(
             maxLines = 1
         )
     }
+}
+
+private fun normalizeCountryLabel(raw: String): String {
+    return raw
+        .split(",")
+        .joinToString(", ") { part ->
+            val trimmed = part.trim()
+            if (trimmed.matches(Regex("[A-Za-z]{2,3}"))) {
+                trimmed.uppercase()
+            } else {
+                trimmed
+            }
+        }
 }
 
 @Composable
