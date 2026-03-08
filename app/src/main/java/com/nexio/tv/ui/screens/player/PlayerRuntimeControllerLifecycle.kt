@@ -30,14 +30,14 @@ internal fun PlayerRuntimeController.releasePlayer() {
     hideSubtitleDelayOverlayJob?.cancel()
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
-    mpvStateCollectionJob?.cancel()
-    mpvStateCollectionJob = null
     mpvSubtitleCueCollectionJob?.cancel()
     mpvSubtitleCueCollectionJob = null
-    observedMpvSession = null
+    observedMpvView = null
     builtInAiSubtitleTranslationJob?.cancel()
     builtInAiSubtitleTranslationJob = null
-    mpvSession?.requestRelease()
+    mpvView?.releasePlayer()
+    mpvView = null
+    mpvRenderState.value = com.nexio.tv.core.mpv.NexioMpvRenderState()
     _exoPlayer?.release()
     _exoPlayer = null
 }

@@ -66,31 +66,13 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     hasPersistedCatalogSnapshot = true
     startupRefreshPending = true
     restoredCatalogSnapshotActive = true
-    _fullCatalogRows.value = snapshot.fullCatalogRows
-    _uiState.update { state ->
-        val restoredGridItems = if (state.homeLayout == HomeLayout.GRID) {
-            buildGridItemsFromRowsPipeline(
-                rows = snapshot.catalogRows,
-                heroItems = snapshot.heroItems,
-                heroSectionEnabled = state.heroSectionEnabled
-            )
-        } else {
-            state.gridItems
-        }
-
-        state.copy(
-            catalogRows = snapshot.catalogRows,
-            heroItems = snapshot.heroItems,
-            gridItems = restoredGridItems,
-            isLoading = false,
-            error = null
-        )
-    }
+    applyHomeSnapshotToUiPipeline(snapshot)
 }
 
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+            traktDiscoveryObserved = true
             traktDiscoverySnapshot = snapshot
             scheduleUpdateCatalogRows()
         }
@@ -113,6 +95,7 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
 internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
         mdbListDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+            mdbListDiscoveryObserved = true
             mdbListDiscoverySnapshot = snapshot
             Log.d(
                 HomeViewModel.TAG,
@@ -211,6 +194,7 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
         addonRepository.getInstalledAddons()
             .distinctUntilChanged()
             .collectLatest { addons ->
+                installedAddonsObserved = true
                 addonsCache = addons
                 loadAllCatalogsPipeline(addons)
             }
@@ -448,6 +432,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val mdbListSnapshot = mdbListDiscoverySnapshot
     val mdbListPrefs = mdbListCatalogPreferences
     val currentVisibleFullRows = _fullCatalogRows.value
+    val startupHydrationPending = !installedAddonsObserved || !traktDiscoveryObserved || !mdbListDiscoveryObserved
     val traktUpNextItems = continueWatchingItems
         .filterIsInstance<ContinueWatchingItem.NextUp>()
         .take(20)
@@ -463,7 +448,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     )
     val recommendationRefMap = traktSnapshot.recommendationRefsByStatusKey
 
-    val (displayRows, baseHeroItems, baseGridItems, fullRowsFiltered) = withContext(Dispatchers.Default) {
+    val (displayRows, baseHeroItems, _, fullRowsFiltered) = withContext(Dispatchers.Default) {
         val rawRowsByKey = orderedKeys
             .mapNotNull { key ->
                 catalogSnapshot[key]?.let { row ->
@@ -517,17 +502,19 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         }
 
         val preservationState = CachedHomePreservationState(
-            preserveAddonRows = hasPersistedCatalogSnapshot && (startupRefreshPending || catalogsLoadInProgress),
+            preserveAddonRows = hasPersistedCatalogSnapshot &&
+                (restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending || catalogsLoadInProgress),
             preserveTraktRows = shouldPreserveTraktCachedRows(
                 prefs = traktPrefs,
                 snapshot = traktSnapshot,
-                refreshInProgress = startupRefreshPending || traktDiscoveryRefreshInProgress
+                refreshInProgress = startupHydrationPending || startupRefreshPending || traktDiscoveryRefreshInProgress
             ),
             preserveMDBListRows = shouldPreserveMDBListCachedRows(
                 prefs = mdbListPrefs,
                 snapshot = mdbListSnapshot,
-                refreshInProgress = startupRefreshPending || mdbListDiscoveryRefreshInProgress
-            )
+                refreshInProgress = startupHydrationPending || startupRefreshPending || mdbListDiscoveryRefreshInProgress
+            ),
+            retainUnorderedRows = restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending
         )
         val effectiveOrderedRows = mergeCachedRowsWithLiveRows(
             cachedRows = currentVisibleFullRows,
@@ -606,15 +593,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         CatalogUpdateResult(computedDisplayRows, computedHeroItems, computedGridItems, effectiveOrderedRows)
     }
 
-    _fullCatalogRows.update { rows ->
-        if (rows == fullRowsFiltered) rows else fullRowsFiltered
-    }
-
-    val nextGridItems = if (currentLayout == HomeLayout.GRID) {
-        replaceGridHeroItemsPipeline(baseGridItems, baseHeroItems)
-    } else {
-        baseGridItems
-    }
     val currentState = _uiState.value
     val hasCurrentRenderedContent = currentState.catalogRows.any { it.items.isNotEmpty() } ||
         currentState.heroItems.isNotEmpty()
@@ -636,36 +614,34 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
-        restoredCatalogSnapshotActive = false
-        if (!activeRefreshInProgress) {
+        if (!startupHydrationPending) {
+            restoredCatalogSnapshotActive = false
+        }
+        if (!activeRefreshInProgress && !startupHydrationPending) {
             startupRefreshPending = false
         }
-    } else if (!activeRefreshInProgress) {
+    } else if (!activeRefreshInProgress && !startupHydrationPending) {
         startupRefreshPending = false
+    }
+
+    if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
+        hasPersistedCatalogSnapshot = persistAndApplyHomeSnapshotPipeline(
+            com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
+                catalogRows = displayRows,
+                fullCatalogRows = fullRowsFiltered,
+                heroItems = baseHeroItems
+            )
+        )
     }
 
     _uiState.update { state ->
         state.copy(
-            catalogRows = if (state.catalogRows == displayRows) state.catalogRows else displayRows,
-            heroItems = if (state.heroItems == baseHeroItems) state.heroItems else baseHeroItems,
-            gridItems = if (state.gridItems == nextGridItems) state.gridItems else nextGridItems,
             traktRecommendationRefs = if (state.traktRecommendationRefs == recommendationRefMap) {
                 state.traktRecommendationRefs
             } else {
                 recommendationRefMap
             },
             isLoading = false
-        )
-    }
-
-    if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
-        hasPersistedCatalogSnapshot = true
-        homeCatalogSnapshotStore.write(
-            com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
-                catalogRows = displayRows,
-                fullCatalogRows = fullRowsFiltered,
-                heroItems = baseHeroItems
-            )
         )
     }
 
@@ -679,27 +655,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             val enrichmentSignature = heroEnrichmentSignaturePipeline(baseHeroItems, tmdbSettings)
             if (lastHeroEnrichmentSignature == enrichmentSignature) {
                 val cached = lastHeroEnrichedItems
-                _uiState.update { state ->
-                    state.copy(
-                        heroItems = if (state.heroItems == cached) state.heroItems else cached,
-                        gridItems = if (currentLayout == HomeLayout.GRID) {
-                            val enrichedGrid = replaceGridHeroItemsPipeline(state.gridItems, cached)
-                            if (state.gridItems == enrichedGrid) state.gridItems else enrichedGrid
-                        } else state.gridItems
-                    )
+                updatePersistedHomeSnapshotPipeline { snapshot ->
+                    snapshot.copy(heroItems = cached)
                 }
             } else {
                 val enrichedItems = enrichHeroItemsPipeline(baseHeroItems, tmdbSettings)
                 lastHeroEnrichmentSignature = enrichmentSignature
                 lastHeroEnrichedItems = enrichedItems
-                _uiState.update { state ->
-                    state.copy(
-                        heroItems = if (state.heroItems == enrichedItems) state.heroItems else enrichedItems,
-                        gridItems = if (currentLayout == HomeLayout.GRID) {
-                            val enrichedGrid = replaceGridHeroItemsPipeline(state.gridItems, enrichedItems)
-                            if (state.gridItems == enrichedGrid) state.gridItems else enrichedGrid
-                        } else state.gridItems
-                    )
+                updatePersistedHomeSnapshotPipeline { snapshot ->
+                    snapshot.copy(heroItems = enrichedItems)
                 }
             }
         }
@@ -711,10 +675,60 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     schedulePosterStatusReconcilePipeline(displayRows)
 }
 
+internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
+    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+) {
+    _fullCatalogRows.value = snapshot.fullCatalogRows
+    _uiState.update { state ->
+        val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
+            buildGridItemsFromRowsPipeline(
+                rows = snapshot.catalogRows,
+                heroItems = snapshot.heroItems,
+                heroSectionEnabled = state.heroSectionEnabled
+            )
+        } else {
+            state.gridItems
+        }
+
+        state.copy(
+            catalogRows = snapshot.catalogRows,
+            heroItems = snapshot.heroItems,
+            gridItems = if (state.gridItems == snapshotGridItems) state.gridItems else snapshotGridItems,
+            isLoading = false,
+            error = null
+        )
+    }
+}
+
+internal suspend fun HomeViewModel.persistAndApplyHomeSnapshotPipeline(
+    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+): Boolean {
+    val persistedSnapshot = withContext(Dispatchers.IO) {
+        homeCatalogSnapshotStore.write(snapshot)
+        homeCatalogSnapshotStore.read()
+    } ?: return false
+
+    applyHomeSnapshotToUiPipeline(persistedSnapshot)
+    return true
+}
+
+internal suspend fun HomeViewModel.updatePersistedHomeSnapshotPipeline(
+    transform: (
+        com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+    ) -> com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+): Boolean {
+    val currentSnapshot = withContext(Dispatchers.IO) {
+        homeCatalogSnapshotStore.read()
+    } ?: return false
+
+    return persistAndApplyHomeSnapshotPipeline(transform(currentSnapshot))
+}
+
 private data class CachedHomePreservationState(
     val preserveAddonRows: Boolean,
     val preserveTraktRows: Boolean,
-    val preserveMDBListRows: Boolean
+    val preserveMDBListRows: Boolean,
+    val retainUnorderedRows: Boolean
 )
 
 private fun shouldPreserveTraktCachedRows(
@@ -792,7 +806,9 @@ private fun mergeCachedRowsWithLiveRows(
         orderedGroupKeys.forEach { groupKey ->
             groupedRows[groupKey]?.let { addAll(it) }
         }
-        addAll(unresolvedRows)
+        if (preservationState.retainUnorderedRows) {
+            addAll(unresolvedRows)
+        }
     }
     return orderedRows
 }

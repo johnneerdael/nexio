@@ -195,24 +195,11 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'playback.general.pauseOverlayEnabled', label: 'Pause overlay', description: 'Show overlay chrome while paused.', kind: 'toggle' },
         { path: 'playback.general.osdClockEnabled', label: 'OSD clock', description: 'Display the clock in playback overlays.', kind: 'toggle' },
         { path: 'playback.general.skipIntroEnabled', label: 'Skip intro', description: 'Enable intro skip actions.', kind: 'toggle' },
-        { path: 'playback.streamSelection.playerPreference', label: 'Player preference', description: 'Choose the default player flow.', kind: 'select', options: [
-          { label: 'Internal', value: 'INTERNAL' },
-          { label: 'libmpv', value: 'LIBMPV' },
-          { label: 'External', value: 'EXTERNAL' },
-          { label: 'Ask every time', value: 'ASK_EVERY_TIME' }
-        ] },
-        { path: 'playback.general.libmpvVideoOutputMode', label: 'libmpv video output', description: 'Choose how libmpv renders video on Android TV. Auto prefers gpu-next, then gpu, then mediacodec_embed.', kind: 'select', options: [
-          { label: 'Auto', value: 'AUTO' },
-          { label: 'gpu-next', value: 'GPU_NEXT' },
-          { label: 'gpu', value: 'GPU' },
-          { label: 'mediacodec_embed', value: 'MEDIACODEC_EMBED' }
-        ] },
         { path: 'playback.streamSelection.streamReuseLastLinkEnabled', label: 'Reuse last stream', description: 'Prefer the last successful stream link.', kind: 'toggle' },
         { path: 'playback.streamSelection.streamReuseLastLinkCacheHours', label: 'Reuse cache window', description: 'How long previous stream links stay reusable.', kind: 'select', options: [1, 6, 12, 24, 48, 72, 168].map((value) => ({ label: `${value}h`, value })) },
         { path: 'playback.streamSelection.uniformStreamFormattingEnabled', label: 'Uniform stream formatting', description: 'Use the normalized stream parser and formatter for consistent stream cards across addons.', kind: 'toggle' },
         { path: 'playback.streamSelection.groupStreamsAcrossAddonsEnabled', label: 'Group streams across addons', description: 'Show one merged source list instead of separate addon tabs.', kind: 'toggle' },
         { path: 'playback.streamSelection.deduplicateGroupedStreamsEnabled', label: 'Deduplicate grouped streams', description: 'Hide likely duplicate results when grouped stream mode is enabled.', kind: 'toggle' },
-        { path: 'playback.streamSelection.filterWebDolbyVisionStreamsEnabled', label: 'Filter WEB-DL Dolby Vision', description: 'Hide WEB-DL streams tagged DV/DoVi to avoid DV5 playback issues.', kind: 'toggle' },
         { path: 'playback.streamSelection.filterEpisodeMismatchStreamsEnabled', label: 'Filter wrong episodes', description: 'Hide episodic streams whose parsed season or episode tags do not match the requested episode.', kind: 'toggle' },
         { path: 'playback.streamSelection.filterMovieYearMismatchStreamsEnabled', label: 'Filter wrong movie year', description: 'Hide movie-like streams whose parsed year does not match the requested title year.', kind: 'toggle' },
         { path: 'playback.streamSelection.streamAutoPlayMode', label: 'Auto-play mode', description: 'Pick the account-wide stream selection behavior.', kind: 'select', options: [
@@ -247,10 +234,7 @@ export const accountGroups: Record<string, PortalGroup[]> = {
           { label: 'Start and stop', value: 'START_STOP' }
         ] },
         { path: 'playback.general.resolutionMatchingEnabled', label: 'Resolution matching', description: 'Allow the app to switch output resolution when needed.', kind: 'toggle' },
-        { path: 'playback.audio.tunnelingEnabled', label: 'Tunneled playback', description: 'Enable tunneling on supported devices.', kind: 'toggle' },
-        { path: 'playback.audio.experimentalDv7ToDv81Enabled', label: 'DV7 - Experimental DV8.1', description: 'Use the experimental DV7 to DV8.1 conversion path.', kind: 'toggle' },
-        { path: 'playback.audio.experimentalDv7ToDv81PreserveMappingEnabled', label: 'DV7 - Preserve Mapping', description: 'Keep Dolby Vision mapping metadata when the DV8.1 path is enabled.', kind: 'toggle' },
-        { path: 'playback.audio.experimentalDv5ToDv81Enabled', label: 'DV5 - Compatibility Remap', description: 'Use the DV5 compatibility remap path when DV8.1 conversion is enabled.', kind: 'toggle' }
+        { path: 'playback.audio.tunnelingEnabled', label: 'Tunneled playback', description: 'Enable tunneling on supported devices.', kind: 'toggle' }
       ]
     },
     {
@@ -261,13 +245,11 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'playback.audio.preferredAudioLanguage', label: 'Preferred audio language', description: 'Primary synced audio preference.', kind: 'text', placeholder: 'device' },
         { path: 'playback.audio.secondaryPreferredAudioLanguage', label: 'Secondary audio language', description: 'Fallback audio language code.', kind: 'text', placeholder: 'en' },
         { path: 'playback.audio.skipSilence', label: 'Skip silence', description: 'Use silence skipping when available.', kind: 'toggle' },
-        { path: 'playback.audio.libmpvAudioPassthroughEnabled', label: 'libmpv audio passthrough', description: 'Allow libmpv to bitstream AC3, E-AC3, DTS, DTS-HD, and TrueHD when supported by the device.', kind: 'toggle' },
         { path: 'playback.audio.decoderPriority', label: 'Decoder priority', description: 'Renderer preference for playback codecs.', kind: 'select', options: [
           { label: '0', value: 0 },
           { label: '1', value: 1 },
           { label: '2', value: 2 }
-        ] },
-        { path: 'playback.audio.experimentalDtsIecPassthroughEnabled', label: 'Fire OS - Experimental Audio Compatibility', description: 'Enable the Fire OS experimental IEC compatibility path.', kind: 'toggle' }
+        ] }
       ]
     },
     {
@@ -292,20 +274,6 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'playback.subtitles.useLibass', label: 'Use libass', description: 'Enable libass rendering when supported.', kind: 'toggle' }
       ]
     },
-    {
-      id: 'buffer',
-      title: 'Buffering',
-      subtitle: 'Network-neutral buffering values that are safe to sync across devices.',
-      fields: [
-        { path: 'playback.bufferNetwork.minBufferMs', label: 'Min buffer', description: 'Minimum buffer in milliseconds.', kind: 'slider', min: 5000, max: 120000, step: 5000 },
-        { path: 'playback.bufferNetwork.maxBufferMs', label: 'Max buffer', description: 'Maximum buffer in milliseconds.', kind: 'slider', min: 5000, max: 120000, step: 5000 },
-        { path: 'playback.bufferNetwork.bufferForPlaybackMs', label: 'Buffer for playback', description: 'Playback start buffer.', kind: 'slider', min: 1000, max: 60000, step: 1000 },
-        { path: 'playback.bufferNetwork.bufferForPlaybackAfterRebufferMs', label: 'After rebuffer', description: 'Playback resume buffer after rebuffer.', kind: 'slider', min: 1000, max: 120000, step: 1000 },
-        { path: 'playback.bufferNetwork.targetBufferSizeMb', label: 'Target buffer size', description: 'Target memory buffer size in MB.', kind: 'slider', min: 0, max: 1000, step: 10 },
-        { path: 'playback.bufferNetwork.backBufferDurationMs', label: 'Back buffer duration', description: 'Back buffer retained behind the playhead.', kind: 'slider', min: 0, max: 120000, step: 5000 },
-        { path: 'playback.bufferNetwork.enableBufferLogs', label: 'Buffer logs', description: 'Enable buffer diagnostics.', kind: 'toggle' }
-      ]
-    }
   ],
   debug: [
     {

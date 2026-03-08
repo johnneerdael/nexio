@@ -20,6 +20,52 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
     progressJob?.cancel()
     progressJob = scope.launch {
         while (isActive) {
+            if (usesLibmpvBackend()) {
+                val view = mpvView
+                if (view != null) {
+                    val pos = view.currentPositionMs().coerceAtLeast(0L)
+                    val playerDuration = view.durationMs().coerceAtLeast(0L)
+                    val playingNow = view.isPlayingNow()
+                    val cacheBuffering = view.isPausedForCacheNow() || view.isCoreIdleNow()
+                    var firstFrameReady = hasRenderedFirstFrame
+                    if (!firstFrameReady) {
+                        firstFrameReady = pos > 0L || (playingNow && !cacheBuffering && playerDuration > 0L)
+                        if (firstFrameReady) {
+                            hasRenderedFirstFrame = true
+                        }
+                    }
+                    if (playerDuration > lastKnownDuration) {
+                        lastKnownDuration = playerDuration
+                    }
+                    val displayPosition = pendingPreviewSeekPosition ?: pos
+                    val ended = playerDuration > 0L && pos >= (playerDuration - 500L)
+                    val wasEnded = _uiState.value.playbackEnded
+                    _uiState.update { state ->
+                        state.copy(
+                            currentPosition = displayPosition,
+                            duration = playerDuration,
+                            isPlaying = playingNow,
+                            isBuffering = !firstFrameReady || cacheBuffering,
+                            showLoadingOverlay = if (state.loadingOverlayEnabled) !firstFrameReady else false,
+                            playbackEnded = ended
+                        )
+                    }
+                    updateMpvAvailableTracks()
+                    tryAutoSelectPreferredSubtitleFromAvailableTracks()
+                    updateActiveSkipInterval(pos)
+                    evaluateNextEpisodeCardVisibility(
+                        positionMs = pos,
+                        durationMs = playerDuration
+                    )
+                    if (ended && !wasEnded) {
+                        emitCompletionScrobbleStop(progressPercent = 99.5f)
+                        saveWatchProgress()
+                        resetNextEpisodeCardState(clearEpisode = false)
+                    }
+                }
+                delay(500)
+                continue
+            }
             val nowUptime = SystemClock.uptimeMillis()
             val pos = backendCurrentPosition().coerceAtLeast(0L)
             val playerDuration = backendDuration().coerceAtLeast(0L)

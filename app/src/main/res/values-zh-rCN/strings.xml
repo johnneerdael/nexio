@@ -143,12 +143,16 @@
   <string name="playback_player_libmpv_desc">使用 libmpv 播放后端并保留相同的 Nexio 控制覆盖层</string>
   <string name="libmpv_video_output_title">libmpv 视频输出</string>
   <string name="libmpv_video_output_auto">自动</string>
-  <string name="libmpv_video_output_auto_desc">优先尝试 gpu-next，其次 gpu，若 GPU 渲染失败则回退到 mediacodec_embed。</string>
-  <string name="libmpv_video_output_gpu_next">gpu-next</string>
-  <string name="libmpv_video_output_gpu_next_desc">首选 Vulkan 渲染器，在兼容设备上提供完整的覆盖层和字幕支持。</string>
-  <string name="libmpv_video_output_gpu">gpu</string>
-  <string name="libmpv_video_output_gpu_desc">OpenGL 回退渲染器，保留完整的覆盖层和字幕支持。</string>
+  <string name="libmpv_video_output_auto_desc">先尝试 gpu-next + Android OpenGL，再尝试 gpu-next + Vulkan，然后是 gpu + Android OpenGL，最后才回退到 mediacodec_embed。</string>
+  <string name="libmpv_video_output_gpu_next_android_opengl">gpu-next（Android OpenGL）</string>
+  <string name="libmpv_video_output_gpu_next_android_opengl_desc">推荐的 Android TV 渲染预设，使用 gpu-next、gpu-context=android 和 gpu-api=opengl。</string>
+  <string name="libmpv_video_output_gpu_next_vulkan">gpu-next（Vulkan）</string>
+  <string name="libmpv_video_output_gpu_next_vulkan_desc">在 Vulkan 路径稳定的设备上使用 gpu-next + Vulkan。</string>
+  <string name="libmpv_video_output_gpu_android_opengl">gpu（Android OpenGL）</string>
+  <string name="libmpv_video_output_gpu_android_opengl_desc">使用经典 gpu 渲染器和 gpu-context=android，以获得最好的 mpv 字幕与 OSD 兼容性。</string>
   <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
   <string name="libmpv_video_output_mediacodec_embed_desc">直接输出到 Android Surface，优先保证兼容性和 HDR 信号，但 mpv 渲染功能较少。</string>
+  <string name="libmpv_gpu_next_dv_reshaping_title">gpu-next 杜比视界重塑</string>
+  <string name="libmpv_gpu_next_dv_reshaping_sub">在 gpu-next 中强制使用软件解码，让 libplacebo 可在非 DV 显示器上重塑杜比视界。这会增加 CPU 占用。</string>
   <string name="stream_player_libmpv">libmpv</string>
 </resources>

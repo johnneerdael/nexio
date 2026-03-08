@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -28,6 +29,11 @@ private val Context.addonPreferencesDataStore: DataStore<Preferences> by prefere
 class AddonPreferences @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    data class AddonInstallConfig(
+        val url: String,
+        val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+    )
+
     companion object {
         private const val TAG = "AddonPreferences"
     }
@@ -51,14 +57,22 @@ class AddonPreferences @Inject constructor(
             .getOrNull()
     }
 
-    val installedAddonUrls: Flow<List<String>> = dataStore.data.map { preferences ->
+    val installedAddons: Flow<List<AddonInstallConfig>> = dataStore.data.map { preferences ->
         val json = preferences[orderedUrlsKey]
         if (json != null) {
-            parseUrlList(json)
+            parseInstallConfigList(json)
         } else {
             val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
-            legacySet.mapNotNull { url -> safeCanonicalizeUrl(url, "legacy preferences") }.distinct()
+            legacySet.mapNotNull { url ->
+                safeCanonicalizeUrl(url, "legacy preferences")?.let { normalized ->
+                    AddonInstallConfig(url = normalized)
+                }
+            }.distinctBy { it.url.lowercase() }
         }
+    }
+
+    val installedAddonUrls: Flow<List<String>> = installedAddons.map { addons ->
+        addons.map { it.url }
     }
 
     suspend fun ensureMigrated() {
@@ -66,7 +80,11 @@ class AddonPreferences @Inject constructor(
         val prefs = ds.data.first()
         if (prefs[orderedUrlsKey] == null) {
             val legacySet = prefs[legacyUrlsKey] ?: getDefaultAddons()
-            val migrated = legacySet.mapNotNull { url -> safeCanonicalizeUrl(url, "legacy migration") }.distinct()
+            val migrated = legacySet.mapNotNull { url ->
+                safeCanonicalizeUrl(url, "legacy migration")?.let { normalized ->
+                    AddonInstallConfig(url = normalized)
+                }
+            }.distinctBy { it.url.lowercase() }
             ds.edit { preferences ->
                 preferences[orderedUrlsKey] = gson.toJson(migrated)
                 preferences.remove(legacyUrlsKey)
@@ -74,12 +92,20 @@ class AddonPreferences @Inject constructor(
         }
     }
 
-    suspend fun addAddon(url: String) {
+    suspend fun addAddon(
+        url: String,
+        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+    ) {
         store().edit { preferences ->
             val current = getCurrentList(preferences)
             val normalizedUrl = canonicalizeUrl(url)
-            if (current.any { canonicalizeUrl(it).equals(normalizedUrl, ignoreCase = true) }) return@edit
-            preferences[orderedUrlsKey] = gson.toJson(current + normalizedUrl)
+            if (current.any { it.url.equals(normalizedUrl, ignoreCase = true) }) return@edit
+            preferences[orderedUrlsKey] = gson.toJson(
+                current + AddonInstallConfig(
+                    url = normalizedUrl,
+                    parserPreset = parserPreset
+                )
+            )
         }
     }
 
@@ -88,9 +114,7 @@ class AddonPreferences @Inject constructor(
             val current = getCurrentList(preferences).toMutableList()
             val normalizedUrl = canonicalizeUrl(url)
 
-            val indexToRemove = current.indexOfFirst {
-                canonicalizeUrl(it).equals(normalizedUrl, ignoreCase = true)
-            }
+            val indexToRemove = current.indexOfFirst { it.url.equals(normalizedUrl, ignoreCase = true) }
             if (indexToRemove != -1) {
                 current.removeAt(indexToRemove)
             }
@@ -100,27 +124,79 @@ class AddonPreferences @Inject constructor(
 
     suspend fun setAddonOrder(urls: List<String>) {
         store().edit { preferences ->
-            preferences[orderedUrlsKey] = gson.toJson(urls.map(::canonicalizeUrl))
+            val currentByUrl = getCurrentList(preferences)
+                .associateBy { it.url.lowercase() }
+            val reordered = urls.mapNotNull { url ->
+                val normalized = canonicalizeUrl(url)
+                currentByUrl[normalized.lowercase()] ?: AddonInstallConfig(url = normalized)
+            }
+            preferences[orderedUrlsKey] = gson.toJson(reordered)
         }
     }
 
-    private fun getCurrentList(preferences: Preferences): List<String> {
+    suspend fun updateAddonParserPreset(url: String, parserPreset: AddonParserPreset) {
+        store().edit { preferences ->
+            val normalizedUrl = canonicalizeUrl(url)
+            val updated = getCurrentList(preferences).map { addon ->
+                if (addon.url.equals(normalizedUrl, ignoreCase = true)) {
+                    addon.copy(parserPreset = parserPreset)
+                } else {
+                    addon
+                }
+            }
+            preferences[orderedUrlsKey] = gson.toJson(updated)
+        }
+    }
+
+    suspend fun setAddonConfigs(configs: List<AddonInstallConfig>) {
+        store().edit { preferences ->
+            val normalized = configs.mapNotNull { addon ->
+                safeCanonicalizeUrl(addon.url, "remote sync")?.let { url ->
+                    AddonInstallConfig(url = url, parserPreset = addon.parserPreset)
+                }
+            }.distinctBy { it.url.lowercase() }
+            preferences[orderedUrlsKey] = gson.toJson(normalized)
+        }
+    }
+
+    private fun getCurrentList(preferences: Preferences): List<AddonInstallConfig> {
         val json = preferences[orderedUrlsKey]
         return if (json != null) {
-            parseUrlList(json)
+            parseInstallConfigList(json)
         } else {
             val legacySet = preferences[legacyUrlsKey] ?: getDefaultAddons()
-            legacySet.mapNotNull { url -> safeCanonicalizeUrl(url, "legacy preferences") }.distinct()
+            legacySet.mapNotNull { url ->
+                safeCanonicalizeUrl(url, "legacy preferences")?.let { normalized ->
+                    AddonInstallConfig(url = normalized)
+                }
+            }.distinctBy { it.url.lowercase() }
         }
     }
 
-    private fun parseUrlList(json: String): List<String> {
+    private fun parseInstallConfigList(json: String): List<AddonInstallConfig> {
         return try {
-            val type = object : TypeToken<List<String>>() {}.type
-            val parsed: List<String> = gson.fromJson(json, type) ?: return emptyList()
-            parsed.mapNotNull { url -> safeCanonicalizeUrl(url, "preferences") }.distinct()
+            val objectType = object : TypeToken<List<AddonInstallConfig>>() {}.type
+            val parsedObjects: List<AddonInstallConfig>? = gson.fromJson(json, objectType)
+            if (parsedObjects != null) {
+                return parsedObjects.mapNotNull { addon ->
+                    safeCanonicalizeUrl(addon.url, "preferences")?.let { normalized ->
+                        AddonInstallConfig(
+                            url = normalized,
+                            parserPreset = addon.parserPreset
+                        )
+                    }
+                }.distinctBy { it.url.lowercase() }
+            }
+
+            val legacyType = object : TypeToken<List<String>>() {}.type
+            val parsedUrls: List<String> = gson.fromJson(json, legacyType) ?: return emptyList()
+            parsedUrls.mapNotNull { url ->
+                safeCanonicalizeUrl(url, "preferences")?.let { normalized ->
+                    AddonInstallConfig(url = normalized)
+                }
+            }.distinctBy { it.url.lowercase() }
         } catch (e: Exception) {
-            getDefaultAddons().toList()
+            getDefaultAddons().map { AddonInstallConfig(url = it) }
         }
     }
 

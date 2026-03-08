@@ -23,6 +23,7 @@ data class AccountAddonPayload(
     val id: String? = null,
     val url: String,
     @SerialName("manifest_url") val manifestUrl: String? = null,
+    @SerialName("parser_preset") val parserPreset: String = "GENERIC",
     val name: String? = null,
     val description: String? = null,
     val enabled: Boolean = true,
@@ -160,20 +161,17 @@ data class PlaybackGeneralSettings(
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
-    val libmpvVideoOutputMode: String = "AUTO",
     val frameRateMatchingMode: String = "OFF",
     val resolutionMatchingEnabled: Boolean = false
 )
 
 @Serializable
 data class StreamSelectionSettings(
-    val playerPreference: String = "INTERNAL",
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
     val uniformStreamFormattingEnabled: Boolean = false,
     val groupStreamsAcrossAddonsEnabled: Boolean = false,
     val deduplicateGroupedStreamsEnabled: Boolean = false,
-    val filterWebDolbyVisionStreamsEnabled: Boolean = false,
     val filterEpisodeMismatchStreamsEnabled: Boolean = false,
     val filterMovieYearMismatchStreamsEnabled: Boolean = false,
     val streamAutoPlayMode: String = "MANUAL",
@@ -192,7 +190,6 @@ data class AudioSettings(
     val preferredAudioLanguage: String = "device",
     val secondaryPreferredAudioLanguage: String? = null,
     val skipSilence: Boolean = false,
-    val libmpvAudioPassthroughEnabled: Boolean = false,
     val decoderPriority: Int = 1,
     val tunnelingEnabled: Boolean = false
 )

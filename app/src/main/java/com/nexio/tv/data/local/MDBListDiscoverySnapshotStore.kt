@@ -39,7 +39,13 @@ class MDBListDiscoverySnapshotStore @Inject constructor(
     fun write(snapshot: MDBListDiscoverySnapshot) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(snapshot)).apply()
+            val payload = JsonObject().apply {
+                add("personalLists", gson.toJsonTree(snapshot.personalLists))
+                add("topLists", gson.toJsonTree(snapshot.topLists))
+                add("customListCatalogs", gson.toJsonTree(snapshot.customListCatalogs))
+                addProperty("updatedAtMs", snapshot.updatedAtMs)
+            }
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist MDBList discovery snapshot", error)
         }
@@ -56,12 +62,24 @@ class MDBListDiscoverySnapshotStore @Inject constructor(
 
     private fun decode(raw: String): MDBListDiscoverySnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
-        return MDBListDiscoverySnapshot(
+        val canonical = MDBListDiscoverySnapshot(
             personalLists = decodeArray(root, "personalLists"),
             topLists = decodeArray(root, "topLists"),
             customListCatalogs = decodeArray(root, "customListCatalogs"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
+        if (canonical.updatedAtMs > 0L ||
+            canonical.personalLists.isNotEmpty() ||
+            canonical.topLists.isNotEmpty() ||
+            canonical.customListCatalogs.isNotEmpty()
+        ) {
+            return canonical
+        }
+
+        // Legacy payloads were stored via direct Gson reflection and may use obfuscated field names.
+        return runCatching {
+            gson.fromJson(raw, MDBListDiscoverySnapshot::class.java)
+        }.getOrNull()
     }
 
     private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {

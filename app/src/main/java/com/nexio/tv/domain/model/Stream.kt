@@ -17,7 +17,8 @@ data class Stream(
     val externalUrl: String?,
     val behaviorHints: StreamBehaviorHints?,
     val addonName: String,
-    val addonLogo: String?
+    val addonLogo: String?,
+    val addonParserPreset: AddonParserPreset = AddonParserPreset.GENERIC
 ) {
     /**
      * Returns the primary stream source URL

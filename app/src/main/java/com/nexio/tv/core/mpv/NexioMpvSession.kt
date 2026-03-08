@@ -1,7 +1,6 @@
 package com.nexio.tv.core.mpv
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import android.view.Surface
 import androidx.media3.common.text.Cue
@@ -16,19 +15,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
+import java.io.FileOutputStream
 
 private const val MPV_TAG = "NexioMpvSession"
-private const val MPV_ANDROID_TV_FORWARD_CACHE_BYTES = 150_000_000L
-private const val MPV_ANDROID_TV_BACK_CACHE_BYTES = 20_000_000L
-private const val MPV_ANDROID_TV_READAHEAD_SECS = 20
+private const val MPV_ANDROID_TV_FORWARD_CACHE_BYTES = 64L * 1024L * 1024L
+private const val MPV_ANDROID_TV_BACK_CACHE_BYTES = 64L * 1024L * 1024L
+private const val MPV_ANDROID_TV_READAHEAD_SECS = 0
 private const val MPV_AUTO_VIDEO_OUTPUT_STARTUP_TIMEOUT_MS = 3_000L
 
 private data class NexioMpvVideoOutputCandidate(
@@ -42,6 +43,7 @@ private data class NexioMpvVideoOutputCandidate(
 private data class NexioMpvConfig(
     val videoOutputMode: LibmpvVideoOutputMode,
     val videoOutputCandidates: List<NexioMpvVideoOutputCandidate>,
+    val gpuNextDolbyVisionReshapingEnabled: Boolean,
     val hardwareDecodeCodecs: String,
     val audioOutput: String,
     val audioSpdifCodecs: String,
@@ -53,13 +55,21 @@ private data class NexioMpvConfig(
     val videoSync: String
 ) {
     companion object {
-        private val gpuNextCandidate = NexioMpvVideoOutputCandidate(
+        private val gpuNextVulkanCandidate = NexioMpvVideoOutputCandidate(
             videoOutput = "gpu-next",
             hardwareDecode = "mediacodec",
             gpuApi = "vulkan"
         )
 
-        private val gpuCandidate = NexioMpvVideoOutputCandidate(
+        private val gpuNextAndroidOpenGlCandidate = NexioMpvVideoOutputCandidate(
+            videoOutput = "gpu-next",
+            hardwareDecode = "mediacodec",
+            gpuApi = "opengl",
+            gpuContext = "android",
+            openglEs = true
+        )
+
+        private val gpuAndroidOpenGlCandidate = NexioMpvVideoOutputCandidate(
             videoOutput = "gpu",
             hardwareDecode = "mediacodec",
             gpuContext = "android",
@@ -71,30 +81,25 @@ private data class NexioMpvConfig(
             hardwareDecode = "mediacodec"
         )
 
-        fun fromPlayerSettings(
-            settings: PlayerSettings,
-            preferEmbeddedOnlyInAuto: Boolean = false
-        ): NexioMpvConfig {
+        fun fromPlayerSettings(settings: PlayerSettings): NexioMpvConfig {
             val videoOutputCandidates = when (settings.libmpvVideoOutputMode) {
-                LibmpvVideoOutputMode.AUTO -> {
-                    if (preferEmbeddedOnlyInAuto) {
-                        listOf(mediaCodecEmbedCandidate)
-                    } else {
-                        listOf(
-                            gpuNextCandidate,
-                            gpuCandidate,
-                            mediaCodecEmbedCandidate
-                        )
-                    }
-                }
-                LibmpvVideoOutputMode.GPU_NEXT -> listOf(gpuNextCandidate)
-                LibmpvVideoOutputMode.GPU -> listOf(gpuCandidate)
+                LibmpvVideoOutputMode.AUTO -> listOf(
+                    gpuNextAndroidOpenGlCandidate,
+                    gpuNextVulkanCandidate,
+                    gpuAndroidOpenGlCandidate,
+                    mediaCodecEmbedCandidate
+                )
+                LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL -> listOf(gpuNextAndroidOpenGlCandidate)
+                LibmpvVideoOutputMode.GPU_NEXT_VULKAN -> listOf(gpuNextVulkanCandidate)
+                LibmpvVideoOutputMode.GPU_ANDROID_OPENGL -> listOf(gpuAndroidOpenGlCandidate)
                 LibmpvVideoOutputMode.MEDIACODEC_EMBED -> listOf(mediaCodecEmbedCandidate)
             }
             return NexioMpvConfig(
                 videoOutputMode = settings.libmpvVideoOutputMode,
                 videoOutputCandidates = videoOutputCandidates,
-                hardwareDecodeCodecs = "all",
+                gpuNextDolbyVisionReshapingEnabled =
+                    settings.libmpvGpuNextDolbyVisionReshapingEnabled,
+                hardwareDecodeCodecs = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1",
                 audioOutput = "audiotrack,opensles",
                 audioSpdifCodecs = if (settings.libmpvAudioPassthroughEnabled) {
                     "ac3,eac3,dts,dts-hd,truehd"
@@ -102,11 +107,11 @@ private data class NexioMpvConfig(
                     ""
                 },
                 audioChannels = "auto-safe",
-                cacheEnabled = true,
+                cacheEnabled = false,
                 demuxerMaxBytes = MPV_ANDROID_TV_FORWARD_CACHE_BYTES,
                 demuxerMaxBackBytes = MPV_ANDROID_TV_BACK_CACHE_BYTES,
                 demuxerReadaheadSecs = MPV_ANDROID_TV_READAHEAD_SECS,
-                videoSync = "audio"
+                videoSync = ""
             )
         }
     }
@@ -164,7 +169,6 @@ class NexioMpvSession(
     private val operationMutex = Mutex()
     private var initialized = false
     private var destroyed = false
-    private var releaseRequested = false
     private var observersRegistered = false
     private var pendingInitialSeekMs: Long = 0L
     private var currentHeaders: Map<String, String> = emptyMap()
@@ -196,7 +200,7 @@ class NexioMpvSession(
     val subtitleCueState: StateFlow<NexioMpvSubtitleCueState> = _subtitleCueState.asStateFlow()
 
     fun configure(settings: PlayerSettings) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         val nextConfig = buildConfig(settings)
         val videoConfigChanged =
             nextConfig.videoOutputMode != currentConfig.videoOutputMode ||
@@ -212,82 +216,67 @@ class NexioMpvSession(
                 "spdif=${currentConfig.audioSpdifCodecs.ifBlank { "off" }} cache=${currentConfig.demuxerMaxBytes}"
         )
         if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
-        applyRuntimeConfig()
+        if (videoConfigChanged) {
+            applyActiveVideoOutputProperties()
+            if (surfaceAttached) {
+                setPropertyString("force-window", "yes")
+            }
+        }
+        applyRuntimeProperties()
     }
 
     private fun buildConfig(settings: PlayerSettings): NexioMpvConfig {
-        return NexioMpvConfig.fromPlayerSettings(
-            settings = settings,
-            preferEmbeddedOnlyInAuto = shouldPreferEmbeddedAuto()
-        )
-    }
-
-    private fun shouldPreferEmbeddedAuto(): Boolean {
-        val model = Build.MODEL.orEmpty()
-        val device = Build.DEVICE.orEmpty()
-        val hardware = Build.HARDWARE.orEmpty()
-        val manufacturer = Build.MANUFACTURER.orEmpty()
-        return manufacturer.equals("Google", ignoreCase = true) && (
-            model.equals("Google TV Streamer", ignoreCase = true) ||
-                device.equals("kirkwood", ignoreCase = true) ||
-                hardware.contains("mt8696", ignoreCase = true)
-            )
+        return NexioMpvConfig.fromPlayerSettings(settings)
     }
 
     fun ensureInitialized() {
-        if (initialized || destroyed || releaseRequested) return
+        if (initialized || destroyed) return
         if (!NexioMpvLib.isAvailable) {
             val message = NexioMpvLib.availabilityError()?.message ?: "libmpv native libraries are unavailable"
             _playbackState.value = _playbackState.value.copy(errorMessage = message, isBuffering = false)
             return
         }
         initialized = true
+        copyRequiredAssets()
         NexioMpvLib.create(context.applicationContext)
-        setOption("config", "no")
-        setOption("msg-level", "all=v")
-        setOption("osc", "no")
-        setOption("osd-level", "0")
+        setOption("profile", "fast")
+        setOption("config", "yes")
+        setOption("config-dir", context.filesDir.path)
+        setOption("sub-ass-override", "force")
         setOption("input-default-bindings", "yes")
         setOption("keep-open", "yes")
-        setOption("cache-pause", "yes")
-        setOption("sub-auto", "all")
-        setOption("force-window", "no")
-        setOption("idle", "once")
+        setOption("gpu-shader-cache-dir", context.cacheDir.path)
+        setOption("icc-cache-dir", context.cacheDir.path)
+        setOption("tls-verify", "yes")
+        setOption("tls-ca-file", "${context.filesDir.path}/cacert.pem")
         applyInitialConfig()
         NexioMpvLib.init()
+        setOption("force-window", "no")
+        setOption("idle", "once")
+        setOption("save-position-on-quit", "no")
         NexioMpvLib.addObserver(this)
         NexioMpvLib.addLogObserver(this)
         observersRegistered = true
         observeProperties()
     }
 
-    fun requestRelease() {
+    fun destroy() {
         if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
-        releaseRequested = true
-        runBlocking(ioDispatcher) {
+        sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
-                removeObserversLocked()
-                videoOutputStartupTimeoutJob?.cancel()
-                videoOutputStartupTimeoutJob = null
-                runCatching { NexioMpvLib.command(arrayOf("stop")) }
-                if (!surfaceAttached && !surfaceDetachInFlight) {
-                    finalizeDestroyLocked()
-                }
+                finalizeDestroyLocked()
             }
         }
     }
 
-    fun destroy() {
-        requestRelease()
-    }
-
     fun attachSurface(surface: Surface) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         if (!NexioMpvLib.isAvailable) return
         ensureInitialized()
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
-                if (releaseRequested || destroyed) return@withLock
+                if (destroyed) return@withLock
+                Log.d(MPV_TAG, "attachSurface pendingLoad=$pendingLoadUntilSurfaceAttach currentVo=${activeVideoOutputCandidate().videoOutput}")
                 runCatching {
                     NexioMpvLib.attachSurface(surface)
                     surfaceAttached = true
@@ -308,10 +297,8 @@ class NexioMpvSession(
         if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
+                Log.d(MPV_TAG, "detachSurface surfaceAttached=$surfaceAttached detachInFlight=$surfaceDetachInFlight")
                 if (!surfaceAttached || surfaceDetachInFlight) {
-                    if (releaseRequested && !surfaceAttached && !surfaceDetachInFlight) {
-                        finalizeDestroyLocked()
-                    }
                     return@withLock
                 }
                 surfaceDetachInFlight = true
@@ -322,15 +309,12 @@ class NexioMpvSession(
                     NexioMpvLib.detachSurface()
                 }
                 surfaceDetachInFlight = false
-                if (releaseRequested) {
-                    finalizeDestroyLocked()
-                }
             }
         }
     }
 
     fun setSurfaceSize(width: Int, height: Int) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable || width <= 0 || height <= 0) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable || width <= 0 || height <= 0) return
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
                 setPropertyString("android-surface-size", "${width}x$height")
@@ -345,7 +329,7 @@ class NexioMpvSession(
         startPositionMs: Long = 0L
     ) {
         ensureInitialized()
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         currentUrl = url
         currentTitle = title
         currentHeaders = headers
@@ -363,6 +347,7 @@ class NexioMpvSession(
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
                 runCatching {
+                    Log.d(MPV_TAG, "load surfaceAttached=$surfaceAttached detachInFlight=$surfaceDetachInFlight startPositionMs=$startPositionMs url=${url.take(96)}")
                     if (!surfaceAttached || surfaceDetachInFlight) {
                         pendingLoadUntilSurfaceAttach = true
                     } else {
@@ -380,7 +365,7 @@ class NexioMpvSession(
     fun pause() = setPaused(true)
 
     fun stop() {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
                 runCatching { NexioMpvLib.command(arrayOf("stop")) }
@@ -389,7 +374,7 @@ class NexioMpvSession(
     }
 
     fun seekTo(positionMs: Long) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         val seconds = positionMs.toDouble() / 1000.0
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
@@ -405,17 +390,17 @@ class NexioMpvSession(
     }
 
     fun setPlaybackSpeed(speed: Float) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         runCatching { NexioMpvLib.setPropertyDouble("speed", speed.toDouble()) }
     }
 
     fun setSubtitleDelay(delayMs: Int) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         runCatching { NexioMpvLib.setPropertyDouble("sub-delay", delayMs / 1000.0) }
     }
 
     fun setSubtitleVisibility(visible: Boolean) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         if (subtitleVisibility == visible) return
         subtitleVisibility = visible
         runCatching { NexioMpvLib.setPropertyBoolean("sub-visibility", visible) }
@@ -423,7 +408,7 @@ class NexioMpvSession(
     }
 
     fun selectAudioTrack(trackIndex: Int) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         val track = _playbackState.value.audioTracks.getOrNull(trackIndex) ?: return
         val trackId = track.trackId ?: return
         runCatching { NexioMpvLib.setPropertyString("aid", trackId) }
@@ -431,7 +416,7 @@ class NexioMpvSession(
     }
 
     fun selectSubtitleTrack(trackIndex: Int) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         val track = _playbackState.value.subtitleTracks.getOrNull(trackIndex) ?: return
         val trackId = track.trackId ?: return
         runCatching { NexioMpvLib.setPropertyString("sid", trackId) }
@@ -443,7 +428,7 @@ class NexioMpvSession(
     }
 
     fun disableSubtitles() {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         runCatching { NexioMpvLib.setPropertyString("sid", "no") }
         setSubtitleVisibility(true)
         clearSubtitleCueState()
@@ -453,7 +438,7 @@ class NexioMpvSession(
     }
 
     fun selectAddonSubtitle(subtitle: Subtitle) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         val normalizedLanguage = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
@@ -480,7 +465,7 @@ class NexioMpvSession(
     }
 
     private fun setPaused(paused: Boolean) {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         runCatching { NexioMpvLib.setPropertyBoolean("pause", paused) }
     }
 
@@ -492,11 +477,8 @@ class NexioMpvSession(
         setOption("ao", currentConfig.audioOutput)
         setOption("audio-spdif", currentConfig.audioSpdifCodecs)
         setOption("audio-channels", currentConfig.audioChannels)
-        setOption("cache", if (currentConfig.cacheEnabled) "yes" else "no")
         setOption("demuxer-max-bytes", currentConfig.demuxerMaxBytes.toString())
         setOption("demuxer-max-back-bytes", currentConfig.demuxerMaxBackBytes.toString())
-        setOption("demuxer-readahead-secs", currentConfig.demuxerReadaheadSecs.toString())
-        setOption("video-sync", currentConfig.videoSync)
         setOption("audio-set-media-role", "yes")
         activeCandidate.gpuApi?.let { setOption("gpu-api", it) }
         activeCandidate.gpuContext?.let { setOption("gpu-context", it) }
@@ -505,15 +487,11 @@ class NexioMpvSession(
         }
     }
 
-    private fun applyRuntimeConfig() {
-        applyActiveVideoOutputProperties()
+    private fun applyRuntimeProperties() {
         setPropertyString("audio-spdif", currentConfig.audioSpdifCodecs)
         setPropertyString("audio-channels", currentConfig.audioChannels)
-        setPropertyString("cache", if (currentConfig.cacheEnabled) "yes" else "no")
         setPropertyString("demuxer-max-bytes", currentConfig.demuxerMaxBytes.toString())
         setPropertyString("demuxer-max-back-bytes", currentConfig.demuxerMaxBackBytes.toString())
-        setPropertyString("demuxer-readahead-secs", currentConfig.demuxerReadaheadSecs.toString())
-        setPropertyString("video-sync", currentConfig.videoSync)
     }
 
     private fun applyActiveVideoOutputProperties() {
@@ -534,7 +512,7 @@ class NexioMpvSession(
     }
 
     private fun scheduleVideoOutputFallback(reason: String) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         if (currentConfig.videoOutputMode != LibmpvVideoOutputMode.AUTO) return
         if (videoOutputFallbackPending) return
         val nextIndex = currentVideoOutputIndex + 1
@@ -577,7 +555,8 @@ class NexioMpvSession(
         val url = currentUrl ?: return
         pendingLoadUntilSurfaceAttach = false
         internalLoadInFlight = true
-        applyRuntimeConfig()
+        Log.d(MPV_TAG, "performLoadCurrentMediaLocked vo=${activeVideoOutputCandidate().videoOutput} title=${currentTitle ?: "unknown"}")
+        applyRuntimeProperties()
         applyRequestHeaders(currentHeaders)
         currentTitle?.let { NexioMpvLib.setPropertyString("force-media-title", it) }
         NexioMpvLib.command(arrayOf("loadfile", url, "replace"))
@@ -586,12 +565,12 @@ class NexioMpvSession(
 
     private fun armVideoOutputStartupWatchdog() {
         videoOutputStartupTimeoutJob?.cancel()
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         if (currentConfig.videoOutputMode != LibmpvVideoOutputMode.AUTO) return
         if (activeVideoOutputCandidate().videoOutput == "mediacodec_embed") return
         videoOutputStartupTimeoutJob = sessionScope.launch(ioDispatcher) {
             delay(MPV_AUTO_VIDEO_OUTPUT_STARTUP_TIMEOUT_MS)
-            if (releaseRequested || destroyed) return@launch
+            if (destroyed) return@launch
             if (_playbackState.value.isReady) return@launch
             scheduleVideoOutputFallback("startup timed out after ${MPV_AUTO_VIDEO_OUTPUT_STARTUP_TIMEOUT_MS}ms")
         }
@@ -604,6 +583,25 @@ class NexioMpvSession(
         }
         if (result < 0) {
             Log.w(MPV_TAG, "mpv rejected option $name=$value (code=$result)")
+        }
+    }
+
+    private fun copyRequiredAssets() {
+        listOf("subfont.ttf", "cacert.pem").forEach { assetName ->
+            runCatching {
+                val destination = File(context.filesDir, assetName)
+                context.assets.open(assetName).use { input ->
+                    val assetSize = input.available().toLong()
+                    if (destination.exists() && destination.length() == assetSize) {
+                        return@runCatching
+                    }
+                    FileOutputStream(destination).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }.onFailure {
+                Log.w(MPV_TAG, "Failed to copy required mpv asset $assetName", it)
+            }
         }
     }
 
@@ -639,17 +637,17 @@ class NexioMpvSession(
 
     private fun applyRequestHeaders(headers: Map<String, String>) {
         if (headers.isEmpty()) {
-            runCatching { NexioMpvLib.setPropertyString("file-local-options/http-header-fields", "") }
+            runCatching { NexioMpvLib.setPropertyString("http-header-fields", "") }
             return
         }
         val headerFields = headers.entries.joinToString(",") { (key, value) ->
             "$key: $value"
         }
-        NexioMpvLib.setPropertyString("file-local-options/http-header-fields", headerFields)
+        NexioMpvLib.setPropertyString("http-header-fields", headerFields)
     }
 
     private fun refreshTrackStateAsync() {
-        if (!initialized || destroyed || releaseRequested || !NexioMpvLib.isAvailable) return
+        if (!initialized || destroyed || !NexioMpvLib.isAvailable) return
         sessionScope.launch(ioDispatcher) {
             operationMutex.withLock {
                 refreshTrackState()
@@ -658,7 +656,7 @@ class NexioMpvSession(
     }
 
     private fun refreshTrackState() {
-        if (destroyed || releaseRequested) return
+        if (destroyed) return
         val count = NexioMpvLib.getPropertyInt("track-list/count") ?: 0
         val entries = buildList {
             for (index in 0 until count) {
@@ -777,14 +775,14 @@ class NexioMpvSession(
     }
 
     override fun eventProperty(property: String) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         when (property) {
             "sub-text", "sub-text/ass", "sub-start/full", "sub-end/full" -> clearSubtitleCueState()
         }
     }
 
     override fun eventProperty(property: String, value: Long) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         when (property) {
             "track-list/count", "video-params/w", "video-params/h" -> {
                 if (property.startsWith("video-params/")) {
@@ -799,7 +797,7 @@ class NexioMpvSession(
     }
 
     override fun eventProperty(property: String, value: Boolean) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         when (property) {
             "pause" -> _playbackState.value = _playbackState.value.copy(isPlaying = !value)
             "paused-for-cache" -> _playbackState.value = _playbackState.value.copy(isBuffering = value)
@@ -812,7 +810,7 @@ class NexioMpvSession(
     }
 
     override fun eventProperty(property: String, value: String) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         when (property) {
             "current-vo" -> {
                 if (currentConfig.videoOutputMode == LibmpvVideoOutputMode.AUTO && value.isBlank()) {
@@ -832,7 +830,7 @@ class NexioMpvSession(
     }
 
     override fun eventProperty(property: String, value: Double) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         when (property) {
             "time-pos" -> _playbackState.value = _playbackState.value.copy(
                 currentPositionMs = (value * 1000.0).toLong()
@@ -854,7 +852,7 @@ class NexioMpvSession(
     }
 
     override fun event(eventId: Int) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         when (eventId) {
             NexioMpvLib.Event.START_FILE -> {
                 _playbackState.value = _playbackState.value.copy(
@@ -907,7 +905,7 @@ class NexioMpvSession(
     }
 
     override fun logMessage(prefix: String, level: Int, text: String) {
-        if (releaseRequested || destroyed) return
+        if (destroyed) return
         if (currentConfig.videoOutputMode == LibmpvVideoOutputMode.AUTO) {
             val normalized = text.lowercase()
             if (
@@ -926,12 +924,8 @@ class NexioMpvSession(
         Log.d(MPV_TAG, "[$prefix/$level] $text")
     }
 
-    fun shouldRetainSurfaceBinding(): Boolean {
-        return releaseRequested && !destroyed
-    }
-
     fun isReusableForPlayback(): Boolean {
-        return !releaseRequested && !destroyed
+        return !destroyed
     }
 
     private fun removeObserversLocked() {
@@ -944,10 +938,23 @@ class NexioMpvSession(
     private fun finalizeDestroyLocked() {
         if (destroyed) return
         destroyed = true
+        runCatching {
+            setPropertyString("vo", "null")
+            setPropertyString("force-window", "no")
+            if (surfaceAttached) {
+                NexioMpvLib.detachSurface()
+            }
+        }
+        initialized = false
         surfaceAttached = false
+        surfaceDetachInFlight = false
+        internalLoadInFlight = false
+        videoOutputFallbackPending = false
         pendingLoadUntilSurfaceAttach = false
         videoOutputStartupTimeoutJob?.cancel()
         videoOutputStartupTimeoutJob = null
+        removeObserversLocked()
         runCatching { NexioMpvLib.destroy() }
+        sessionScope.cancel()
     }
 }

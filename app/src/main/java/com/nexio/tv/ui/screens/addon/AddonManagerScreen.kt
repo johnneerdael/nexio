@@ -89,6 +89,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.domain.model.AddonParserPreset
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -295,6 +296,21 @@ fun AddonManagerScreen(
                                 ) {
                                     Text(text = if (uiState.isInstalling) stringResource(R.string.addon_installing) else stringResource(R.string.addon_install_btn))
                                 }
+
+                                Button(
+                                    onClick = {
+                                        viewModel.onInstallParserPresetChange(uiState.installParserPreset.next())
+                                    },
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = NexioColors.BackgroundCard,
+                                        contentColor = NexioColors.TextSecondary,
+                                        focusedContainerColor = NexioColors.FocusBackground,
+                                        focusedContentColor = NexioColors.Primary
+                                    ),
+                                    shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                                ) {
+                                    Text(text = "Parser: ${uiState.installParserPreset.label()}")
+                                }
                             }
 
                             AnimatedVisibility(visible = uiState.error != null) {
@@ -357,6 +373,7 @@ fun AddonManagerScreen(
                         canMoveDown = index < uiState.installedAddons.lastIndex,
                         onMoveUp = { viewModel.moveAddonUp(addon.baseUrl) },
                         onMoveDown = { viewModel.moveAddonDown(addon.baseUrl) },
+                        onUpdateParserPreset = { viewModel.updateAddonParserPreset(addon.baseUrl, it) },
                         onRemove = { viewModel.removeAddon(addon.baseUrl) },
                         isReadOnly = viewModel.isReadOnly
                     )
@@ -881,6 +898,7 @@ private fun AddonCard(
     canMoveDown: Boolean,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onUpdateParserPreset: (AddonParserPreset) -> Unit,
     onRemove: () -> Unit,
     isReadOnly: Boolean = false
 ) {
@@ -920,6 +938,7 @@ private fun AddonCard(
                 canMoveDown = canMoveDown,
                 onMoveUp = onMoveUp,
                 onMoveDown = onMoveDown,
+                onUpdateParserPreset = onUpdateParserPreset,
                 onRemove = onRemove
             )
         }
@@ -935,6 +954,7 @@ private fun AddonCardContent(
     canMoveDown: Boolean = false,
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
+    onUpdateParserPreset: (AddonParserPreset) -> Unit = {},
     onRemove: () -> Unit = {}
 ) {
     Column(modifier = Modifier.padding(20.dp)) {
@@ -987,6 +1007,18 @@ private fun AddonCardContent(
                         Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = "Move down")
                     }
                     Button(
+                        onClick = { onUpdateParserPreset(addon.parserPreset.next()) },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextSecondary,
+                            focusedContainerColor = NexioColors.FocusBackground,
+                            focusedContentColor = NexioColors.Primary
+                        ),
+                        shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
+                    ) {
+                        Text(text = addon.parserPreset.label())
+                    }
+                    Button(
                         onClick = onRemove,
                         colors = ButtonDefaults.colors(
                             containerColor = NexioColors.BackgroundCard,
@@ -1020,6 +1052,13 @@ private fun AddonCardContent(
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(
+            text = "Parser • ${addon.parserPreset.label()}",
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextTertiary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
             text = stringResource(R.string.addon_catalogs_types, addon.catalogs.size, addon.rawTypes.joinToString()),
             style = MaterialTheme.typography.bodySmall,
             color = NexioColors.TextTertiary
@@ -1029,4 +1068,18 @@ private fun AddonCardContent(
 
 private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
     return extra.any { extra -> extra.name.equals("search", ignoreCase = true) && extra.isRequired }
+}
+
+private fun AddonParserPreset.next(): AddonParserPreset {
+    val values = AddonParserPreset.entries
+    return values[(ordinal + 1) % values.size]
+}
+
+private fun AddonParserPreset.label(): String {
+    return when (this) {
+        AddonParserPreset.GENERIC -> "Generic"
+        AddonParserPreset.STREMTHRU -> "StremThru"
+        AddonParserPreset.TORRENTIO -> "Torrentio"
+        AddonParserPreset.WEBSTREAMR -> "WebStreamr"
+    }
 }

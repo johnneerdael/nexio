@@ -3,8 +3,6 @@ export type PortalFont = 'INTER' | 'DM_SANS' | 'OPEN_SANS'
 export type PortalLocale = 'system' | 'en' | 'es' | 'fr' | 'de' | 'nl' | 'zh-CN'
 export type LayoutMode = 'MODERN' | 'GRID' | 'CLASSIC'
 export type FrameRateMode = 'OFF' | 'START' | 'START_STOP'
-export type PlayerPreference = 'INTERNAL' | 'LIBMPV' | 'EXTERNAL' | 'ASK_EVERY_TIME'
-export type LibmpvVideoOutputMode = 'AUTO' | 'GPU_NEXT' | 'GPU' | 'MEDIACODEC_EMBED'
 export type StreamAutoPlayMode = 'MANUAL' | 'FIRST_STREAM' | 'REGEX_MATCH'
 export type StreamAutoPlaySource = 'ALL_SOURCES' | 'INSTALLED_ADDONS_ONLY'
 export type ThresholdMode = 'PERCENTAGE' | 'MINUTES_BEFORE_END'
@@ -39,6 +37,7 @@ export type AddonRecord = {
   name: string
   enabled: boolean
   manifestUrl: string
+  parserPreset: 'GENERIC' | 'STREMTHRU' | 'TORRENTIO' | 'WEBSTREAMR'
   description?: string
   logo?: string
   transportUrl?: string
@@ -212,18 +211,15 @@ export type PortalSettings = {
       pauseOverlayEnabled: boolean
       osdClockEnabled: boolean
       skipIntroEnabled: boolean
-      libmpvVideoOutputMode: LibmpvVideoOutputMode
       frameRateMatchingMode: FrameRateMode
       resolutionMatchingEnabled: boolean
     }
     streamSelection: {
-      playerPreference: PlayerPreference
       streamReuseLastLinkEnabled: boolean
       streamReuseLastLinkCacheHours: number
       uniformStreamFormattingEnabled: boolean
       groupStreamsAcrossAddonsEnabled: boolean
       deduplicateGroupedStreamsEnabled: boolean
-      filterWebDolbyVisionStreamsEnabled: boolean
       filterEpisodeMismatchStreamsEnabled: boolean
       filterMovieYearMismatchStreamsEnabled: boolean
       streamAutoPlayMode: StreamAutoPlayMode
@@ -240,14 +236,9 @@ export type PortalSettings = {
       preferredAudioLanguage: string
       secondaryPreferredAudioLanguage: string | null
       skipSilence: boolean
-      libmpvAudioPassthroughEnabled: boolean
       decoderPriority: number
       tunnelingEnabled: boolean
       mapDV7ToHevc?: boolean
-      experimentalDv7ToDv81Enabled?: boolean
-      experimentalDtsIecPassthroughEnabled?: boolean
-      experimentalDv7ToDv81PreserveMappingEnabled?: boolean
-      experimentalDv5ToDv81Enabled?: boolean
     }
     subtitles: {
       preferredLanguage: string

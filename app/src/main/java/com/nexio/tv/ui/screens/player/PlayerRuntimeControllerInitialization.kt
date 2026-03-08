@@ -100,7 +100,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         addonSubtitlesError = null
                     )
                 }
-                initializeLibmpvPlayer(url, headers, playerSettings)
+                mpvInitializationInProgress = true
+                try {
+                    initializeLibmpvPlayer(url, headers, playerSettings)
+                } finally {
+                    mpvInitializationInProgress = false
+                }
                 return@launch
             }
             val useLibass = false // Temporarily disabled for maintenance

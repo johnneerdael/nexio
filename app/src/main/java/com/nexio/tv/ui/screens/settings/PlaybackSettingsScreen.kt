@@ -258,6 +258,11 @@ fun PlaybackSettingsContent(
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
                 onSetOsdClockEnabled = { enabled -> coroutineScope.launch { viewModel.setOsdClockEnabled(enabled) } },
                 onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
+                onSetLibmpvGpuNextDolbyVisionReshapingEnabled = { enabled ->
+                    coroutineScope.launch {
+                        viewModel.setLibmpvGpuNextDolbyVisionReshapingEnabled(enabled)
+                    }
+                },
                 onSetFrameRateMatchingMode = { mode -> coroutineScope.launch { viewModel.setFrameRateMatchingMode(mode) } },
                 onSetResolutionMatchingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setResolutionMatchingEnabled(enabled) }
@@ -274,9 +279,6 @@ fun PlaybackSettingsContent(
                     enabled -> coroutineScope.launch {
                         viewModel.setExperimentalDtsIecPassthroughEnabled(enabled)
                     }
-                },
-                onSetExperimentalDv5ToDv81Enabled = {
-                    enabled -> coroutineScope.launch { viewModel.setExperimentalDv5ToDv81Enabled(enabled) }
                 },
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled = {
                     enabled ->

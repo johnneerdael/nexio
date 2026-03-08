@@ -136,7 +136,14 @@ class TraktDiscoveryService @Inject constructor(
     }
 
     fun observeSnapshot(): Flow<TraktDiscoverySnapshot> {
-        return snapshotState.onStart { ensureFresh(force = false) }
+        return snapshotState.onStart {
+            scope.launch {
+                runCatching { ensureFresh(force = false) }
+                    .onFailure { error ->
+                        Log.w("TraktDiscovery", "Failed to refresh Trakt discovery snapshot", error)
+                    }
+            }
+        }
     }
 
     suspend fun ensureFresh(force: Boolean) {

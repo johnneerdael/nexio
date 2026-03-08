@@ -13,14 +13,6 @@
 
     <!-- Stream Selection -->
     <SettingsSection title="Stream Selection" description="Configure stream resolution, auto-play, and binge watching.">
-      <SettingRow label="Player Preference" description="Choose standard EXOPLAYER or an external app.">
-        <BaseSelect v-model="settings.playback.streamSelection.playerPreference" :options="playerOptions" />
-      </SettingRow>
-
-      <SettingRow label="libmpv Video Output" description="Choose how libmpv renders video on Android TV. Auto tries gpu-next, then gpu, then mediacodec_embed.">
-        <BaseSelect v-model="settings.playback.general.libmpvVideoOutputMode" :options="libmpvVideoOutputOptions" />
-      </SettingRow>
-
       <SettingRow label="Uniform Stream Formatting" description="Use the normalized stream parser and formatter across addons.">
         <BaseToggle v-model="settings.playback.streamSelection.uniformStreamFormattingEnabled" />
       </SettingRow>
@@ -34,10 +26,6 @@
           v-model="settings.playback.streamSelection.deduplicateGroupedStreamsEnabled"
           :disabled="!settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled"
         />
-      </SettingRow>
-
-      <SettingRow label="Filter WEB-DL Dolby Vision" description="Hide WEB-DL streams tagged DV or DoVi.">
-        <BaseToggle v-model="settings.playback.streamSelection.filterWebDolbyVisionStreamsEnabled" />
       </SettingRow>
 
       <SettingRow label="Filter Wrong Episodes" description="Hide episodic streams whose parsed season or episode does not match the requested episode.">
@@ -105,24 +93,6 @@
         <SettingRow label="Tunneled Playback" description="Enable tunneling on supported devices.">
           <BaseToggle v-model="settings.playback.audio.tunnelingEnabled" />
         </SettingRow>
-
-        <SettingRow label="DV7 - Experimental DV8.1" description="Use the experimental DV7 to DV8.1 conversion path.">
-          <BaseToggle v-model="settings.playback.audio.experimentalDv7ToDv81Enabled" />
-        </SettingRow>
-
-        <SettingRow label="DV7 - Preserve Mapping" description="Keep Dolby Vision mapping metadata when DV8.1 conversion is enabled.">
-          <BaseToggle
-            v-model="settings.playback.audio.experimentalDv7ToDv81PreserveMappingEnabled"
-            :disabled="!settings.playback.audio.experimentalDv7ToDv81Enabled"
-          />
-        </SettingRow>
-
-        <SettingRow label="DV5 - Compatibility Remap" description="Use the DV5 compatibility remap path when DV8.1 conversion is enabled.">
-          <BaseToggle
-            v-model="settings.playback.audio.experimentalDv5ToDv81Enabled"
-            :disabled="!settings.playback.audio.experimentalDv7ToDv81Enabled"
-          />
-        </SettingRow>
       </div>
 
       <div class="space-y-4 pt-4">
@@ -130,14 +100,6 @@
 
         <SettingRow label="Decoder Priority" description="Renderer preference for playback codecs.">
           <BaseSelect v-model="settings.playback.audio.decoderPriority" :options="decoderPriorityOptions" />
-        </SettingRow>
-
-        <SettingRow label="libmpv Audio Passthrough" description="Allow libmpv to bitstream AC3, E-AC3, DTS, DTS-HD, and TrueHD when the device supports passthrough.">
-          <BaseToggle v-model="settings.playback.audio.libmpvAudioPassthroughEnabled" />
-        </SettingRow>
-
-        <SettingRow label="Fire OS - Experimental Audio Compatibility" description="Enable the Fire OS experimental IEC compatibility path.">
-          <BaseToggle v-model="settings.playback.audio.experimentalDtsIecPassthroughEnabled" />
         </SettingRow>
       </div>
     </SettingsSection>
@@ -176,15 +138,6 @@
 
     <!-- Buffer & Network -->
     <SettingsSection title="Buffer & Network" description="Advanced network settings for optimized streaming.">
-      <SettingRow label="Max Buffer Duration (ms)">
-        <BaseSlider 
-          v-model="settings.playback.bufferNetwork.maxBufferMs" 
-          :min="5000" 
-          :max="120000" 
-          :step="5000" 
-        />
-      </SettingRow>
-
       <SettingRow label="VOD Cache Size (MB)">
         <BaseSlider 
           v-model="settings.playback.bufferNetwork.vodCacheSizeMb" 
@@ -215,20 +168,6 @@ const frameRateOptions = [
   { label: 'OFF', value: 'OFF' },
   { label: 'Start Only', value: 'START' },
   { label: 'Start and Stop', value: 'START_STOP' },
-]
-
-const playerOptions = [
-  { label: 'Internal ExoPlayer', value: 'INTERNAL' },
-  { label: 'Internal libmpv', value: 'LIBMPV' },
-  { label: 'External App', value: 'EXTERNAL' },
-  { label: 'Ask Every Time', value: 'ASK_EVERY_TIME' },
-]
-
-const libmpvVideoOutputOptions = [
-  { label: 'Auto', value: 'AUTO' },
-  { label: 'gpu-next', value: 'GPU_NEXT' },
-  { label: 'gpu', value: 'GPU' },
-  { label: 'mediacodec_embed', value: 'MEDIACODEC_EMBED' },
 ]
 
 const autoPlayOptions = [

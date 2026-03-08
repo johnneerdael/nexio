@@ -135,13 +135,17 @@
   <string name="playback_player_ask_desc">Elige el reproductor cada vez</string>
   <string name="libmpv_video_output_title">Salida de video de libmpv</string>
   <string name="libmpv_video_output_auto">Automático</string>
-  <string name="libmpv_video_output_auto_desc">Prueba primero gpu-next, luego gpu y finalmente mediacodec_embed si fallan los renderizadores GPU.</string>
-  <string name="libmpv_video_output_gpu_next">gpu-next</string>
-  <string name="libmpv_video_output_gpu_next_desc">Renderizador Vulkan preferido con soporte completo de superposición y subtítulos en dispositivos compatibles.</string>
-  <string name="libmpv_video_output_gpu">gpu</string>
-  <string name="libmpv_video_output_gpu_desc">Alternativa OpenGL con soporte completo de superposición y subtítulos.</string>
+  <string name="libmpv_video_output_auto_desc">Prueba primero gpu-next con Android OpenGL, luego gpu-next con Vulkan, después gpu con Android OpenGL y finalmente mediacodec_embed.</string>
+  <string name="libmpv_video_output_gpu_next_android_opengl">gpu-next (Android OpenGL)</string>
+  <string name="libmpv_video_output_gpu_next_android_opengl_desc">Preajuste recomendado para Android TV con gpu-next, gpu-context=android y gpu-api=opengl.</string>
+  <string name="libmpv_video_output_gpu_next_vulkan">gpu-next (Vulkan)</string>
+  <string name="libmpv_video_output_gpu_next_vulkan_desc">Usa gpu-next con Vulkan en dispositivos donde la ruta Vulkan es estable.</string>
+  <string name="libmpv_video_output_gpu_android_opengl">gpu (Android OpenGL)</string>
+  <string name="libmpv_video_output_gpu_android_opengl_desc">Usa el renderizador gpu clásico con gpu-context=android para máxima compatibilidad con subtítulos y OSD de mpv.</string>
   <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
   <string name="libmpv_video_output_mediacodec_embed_desc">Salida directa a la superficie de Android centrada en compatibilidad y señalización HDR, con menos funciones del renderizador de mpv.</string>
+  <string name="libmpv_gpu_next_dv_reshaping_title">Remapeo Dolby Vision en gpu-next</string>
+  <string name="libmpv_gpu_next_dv_reshaping_sub">Fuerza la decodificación por software en gpu-next para que libplacebo pueda remapear Dolby Vision en pantallas sin DV. Aumenta el uso de CPU.</string>
   <!-- PlaybackAudioSettings -->
   <string name="audio_section">Audio</string>
   <string name="audio_lang_default">Predeterminado (archivo de medios)</string>

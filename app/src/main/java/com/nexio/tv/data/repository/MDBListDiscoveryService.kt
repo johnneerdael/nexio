@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -54,6 +58,7 @@ class MDBListDiscoveryService @Inject constructor(
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: MDBListDiscoverySnapshotStore
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val snapshotState = MutableStateFlow(MDBListDiscoverySnapshot())
     private val refreshMutex = Mutex()
     private var lastRefreshMs = 0L
@@ -70,7 +75,14 @@ class MDBListDiscoveryService @Inject constructor(
     }
 
     fun observeSnapshot(): Flow<MDBListDiscoverySnapshot> {
-        return snapshotState.onStart { ensureFresh(force = false) }
+        return snapshotState.onStart {
+            scope.launch {
+                runCatching { ensureFresh(force = false) }
+                    .onFailure { error ->
+                        Log.w("MDBListDiscovery", "Failed to refresh MDBList discovery snapshot", error)
+                    }
+            }
+        }
     }
 
     suspend fun ensureFresh(force: Boolean) {

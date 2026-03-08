@@ -99,13 +99,13 @@ class StartupSyncService @Inject constructor(
     private suspend fun pullRemoteSnapshot(): Result<Unit> {
         return try {
             addonRepository.isSyncingFromRemote = true
-            val remoteAddonUrls = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
-            addonRepository.reconcileWithRemoteAddonUrls(
-                remoteUrls = remoteAddonUrls,
+            val remoteAddonConfigs = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
+            addonRepository.reconcileWithRemoteAddonConfigs(
+                remoteAddons = remoteAddonConfigs,
                 removeMissingLocal = true
             )
             accountSyncRefreshNotifier.notifyRefreshRequired()
-            Log.d(TAG, "Pulled account snapshot with ${remoteAddonUrls.size} addons from remote")
+            Log.d(TAG, "Pulled account snapshot with ${remoteAddonConfigs.size} addons from remote")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Startup account snapshot sync failed", e)

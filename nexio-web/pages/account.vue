@@ -36,6 +36,7 @@
         @remove-addon="removeAddon"
         @move-addon="moveAddon"
         @toggle-addon="toggleAddon"
+        @update-addon-parser-preset="updateAddonParserPreset"
       />
 
       <CatalogInventory
@@ -178,6 +179,7 @@ const {
   removeAddon,
   moveAddon,
   toggleAddon,
+  updateAddonParserPreset,
   moveCatalog,
   reorderCatalogs,
   toggleCatalog,

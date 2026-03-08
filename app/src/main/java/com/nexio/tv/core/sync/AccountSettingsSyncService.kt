@@ -4,16 +4,15 @@ import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
-import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
-import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
@@ -49,6 +48,7 @@ import com.nexio.tv.data.remote.supabase.SubtitleSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.HomeLayout
@@ -208,7 +208,7 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    suspend fun pullFromRemoteAndApply(): Result<List<String>> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemoteAndApply(): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
             val snapshot = withJwtRefreshRetry {
                 postgrest.rpc("sync_pull_account_snapshot").decodeAs<AccountSnapshotRpcResponse>()
@@ -226,8 +226,18 @@ class AccountSettingsSyncService @Inject constructor(
                 snapshot.addons
                     .sortedBy { it.sortOrder }
                     .filter { it.enabled }
-                    .mapNotNull { resolveRemoteAddonUrl(it).getOrNull() }
-                    .filter { it.isNotBlank() }
+                    .mapNotNull { addon ->
+                        resolveRemoteAddonUrl(addon).getOrNull()
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { url ->
+                                AddonPreferences.AddonInstallConfig(
+                                    url = url,
+                                    parserPreset = runCatching {
+                                        enumValueOf<AddonParserPreset>(addon.parserPreset.trim().uppercase())
+                                    }.getOrDefault(AddonParserPreset.GENERIC)
+                                )
+                            }
+                    }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
@@ -328,18 +338,15 @@ class AccountSettingsSyncService @Inject constructor(
                     pauseOverlayEnabled = player.pauseOverlayEnabled,
                     osdClockEnabled = player.osdClockEnabled,
                     skipIntroEnabled = player.skipIntroEnabled,
-                    libmpvVideoOutputMode = player.libmpvVideoOutputMode.name,
                     frameRateMatchingMode = player.frameRateMatchingMode.name,
                     resolutionMatchingEnabled = player.resolutionMatchingEnabled
                 ),
                 streamSelection = StreamSelectionSettings(
-                    playerPreference = player.playerPreference.name,
                     streamReuseLastLinkEnabled = player.streamReuseLastLinkEnabled,
                     streamReuseLastLinkCacheHours = player.streamReuseLastLinkCacheHours,
                     uniformStreamFormattingEnabled = player.uniformStreamFormattingEnabled,
                     groupStreamsAcrossAddonsEnabled = player.groupStreamsAcrossAddonsEnabled,
                     deduplicateGroupedStreamsEnabled = player.deduplicateGroupedStreamsEnabled,
-                    filterWebDolbyVisionStreamsEnabled = player.filterWebDolbyVisionStreamsEnabled,
                     filterEpisodeMismatchStreamsEnabled = player.filterEpisodeMismatchStreamsEnabled,
                     filterMovieYearMismatchStreamsEnabled = player.filterMovieYearMismatchStreamsEnabled,
                     streamAutoPlayMode = player.streamAutoPlayMode.name,
@@ -356,7 +363,6 @@ class AccountSettingsSyncService @Inject constructor(
                     preferredAudioLanguage = player.preferredAudioLanguage,
                     secondaryPreferredAudioLanguage = player.secondaryPreferredAudioLanguage,
                     skipSilence = player.skipSilence,
-                    libmpvAudioPassthroughEnabled = player.libmpvAudioPassthroughEnabled,
                     decoderPriority = player.decoderPriority,
                     tunnelingEnabled = player.tunnelingEnabled
                 ),
@@ -469,21 +475,13 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(settings.playback.general.pauseOverlayEnabled)
         playerSettingsDataStore.setOsdClockEnabled(settings.playback.general.osdClockEnabled)
         playerSettingsDataStore.setSkipIntroEnabled(settings.playback.general.skipIntroEnabled)
-        playerSettingsDataStore.setLibmpvVideoOutputMode(
-            enumValueOrDefault(
-                settings.playback.general.libmpvVideoOutputMode,
-                LibmpvVideoOutputMode.AUTO
-            )
-        )
         playerSettingsDataStore.setFrameRateMatchingMode(enumValueOrDefault(settings.playback.general.frameRateMatchingMode, FrameRateMatchingMode.OFF))
         playerSettingsDataStore.setResolutionMatchingEnabled(settings.playback.general.resolutionMatchingEnabled)
-        playerSettingsDataStore.setPlayerPreference(enumValueOrDefault(settings.playback.streamSelection.playerPreference, PlayerPreference.INTERNAL))
         playerSettingsDataStore.setStreamReuseLastLinkEnabled(settings.playback.streamSelection.streamReuseLastLinkEnabled)
         playerSettingsDataStore.setStreamReuseLastLinkCacheHours(settings.playback.streamSelection.streamReuseLastLinkCacheHours)
         playerSettingsDataStore.setUniformStreamFormattingEnabled(settings.playback.streamSelection.uniformStreamFormattingEnabled)
         playerSettingsDataStore.setGroupStreamsAcrossAddonsEnabled(settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled)
         playerSettingsDataStore.setDeduplicateGroupedStreamsEnabled(settings.playback.streamSelection.deduplicateGroupedStreamsEnabled)
-        playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(settings.playback.streamSelection.filterWebDolbyVisionStreamsEnabled)
         playerSettingsDataStore.setFilterEpisodeMismatchStreamsEnabled(settings.playback.streamSelection.filterEpisodeMismatchStreamsEnabled)
         playerSettingsDataStore.setFilterMovieYearMismatchStreamsEnabled(settings.playback.streamSelection.filterMovieYearMismatchStreamsEnabled)
         playerSettingsDataStore.setStreamAutoPlayMode(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlayMode, StreamAutoPlayMode.MANUAL))
@@ -498,7 +496,6 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setPreferredAudioLanguage(settings.playback.audio.preferredAudioLanguage)
         playerSettingsDataStore.setSecondaryPreferredAudioLanguage(settings.playback.audio.secondaryPreferredAudioLanguage)
         playerSettingsDataStore.setSkipSilence(settings.playback.audio.skipSilence)
-        playerSettingsDataStore.setLibmpvAudioPassthroughEnabled(settings.playback.audio.libmpvAudioPassthroughEnabled)
         playerSettingsDataStore.setDecoderPriority(settings.playback.audio.decoderPriority)
         playerSettingsDataStore.setTunnelingEnabled(settings.playback.audio.tunnelingEnabled)
         playerSettingsDataStore.setSubtitlePreferredLanguage(settings.playback.subtitles.preferredLanguage)

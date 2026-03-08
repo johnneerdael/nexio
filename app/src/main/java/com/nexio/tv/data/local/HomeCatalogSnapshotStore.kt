@@ -44,7 +44,12 @@ class HomeCatalogSnapshotStore @Inject constructor(
     fun write(snapshot: Snapshot) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(snapshot)).apply()
+            val payload = JsonObject().apply {
+                add("catalogRows", gson.toJsonTree(snapshot.catalogRows))
+                add("fullCatalogRows", gson.toJsonTree(snapshot.fullCatalogRows))
+                add("heroItems", gson.toJsonTree(snapshot.heroItems))
+            }
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist home snapshot", error)
         }
@@ -61,11 +66,19 @@ class HomeCatalogSnapshotStore @Inject constructor(
 
     private fun decodeSnapshot(raw: String): Snapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
-        return Snapshot(
+        val canonical = Snapshot(
             catalogRows = decodeArray<CatalogRow>(root, "catalogRows"),
             fullCatalogRows = decodeArray<CatalogRow>(root, "fullCatalogRows"),
             heroItems = decodeArray<MetaPreview>(root, "heroItems")
         )
+        if (canonical.catalogRows.isNotEmpty() || canonical.fullCatalogRows.isNotEmpty() || canonical.heroItems.isNotEmpty()) {
+            return canonical
+        }
+
+        // Legacy payloads were stored via direct Gson reflection and may use obfuscated field names.
+        return runCatching {
+            gson.fromJson(raw, Snapshot::class.java)
+        }.getOrNull()
     }
 
     private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {

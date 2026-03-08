@@ -8,6 +8,7 @@ import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.repository.AddonRepository
@@ -65,7 +66,11 @@ class StreamRepositoryImpl @Inject constructor(
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
                                         val namedStreams = streamsResult.data.map {
-                                            it.copy(addonName = addon.displayName, addonLogo = addon.logo)
+                                            it.copy(
+                                                addonName = addon.displayName,
+                                                addonLogo = addon.logo,
+                                                addonParserPreset = addon.parserPreset
+                                            )
                                         }
                                         resultChannel.send(
                                             AddonStreams(
@@ -134,11 +139,15 @@ class StreamRepositoryImpl @Inject constructor(
             is NetworkResult.Success -> addonResult.data.logo
             else -> null
         }
+        val addonParserPreset = when (addonResult) {
+            is NetworkResult.Success -> addonResult.data.parserPreset
+            else -> AddonParserPreset.GENERIC
+        }
 
         return when (val result = safeApiCall { api.getStreams(streamUrl) }) {
             is NetworkResult.Success -> {
                 val streams = result.data.streams?.map { 
-                    it.toDomain(addonName, addonLogo) 
+                    it.toDomain(addonName, addonLogo, addonParserPreset)
                 } ?: emptyList()
                 Log.d(TAG, "Streams success addon=$addonName count=${streams.size} url=${sanitizeUrlForLogs(streamUrl)}")
                 NetworkResult.Success(streams)

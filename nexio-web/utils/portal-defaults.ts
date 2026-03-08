@@ -17,11 +17,6 @@ export const defaultTraktCatalogOrder: CatalogId[] = [
 ]
 
 export const defaultSyncExclusions: SyncExclusion[] = [
-  { key: 'playback.audio.mapDV7ToHevc', reason: 'Dolby Vision handling is TV-specific.' },
-  { key: 'playback.audio.experimentalDv7ToDv81Enabled', reason: 'DV7 conversion depends on device codec behavior.' },
-  { key: 'playback.audio.experimentalDv7ToDv81PreserveMappingEnabled', reason: 'DV mapping behavior depends on local playback capability.' },
-  { key: 'playback.audio.experimentalDv5ToDv81Enabled', reason: 'DV5 compatibility is device-specific.' },
-  { key: 'playback.audio.experimentalDtsIecPassthroughEnabled', reason: 'Fire OS audio quirks must stay local to the device.' },
   { key: 'playback.bufferNetwork.vodCacheSizeMode', reason: 'Cache size should remain per-device.' },
   { key: 'playback.bufferNetwork.vodCacheSizeMb', reason: 'Cache size should remain per-device.' },
   { key: 'playback.bufferNetwork.useParallelConnections', reason: 'Parallel fetch tuning should remain per-device.' },
@@ -108,18 +103,15 @@ export const defaultSettings = (): PortalSettings => ({
       pauseOverlayEnabled: true,
       osdClockEnabled: true,
       skipIntroEnabled: true,
-      libmpvVideoOutputMode: 'AUTO',
       frameRateMatchingMode: 'OFF',
       resolutionMatchingEnabled: false
     },
     streamSelection: {
-      playerPreference: 'INTERNAL',
       streamReuseLastLinkEnabled: false,
       streamReuseLastLinkCacheHours: 24,
       uniformStreamFormattingEnabled: false,
       groupStreamsAcrossAddonsEnabled: false,
       deduplicateGroupedStreamsEnabled: false,
-      filterWebDolbyVisionStreamsEnabled: false,
       filterEpisodeMismatchStreamsEnabled: false,
       filterMovieYearMismatchStreamsEnabled: false,
       streamAutoPlayMode: 'MANUAL',
@@ -136,14 +128,9 @@ export const defaultSettings = (): PortalSettings => ({
       preferredAudioLanguage: 'device',
       secondaryPreferredAudioLanguage: null,
       skipSilence: false,
-      libmpvAudioPassthroughEnabled: false,
       decoderPriority: 1,
       tunnelingEnabled: false,
-      mapDV7ToHevc: false,
-      experimentalDv7ToDv81Enabled: false,
-      experimentalDtsIecPassthroughEnabled: false,
-      experimentalDv7ToDv81PreserveMappingEnabled: false,
-      experimentalDv5ToDv81Enabled: false
+      mapDV7ToHevc: false
     },
     subtitles: {
       preferredLanguage: 'en',
@@ -193,6 +180,7 @@ export const defaultAccountAddons = (): AddonRecord[] => [
     id: 'addon-cinemeta',
     url: 'https://v3-cinemeta.strem.io',
     manifestUrl: 'https://v3-cinemeta.strem.io/manifest.json',
+    parserPreset: 'GENERIC',
     name: 'Cinemeta',
     enabled: true,
     description: 'Default metadata and catalog provider.',
@@ -205,6 +193,7 @@ export const defaultAccountAddons = (): AddonRecord[] => [
     id: 'addon-opensubtitles',
     url: 'https://opensubtitles-v3.strem.io',
     manifestUrl: 'https://opensubtitles-v3.strem.io/manifest.json',
+    parserPreset: 'GENERIC',
     name: 'OpenSubtitles',
     enabled: true,
     description: 'Default subtitle provider.',

@@ -176,6 +176,10 @@ android {
                 "src/main/_jni_disabled",
                 "../third_party/libmpv/jniLibs"
             )
+            assets.srcDirs(
+                "src/main/assets",
+                "../mpv-android/app/src/main/assets"
+            )
         }
     }
 
