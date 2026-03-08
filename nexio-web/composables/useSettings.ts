@@ -79,6 +79,7 @@ export const useSettings = () => {
         pauseOverlayEnabled: true,
         osdClockEnabled: true,
         skipIntroEnabled: true,
+        libmpvVideoOutputMode: 'AUTO',
         frameRateMatchingMode: 'OFF',
         resolutionMatchingEnabled: false
       },
@@ -106,6 +107,7 @@ export const useSettings = () => {
         preferredAudioLanguage: 'device',
         secondaryPreferredAudioLanguage: null,
         skipSilence: false,
+        libmpvAudioPassthroughEnabled: false,
         decoderPriority: 1,
         tunnelingEnabled: false,
         mapDV7ToHevc: false,

@@ -160,6 +160,7 @@ data class PlaybackGeneralSettings(
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
+    val libmpvVideoOutputMode: String = "AUTO",
     val frameRateMatchingMode: String = "OFF",
     val resolutionMatchingEnabled: Boolean = false
 )
@@ -191,6 +192,7 @@ data class AudioSettings(
     val preferredAudioLanguage: String = "device",
     val secondaryPreferredAudioLanguage: String? = null,
     val skipSilence: Boolean = false,
+    val libmpvAudioPassthroughEnabled: Boolean = false,
     val decoderPriority: Int = 1,
     val tunnelingEnabled: Boolean = false
 )

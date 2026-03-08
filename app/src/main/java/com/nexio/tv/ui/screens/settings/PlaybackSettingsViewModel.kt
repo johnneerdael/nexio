@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
@@ -42,6 +43,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPlayerPreference(preference)
     }
 
+    suspend fun setLibmpvVideoOutputMode(mode: LibmpvVideoOutputMode) {
+        playerSettingsDataStore.setLibmpvVideoOutputMode(mode)
+    }
+
     // Audio settings
 
     suspend fun setDecoderPriority(priority: Int) {
@@ -54,6 +59,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSkipSilence(enabled: Boolean) {
         playerSettingsDataStore.setSkipSilence(enabled)
+    }
+
+    suspend fun setLibmpvAudioPassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setLibmpvAudioPassthroughEnabled(enabled)
     }
 
     suspend fun setPreferredAudioLanguage(language: String) {

@@ -190,6 +190,7 @@
     <string name="playback_section_player_desc">Player preference, auto-play, and source filtering.</string>
     <string name="playback_player">Player</string>
     <string name="playback_player_internal">Internal</string>
+    <string name="playback_player_libmpv">libmpv</string>
     <string name="playback_player_external">External</string>
     <string name="playback_player_ask">Ask every time</string>
     <string name="playback_section_audio">Video &amp; Audio</string>
@@ -207,7 +208,17 @@
     <string name="playback_resolution_matching">Resolution matching</string>
     <string name="playback_resolution_matching_sub">Allow display mode changes to match video resolution.</string>
     <string name="playback_player_external_desc">Always open streams in an external app</string>
+    <string name="playback_player_libmpv_desc">Use the libmpv playback backend with the same Nexio overlay</string>
     <string name="playback_player_ask_desc">Choose the player each time</string>
+    <string name="libmpv_video_output_title">libmpv Video Output</string>
+    <string name="libmpv_video_output_auto">Auto</string>
+    <string name="libmpv_video_output_auto_desc">Try gpu-next first, then gpu, then mediacodec_embed if the GPU renderers fail.</string>
+    <string name="libmpv_video_output_gpu_next">gpu-next</string>
+    <string name="libmpv_video_output_gpu_next_desc">Preferred Vulkan renderer with full overlay and subtitle support on capable devices.</string>
+    <string name="libmpv_video_output_gpu">gpu</string>
+    <string name="libmpv_video_output_gpu_desc">OpenGL renderer fallback with full overlay and subtitle support.</string>
+    <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
+    <string name="libmpv_video_output_mediacodec_embed_desc">Direct Android surface output focused on compatibility and HDR signaling, with fewer mpv renderer features.</string>
 
     <!-- PlaybackAudioSettings -->
     <string name="video_section">Video</string>
@@ -217,6 +228,8 @@
     <string name="audio_preferred_lang">Preferred Audio Language</string>
     <string name="audio_skip_silence">Skip Silence</string>
     <string name="audio_skip_silence_sub">Skip silent portions of audio during playback</string>
+    <string name="audio_libmpv_passthrough_title">libmpv Audio Passthrough</string>
+    <string name="audio_libmpv_passthrough_sub">Allow libmpv to bitstream AC-3, E-AC-3, DTS, DTS-HD, and TrueHD when supported by the device</string>
     <string name="audio_advanced_section">Advanced Audio</string>
     <string name="audio_advanced_warning">These settings may cause issues on some devices. Change only if you know what you\'re doing.</string>
     <string name="audio_decoder_device_only">Device decoders only</string>
@@ -649,6 +662,7 @@
     <string name="stream_type_external">External</string>
     <string name="stream_player_picker_title">What player should be used?</string>
     <string name="stream_player_internal">Internal</string>
+    <string name="stream_player_libmpv">libmpv</string>
     <string name="stream_player_external">External</string>
 
     <!-- PlayerScreen -->

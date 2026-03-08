@@ -183,7 +183,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             isVc1SoftwareFallbackActiveForCurrentPlayback &&
             !isVc1TrackSelectionBypassActiveForCurrentPlayback
         ) {
-            val currentPosition = _exoPlayer?.currentPosition ?: 0L
+            val currentPosition = backendCurrentPosition()
             vc1TrackSelectionBypassStreamUrls.add(currentStreamUrl)
             Log.w(
                 PlayerRuntimeController.TAG,
@@ -561,7 +561,7 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         return
     }
 
-    val playerReady = _exoPlayer?.playbackState == Player.STATE_READY
+    val playerReady = backendIsReady()
     if (!playerReady) {
         Log.d(PlayerRuntimeController.TAG, "AUTO_SUB defer addon fallback: player not ready")
         return
@@ -658,6 +658,12 @@ internal fun PlayerRuntimeController.startFrameRateProbe(
 }
 
 internal fun PlayerRuntimeController.applySubtitlePreferences(preferred: String, secondary: String?) {
+    if (usesLibmpvBackend()) {
+        if (preferred == "none") {
+            disableSubtitles()
+        }
+        return
+    }
     _exoPlayer?.let { player ->
         val builder = player.trackSelectionParameters.buildUpon()
 

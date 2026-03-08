@@ -20,10 +20,13 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ForwardingRenderer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.FireOsDefaultAudioSink
 import androidx.media3.exoplayer.audio.FireOsIec61937AudioOutputProvider
+import androidx.media3.exoplayer.audio.FireOsMediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
@@ -89,6 +92,17 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 preferredLanguage = playerSettings.subtitleStyle.preferredLanguage,
                 secondaryLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage
             )
+            if (usesLibmpvBackend()) {
+                _uiState.update {
+                    it.copy(
+                        addonSubtitles = startupSubtitlePreparation.fetchedSubtitles,
+                        isLoadingAddonSubtitles = !startupSubtitlePreparation.fetchCompleted,
+                        addonSubtitlesError = null
+                    )
+                }
+                initializeLibmpvPlayer(url, headers, playerSettings)
+                return@launch
+            }
             val useLibass = false // Temporarily disabled for maintenance
             val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
             DoviBridge.resetRuntimeCounters()
@@ -879,7 +893,11 @@ private class SubtitleOffsetRenderersFactory(
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
             if (experimentalFireOsIecPassthroughEnabled) {
-                builder.setAudioOutputProvider(FireOsIec61937AudioOutputProvider(context))
+                return FireOsDefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                    .setAudioOutputProvider(FireOsIec61937AudioOutputProvider(context))
+                    .build()
             }
             return builder.build()
         }
@@ -908,6 +926,52 @@ private class SubtitleOffsetRenderersFactory(
                 ),
                 subtitleDelayUsProvider
             )
+        )
+    }
+
+    override fun buildAudioRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        audioSink: AudioSink,
+        eventHandler: android.os.Handler,
+        eventListener: AudioRendererEventListener,
+        out: ArrayList<Renderer>
+    ) {
+        if (!experimentalFireOsIecPassthroughEnabled || audioSink !is FireOsDefaultAudioSink) {
+            super.buildAudioRenderers(
+                context,
+                extensionRendererMode,
+                mediaCodecSelector,
+                enableDecoderFallback,
+                audioSink,
+                eventHandler,
+                eventListener,
+                out
+            )
+            return
+        }
+
+        val insertionIndex = out.size
+        super.buildAudioRenderers(
+            context,
+            extensionRendererMode,
+            mediaCodecSelector,
+            enableDecoderFallback,
+            audioSink,
+            eventHandler,
+            eventListener,
+            out
+        )
+        out[insertionIndex] = FireOsMediaCodecAudioRenderer(
+            context,
+            codecAdapterFactory,
+            mediaCodecSelector,
+            enableDecoderFallback,
+            eventHandler,
+            eventListener,
+            audioSink
         )
     }
 }

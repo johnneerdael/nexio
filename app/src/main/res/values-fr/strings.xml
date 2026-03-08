@@ -115,6 +115,7 @@
   <string name="playback_section_player_desc">Préférence de lecteur, lecture automatique et filtrage des sources.</string>
   <string name="playback_player">Lecteur</string>
   <string name="playback_player_internal">Interne</string>
+  <string name="playback_player_libmpv">libmpv</string>
   <string name="playback_player_external">Externe</string>
   <string name="playback_player_ask">Demander à chaque fois</string>
   <string name="playback_section_audio">Audio et bande-annonce</string>
@@ -130,7 +131,17 @@
   <string name="playback_afr_on_start_stop">Au démarrage/arrêt</string>
   <string name="playback_afr_on_start_stop_sub">Changer au début et restaurer à l\'arrêt.</string>
   <string name="playback_player_external_desc">Toujours ouvrir les flux dans une application externe</string>
+  <string name="playback_player_libmpv_desc">Utiliser le moteur libmpv avec la même surcouche Nexio</string>
   <string name="playback_player_ask_desc">Choisir le lecteur à chaque fois</string>
+  <string name="libmpv_video_output_title">Sortie vidéo libmpv</string>
+  <string name="libmpv_video_output_auto">Auto</string>
+  <string name="libmpv_video_output_auto_desc">Essaie gpu-next, puis gpu, puis mediacodec_embed si les rendus GPU echouent.</string>
+  <string name="libmpv_video_output_gpu_next">gpu-next</string>
+  <string name="libmpv_video_output_gpu_next_desc">Rendu Vulkan prefere avec prise en charge complete de overlay et des sous-titres sur les appareils compatibles.</string>
+  <string name="libmpv_video_output_gpu">gpu</string>
+  <string name="libmpv_video_output_gpu_desc">Rendu OpenGL de secours avec prise en charge complete de overlay et des sous-titres.</string>
+  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
+  <string name="libmpv_video_output_mediacodec_embed_desc">Sortie directe vers la surface Android, axée sur la compatibilité et le signal HDR, avec moins de fonctionnalités de rendu mpv.</string>
   <!-- PlaybackAudioSettings -->
   <string name="audio_section">Audio</string>
   <string name="audio_lang_default">Par défaut (fichier média)</string>
@@ -138,6 +149,8 @@
   <string name="audio_preferred_lang">Langue audio préférée</string>
   <string name="audio_skip_silence">Passer les silences</string>
   <string name="audio_skip_silence_sub">Passer les passages silencieux de l\'audio pendant la lecture</string>
+  <string name="audio_libmpv_passthrough_title">Passthrough audio libmpv</string>
+  <string name="audio_libmpv_passthrough_sub">Permet à libmpv d\'envoyer AC-3, E-AC-3, DTS, DTS-HD et TrueHD en bitstream lorsque l\'appareil le prend en charge</string>
   <string name="audio_advanced_section">Audio avancé</string>
   <string name="audio_advanced_warning">Ces paramètres peuvent causer des problèmes sur certains appareils. Ne modifiez que si vous savez ce que vous faites.</string>
   <string name="audio_decoder_device_only">Décodeurs de l\'appareil uniquement</string>
@@ -445,6 +458,7 @@
   <string name="stream_type_external">Externe</string>
   <string name="stream_player_picker_title">Quel lecteur utiliser ?</string>
   <string name="stream_player_internal">Interne</string>
+  <string name="stream_player_libmpv">libmpv</string>
   <string name="stream_player_external">Externe</string>
   <!-- PlayerScreen -->
   <string name="player_ends_at">Fin à : %1$s</string>

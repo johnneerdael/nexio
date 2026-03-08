@@ -42,6 +42,11 @@ internal fun PlayerRuntimeController.showSeekOverlayTemporarily() {
 }
 
 internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
+    if (usesLibmpvBackend()) {
+        mpvSession?.selectAudioTrack(trackIndex)
+        persistRememberedLinkAudioSelection(trackIndex)
+        return
+    }
     _exoPlayer?.let { player ->
         val tracks = player.currentTracks
         var currentAudioIndex = 0
@@ -89,6 +94,7 @@ internal fun PlayerRuntimeController.persistRememberedLinkAudioSelection(trackIn
 }
 
 internal fun PlayerRuntimeController.applyAddonSubtitleOverride(addonTrackId: String): Boolean {
+    if (usesLibmpvBackend()) return false
     val player = _exoPlayer ?: return false
     player.currentTracks.groups.forEach { trackGroup ->
         if (trackGroup.type != C.TRACK_TYPE_TEXT) return@forEach
@@ -113,6 +119,7 @@ internal fun PlayerRuntimeController.applyAddonSubtitleOverride(addonTrackId: St
 internal fun PlayerRuntimeController.applyAddonSubtitleOverrideByLanguage(
     language: String
 ): Boolean {
+    if (usesLibmpvBackend()) return false
     val player = _exoPlayer ?: return false
     player.currentTracks.groups.forEach { trackGroup ->
         if (trackGroup.type != C.TRACK_TYPE_TEXT) return@forEach
@@ -145,6 +152,16 @@ internal fun PlayerRuntimeController.applyAddonSubtitleOverrideByLanguage(
 }
 
 internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
+    if (usesLibmpvBackend()) {
+        mpvSession?.selectSubtitleTrack(trackIndex)
+        _uiState.update {
+            it.copy(
+                selectedSubtitleTrackIndex = trackIndex,
+                selectedAddonSubtitle = null
+            )
+        }
+        return
+    }
     _exoPlayer?.let { player ->
         Log.d(PlayerRuntimeController.TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex")
         val tracks = player.currentTracks
@@ -172,6 +189,16 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 }
 
 internal fun PlayerRuntimeController.disableSubtitles() {
+    if (usesLibmpvBackend()) {
+        mpvSession?.disableSubtitles()
+        _uiState.update {
+            it.copy(
+                selectedSubtitleTrackIndex = -1,
+                selectedAddonSubtitle = null
+            )
+        }
+        return
+    }
     _exoPlayer?.let { player ->
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
@@ -208,6 +235,20 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
     subtitle: Subtitle,
     selectedSubtitle: Subtitle = subtitle
 ) {
+    if (usesLibmpvBackend()) {
+        Log.d(PlayerRuntimeController.TAG, "Selecting ADDON subtitle via LIBMPV lang=${subtitle.lang} id=${subtitle.id}")
+        mpvSession?.selectAddonSubtitle(subtitle)
+        pendingAddonSubtitleLanguage = null
+        pendingAddonSubtitleTrackId = null
+        pendingAudioSelectionAfterSubtitleRefresh = null
+        _uiState.update {
+            it.copy(
+                selectedAddonSubtitle = selectedSubtitle,
+                selectedSubtitleTrackIndex = -1
+            )
+        }
+        return
+    }
     _exoPlayer?.let { player ->
         Log.d(PlayerRuntimeController.TAG, "Selecting ADDON subtitle lang=${subtitle.lang} id=${subtitle.id}")
 

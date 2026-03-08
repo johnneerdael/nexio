@@ -108,6 +108,7 @@ export const defaultSettings = (): PortalSettings => ({
       pauseOverlayEnabled: true,
       osdClockEnabled: true,
       skipIntroEnabled: true,
+      libmpvVideoOutputMode: 'AUTO',
       frameRateMatchingMode: 'OFF',
       resolutionMatchingEnabled: false
     },
@@ -135,8 +136,14 @@ export const defaultSettings = (): PortalSettings => ({
       preferredAudioLanguage: 'device',
       secondaryPreferredAudioLanguage: null,
       skipSilence: false,
+      libmpvAudioPassthroughEnabled: false,
       decoderPriority: 1,
-      tunnelingEnabled: false
+      tunnelingEnabled: false,
+      mapDV7ToHevc: false,
+      experimentalDv7ToDv81Enabled: false,
+      experimentalDtsIecPassthroughEnabled: false,
+      experimentalDv7ToDv81PreserveMappingEnabled: false,
+      experimentalDv5ToDv81Enabled: false
     },
     subtitles: {
       preferredLanguage: 'en',

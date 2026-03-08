@@ -328,7 +328,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     )
     
     resetLoadingOverlayForNewStream()
-    _exoPlayer?.stop()
+    backendStop()
 
     currentStreamUrl = url
     currentHeaders = newHeaders
@@ -344,7 +344,6 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     lastSavedPosition = 0L
-    _exoPlayer?.stop()
     resetLoadingOverlayForNewStream()
 
     _uiState.update {
@@ -623,7 +622,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     // Reset transient playback flags before stopping, so stop callbacks never
     // persist stale positions into the newly selected episode.
     resetLoadingOverlayForNewStream()
-    _exoPlayer?.stop()
+    backendStop()
 
     currentStreamUrl = url
     currentHeaders = newHeaders
@@ -644,7 +643,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
     refreshScrobbleItem()
     lastSavedPosition = 0L
-    _exoPlayer?.stop()
     resetLoadingOverlayForNewStream()
 
     _uiState.update {

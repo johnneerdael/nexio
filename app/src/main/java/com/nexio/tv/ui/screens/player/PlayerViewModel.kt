@@ -5,6 +5,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
+import com.nexio.tv.core.mpv.NexioMpvRenderState
+import com.nexio.tv.core.mpv.NexioMpvSession
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -17,6 +19,7 @@ import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
@@ -37,6 +40,7 @@ class PlayerViewModel @Inject constructor(
     private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    private val emptyMpvRenderState = MutableStateFlow(NexioMpvRenderState())
 
     private val controller = PlayerRuntimeController(
         context = context,
@@ -61,6 +65,15 @@ class PlayerViewModel @Inject constructor(
 
     val exoPlayer: ExoPlayer?
         get() = controller.exoPlayer
+
+    val mpvSession: NexioMpvSession?
+        get() = controller.mpvSession
+
+    val mpvRenderState: StateFlow<NexioMpvRenderState>
+        get() = controller.mpvSession?.renderState ?: emptyMpvRenderState
+
+    val usesLibmpvBackend: Boolean
+        get() = controller.playerBackendPreference == com.nexio.tv.data.local.PlayerPreference.LIBMPV
 
     fun getCurrentStreamUrl(): String = controller.getCurrentStreamUrl()
 
@@ -90,8 +103,16 @@ class PlayerViewModel @Inject constructor(
         controller.startInitialPlaybackIfNeeded()
     }
 
+    fun pausePlaybackForLifecycle() {
+        controller.pausePlaybackForLifecycle()
+    }
+
     fun onEvent(event: PlayerEvent) {
         controller.onEvent(event)
+    }
+
+    fun setLibmpvSubtitleVisibility(visible: Boolean) {
+        controller.setLibmpvSubtitleVisibility(visible)
     }
 
     override fun onCleared() {
