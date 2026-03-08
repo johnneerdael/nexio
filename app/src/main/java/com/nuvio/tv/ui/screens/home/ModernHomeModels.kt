@@ -178,7 +178,7 @@ internal fun buildContinueWatchingItem(
             HeroPreview(
                 title = item.progress.name,
                 logo = item.progress.logo,
-                description = item.episodeDescription ?: item.progress.episodeTitle,
+                description = item.episodeDescription ?: item.progress.episodeTitle?.localizeEpisodeTitle(context),
                 contentTypeText = episodeLabel,
                 isSeries = isSeries,
                 yearText = extractYear(item.releaseInfo),
@@ -202,7 +202,7 @@ internal fun buildContinueWatchingItem(
                 title = item.info.name,
                 logo = item.info.logo,
                 description = item.info.episodeDescription
-                    ?: item.info.episodeTitle
+                    ?: item.info.episodeTitle?.localizeEpisodeTitle(context)
                     ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
                 contentTypeText = episodeLabel,
                 isSeries = true,
