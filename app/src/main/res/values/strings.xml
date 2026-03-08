@@ -952,4 +952,6 @@
     <string name="update_open_settings">Open Settings</string>
     <string name="update_install">Install</string>
     <string name="update_ignore">Ignore</string>
+    <string name="update_download">Download</string>
+    <string name="update_downloading_progress">Downloading…</string>
 </resources>
