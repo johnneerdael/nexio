@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.core.tmdb.TmdbEnrichment
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.HomeLayout
 import com.nuvio.tv.domain.model.Meta
@@ -291,32 +292,97 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     if (startupGracePeriodActive) return
-    if (!externalMetaPrefetchEnabled) return
-    if (item.id in prefetchedExternalMetaIds) return
-    if (pendingExternalMetaPrefetchItemId == item.id) return
+    if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
+    if (pendingTmdbEnrichItemId == item.id) return
 
-    pendingExternalMetaPrefetchItemId = item.id
-    externalMetaPrefetchJob?.cancel()
-    externalMetaPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+    pendingTmdbEnrichItemId = item.id
+    tmdbEnrichFocusJob?.cancel()
+    tmdbEnrichFocusJob = viewModelScope.launch(Dispatchers.IO) {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
-        if (pendingExternalMetaPrefetchItemId != item.id) return@launch
+        if (pendingTmdbEnrichItemId != item.id) return@launch
+        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return@launch
+
+        if (currentTmdbSettings.enabled) {
+            val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
+            val enrichment = if (tmdbId != null) runCatching {
+                tmdbMetadataService.fetchEnrichment(
+                    tmdbId = tmdbId,
+                    contentType = item.type,
+                    language = currentTmdbSettings.language
+                )
+            }.getOrNull() else null
+
+            if (enrichment != null) {
+                prefetchedTmdbIds.add(item.id)
+                updateCatalogItemWithTmdb(item.id, enrichment)
+                return@launch
+            }
+        }
+
         if (!externalMetaPrefetchEnabled) return@launch
         if (item.id in prefetchedExternalMetaIds) return@launch
         if (!externalMetaPrefetchInFlightIds.add(item.id)) return@launch
         try {
             val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
                 .first { it is NetworkResult.Success || it is NetworkResult.Error }
-
             if (result is NetworkResult.Success) {
                 prefetchedExternalMetaIds.add(item.id)
                 updateCatalogItemWithMeta(item.id, result.data)
             }
         } finally {
             externalMetaPrefetchInFlightIds.remove(item.id)
-            if (pendingExternalMetaPrefetchItemId == item.id) {
-                pendingExternalMetaPrefetchItemId = null
+            if (pendingTmdbEnrichItemId == item.id) pendingTmdbEnrichItemId = null
+        }
+    }
+}
+
+private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: TmdbEnrichment) {
+    fun mergeItem(currentItem: MetaPreview): MetaPreview {
+        var merged = currentItem
+        if (currentTmdbSettings.useBasicInfo) {
+            merged = merged.copy(
+                name = enrichment.localizedTitle ?: merged.name,
+                description = enrichment.description ?: merged.description,
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres,
+                imdbRating = enrichment.rating?.toFloat() ?: merged.imdbRating
+            )
+        }
+        if (currentTmdbSettings.useDetails) {
+            merged = merged.copy(releaseInfo = enrichment.releaseInfo ?: merged.releaseInfo)
+        }
+        return merged
+    }
+
+    catalogsMap.forEach { (key, row) ->
+        val idx = row.items.indexOfFirst { it.id == itemId }
+        if (idx >= 0) {
+            val merged = mergeItem(row.items[idx])
+            if (merged != row.items[idx]) {
+                val mutableItems = row.items.toMutableList()
+                mutableItems[idx] = merged
+                catalogsMap[key] = row.copy(items = mutableItems)
+                truncatedRowCache.remove(key)
             }
         }
+    }
+
+    _uiState.update { state ->
+        var changed = false
+        val updatedRows = state.catalogRows.map { row ->
+            val idx = row.items.indexOfFirst { it.id == itemId }
+            if (idx < 0) row
+            else {
+                val mergedItem = mergeItem(row.items[idx])
+                if (mergedItem == row.items[idx]) row
+                else {
+                    changed = true
+                    val mutableItems = row.items.toMutableList()
+                    mutableItems[idx] = mergedItem
+                    row.copy(items = mutableItems)
+                }
+            }
+        }
+        if (changed) state.copy(catalogRows = updatedRows) else state
     }
 }
 

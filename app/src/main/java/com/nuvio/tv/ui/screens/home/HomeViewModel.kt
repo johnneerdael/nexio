@@ -115,6 +115,9 @@ class HomeViewModel @Inject constructor(
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var externalMetaPrefetchJob: Job? = null
     internal var pendingExternalMetaPrefetchItemId: String? = null
+    internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal var tmdbEnrichFocusJob: Job? = null
+    internal var pendingTmdbEnrichItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var movieWatchedBatchJob: Job? = null
