@@ -426,7 +426,12 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 
                     if (settings.useDetails) {
                         enriched = enriched.copy(
-                            releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo
+                            runtime = enrichment.runtimeMinutes?.toString() ?: enriched.runtime,
+                            releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo,
+                            status = enrichment.status ?: enriched.status,
+                            ageRating = enrichment.ageRating ?: enriched.ageRating,
+                            country = enrichment.countries?.joinToString(", ") ?: enriched.country,
+                            language = enrichment.language ?: enriched.language
                         )
                     }
 

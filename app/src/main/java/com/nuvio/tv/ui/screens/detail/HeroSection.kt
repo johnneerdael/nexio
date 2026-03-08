@@ -59,6 +59,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MDBListRatings
@@ -588,6 +589,7 @@ private fun MetaInfoRow(
     val statusBadge = remember(meta.status) {
         meta.status?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
     }
+    Log.d("HeroBadge", "name=${meta.name} ageRating=${meta.ageRating} status=${meta.status} ageRatingBadge=$ageRatingBadge statusBadge=$statusBadge")
     val secondaryItems = remember(meta.country, meta.language) {
         buildList<String> {
             meta.country?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
@@ -659,14 +661,23 @@ private fun MetaInfoRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ageRatingBadge?.let { badge ->
-                    HeroMetaBadge(text = badge)
-                }
-                statusBadge?.let { badge ->
-                    HeroMetaBadge(
-                        text = badge,
-                        contentColor = NuvioColors.TextPrimary
+                if (ageRatingBadge != null && statusBadge != null) {
+                    CombinedMetaBadge(
+                        leftText = ageRatingBadge,
+                        leftColor = NuvioColors.TextSecondary,
+                        rightText = statusBadge,
+                        rightColor = NuvioColors.TextPrimary
                     )
+                } else {
+                    ageRatingBadge?.let { badge ->
+                        HeroMetaBadge(text = badge)
+                    }
+                    statusBadge?.let { badge ->
+                        HeroMetaBadge(
+                            text = badge,
+                            contentColor = NuvioColors.TextPrimary
+                        )
+                    }
                 }
                 if ((ageRatingBadge != null || statusBadge != null) && secondaryItems.isNotEmpty()) {
                     MetaInfoDivider()
@@ -675,7 +686,7 @@ private fun MetaInfoRow(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.labelMedium,
-                        color = NuvioTheme.extendedColors.textTertiary
+                        color = NuvioColors.TextPrimary
                     )
                     if (index < secondaryItems.lastIndex) {
                         MetaInfoDivider()
@@ -704,6 +715,45 @@ private fun HeroMetaBadge(
             text = text,
             style = MaterialTheme.typography.labelMedium,
             color = contentColor,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun CombinedMetaBadge(
+    leftText: String,
+    leftColor: Color = NuvioColors.TextSecondary,
+    rightText: String,
+    rightColor: Color = NuvioColors.TextPrimary
+) {
+    val dividerColor = leftColor.copy(alpha = 0.55f)
+    Row(
+        modifier = Modifier
+            .border(
+                border = BorderStroke(1.dp, dividerColor),
+                shape = RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = leftText,
+            style = MaterialTheme.typography.labelMedium,
+            color = leftColor,
+            maxLines = 1
+        )
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .height(12.dp)
+                .background(dividerColor)
+        )
+        Text(
+            text = rightText,
+            style = MaterialTheme.typography.labelMedium,
+            color = rightColor,
             maxLines = 1
         )
     }
