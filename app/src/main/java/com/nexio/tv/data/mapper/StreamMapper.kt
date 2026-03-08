@@ -3,11 +3,16 @@ package com.nexio.tv.data.mapper
 import com.nexio.tv.data.remote.dto.BehaviorHintsDto
 import com.nexio.tv.data.remote.dto.ProxyHeadersDto
 import com.nexio.tv.data.remote.dto.StreamDto
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ProxyHeaders
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.StreamBehaviorHints
 
-fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream = Stream(
+fun StreamDto.toDomain(
+    addonName: String,
+    addonLogo: String?,
+    addonParserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+): Stream = Stream(
     name = name,
     title = title,
     description = description,
@@ -18,7 +23,8 @@ fun StreamDto.toDomain(addonName: String, addonLogo: String?): Stream = Stream(
     externalUrl = externalUrl,
     behaviorHints = behaviorHints?.toDomain(),
     addonName = addonName,
-    addonLogo = addonLogo
+    addonLogo = addonLogo,
+    addonParserPreset = addonParserPreset
 )
 
 fun BehaviorHintsDto.toDomain(): StreamBehaviorHints = StreamBehaviorHints(

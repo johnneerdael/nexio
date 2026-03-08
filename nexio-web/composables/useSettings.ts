@@ -79,18 +79,15 @@ export const useSettings = () => {
         pauseOverlayEnabled: true,
         osdClockEnabled: true,
         skipIntroEnabled: true,
-        libmpvVideoOutputMode: 'AUTO',
         frameRateMatchingMode: 'OFF',
         resolutionMatchingEnabled: false
       },
       streamSelection: {
-        playerPreference: 'INTERNAL',
         streamReuseLastLinkEnabled: false,
         streamReuseLastLinkCacheHours: 24,
         uniformStreamFormattingEnabled: false,
         groupStreamsAcrossAddonsEnabled: false,
         deduplicateGroupedStreamsEnabled: false,
-        filterWebDolbyVisionStreamsEnabled: false,
         filterEpisodeMismatchStreamsEnabled: false,
         filterMovieYearMismatchStreamsEnabled: false,
         streamAutoPlayMode: 'MANUAL',
@@ -107,14 +104,9 @@ export const useSettings = () => {
         preferredAudioLanguage: 'device',
         secondaryPreferredAudioLanguage: null,
         skipSilence: false,
-        libmpvAudioPassthroughEnabled: false,
         decoderPriority: 1,
         tunnelingEnabled: false,
-        mapDV7ToHevc: false,
-        experimentalDv7ToDv81Enabled: false,
-        experimentalDtsIecPassthroughEnabled: false,
-        experimentalDv7ToDv81PreserveMappingEnabled: false,
-        experimentalDv5ToDv81Enabled: false
+        mapDV7ToHevc: false
       },
       subtitles: {
         preferredLanguage: 'en',

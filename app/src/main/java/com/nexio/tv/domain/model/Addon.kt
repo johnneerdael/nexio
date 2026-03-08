@@ -3,6 +3,14 @@ package com.nexio.tv.domain.model
 import androidx.compose.runtime.Immutable
 
 @Immutable
+enum class AddonParserPreset {
+    GENERIC,
+    STREMTHRU,
+    TORRENTIO,
+    WEBSTREAMR
+}
+
+@Immutable
 data class Addon(
     val id: String,
     val name: String,
@@ -14,7 +22,8 @@ data class Addon(
     val catalogs: List<CatalogDescriptor>,
     val types: List<ContentType>,
     val rawTypes: List<String> = types.map { it.toApiString() },
-    val resources: List<AddonResource>
+    val resources: List<AddonResource>,
+    val parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
 )
 
 @Immutable

@@ -114,6 +114,7 @@ export function parseAddonInstallUrl(rawUrl: string): {
       id: crypto.randomUUID(),
       url: normalized,
       manifestUrl: `${normalized}/manifest.json`,
+      parserPreset: 'GENERIC',
       name: parsed.hostname.replace(/^www\./, ''),
       enabled: true,
       installKind: secretRef ? 'configured' : 'manifest',

@@ -140,6 +140,7 @@ function sanitizeAddonRecord(addon: AddonRecord, index: number): AddonRecord {
     ...addon,
     url: normalizedUrl,
     manifestUrl: normalizeAddonManifestUrl(normalizedUrl, addon.manifestUrl),
+    parserPreset: addon.parserPreset ?? 'GENERIC',
     publicQueryParams: { ...(addon.publicQueryParams ?? {}) },
     sortOrder: addon.sortOrder ?? index
   }
@@ -199,16 +200,82 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
     },
     playback: {
       general: {
-        ...defaults.playback.general,
-        ...(input?.playback?.general ?? {})
+        loadingOverlayEnabled:
+          input?.playback?.general?.loadingOverlayEnabled ?? defaults.playback.general.loadingOverlayEnabled,
+        pauseOverlayEnabled:
+          input?.playback?.general?.pauseOverlayEnabled ?? defaults.playback.general.pauseOverlayEnabled,
+        osdClockEnabled:
+          input?.playback?.general?.osdClockEnabled ?? defaults.playback.general.osdClockEnabled,
+        skipIntroEnabled:
+          input?.playback?.general?.skipIntroEnabled ?? defaults.playback.general.skipIntroEnabled,
+        frameRateMatchingMode:
+          input?.playback?.general?.frameRateMatchingMode ?? defaults.playback.general.frameRateMatchingMode,
+        resolutionMatchingEnabled:
+          input?.playback?.general?.resolutionMatchingEnabled ?? defaults.playback.general.resolutionMatchingEnabled
       },
       streamSelection: {
-        ...defaults.playback.streamSelection,
-        ...(input?.playback?.streamSelection ?? {})
+        streamReuseLastLinkEnabled:
+          input?.playback?.streamSelection?.streamReuseLastLinkEnabled
+          ?? defaults.playback.streamSelection.streamReuseLastLinkEnabled,
+        streamReuseLastLinkCacheHours:
+          input?.playback?.streamSelection?.streamReuseLastLinkCacheHours
+          ?? defaults.playback.streamSelection.streamReuseLastLinkCacheHours,
+        uniformStreamFormattingEnabled:
+          input?.playback?.streamSelection?.uniformStreamFormattingEnabled
+          ?? defaults.playback.streamSelection.uniformStreamFormattingEnabled,
+        groupStreamsAcrossAddonsEnabled:
+          input?.playback?.streamSelection?.groupStreamsAcrossAddonsEnabled
+          ?? defaults.playback.streamSelection.groupStreamsAcrossAddonsEnabled,
+        deduplicateGroupedStreamsEnabled:
+          input?.playback?.streamSelection?.deduplicateGroupedStreamsEnabled
+          ?? defaults.playback.streamSelection.deduplicateGroupedStreamsEnabled,
+        filterEpisodeMismatchStreamsEnabled:
+          input?.playback?.streamSelection?.filterEpisodeMismatchStreamsEnabled
+          ?? defaults.playback.streamSelection.filterEpisodeMismatchStreamsEnabled,
+        filterMovieYearMismatchStreamsEnabled:
+          input?.playback?.streamSelection?.filterMovieYearMismatchStreamsEnabled
+          ?? defaults.playback.streamSelection.filterMovieYearMismatchStreamsEnabled,
+        streamAutoPlayMode:
+          input?.playback?.streamSelection?.streamAutoPlayMode
+          ?? defaults.playback.streamSelection.streamAutoPlayMode,
+        streamAutoPlaySource:
+          input?.playback?.streamSelection?.streamAutoPlaySource
+          ?? defaults.playback.streamSelection.streamAutoPlaySource,
+        streamAutoPlaySelectedAddons:
+          input?.playback?.streamSelection?.streamAutoPlaySelectedAddons
+          ?? defaults.playback.streamSelection.streamAutoPlaySelectedAddons,
+        streamAutoPlayRegex:
+          input?.playback?.streamSelection?.streamAutoPlayRegex
+          ?? defaults.playback.streamSelection.streamAutoPlayRegex,
+        streamAutoPlayNextEpisodeEnabled:
+          input?.playback?.streamSelection?.streamAutoPlayNextEpisodeEnabled
+          ?? defaults.playback.streamSelection.streamAutoPlayNextEpisodeEnabled,
+        streamAutoPlayPreferBingeGroupForNextEpisode:
+          input?.playback?.streamSelection?.streamAutoPlayPreferBingeGroupForNextEpisode
+          ?? defaults.playback.streamSelection.streamAutoPlayPreferBingeGroupForNextEpisode,
+        nextEpisodeThresholdMode:
+          input?.playback?.streamSelection?.nextEpisodeThresholdMode
+          ?? defaults.playback.streamSelection.nextEpisodeThresholdMode,
+        nextEpisodeThresholdPercent:
+          input?.playback?.streamSelection?.nextEpisodeThresholdPercent
+          ?? defaults.playback.streamSelection.nextEpisodeThresholdPercent,
+        nextEpisodeThresholdMinutesBeforeEnd:
+          input?.playback?.streamSelection?.nextEpisodeThresholdMinutesBeforeEnd
+          ?? defaults.playback.streamSelection.nextEpisodeThresholdMinutesBeforeEnd
       },
       audio: {
-        ...defaults.playback.audio,
-        ...(input?.playback?.audio ?? {})
+        preferredAudioLanguage:
+          input?.playback?.audio?.preferredAudioLanguage ?? defaults.playback.audio.preferredAudioLanguage,
+        secondaryPreferredAudioLanguage:
+          input?.playback?.audio?.secondaryPreferredAudioLanguage ?? defaults.playback.audio.secondaryPreferredAudioLanguage,
+        skipSilence:
+          input?.playback?.audio?.skipSilence ?? defaults.playback.audio.skipSilence,
+        decoderPriority:
+          input?.playback?.audio?.decoderPriority ?? defaults.playback.audio.decoderPriority,
+        tunnelingEnabled:
+          input?.playback?.audio?.tunnelingEnabled ?? defaults.playback.audio.tunnelingEnabled,
+        mapDV7ToHevc:
+          input?.playback?.audio?.mapDV7ToHevc ?? defaults.playback.audio.mapDV7ToHevc
       },
       subtitles: {
         ...defaults.playback.subtitles,
@@ -817,7 +884,7 @@ export function usePortalStore() {
     state.value.settings = draft as PortalSettings
   }
 
-  async function addAddon(url: string) {
+  async function addAddon(url: string, parserPreset: AddonRecord['parserPreset'] = 'GENERIC') {
     const parsed = parseAddonInstallUrl(url)
     if (parsed.secretType && !state.value.session) {
       throw new Error('Sign in before adding credentialed addons.')
@@ -829,7 +896,10 @@ export function usePortalStore() {
     state.value.addons = [
       ...state.value.addons,
       {
-        ...sanitizeAddonRecord(parsed.addon, state.value.addons.length),
+        ...sanitizeAddonRecord({
+          ...parsed.addon,
+          parserPreset
+        }, state.value.addons.length),
         sortOrder: state.value.addons.length
       }
     ]
@@ -879,6 +949,12 @@ export function usePortalStore() {
   function toggleAddon(id: string) {
     state.value.addons = state.value.addons.map((addon) =>
       addon.id === id ? { ...addon, enabled: !addon.enabled } : addon
+    )
+  }
+
+  function updateAddonParserPreset(id: string, parserPreset: AddonRecord['parserPreset']) {
+    state.value.addons = state.value.addons.map((addon) =>
+      addon.id === id ? { ...addon, parserPreset } : addon
     )
   }
 
@@ -1345,6 +1421,7 @@ export function usePortalStore() {
     removeAddon,
     moveAddon,
     toggleAddon,
+    updateAddonParserPreset,
     moveCatalog,
     reorderCatalogs,
     toggleCatalog,

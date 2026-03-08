@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
@@ -236,25 +237,34 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         }
     }
 
-    _uiState.update { state ->
-        var changed = false
-        val updatedRows = state.catalogRows.map { row ->
-            val itemIndex = row.items.indexOfFirst { it.id == itemId }
-            if (itemIndex < 0) {
-                row
-            } else {
-                val mergedItem = mergeItem(row.items[itemIndex])
-                if (mergedItem == row.items[itemIndex]) {
-                    row
-                } else {
-                    changed = true
-                    val mutableItems = row.items.toMutableList()
-                    mutableItems[itemIndex] = mergedItem
-                    row.copy(items = mutableItems)
+    viewModelScope.launch {
+        updatePersistedHomeSnapshotPipeline { snapshot ->
+            fun mergeRows(rows: List<CatalogRow>): List<CatalogRow> {
+                return rows.map { row ->
+                    val itemIndex = row.items.indexOfFirst { it.id == itemId }
+                    if (itemIndex < 0) {
+                        row
+                    } else {
+                        val mergedItem = mergeItem(row.items[itemIndex])
+                        if (mergedItem == row.items[itemIndex]) {
+                            row
+                        } else {
+                            val mutableItems = row.items.toMutableList()
+                            mutableItems[itemIndex] = mergedItem
+                            row.copy(items = mutableItems)
+                        }
+                    }
                 }
             }
+
+            snapshot.copy(
+                catalogRows = mergeRows(snapshot.catalogRows),
+                fullCatalogRows = mergeRows(snapshot.fullCatalogRows),
+                heroItems = snapshot.heroItems.map { item ->
+                    if (item.id == itemId) mergeItem(item) else item
+                }
+            )
         }
-        if (changed) state.copy(catalogRows = updatedRows) else state
     }
 
 }

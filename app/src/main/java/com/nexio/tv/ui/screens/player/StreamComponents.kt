@@ -197,12 +197,12 @@ internal fun StreamItem(
                     }
                 }
 
-                item.detailLines.forEach { detail ->
+                item.detailLines.forEachIndexed { index, detail ->
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = NexioTheme.extendedColors.textSecondary,
-                        maxLines = 2,
+                        maxLines = if (index == item.detailLines.lastIndex) 1 else 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

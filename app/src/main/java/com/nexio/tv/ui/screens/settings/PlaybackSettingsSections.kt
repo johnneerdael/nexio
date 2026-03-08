@@ -124,6 +124,7 @@ internal fun PlaybackSettingsSections(
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
+    onSetLibmpvGpuNextDolbyVisionReshapingEnabled: (Boolean) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
@@ -131,7 +132,6 @@ internal fun PlaybackSettingsSections(
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
-    onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
     onSetSubtitleVerticalOffset: (Int) -> Unit,
@@ -192,8 +192,12 @@ internal fun PlaybackSettingsSections(
         },
         libmpvVideoOutputLabel = when (playerSettings.libmpvVideoOutputMode) {
             LibmpvVideoOutputMode.AUTO -> stringResource(R.string.libmpv_video_output_auto)
-            LibmpvVideoOutputMode.GPU_NEXT -> stringResource(R.string.libmpv_video_output_gpu_next)
-            LibmpvVideoOutputMode.GPU -> stringResource(R.string.libmpv_video_output_gpu)
+            LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL ->
+                stringResource(R.string.libmpv_video_output_gpu_next_android_opengl)
+            LibmpvVideoOutputMode.GPU_NEXT_VULKAN ->
+                stringResource(R.string.libmpv_video_output_gpu_next_vulkan)
+            LibmpvVideoOutputMode.GPU_ANDROID_OPENGL ->
+                stringResource(R.string.libmpv_video_output_gpu_android_opengl)
             LibmpvVideoOutputMode.MEDIACODEC_EMBED ->
                 stringResource(R.string.libmpv_video_output_mediacodec_embed)
         }
@@ -318,6 +322,20 @@ internal fun PlaybackSettingsSections(
                         onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
                     )
                 }
+
+                item(key = "stream_libmpv_gpu_next_dv_reshaping") {
+                    ToggleSettingsItem(
+                        icon = Icons.Default.Image,
+                        title = stringResource(R.string.libmpv_gpu_next_dv_reshaping_title),
+                        subtitle = stringResource(R.string.libmpv_gpu_next_dv_reshaping_sub),
+                        isChecked = playerSettings.libmpvGpuNextDolbyVisionReshapingEnabled,
+                        onCheckedChange = onSetLibmpvGpuNextDolbyVisionReshapingEnabled,
+                        onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION },
+                        enabled = playerSettings.libmpvVideoOutputMode == LibmpvVideoOutputMode.AUTO ||
+                            playerSettings.libmpvVideoOutputMode == LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL ||
+                            playerSettings.libmpvVideoOutputMode == LibmpvVideoOutputMode.GPU_NEXT_VULKAN
+                    )
+                }
             }
 
             autoPlaySettingsItems(
@@ -362,7 +380,6 @@ internal fun PlaybackSettingsSections(
                 onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
-                onSetExperimentalDv5ToDv81Enabled = onSetExperimentalDv5ToDv81Enabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
                     onSetExperimentalDv7ToDv81PreserveMappingEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
@@ -793,14 +810,19 @@ private fun LibmpvVideoOutputDialog(
             stringResource(R.string.libmpv_video_output_auto_desc)
         ),
         Triple(
-            LibmpvVideoOutputMode.GPU_NEXT,
-            stringResource(R.string.libmpv_video_output_gpu_next),
-            stringResource(R.string.libmpv_video_output_gpu_next_desc)
+            LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL,
+            stringResource(R.string.libmpv_video_output_gpu_next_android_opengl),
+            stringResource(R.string.libmpv_video_output_gpu_next_android_opengl_desc)
         ),
         Triple(
-            LibmpvVideoOutputMode.GPU,
-            stringResource(R.string.libmpv_video_output_gpu),
-            stringResource(R.string.libmpv_video_output_gpu_desc)
+            LibmpvVideoOutputMode.GPU_NEXT_VULKAN,
+            stringResource(R.string.libmpv_video_output_gpu_next_vulkan),
+            stringResource(R.string.libmpv_video_output_gpu_next_vulkan_desc)
+        ),
+        Triple(
+            LibmpvVideoOutputMode.GPU_ANDROID_OPENGL,
+            stringResource(R.string.libmpv_video_output_gpu_android_opengl),
+            stringResource(R.string.libmpv_video_output_gpu_android_opengl_desc)
         ),
         Triple(
             LibmpvVideoOutputMode.MEDIACODEC_EMBED,

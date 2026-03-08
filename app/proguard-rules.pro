@@ -39,6 +39,15 @@
 # Keep all DTO classes used with Moshi/Retrofit
 -keep class com.nexio.tv.data.remote.dto.** { *; }
 -keep class com.nexio.tv.domain.model.** { *; }
+# Keep local snapshot payload models serialized with Gson to survive restarts/updates.
+-keep class com.nexio.tv.data.local.HomeCatalogSnapshotStore$Snapshot { *; }
+-keep class com.nexio.tv.data.repository.TraktDiscoverySnapshot { *; }
+-keep class com.nexio.tv.data.repository.TraktCustomListCatalog { *; }
+-keep class com.nexio.tv.data.repository.TraktPopularListOption { *; }
+-keep class com.nexio.tv.data.repository.TraktRecommendationRef { *; }
+-keep class com.nexio.tv.data.repository.MDBListDiscoverySnapshot { *; }
+-keep class com.nexio.tv.data.repository.MDBListCustomCatalog { *; }
+-keep class com.nexio.tv.data.repository.MDBListListOption { *; }
 
 # ── Kotlin ─────────────────────────────────────────────────────────────────────
 -keepattributes *Annotation*

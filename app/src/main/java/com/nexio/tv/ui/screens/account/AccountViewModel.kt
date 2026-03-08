@@ -459,9 +459,9 @@ class AccountViewModel @Inject constructor(
     private suspend fun pullRemoteData(): Result<Unit> {
         try {
             addonRepository.isSyncingFromRemote = true
-            val remoteAddonUrls = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
-            addonRepository.reconcileWithRemoteAddonUrls(
-                remoteUrls = remoteAddonUrls,
+            val remoteAddonConfigs = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
+            addonRepository.reconcileWithRemoteAddonConfigs(
+                remoteAddons = remoteAddonConfigs,
                 removeMissingLocal = true
             )
             accountSyncRefreshNotifier.notifyRefreshRequired()

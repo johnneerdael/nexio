@@ -923,12 +923,12 @@ private fun StreamCard(
                     )
                 }
 
-                detailLines.forEach { detail ->
+                detailLines.forEachIndexed { index, detail ->
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
                         color = NexioTheme.extendedColors.textSecondary,
-                        maxLines = 2,
+                        maxLines = if (index == detailLines.lastIndex) 1 else 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

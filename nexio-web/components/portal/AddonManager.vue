@@ -14,6 +14,12 @@
     <div class="field-shell">
       <label for="addon-url">Install addon</label>
       <input id="addon-url" v-model="addonUrl" placeholder="https://example.com/manifest.json">
+      <select v-model="parserPreset">
+        <option value="GENERIC">Generic</option>
+        <option value="STREMTHRU">StremThru</option>
+        <option value="TORRENTIO">Torrentio</option>
+        <option value="WEBSTREAMR">WebStreamr</option>
+      </select>
       <button class="secondary-btn" @click="submitAddon">Add addon</button>
     </div>
 
@@ -36,6 +42,15 @@
               {{ secretStatuses[addon.secretRef].maskedPreview || 'Secret configured' }}
             </p>
             <p v-if="addon.description">{{ addon.description }}</p>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+              <span class="badge">Parser</span>
+              <select :value="addon.parserPreset" @change="emit('update-addon-parser-preset', addon.id, (($event.target as HTMLSelectElement).value as AddonRecord['parserPreset']))">
+                <option value="GENERIC">Generic</option>
+                <option value="STREMTHRU">StremThru</option>
+                <option value="TORRENTIO">Torrentio</option>
+                <option value="WEBSTREAMR">WebStreamr</option>
+              </select>
+            </div>
           </div>
           <div style="display:flex; gap:0.45rem; flex-wrap:wrap; justify-content:flex-end;">
             <button class="ghost-btn" @click="emit('move-addon', addon.id, -1)">Up</button>
@@ -64,13 +79,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   persist: []
-  'add-addon': [url: string]
+  'add-addon': [url: string, parserPreset: AddonRecord['parserPreset']]
   'remove-addon': [id: string]
   'move-addon': [id: string, direction: -1 | 1]
   'toggle-addon': [id: string]
+  'update-addon-parser-preset': [id: string, parserPreset: AddonRecord['parserPreset']]
 }>()
 
 const addonUrl = ref('')
+const parserPreset = ref<AddonRecord['parserPreset']>('GENERIC')
 
 function addonDisplayUrl(addon: AddonRecord) {
   const params = new URLSearchParams(addon.publicQueryParams ?? {})
@@ -101,7 +118,7 @@ function addonPathLabel(addon: AddonRecord) {
 }
 
 function submitAddon() {
-  emit('add-addon', addonUrl.value)
+  emit('add-addon', addonUrl.value, parserPreset.value)
   addonUrl.value = ''
 }
 </script>

@@ -2,11 +2,13 @@ package com.nexio.tv.ui.screens.addon
 
 import android.graphics.Bitmap
 import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonParserPreset
 
 data class AddonManagerUiState(
     val isLoading: Boolean = false,
     val isInstalling: Boolean = false,
     val installUrl: String = "",
+    val installParserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
     val installedAddons: List<Addon> = emptyList(),
     val error: String? = null,
     // QR mode

@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
       p_addons: (body.addons ?? []).map((addon, index) => ({
         url: normalizeAddonUrl(addon.url),
         manifest_url: normalizeAddonManifestUrl(addon.url, addon.manifestUrl),
+        parser_preset: addon.parserPreset ?? 'GENERIC',
         name: addon.name,
         description: addon.description ?? null,
         enabled: addon.enabled,

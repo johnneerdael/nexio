@@ -3,6 +3,7 @@ package com.nexio.tv.core.sync
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.AddonPreferences
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
 import io.github.jan.supabase.postgrest.Postgrest
@@ -42,17 +43,17 @@ class AddonSyncService @Inject constructor(
      */
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val localUrls = addonPreferences.installedAddonUrls.first()
-            val parsedAddons = localUrls.mapNotNull { url ->
-                runCatching { parseAddonInstallUrl(url) }
+            val localAddons = addonPreferences.installedAddons.first()
+            val parsedAddons = localAddons.mapNotNull { addon ->
+                runCatching { parseAddonInstallUrl(addon.url) to addon.parserPreset }
                     .onFailure { error ->
-                        Log.w(TAG, "pushToRemote: dropping malformed local addon URL=$url", error)
+                        Log.w(TAG, "pushToRemote: dropping malformed local addon URL=${addon.url}", error)
                     }
                     .getOrNull()
             }
-            Log.d(TAG, "pushToRemote: localUrls count=${localUrls.size} valid=${parsedAddons.size}")
+            Log.d(TAG, "pushToRemote: localAddons count=${localAddons.size} valid=${parsedAddons.size}")
 
-            parsedAddons.forEach { parsed ->
+            parsedAddons.forEach { (parsed, _) ->
                 val secretPayload = parsed.secretPayload
                 val secretRef = parsed.secretRef
                 if (secretPayload != null && !secretRef.isNullOrBlank()) {
@@ -87,12 +88,14 @@ class AddonSyncService @Inject constructor(
             val params = buildJsonObject {
                 put("p_addons", buildJsonArray {
                     parsedAddons.forEachIndexed { index, addon ->
+                        val (parsedAddon, parserPreset) = addon
                         addJsonObject {
-                            put("url", addon.publicBaseUrl)
-                            put("manifest_url", addon.manifestUrl)
-                            put("public_query_params", Json.encodeToJsonElement(MapSerializer(String.serializer(), String.serializer()), addon.publicQueryParams))
-                            put("install_kind", addon.installKind)
-                            addon.secretRef?.let { put("secret_ref", it) }
+                            put("url", parsedAddon.publicBaseUrl)
+                            put("manifest_url", parsedAddon.manifestUrl)
+                            put("parser_preset", parserPreset.name)
+                            put("public_query_params", Json.encodeToJsonElement(MapSerializer(String.serializer(), String.serializer()), parsedAddon.publicQueryParams))
+                            put("install_kind", parsedAddon.installKind)
+                            parsedAddon.secretRef?.let { put("secret_ref", it) }
                             put("sort_order", index)
                         }
                     }
@@ -104,7 +107,7 @@ class AddonSyncService @Inject constructor(
                 postgrest.rpc("sync_push_account_addons", params).decodeList<AccountSyncMutationResult>()
             }
 
-            Log.d(TAG, "Pushed ${localUrls.size} addons to remote")
+            Log.d(TAG, "Pushed ${localAddons.size} addons to remote")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push addons to remote", e)
@@ -112,7 +115,7 @@ class AddonSyncService @Inject constructor(
         }
     }
 
-    suspend fun getRemoteAddonUrls(): Result<List<String>> = withContext(Dispatchers.IO) {
+    suspend fun getRemoteAddonConfigs(): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
             val snapshot = withJwtRefreshRetry {
                 postgrest.rpc("sync_pull_account_snapshot").decodeAs<AccountSnapshotRpcResponse>()
@@ -121,10 +124,17 @@ class AddonSyncService @Inject constructor(
             Result.success(
                 snapshot.addons
                     .sortedBy { it.sortOrder }
-                    .map { it.url }
+                    .map { addon ->
+                        AddonPreferences.AddonInstallConfig(
+                            url = addon.url,
+                            parserPreset = runCatching {
+                                enumValueOf<AddonParserPreset>(addon.parserPreset.trim().uppercase())
+                            }.getOrDefault(AddonParserPreset.GENERIC)
+                        )
+                    }
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get remote addon URLs", e)
+            Log.e(TAG, "Failed to get remote addon configs", e)
             Result.failure(e)
         }
     }

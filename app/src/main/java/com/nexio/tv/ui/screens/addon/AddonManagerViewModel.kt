@@ -11,6 +11,7 @@ import com.nexio.tv.core.server.AddonConfigServer
 import com.nexio.tv.core.server.DeviceIpAddress
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -62,8 +63,13 @@ class AddonManagerViewModel @Inject constructor(
         _uiState.update { it.copy(installUrl = url, error = null) }
     }
 
+    fun onInstallParserPresetChange(parserPreset: AddonParserPreset) {
+        _uiState.update { it.copy(installParserPreset = parserPreset, error = null) }
+    }
+
     fun installAddon() {
         val rawUrl = uiState.value.installUrl.trim()
+        val parserPreset = uiState.value.installParserPreset
         if (rawUrl.isBlank()) {
             _uiState.update { it.copy(error = "Enter a valid addon URL") }
             return
@@ -80,8 +86,14 @@ class AddonManagerViewModel @Inject constructor(
 
             when (val result = addonRepository.fetchAddon(normalizedUrl)) {
                 is NetworkResult.Success -> {
-                    addonRepository.addAddon(normalizedUrl)
-                    _uiState.update { it.copy(isInstalling = false, installUrl = "") }
+                    addonRepository.addAddon(normalizedUrl, parserPreset)
+                    _uiState.update {
+                        it.copy(
+                            isInstalling = false,
+                            installUrl = "",
+                            installParserPreset = AddonParserPreset.GENERIC
+                        )
+                    }
                 }
                 is NetworkResult.Error -> {
                     _uiState.update {
@@ -123,6 +135,12 @@ class AddonManagerViewModel @Inject constructor(
     fun removeAddon(baseUrl: String) {
         viewModelScope.launch {
             addonRepository.removeAddon(baseUrl)
+        }
+    }
+
+    fun updateAddonParserPreset(baseUrl: String, parserPreset: AddonParserPreset) {
+        viewModelScope.launch {
+            addonRepository.updateAddonParserPreset(baseUrl, parserPreset)
         }
     }
 
@@ -523,4 +541,3 @@ class AddonManagerViewModel @Inject constructor(
         val isDisabled: Boolean = false
     )
 }
-

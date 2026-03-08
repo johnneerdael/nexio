@@ -47,6 +47,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setLibmpvVideoOutputMode(mode)
     }
 
+    suspend fun setLibmpvGpuNextDolbyVisionReshapingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setLibmpvGpuNextDolbyVisionReshapingEnabled(enabled)
+    }
+
     // Audio settings
 
     suspend fun setDecoderPriority(priority: Int) {

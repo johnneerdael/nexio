@@ -13,6 +13,7 @@ import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -114,22 +115,29 @@ class AddonRepositoryImpl @Inject constructor(
     }
 
     override fun getInstalledAddons(): Flow<List<Addon>> =
-        preferences.installedAddonUrls.flatMapLatest { urls ->
+        preferences.installedAddons.flatMapLatest { addonConfigs ->
             flow {
-                val validUrls = urls.mapNotNull { url -> safeCanonicalizeUrl(url, "preferences flow") }
+                val validConfigs = addonConfigs.mapNotNull { addon ->
+                    safeCanonicalizeUrl(addon.url, "preferences flow")?.let { normalized ->
+                        addon.copy(url = normalized)
+                    }
+                }
 
                 // Emit cached addons immediately (now includes disk-persisted cache)
-                val cached = validUrls.mapNotNull { manifestCache[it] }
+                val cached = validConfigs.mapNotNull { addonConfig ->
+                    manifestCache[addonConfig.url]?.copy(parserPreset = addonConfig.parserPreset)
+                }
                 if (cached.isNotEmpty()) {
                     emit(applyDisplayNames(cached))
                 }
 
                 val fresh = coroutineScope {
-                    validUrls.map { url ->
+                    validConfigs.map { addonConfig ->
                         async {
-                            when (val result = fetchAddon(url)) {
+                            when (val result = fetchAddon(addonConfig.url, addonConfig.parserPreset)) {
                                 is NetworkResult.Success -> result.data
-                                else -> manifestCache[canonicalizeUrl(url)]
+                                else -> manifestCache[canonicalizeUrl(addonConfig.url)]
+                                    ?.copy(parserPreset = addonConfig.parserPreset)
                             }
                         }
                     }.awaitAll().filterNotNull()
@@ -143,12 +151,19 @@ class AddonRepositoryImpl @Inject constructor(
         }
 
     override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> {
+        return fetchAddon(baseUrl, AddonParserPreset.GENERIC)
+    }
+
+    private suspend fun fetchAddon(
+        baseUrl: String,
+        parserPreset: AddonParserPreset
+    ): NetworkResult<Addon> {
         val cleanBaseUrl = canonicalizeUrl(baseUrl)
         val manifestUrl = buildAddonRequestUrl(cleanBaseUrl, "manifest.json")
 
         return when (val result = safeApiCall { api.getManifest(manifestUrl) }) {
             is NetworkResult.Success -> {
-                val addon = result.data.toDomain(cleanBaseUrl)
+                val addon = result.data.toDomain(cleanBaseUrl).copy(parserPreset = parserPreset)
                 manifestCache[cleanBaseUrl] = addon
                 persistManifestCacheToDisk()
                 NetworkResult.Success(addon)
@@ -164,9 +179,9 @@ class AddonRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun addAddon(url: String) {
+    override suspend fun addAddon(url: String, parserPreset: AddonParserPreset) {
         val cleanUrl = canonicalizeUrl(url)
-        preferences.addAddon(cleanUrl)
+        preferences.addAddon(cleanUrl, parserPreset)
         triggerRemoteSync()
     }
 
@@ -182,22 +197,33 @@ class AddonRepositoryImpl @Inject constructor(
         triggerRemoteSync()
     }
 
-    suspend fun reconcileWithRemoteAddonUrls(
-        remoteUrls: List<String>,
+    override suspend fun updateAddonParserPreset(url: String, parserPreset: AddonParserPreset) {
+        val cleanUrl = canonicalizeUrl(url)
+        preferences.updateAddonParserPreset(cleanUrl, parserPreset)
+        manifestCache[cleanUrl]?.let { cached ->
+            manifestCache[cleanUrl] = cached.copy(parserPreset = parserPreset)
+            persistManifestCacheToDisk()
+        }
+        triggerRemoteSync()
+    }
+
+    suspend fun reconcileWithRemoteAddonConfigs(
+        remoteAddons: List<AddonPreferences.AddonInstallConfig>,
         removeMissingLocal: Boolean = true
     ) {
-        val normalizedRemote = remoteUrls
-            .map { canonicalizeUrl(it) }
-            .filter { it.isNotBlank() }
-            .distinctBy { normalizeUrl(it) }
-        val remoteSet = normalizedRemote.map { normalizeUrl(it) }.toSet()
+        val normalizedRemote = remoteAddons.mapNotNull { addon ->
+            safeCanonicalizeUrl(addon.url, "remote reconcile")?.let { normalized ->
+                addon.copy(url = normalized)
+            }
+        }.distinctBy { normalizeUrl(it.url) }
+        val remoteSet = normalizedRemote.map { normalizeUrl(it.url) }.toSet()
 
-        val initialLocalUrls = preferences.installedAddonUrls.first()
-        val initialLocalSet = initialLocalUrls.map { normalizeUrl(it) }.toSet()
-        val shouldRemoveMissingLocal = if (removeMissingLocal && normalizedRemote.isEmpty() && initialLocalUrls.isNotEmpty()) {
+        val initialLocalAddons = preferences.installedAddons.first()
+        val initialLocalSet = initialLocalAddons.map { normalizeUrl(it.url) }.toSet()
+        val shouldRemoveMissingLocal = if (removeMissingLocal && normalizedRemote.isEmpty() && initialLocalAddons.isNotEmpty()) {
             Log.w(
                 TAG,
-                "reconcileWithRemoteAddonUrls: remote list empty while local has ${initialLocalUrls.size} entries; preserving local addons"
+                "reconcileWithRemoteAddonConfigs: remote list empty while local has ${initialLocalAddons.size} entries; preserving local addons"
             )
             false
         } else {
@@ -205,29 +231,32 @@ class AddonRepositoryImpl @Inject constructor(
         }
 
         if (shouldRemoveMissingLocal) {
-            initialLocalUrls
-                .filter { normalizeUrl(it) !in remoteSet }
-                .forEach { removeAddon(it) }
+            initialLocalAddons
+                .filter { normalizeUrl(it.url) !in remoteSet }
+                .forEach { removeAddon(it.url) }
         }
 
         normalizedRemote
-            .filter { normalizeUrl(it) !in initialLocalSet }
-            .forEach { addAddon(it) }
+            .filter { normalizeUrl(it.url) !in initialLocalSet }
+            .forEach { addAddon(it.url, it.parserPreset) }
 
-        val currentUrls = preferences.installedAddonUrls.first()
-        val currentByNormalizedUrl = linkedMapOf<String, String>()
-        currentUrls.forEach { url ->
-            currentByNormalizedUrl.putIfAbsent(normalizeUrl(url), canonicalizeUrl(url))
+        val currentAddons = preferences.installedAddons.first()
+        val currentByNormalizedUrl = linkedMapOf<String, AddonPreferences.AddonInstallConfig>()
+        currentAddons.forEach { addon ->
+            currentByNormalizedUrl.putIfAbsent(normalizeUrl(addon.url), addon.copy(url = canonicalizeUrl(addon.url)))
         }
         val remoteOrdered = normalizedRemote
-            .mapNotNull { currentByNormalizedUrl[normalizeUrl(it)] }
-        val extras = currentUrls
-            .map { canonicalizeUrl(it) }
-            .filter { normalizeUrl(it) !in remoteSet }
+            .mapNotNull { remote ->
+                currentByNormalizedUrl[normalizeUrl(remote.url)]?.copy(parserPreset = remote.parserPreset)
+                    ?: remote
+            }
+        val extras = currentAddons
+            .map { it.copy(url = canonicalizeUrl(it.url)) }
+            .filter { normalizeUrl(it.url) !in remoteSet }
 
         val reordered = if (shouldRemoveMissingLocal) remoteOrdered else remoteOrdered + extras
-        if (reordered != currentUrls.map { canonicalizeUrl(it) }) {
-            preferences.setAddonOrder(reordered)
+        if (reordered != currentAddons.map { it.copy(url = canonicalizeUrl(it.url)) }) {
+            preferences.setAddonConfigs(reordered)
         }
     }
 

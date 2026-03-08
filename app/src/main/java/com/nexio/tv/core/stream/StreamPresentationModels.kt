@@ -1,6 +1,7 @@
 package com.nexio.tv.core.stream
 
 import androidx.compose.runtime.Immutable
+import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import java.util.Locale
 import kotlin.math.roundToLong
@@ -377,22 +378,22 @@ object StreamPresentationEngine {
         val baseTitle = parsed.title?.takeIf { it.isNotBlank() }
             ?: parsed.filename?.substringBeforeLast('.')
             ?: stream.getDisplayName()
-        val resolutionLabel = when (parsed.resolution) {
-            "2160p" -> "4K"
-            "1440p" -> "2K"
-            "1080p" -> "FHD"
-            "720p" -> "HD"
-            "576p", "480p" -> "SD"
+        val storyMarker = when {
+            parsed.seasons.isNotEmpty() && parsed.episodes.isNotEmpty() ->
+                "🎬 ${parsed.seasons.zip(parsed.episodes).joinToString(" • ") { (season, episode) ->
+                    "S${season.toString().padStart(2, '0')} - E${episode.toString().padStart(2, '0')}"
+                }}"
+            parsed.year != null -> "🎬 ${parsed.year}"
             else -> null
         }
         val cacheMarker = when (parsed.isCached) {
-            true -> " ⚡"
-            false -> " ❌"
-            null -> ""
+            true -> "⚡️"
+            false -> "❌️"
+            null -> null
         }
-        return listOfNotNull(baseTitle, resolutionLabel)
-            .joinToString(" | ")
-            .plus(cacheMarker)
+        val resolutionLabel = resolutionLabel(parsed.resolution)
+        return listOfNotNull(baseTitle, storyMarker, cacheMarker, resolutionLabel)
+            .joinToString(" ")
             .trim()
     }
 
@@ -400,16 +401,7 @@ object StreamPresentationEngine {
         if (!uniform) {
             return stream.getDisplayDescription()?.takeIf { it != stream.getDisplayName() }
         }
-
-        return parsed.serviceId?.let { service ->
-            buildString {
-                append(service)
-                if (parsed.releaseGroup != null) {
-                    append(" • ")
-                    append(parsed.releaseGroup)
-                }
-            }
-        } ?: parsed.releaseGroup
+        return null
     }
 
     private fun buildDetailLines(stream: Stream, parsed: ParsedStreamInfo, uniform: Boolean): List<String> {
@@ -419,13 +411,7 @@ object StreamPresentationEngine {
 
         val lines = mutableListOf<String>()
 
-        val introParts = mutableListOf<String>()
-        parsed.year?.let { introParts += "🎬 $it" }
-        formatSeasonEpisode(parsed)?.let { introParts += it }
-        parsed.durationMs?.takeIf { it > 0 }?.let { introParts += "⏱️ ${formatDuration(it)}" }
-        if (introParts.isNotEmpty()) {
-            lines += introParts.joinToString(" | ")
-        }
+        parsed.durationMs?.takeIf { it > 0 }?.let { lines += "⏱️ ${formatDuration(it)}" }
 
         val videoParts = mutableListOf<String>()
         parsed.quality?.let { videoParts += qualityLabel(it) }
@@ -496,7 +482,7 @@ object StreamPresentationEngine {
             "WEBRip" -> "💻 WEBRIP"
             "HDRip" -> "💿 HDRIP"
             "HC HD-Rip" -> "💽 HC HD-RIP"
-            "DVDRip" -> "💾 DVDRIP"
+            "DVDRip" -> "💾 DVD RIP"
             "HDTV" -> "📺 HDTV"
             else -> quality
         }
@@ -512,7 +498,20 @@ object StreamPresentationEngine {
     }
 
     private fun stylizeAudioTag(tag: String): String {
-        return tag
+        return when (tag) {
+            "Atmos" -> "Atmos"
+            "TrueHD" -> "TrueHD"
+            "DTS-HD MA" -> "DTS-HD MA"
+            "DTS-HD" -> "DTS-HD"
+            "DTS-ES" -> "DTS-ES"
+            "DTS" -> "DTS"
+            "DD+" -> "DD+"
+            "DD" -> "DD"
+            "FLAC" -> "FLAC"
+            "OPUS" -> "OPUS"
+            "AAC" -> "AAC"
+            else -> tag
+        }
     }
 
     private fun formatDuration(durationMs: Long): String {
@@ -556,7 +555,20 @@ object StreamPresentationEngine {
             "korean" -> "KO"
             "chinese" -> "ZH"
             "portuguese" -> "PT"
-            else -> language.uppercase(Locale.US).take(3)
+            "multi" -> "MULTI"
+            "dual audio" -> "DUAL"
+            else -> language.uppercase(Locale.US)
+        }
+    }
+
+    private fun resolutionLabel(resolution: String?): String? {
+        return when (resolution) {
+            "2160p" -> "4K"
+            "1440p" -> "2K"
+            "1080p" -> "FHD"
+            "720p" -> "HD"
+            "576p", "480p" -> "SD"
+            else -> null
         }
     }
 
@@ -682,21 +694,21 @@ private object AioStyleStreamParser {
     )
 
     private val qualityPatterns = linkedMapOf(
-        "BluRay REMUX" to tokenRegex("""(?:bd|br|uhd)?remux"""),
+        "BluRay REMUX" to tokenRegex("""(?:bd|br|b|uhd)?remux"""),
         "BluRay" to tokenRegex("""bluray|blu-ray|bdrip|brrip"""),
-        "WEB-DL" to tokenRegex("""web[ ._-]?dl"""),
+        "WEB-DL" to tokenRegex("""web[ ._-]?(dl)?(?![ ._-]?rip)"""),
         "WEBRip" to tokenRegex("""web[ ._-]?rip"""),
-        "HDRip" to tokenRegex("""hd[ ._-]?rip"""),
-        "HC HD-Rip" to tokenRegex("""hc[ ._-]?hd[ ._-]?rip"""),
+        "HDRip" to tokenRegex("""hd[ ._-]?rip|web[ ._-]?dl[ ._-]?rip"""),
+        "HC HD-Rip" to tokenRegex("""hc|hc[ ._-]?hd[ ._-]?rip"""),
         "DVDRip" to tokenRegex("""dvd[ ._-]?rip"""),
         "HDTV" to tokenRegex("""hdtv""")
     )
 
     private val visualTagPatterns = linkedMapOf(
-        "HDR10+" to tokenRegex("""hdr10\+?"""),
-        "HDR10" to tokenRegex("""hdr10"""),
-        "HDR" to tokenRegex("""hdr"""),
-        "DV" to tokenRegex("""dovi|dolby[ ._-]?vision|dv"""),
+        "HDR10+" to tokenRegex("""hdr[ ._-]?10[ ._-]?(?:plus|\+|p)"""),
+        "HDR10" to tokenRegex("""hdr[ ._-]?10(?![ ._-]?(?:plus|\+|p))"""),
+        "HDR" to tokenRegex("""hdr(?![ ._-]?10)"""),
+        "DV" to tokenRegex("""dovi|do?(?:lby)?[ ._-]?vi?(?:sion)?|dv"""),
         "IMAX" to tokenRegex("""imax""")
     )
 
@@ -708,18 +720,18 @@ private object AioStyleStreamParser {
         "DTS-ES" to tokenRegex("""dts[ ._-]?es"""),
         "DTS:X" to tokenRegex("""dts[ .:_-]?x"""),
         "DTS" to tokenRegex("""dts"""),
-        "DD+" to tokenRegex("""dd\+|eac3|dolby[ ._-]?digital[ ._-]?plus"""),
-        "DD" to tokenRegex("""dd|ac3|dolby[ ._-]?digital"""),
+        "DD+" to tokenRegex("""ddp(?:5[ ._-]?1|7[ ._-]?1|2[ ._-]?0)?|dd\+|e[ ._-]?ac[ ._-]?3|dolby[ ._-]?digital[ ._-]?plus"""),
+        "DD" to tokenRegex("""(?<!e[ ._-]?)ac[ ._-]?3|dolby[ ._-]?digital|dd(?!p|\+)"""),
         "FLAC" to tokenRegex("""flac"""),
         "OPUS" to tokenRegex("""opus"""),
         "AAC" to tokenRegex("""aac""")
     )
 
     private val audioChannelPatterns = linkedMapOf(
-        "7.1" to tokenRegex("""7[ ._-]?1(?:ch)?"""),
-        "6.1" to tokenRegex("""6[ ._-]?1(?:ch)?"""),
-        "5.1" to tokenRegex("""5[ ._-]?1(?:ch)?"""),
-        "2.0" to tokenRegex("""2[ ._-]?0(?:ch)?""")
+        "7.1" to tokenRegex("""(?:d(?:olby)?[ ._-]?d(?:igital)?[ ._-]?(?:(?:p(?:lus)?|\+)a?)?)?7[ ._-]?1(?:ch)?"""),
+        "6.1" to tokenRegex("""(?:d(?:olby)?[ ._-]?d(?:igital)?[ ._-]?(?:(?:p(?:lus)?|\+)a?)?)?6[ ._-]?1(?:ch)?"""),
+        "5.1" to tokenRegex("""(?:d(?:olby)?[ ._-]?d(?:igital)?[ ._-]?(?:(?:p(?:lus)?|\+)a?)?)?5[ ._-]?1(?:ch)?"""),
+        "2.0" to tokenRegex("""(?:d(?:olby)?[ ._-]?d(?:igital)?)?2[ ._-]?0(?:ch)?""")
     )
 
     private val encodePatterns = linkedMapOf(
@@ -729,15 +741,15 @@ private object AioStyleStreamParser {
     )
 
     private val languagePatterns = linkedMapOf(
-        "English" to tokenRegex("""(?:english|eng)(?![ ._-]?sub)"""),
+        "English" to tokenRegex("""(?:english|eng)(?![ ._-]?sub(?:title)?s?)"""),
         "Dutch" to tokenRegex("""(?:dutch|nl)(?![ ._-]?sub)"""),
         "Spanish" to tokenRegex("""(?:spanish|spa|esp)(?![ ._-]?sub)"""),
-        "French" to tokenRegex("""(?:french|fra|fre|vf|vff)(?![ ._-]?sub)"""),
+        "French" to tokenRegex("""(?:french|fra|fre|fr|vf|vff|vfi|vf2|vfq|truefrench)(?![ ._-]?sub(?:title)?s?)"""),
         "German" to tokenRegex("""(?:german|deu|ger)(?![ ._-]?sub)"""),
         "Italian" to tokenRegex("""(?:italian|ita)(?![ ._-]?sub)"""),
         "Japanese" to tokenRegex("""(?:japanese|jpn|jap)(?![ ._-]?sub)"""),
         "Multi" to tokenRegex("""multi"""),
-        "Dual Audio" to tokenRegex("""dual[ ._-]?audio""")
+        "Dual Audio" to tokenRegex("""dual[ ._-]?(?:audio|lang(?:uage)?)""")
     )
 
     private val sizeRegex = Regex("""(?i)(\d+(?:\.\d+)?)\s?(KB|MB|GB|TB)""")
@@ -745,18 +757,19 @@ private object AioStyleStreamParser {
     private val yearRegex = Regex("""\b(19|20)\d{2}\b""")
     private val seasonEpisodeRegex = Regex("""(?i)\bS(\d{1,2})(?:E(\d{1,2}))?\b""")
     private val altEpisodeRegex = Regex("""(?i)\b(\d{1,2})x(\d{1,2})\b""")
-    private val releaseGroupRegex = Regex("""-(?!\d+$|S\d+|\d+x|ep?\d+)([A-Za-z0-9][A-Za-z0-9._-]{1,})$""")
-    private val cachedSymbols = listOf("⚡", "🚀", "cached", "+")
+    private val yearTokenRegex = Regex("""^(?:19|20)\d{2}$""")
+    private val releaseGroupRegex = Regex("""-([A-Za-z0-9][A-Za-z0-9._-]*)$""", RegexOption.IGNORE_CASE)
+    private val cachedSymbols = listOf("⚡", "🚀", "cached")
     private val uncachedSymbols = listOf("⏳", "download", "uncached", "☁️")
 
     private val servicePatterns = linkedMapOf(
         "RD" to listOf("realdebrid", "real-debrid", "rd"),
         "PM" to listOf("premiumize", "pm"),
-        "AD" to listOf("alldebrid", "all-debrid", "ad"),
-        "DL" to listOf("debridlink", "debrid-link", "dl"),
-        "TB" to listOf("torbox", "tb"),
-        "ED" to listOf("easydebrid", "easy-debrid", "ed"),
-        "PK" to listOf("pikpak", "pk")
+        "AD" to listOf("alldebrid", "all-debrid"),
+        "DL" to listOf("debridlink", "debrid-link", "dlink"),
+        "TB" to listOf("torbox"),
+        "ED" to listOf("easydebrid", "easy-debrid"),
+        "PK" to listOf("pikpak")
     )
 
     fun parse(stream: Stream): ParsedStreamInfo {
@@ -771,15 +784,15 @@ private object AioStyleStreamParser {
         val visualTags = matchMany(parseSource, visualTagPatterns)
         val audioTags = matchMany(parseSource, audioTagPatterns)
         val audioChannels = matchMany(parseSource, audioChannelPatterns)
-        val languages = matchMany(parseSource, languagePatterns)
+        val languages = reorderLanguages(matchMany(parseSource, languagePatterns))
         val year = yearRegex.find(parseSource)?.value
-        val releaseGroup = filename
-            ?.substringBeforeLast('.')
+        val filenameWithoutExtension = filename?.substringBeforeLast('.', filename)
+        val releaseGroup = filenameWithoutExtension
             ?.let { releaseGroupRegex.find(it)?.groupValues?.getOrNull(1) }
-        val title = deriveTitle(filename ?: stream.title ?: stream.name)
+        val title = deriveTitle(filename ?: stream.title ?: stream.name, year)
         val seasonsEpisodes = deriveSeasonEpisode(filename ?: parseSource)
-        val serviceId = deriveServiceId(stream, parseSource)
-        val cached = deriveCached(parseSource)
+        val serviceId = deriveServiceId(stream, description, filename)
+        val cached = deriveCached(name, description)
         val sizeBytes = stream.behaviorHints?.videoSize ?: parseSizeBytes(description) ?: parseSizeBytes(name)
         val durationMs = parseDuration(description)
         val transportKind = deriveTransportKind(stream, serviceId, cached)
@@ -809,6 +822,12 @@ private object AioStyleStreamParser {
 
     private fun deriveFilename(stream: Stream, description: String): String? {
         stream.behaviorHints?.filename?.takeIf { it.isNotBlank() }?.let { return it.trim() }
+        when (stream.addonParserPreset) {
+            AddonParserPreset.STREMTHRU -> deriveStremThruFilename(description)?.let { return it }
+            AddonParserPreset.WEBSTREAMR -> deriveWebStreamrFilename(stream, description)?.let { return it }
+            AddonParserPreset.TORRENTIO,
+            AddonParserPreset.GENERIC -> Unit
+        }
         val lines = description.lines()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -828,25 +847,58 @@ private object AioStyleStreamParser {
             ?.takeIf { it.isNotBlank() }
     }
 
-    private fun deriveTitle(raw: String?): String? {
+    private fun deriveStremThruFilename(description: String): String? {
+        val lines = description.lines().map { it.trim() }.filter { it.isNotBlank() }
+        return lines.firstNotNullOfOrNull { line ->
+            when {
+                "📄" in line -> line.substringAfter("📄").trim().takeIf { it.isNotBlank() }
+                "📁" in line -> line.substringAfter("📁").trim().takeIf { it.isNotBlank() }
+                else -> null
+            }
+        }
+    }
+
+    private fun deriveWebStreamrFilename(stream: Stream, description: String): String? {
+        val firstLine = description.lines().firstOrNull()?.trim().orEmpty()
+        val base = if (firstLine.contains("🔗")) null else firstLine.takeIf { it.isNotBlank() }
+        val resolution = Regex("""(\d{3,4}p)""", RegexOption.IGNORE_CASE).find(stream.name.orEmpty())?.value
+        return listOfNotNull(base, resolution).joinToString(" ").trim().takeIf { it.isNotBlank() }
+    }
+
+    private fun deriveTitle(raw: String?, detectedYear: String?): String? {
         val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val withoutExtension = value.substringBeforeLast('.', value)
-        val truncated = withoutExtension
-            .replace(Regex("""(?i)\b(?:2160p|1440p|1080p|720p|576p|480p|bluray|blu-ray|remux|web[- ._]?dl|webrip|hdrip|hdtv|x265|h265|hevc|x264|h264|avc|av1|dovi|dolby[ ._-]?vision|hdr10\+?|hdr|atmos|truehd|dts(?:[- ._]?hd(?:[- ._]?ma)?)?|dd\+?|aac|flac|opus)\b.*$"""), "")
-            .replace('.', ' ')
-            .replace('_', ' ')
-            .replace(Regex("""\s+"""), " ")
-            .trim()
-        return truncated.takeIf { it.isNotBlank() }?.split(' ')
-            ?.joinToString(" ") { token ->
-                when {
-                    seasonEpisodeTokenRegex.matches(token) -> token.uppercase(Locale.US)
-                    seasonOnlyTokenRegex.matches(token) -> token.uppercase(Locale.US)
-                    episodeOnlyTokenRegex.matches(token) -> token.uppercase(Locale.US)
-                    else -> token.lowercase(Locale.US)
-                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }
-                }
-            }
+        val tokens = withoutExtension
+            .replace(Regex("""[\[\](){}]"""), " ")
+            .split(Regex("""[.\s_\-]+"""))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return null
+        val stopIndex = tokens.indexOfFirst { token ->
+            isTitleBoundaryToken(token, detectedYear)
+        }.let { index -> if (index == -1) tokens.size else index }
+        val titleTokens = tokens.take(stopIndex).ifEmpty { tokens.take(1) }
+        return titleTokens.joinToString(" ") { token ->
+            token.lowercase(Locale.US)
+                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }
+        }.trim().takeIf { it.isNotBlank() }
+    }
+
+    private fun isTitleBoundaryToken(token: String, detectedYear: String?): Boolean {
+        val normalized = token.trim().trim('(', ')', '[', ']', '{', '}')
+        if (normalized.isBlank()) return false
+        if (seasonEpisodeTokenRegex.matches(normalized)) return true
+        if (seasonOnlyTokenRegex.matches(normalized)) return true
+        if (episodeOnlyTokenRegex.matches(normalized)) return true
+        if (yearTokenRegex.matches(normalized) && (detectedYear == null || normalized == detectedYear)) return true
+        val text = " $normalized "
+        return resolutionPatterns.values.any { it.containsMatchIn(text) } ||
+            qualityPatterns.values.any { it.containsMatchIn(text) } ||
+            encodePatterns.values.any { it.containsMatchIn(text) } ||
+            visualTagPatterns.values.any { it.containsMatchIn(text) } ||
+            audioTagPatterns.values.any { it.containsMatchIn(text) } ||
+            audioChannelPatterns.values.any { it.containsMatchIn(text) } ||
+            languagePatterns.values.any { it.containsMatchIn(text) }
     }
 
     private fun deriveSeasonEpisode(text: String): Pair<List<Int>, List<Int>> {
@@ -863,12 +915,23 @@ private object AioStyleStreamParser {
         return emptyList<Int>() to emptyList()
     }
 
-    private fun deriveServiceId(stream: Stream, parseSource: String): String? {
-        val lowered = buildString {
-            append(parseSource)
-            append(' ')
-            append(stream.addonName)
-        }.lowercase(Locale.US)
+    private fun deriveServiceId(stream: Stream, description: String, filename: String?): String? {
+        val descriptionSignals = description.lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filterNot { line ->
+                val normalizedLine = line.substringAfter("📄 ", line).substringAfter("📁 ", line).trim()
+                filename?.equals(normalizedLine, ignoreCase = true) == true ||
+                    normalizedLine.endsWith(".mkv", ignoreCase = true) ||
+                    normalizedLine.endsWith(".mp4", ignoreCase = true) ||
+                    normalizedLine.endsWith(".avi", ignoreCase = true)
+            }
+            .joinToString(" ")
+        val lowered = listOfNotNull(
+            stream.name?.takeIf { it.isNotBlank() },
+            descriptionSignals.takeIf { it.isNotBlank() },
+            stream.addonName.takeIf { it.isNotBlank() }
+        ).joinToString(" ").lowercase(Locale.US)
         return servicePatterns.entries.firstOrNull { (_, aliases) ->
             aliases.any { alias ->
                 aliasRegex(alias).containsMatchIn(lowered)
@@ -876,8 +939,8 @@ private object AioStyleStreamParser {
         }?.key
     }
 
-    private fun deriveCached(parseSource: String): Boolean? {
-        val lowered = parseSource.lowercase(Locale.US)
+    private fun deriveCached(name: String, description: String): Boolean? {
+        val lowered = listOf(name, description).joinToString(" ").lowercase(Locale.US)
         return when {
             uncachedSymbols.any { lowered.contains(it.lowercase(Locale.US)) } -> false
             cachedSymbols.any { lowered.contains(it.lowercase(Locale.US)) } -> true
@@ -932,6 +995,21 @@ private object AioStyleStreamParser {
         return patterns.entries
             .filter { (_, regex) -> regex.containsMatchIn(text) }
             .map { it.key }
+    }
+
+    private fun reorderLanguages(languages: List<String>): List<String> {
+        if (languages.isEmpty()) return languages
+        return languages
+            .distinct()
+            .sortedWith(
+                compareBy<String> { language ->
+                    when (language) {
+                        "Multi" -> 0
+                        "Dual Audio" -> 1
+                        else -> 2
+                    }
+                }.thenBy { it }
+            )
     }
 }
 

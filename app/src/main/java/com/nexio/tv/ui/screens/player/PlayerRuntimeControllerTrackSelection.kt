@@ -43,8 +43,14 @@ internal fun PlayerRuntimeController.showSeekOverlayTemporarily() {
 
 internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
     if (usesLibmpvBackend()) {
-        mpvSession?.selectAudioTrack(trackIndex)
-        persistRememberedLinkAudioSelection(trackIndex)
+        val wasPlaying = isPlaybackCurrentlyPlaying()
+        val track = _uiState.value.audioTracks.getOrNull(trackIndex)
+        val trackId = track?.trackId?.toIntOrNull()
+        val changed = trackId != null && mpvView?.selectAudioTrackById(trackId) == true
+        if (changed) {
+            persistRememberedLinkAudioSelection(trackIndex)
+            keepMpvPlayingIfNeeded(wasPlaying)
+        }
         return
     }
     _exoPlayer?.let { player ->
@@ -153,12 +159,17 @@ internal fun PlayerRuntimeController.applyAddonSubtitleOverrideByLanguage(
 
 internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
     if (usesLibmpvBackend()) {
-        mpvSession?.selectSubtitleTrack(trackIndex)
-        _uiState.update {
-            it.copy(
-                selectedSubtitleTrackIndex = trackIndex,
-                selectedAddonSubtitle = null
-            )
+        Log.d(PlayerRuntimeController.TAG, "Selecting INTERNAL subtitle trackIndex=$trackIndex (mpv)")
+        val shouldKeepPlaying = !userPausedManually && !_uiState.value.playbackEnded
+        val track = _uiState.value.subtitleTracks.getOrNull(trackIndex)
+        val trackId = track?.trackId?.toIntOrNull()
+        val changed = trackId != null && mpvView?.selectSubtitleTrackById(trackId) == true
+        if (changed) {
+            pendingAddonSubtitleLanguage = null
+            pendingAddonSubtitleTrackId = null
+            pendingAudioSelectionAfterSubtitleRefresh = null
+            updateMpvAvailableTracks()
+            keepMpvPlayingIfNeeded(shouldKeepPlaying)
         }
         return
     }
@@ -190,12 +201,17 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 
 internal fun PlayerRuntimeController.disableSubtitles() {
     if (usesLibmpvBackend()) {
-        mpvSession?.disableSubtitles()
-        _uiState.update {
-            it.copy(
-                selectedSubtitleTrackIndex = -1,
-                selectedAddonSubtitle = null
-            )
+        if (mpvView?.disableSubtitles() == true) {
+            pendingAddonSubtitleLanguage = null
+            pendingAddonSubtitleTrackId = null
+            pendingAudioSelectionAfterSubtitleRefresh = null
+            _uiState.update {
+                it.copy(
+                    selectedSubtitleTrackIndex = -1,
+                    selectedAddonSubtitle = null
+                )
+            }
+            updateMpvAvailableTracks()
         }
         return
     }
@@ -236,8 +252,21 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
     selectedSubtitle: Subtitle = subtitle
 ) {
     if (usesLibmpvBackend()) {
+        val currentlySelected = _uiState.value.selectedAddonSubtitle
+        if (currentlySelected?.id == subtitle.id && currentlySelected.url == subtitle.url) {
+            return
+        }
         Log.d(PlayerRuntimeController.TAG, "Selecting ADDON subtitle via LIBMPV lang=${subtitle.lang} id=${subtitle.id}")
-        mpvSession?.selectAddonSubtitle(subtitle)
+        val wasPlaying = isPlaybackCurrentlyPlaying()
+        val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+        val trackTitle = buildAddonSubtitleTrackId(subtitle)
+        val added = mpvView?.addAndSelectExternalSubtitle(
+            url = subtitle.url,
+            title = trackTitle,
+            language = normalizedLang
+        ) == true
+        if (!added) return
+
         pendingAddonSubtitleLanguage = null
         pendingAddonSubtitleTrackId = null
         pendingAudioSelectionAfterSubtitleRefresh = null
@@ -247,6 +276,8 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
                 selectedSubtitleTrackIndex = -1
             )
         }
+        updateMpvAvailableTracks()
+        keepMpvPlayingIfNeeded(wasPlaying)
         return
     }
     _exoPlayer?.let { player ->

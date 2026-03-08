@@ -135,6 +135,7 @@ object AudioLanguageOption {
 data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
     val libmpvVideoOutputMode: LibmpvVideoOutputMode = LibmpvVideoOutputMode.AUTO,
+    val libmpvGpuNextDolbyVisionReshapingEnabled: Boolean = false,
     val useLibass: Boolean = false,
     val libassRenderType: LibassRenderType = LibassRenderType.OVERLAY_OPEN_GL,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
@@ -153,7 +154,7 @@ data class PlayerSettings(
     // Force Dolby Vision streams to HEVC/HDR10 fallback (uses Media3 codec remap path)
     val mapDV7ToHevc: Boolean = false,
     // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
-    val experimentalDv7ToDv81Enabled: Boolean = false,
+    val experimentalDv7ToDv81Enabled: Boolean = true,
     // Experimental: enable Fire OS audio-path quirks (DTS core fallback, capability routing, etc).
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
@@ -254,9 +255,27 @@ enum class PlayerPreference {
 
 enum class LibmpvVideoOutputMode {
     AUTO,
-    GPU_NEXT,
-    GPU,
-    MEDIACODEC_EMBED
+    GPU_NEXT_ANDROID_OPENGL,
+    GPU_NEXT_VULKAN,
+    GPU_ANDROID_OPENGL,
+    MEDIACODEC_EMBED;
+
+    companion object {
+        fun fromStoredValue(rawValue: String?): LibmpvVideoOutputMode {
+            return when (rawValue?.trim()?.uppercase()) {
+                null,
+                "",
+                "AUTO" -> AUTO
+                "GPU_NEXT",
+                "GPU_NEXT_VULKAN" -> GPU_NEXT_VULKAN
+                "GPU",
+                "GPU_ANDROID_OPENGL" -> GPU_ANDROID_OPENGL
+                "GPU_NEXT_ANDROID_OPENGL" -> GPU_NEXT_ANDROID_OPENGL
+                "MEDIACODEC_EMBED" -> MEDIACODEC_EMBED
+                else -> AUTO
+            }
+        }
+    }
 }
 
 /**
@@ -283,6 +302,8 @@ class PlayerSettingsDataStore @Inject constructor(
     // Player preference key
     private val playerPreferenceKey = stringPreferencesKey("player_preference")
     private val libmpvVideoOutputModeKey = stringPreferencesKey("libmpv_video_output_mode")
+    private val libmpvGpuNextDolbyVisionReshapingEnabledKey =
+        booleanPreferencesKey("libmpv_gpu_next_dolby_vision_reshaping_enabled")
 
     // Libass settings keys
     private val useLibassKey = booleanPreferencesKey("use_libass")
@@ -519,9 +540,11 @@ class PlayerSettingsDataStore @Inject constructor(
                 playerPreference = prefs[playerPreferenceKey]?.let {
                     runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
                 } ?: PlayerPreference.INTERNAL,
-                libmpvVideoOutputMode = prefs[libmpvVideoOutputModeKey]?.let {
-                    runCatching { LibmpvVideoOutputMode.valueOf(it) }.getOrDefault(LibmpvVideoOutputMode.AUTO)
-                } ?: LibmpvVideoOutputMode.AUTO,
+                libmpvVideoOutputMode = LibmpvVideoOutputMode.fromStoredValue(
+                    prefs[libmpvVideoOutputModeKey]
+                ),
+                libmpvGpuNextDolbyVisionReshapingEnabled =
+                    prefs[libmpvGpuNextDolbyVisionReshapingEnabledKey] ?: false,
                 useLibass = prefs[useLibassKey] ?: false,
                 libassRenderType = prefs[libassRenderTypeKey]?.let {
                     try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
@@ -541,7 +564,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
                 mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
-                experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: false,
+                experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: true,
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
                 experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
@@ -666,6 +689,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setLibmpvVideoOutputMode(mode: LibmpvVideoOutputMode) {
         store().edit { prefs ->
             prefs[libmpvVideoOutputModeKey] = mode.name
+        }
+    }
+
+    suspend fun setLibmpvGpuNextDolbyVisionReshapingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[libmpvGpuNextDolbyVisionReshapingEnabledKey] = enabled
         }
     }
 

@@ -64,7 +64,6 @@ internal fun LazyListScope.videoSettingsItems(
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
-    onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
@@ -134,18 +133,6 @@ internal fun LazyListScope.videoSettingsItems(
             subtitle = stringResource(R.string.audio_dv_experimental_preserve_mapping_sub),
             isChecked = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
             onCheckedChange = onSetExperimentalDv7ToDv81PreserveMappingEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
-        )
-    }
-
-    item(key = "audio_dv5_dovi_experimental") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv5_compatibility_title),
-            subtitle = stringResource(R.string.audio_dv5_compatibility_sub),
-            isChecked = playerSettings.experimentalDv5ToDv81Enabled,
-            onCheckedChange = onSetExperimentalDv5ToDv81Enabled,
             onFocused = onItemFocused,
             enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
         )

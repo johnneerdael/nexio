@@ -131,6 +131,12 @@ class HomeViewModel @Inject constructor(
     internal var traktDiscoveryRefreshInProgress: Boolean = false
     @Volatile
     internal var mdbListDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
+    internal var installedAddonsObserved: Boolean = false
+    @Volatile
+    internal var traktDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var mdbListDiscoveryObserved: Boolean = false
 
     init {
         restorePersistedCatalogSnapshot()

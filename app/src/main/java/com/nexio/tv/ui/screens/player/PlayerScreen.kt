@@ -64,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -576,38 +577,23 @@ fun PlayerScreen(
         // Video Player
         if (viewModel.usesLibmpvBackend) {
             val subtitleStyle = uiState.subtitleStyle
-            val useAiOverlay = uiState.useBuiltInAiSubtitleOverlay
-            val translatedBuiltInCues = uiState.translatedBuiltInCues
             AndroidView(
                 factory = { context ->
-                    NexioMpvSurfaceView(context).apply {
-                        bindSession(viewModel.mpvSession)
+                    NexioMpvSurfaceView(context).also { view ->
+                        viewModel.attachMpvView(view)
                     }
                 },
                 update = { mpvView ->
-                    mpvView.bindSession(viewModel.mpvSession)
-                    mpvView.setResizeMode(uiState.resizeMode)
-                    mpvView.setVideoSize(mpvRenderState.videoWidth, mpvRenderState.videoHeight)
+                    viewModel.attachMpvView(mpvView)
+                    mpvView.applySubtitleStyle(subtitleStyle)
                 },
                 modifier = Modifier.fillMaxSize()
             )
-            AndroidView(
-                factory = { context ->
-                    createBuiltInAiSubtitleOverlay(context).apply {
-                        visibility = View.GONE
-                    }
-                },
-                update = { subtitleOverlay ->
-                    applySubtitleStyle(subtitleOverlay, subtitleStyle)
-                    val overlayHasTranslatedCues = useAiOverlay && translatedBuiltInCues.isNotEmpty()
-                    subtitleOverlay.visibility = if (overlayHasTranslatedCues) View.VISIBLE else View.GONE
-                    subtitleOverlay.setCues(
-                        if (overlayHasTranslatedCues) translatedBuiltInCues else emptyList<Cue>()
-                    )
-                    viewModel.setLibmpvSubtitleVisibility(!overlayHasTranslatedCues)
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+            DisposableEffect(Unit) {
+                onDispose {
+                    viewModel.attachMpvView(null)
+                }
+            }
         } else viewModel.exoPlayer?.let { player ->
             val subtitleStyle = uiState.subtitleStyle
             val resizeMode = uiState.resizeMode

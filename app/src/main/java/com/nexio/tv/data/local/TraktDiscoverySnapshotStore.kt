@@ -41,7 +41,20 @@ class TraktDiscoverySnapshotStore @Inject constructor(
     fun write(snapshot: TraktDiscoverySnapshot) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(snapshot)).apply()
+            val payload = JsonObject().apply {
+                add("calendarItems", gson.toJsonTree(snapshot.calendarItems))
+                add("recommendationMovieItems", gson.toJsonTree(snapshot.recommendationMovieItems))
+                add("recommendationShowItems", gson.toJsonTree(snapshot.recommendationShowItems))
+                add("trendingMovieItems", gson.toJsonTree(snapshot.trendingMovieItems))
+                add("trendingShowItems", gson.toJsonTree(snapshot.trendingShowItems))
+                add("popularMovieItems", gson.toJsonTree(snapshot.popularMovieItems))
+                add("popularShowItems", gson.toJsonTree(snapshot.popularShowItems))
+                add("customListCatalogs", gson.toJsonTree(snapshot.customListCatalogs))
+                add("popularLists", gson.toJsonTree(snapshot.popularLists))
+                add("recommendationRefsByStatusKey", gson.toJsonTree(snapshot.recommendationRefsByStatusKey))
+                addProperty("updatedAtMs", snapshot.updatedAtMs)
+            }
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist Trakt discovery snapshot", error)
         }
@@ -58,7 +71,7 @@ class TraktDiscoverySnapshotStore @Inject constructor(
 
     private fun decode(raw: String): TraktDiscoverySnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
-        return TraktDiscoverySnapshot(
+        val canonical = TraktDiscoverySnapshot(
             calendarItems = decodeArray(root, "calendarItems"),
             recommendationMovieItems = decodeArray(root, "recommendationMovieItems"),
             recommendationShowItems = decodeArray(root, "recommendationShowItems"),
@@ -71,6 +84,25 @@ class TraktDiscoverySnapshotStore @Inject constructor(
             recommendationRefsByStatusKey = decodeMap(root, "recommendationRefsByStatusKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
+        if (canonical.updatedAtMs > 0L ||
+            canonical.calendarItems.isNotEmpty() ||
+            canonical.recommendationMovieItems.isNotEmpty() ||
+            canonical.recommendationShowItems.isNotEmpty() ||
+            canonical.trendingMovieItems.isNotEmpty() ||
+            canonical.trendingShowItems.isNotEmpty() ||
+            canonical.popularMovieItems.isNotEmpty() ||
+            canonical.popularShowItems.isNotEmpty() ||
+            canonical.customListCatalogs.isNotEmpty() ||
+            canonical.popularLists.isNotEmpty() ||
+            canonical.recommendationRefsByStatusKey.isNotEmpty()
+        ) {
+            return canonical
+        }
+
+        // Legacy payloads were stored via direct Gson reflection and may use obfuscated field names.
+        return runCatching {
+            gson.fromJson(raw, TraktDiscoverySnapshot::class.java)
+        }.getOrNull()
     }
 
     private inline fun <reified T> decodeArray(root: JsonObject, key: String): List<T> {

@@ -13,6 +13,7 @@ type SnapshotRpcPayload = {
     id?: string
     url?: string
     manifest_url?: string | null
+    parser_preset?: 'GENERIC' | 'STREMTHRU' | 'TORRENTIO' | 'WEBSTREAMR' | null
     name?: string | null
     description?: string | null
     enabled?: boolean | null
@@ -56,6 +57,7 @@ function toAddonRecords(addons: SnapshotRpcPayload['addons']): AddonRecord[] {
       id: addon.id ?? crypto.randomUUID(),
       url: normalizedUrl,
       manifestUrl,
+      parserPreset: addon.parser_preset ?? 'GENERIC',
       name: addon.name ?? addon.url ?? 'Addon',
       enabled: addon.enabled ?? true,
       description: addon.description ?? undefined,
