@@ -49,12 +49,19 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AudioLanguageOption
+import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
 internal fun LazyListScope.videoSettingsItems(
     playerSettings: PlayerSettings,
+    frameRateMatchingLabel: String,
+    afrExpanded: Boolean,
+    onToggleAfrExpanded: () -> Unit,
+    afrHeaderFocusRequester: FocusRequester,
+    onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
+    onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDv5ToDv81Enabled: (Boolean) -> Unit,
@@ -69,6 +76,31 @@ internal fun LazyListScope.videoSettingsItems(
             color = NexioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
         )
+    }
+
+    item(key = "video_afr_header") {
+        PlaybackSectionHeader(
+            title = stringResource(R.string.playback_auto_frame_rate),
+            description = frameRateMatchingLabel,
+            expanded = afrExpanded,
+            onToggle = onToggleAfrExpanded,
+            focusRequester = afrHeaderFocusRequester,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    if (afrExpanded) {
+        item(key = "video_afr_options") {
+            FrameRateMatchingModeOptions(
+                selectedMode = playerSettings.frameRateMatchingMode,
+                resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
+                onSelect = onSetFrameRateMatchingMode,
+                onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
+                onFocused = onItemFocused,
+                enabled = enabled
+            )
+        }
     }
 
     item(key = "audio_tunneled_playback") {
@@ -126,6 +158,7 @@ internal fun LazyListScope.audioSettingsItems(
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
+    onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
@@ -190,6 +223,18 @@ internal fun LazyListScope.audioSettingsItems(
             subtitle = stringResource(R.string.audio_skip_silence_sub),
             isChecked = playerSettings.skipSilence,
             onCheckedChange = onSetSkipSilence,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_libmpv_passthrough") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_libmpv_passthrough_title),
+            subtitle = stringResource(R.string.audio_libmpv_passthrough_sub),
+            isChecked = playerSettings.libmpvAudioPassthroughEnabled,
+            onCheckedChange = onSetLibmpvAudioPassthroughEnabled,
             onFocused = onItemFocused,
             enabled = enabled
         )

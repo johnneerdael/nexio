@@ -3,7 +3,8 @@ export type PortalFont = 'INTER' | 'DM_SANS' | 'OPEN_SANS'
 export type PortalLocale = 'system' | 'en' | 'es' | 'fr' | 'de' | 'nl' | 'zh-CN'
 export type LayoutMode = 'MODERN' | 'GRID' | 'CLASSIC'
 export type FrameRateMode = 'OFF' | 'START' | 'START_STOP'
-export type PlayerPreference = 'INTERNAL' | 'EXTERNAL' | 'ASK_EVERY_TIME'
+export type PlayerPreference = 'INTERNAL' | 'LIBMPV' | 'EXTERNAL' | 'ASK_EVERY_TIME'
+export type LibmpvVideoOutputMode = 'AUTO' | 'GPU_NEXT' | 'GPU' | 'MEDIACODEC_EMBED'
 export type StreamAutoPlayMode = 'MANUAL' | 'FIRST_STREAM' | 'REGEX_MATCH'
 export type StreamAutoPlaySource = 'ALL_SOURCES' | 'INSTALLED_ADDONS_ONLY'
 export type ThresholdMode = 'PERCENTAGE' | 'MINUTES_BEFORE_END'
@@ -211,6 +212,7 @@ export type PortalSettings = {
       pauseOverlayEnabled: boolean
       osdClockEnabled: boolean
       skipIntroEnabled: boolean
+      libmpvVideoOutputMode: LibmpvVideoOutputMode
       frameRateMatchingMode: FrameRateMode
       resolutionMatchingEnabled: boolean
     }
@@ -238,8 +240,14 @@ export type PortalSettings = {
       preferredAudioLanguage: string
       secondaryPreferredAudioLanguage: string | null
       skipSilence: boolean
+      libmpvAudioPassthroughEnabled: boolean
       decoderPriority: number
       tunnelingEnabled: boolean
+      mapDV7ToHevc?: boolean
+      experimentalDv7ToDv81Enabled?: boolean
+      experimentalDtsIecPassthroughEnabled?: boolean
+      experimentalDv7ToDv81PreserveMappingEnabled?: boolean
+      experimentalDv5ToDv81Enabled?: boolean
     }
     subtitles: {
       preferredLanguage: string

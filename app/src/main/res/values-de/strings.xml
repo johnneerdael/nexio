@@ -20,6 +20,8 @@
   <string name="playback_osd_clock">OSD-Uhr</string>
   <string name="sub_startup_mode_all">Alle Untertitel</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - Experimentelle Audio-Kompatibilitaet</string>
+  <string name="audio_libmpv_passthrough_title">libmpv-Audio-Passthrough</string>
+  <string name="audio_libmpv_passthrough_sub">Erlaubt libmpv, AC-3, E-AC-3, DTS, DTS-HD und TrueHD direkt weiterzugeben, wenn das Geraet dies unterstuetzt</string>
   <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Mapping erhalten</string>
   <string name="settings_rounded_ui">Abgerundete Benutzeroberflaeche</string>
   <string name="settings_catalogs">Kataloge</string>
@@ -137,4 +139,16 @@
   <string name="streams_filter_wrong_episodes_sub">Blende episodische Streams aus, deren erkannte Staffel- oder Episodenangaben nicht zur angeforderten Episode passen.</string>
   <string name="streams_filter_wrong_movie_year_title">Falsches Filmjahr filtern</string>
   <string name="streams_filter_wrong_movie_year_sub">Blende filmartige Streams aus, deren erkanntes Jahr nicht zum angeforderten Titeljahr passt.</string>
+  <string name="playback_player_libmpv">libmpv</string>
+  <string name="playback_player_libmpv_desc">Das libmpv-Wiedergabe-Backend mit derselben Nexio-Oberfläche verwenden</string>
+  <string name="libmpv_video_output_title">libmpv-Videoausgabe</string>
+  <string name="libmpv_video_output_auto">Automatisch</string>
+  <string name="libmpv_video_output_auto_desc">Versucht zuerst gpu-next, dann gpu und danach mediacodec_embed, falls die GPU-Renderer fehlschlagen.</string>
+  <string name="libmpv_video_output_gpu_next">gpu-next</string>
+  <string name="libmpv_video_output_gpu_next_desc">Bevorzugter Vulkan-Renderer mit voller Overlay- und Untertitelunterstützung auf geeigneten Geräten.</string>
+  <string name="libmpv_video_output_gpu">gpu</string>
+  <string name="libmpv_video_output_gpu_desc">OpenGL-Fallback mit voller Overlay- und Untertitelunterstützung.</string>
+  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
+  <string name="libmpv_video_output_mediacodec_embed_desc">Direkte Android-Surface-Ausgabe mit Fokus auf Kompatibilität und HDR-Signalisierung, aber mit weniger mpv-Renderer-Funktionen.</string>
+  <string name="stream_player_libmpv">libmpv</string>
 </resources>

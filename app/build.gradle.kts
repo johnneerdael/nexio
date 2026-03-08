@@ -171,8 +171,11 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Keep local jniLibs disabled; use dependency-provided native libs only.
-            jniLibs.srcDirs("src/main/_jni_disabled")
+            // Keep local jniLibs disabled by default, but package libmpv natives from third_party when present.
+            jniLibs.srcDirs(
+                "src/main/_jni_disabled",
+                "../third_party/libmpv/jniLibs"
+            )
         }
     }
 

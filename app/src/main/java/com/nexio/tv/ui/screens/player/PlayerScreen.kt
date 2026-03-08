@@ -109,6 +109,7 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.core.mpv.NexioMpvSurfaceView
 import com.nexio.tv.core.player.ExternalPlayerLauncher
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
@@ -188,6 +189,20 @@ private fun PlayerView.ensureBuiltInAiSubtitleOverlay(): SubtitleView? {
     }
 }
 
+private fun createBuiltInAiSubtitleOverlay(context: android.content.Context): SubtitleView {
+    return SubtitleView(context).apply {
+        tag = BUILT_IN_AI_SUBTITLE_OVERLAY_TAG
+        visibility = View.GONE
+        isClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
+    }
+}
+
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
@@ -196,6 +211,7 @@ fun PlayerScreen(
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val mpvRenderState by viewModel.mpvRenderState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val containerFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -269,7 +285,7 @@ fun PlayerScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
-                    viewModel.exoPlayer?.pause()
+                    viewModel.pausePlaybackForLifecycle()
                 }
                 Lifecycle.Event.ON_RESUME -> {
                     // Don't auto-resume, let user control
@@ -558,7 +574,41 @@ fun PlayerScreen(
             }
     ) {
         // Video Player
-        viewModel.exoPlayer?.let { player ->
+        if (viewModel.usesLibmpvBackend) {
+            val subtitleStyle = uiState.subtitleStyle
+            val useAiOverlay = uiState.useBuiltInAiSubtitleOverlay
+            val translatedBuiltInCues = uiState.translatedBuiltInCues
+            AndroidView(
+                factory = { context ->
+                    NexioMpvSurfaceView(context).apply {
+                        bindSession(viewModel.mpvSession)
+                    }
+                },
+                update = { mpvView ->
+                    mpvView.bindSession(viewModel.mpvSession)
+                    mpvView.setResizeMode(uiState.resizeMode)
+                    mpvView.setVideoSize(mpvRenderState.videoWidth, mpvRenderState.videoHeight)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+            AndroidView(
+                factory = { context ->
+                    createBuiltInAiSubtitleOverlay(context).apply {
+                        visibility = View.GONE
+                    }
+                },
+                update = { subtitleOverlay ->
+                    applySubtitleStyle(subtitleOverlay, subtitleStyle)
+                    val overlayHasTranslatedCues = useAiOverlay && translatedBuiltInCues.isNotEmpty()
+                    subtitleOverlay.visibility = if (overlayHasTranslatedCues) View.VISIBLE else View.GONE
+                    subtitleOverlay.setCues(
+                        if (overlayHasTranslatedCues) translatedBuiltInCues else emptyList<Cue>()
+                    )
+                    viewModel.setLibmpvSubtitleVisibility(!overlayHasTranslatedCues)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else viewModel.exoPlayer?.let { player ->
             val subtitleStyle = uiState.subtitleStyle
             val resizeMode = uiState.resizeMode
             val useAiOverlay = uiState.useBuiltInAiSubtitleOverlay

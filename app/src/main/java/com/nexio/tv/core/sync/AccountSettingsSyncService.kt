@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerPreference
@@ -327,6 +328,7 @@ class AccountSettingsSyncService @Inject constructor(
                     pauseOverlayEnabled = player.pauseOverlayEnabled,
                     osdClockEnabled = player.osdClockEnabled,
                     skipIntroEnabled = player.skipIntroEnabled,
+                    libmpvVideoOutputMode = player.libmpvVideoOutputMode.name,
                     frameRateMatchingMode = player.frameRateMatchingMode.name,
                     resolutionMatchingEnabled = player.resolutionMatchingEnabled
                 ),
@@ -354,6 +356,7 @@ class AccountSettingsSyncService @Inject constructor(
                     preferredAudioLanguage = player.preferredAudioLanguage,
                     secondaryPreferredAudioLanguage = player.secondaryPreferredAudioLanguage,
                     skipSilence = player.skipSilence,
+                    libmpvAudioPassthroughEnabled = player.libmpvAudioPassthroughEnabled,
                     decoderPriority = player.decoderPriority,
                     tunnelingEnabled = player.tunnelingEnabled
                 ),
@@ -466,6 +469,12 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setPauseOverlayEnabled(settings.playback.general.pauseOverlayEnabled)
         playerSettingsDataStore.setOsdClockEnabled(settings.playback.general.osdClockEnabled)
         playerSettingsDataStore.setSkipIntroEnabled(settings.playback.general.skipIntroEnabled)
+        playerSettingsDataStore.setLibmpvVideoOutputMode(
+            enumValueOrDefault(
+                settings.playback.general.libmpvVideoOutputMode,
+                LibmpvVideoOutputMode.AUTO
+            )
+        )
         playerSettingsDataStore.setFrameRateMatchingMode(enumValueOrDefault(settings.playback.general.frameRateMatchingMode, FrameRateMatchingMode.OFF))
         playerSettingsDataStore.setResolutionMatchingEnabled(settings.playback.general.resolutionMatchingEnabled)
         playerSettingsDataStore.setPlayerPreference(enumValueOrDefault(settings.playback.streamSelection.playerPreference, PlayerPreference.INTERNAL))
@@ -489,6 +498,7 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setPreferredAudioLanguage(settings.playback.audio.preferredAudioLanguage)
         playerSettingsDataStore.setSecondaryPreferredAudioLanguage(settings.playback.audio.secondaryPreferredAudioLanguage)
         playerSettingsDataStore.setSkipSilence(settings.playback.audio.skipSilence)
+        playerSettingsDataStore.setLibmpvAudioPassthroughEnabled(settings.playback.audio.libmpvAudioPassthroughEnabled)
         playerSettingsDataStore.setDecoderPriority(settings.playback.audio.decoderPriority)
         playerSettingsDataStore.setTunnelingEnabled(settings.playback.audio.tunnelingEnabled)
         playerSettingsDataStore.setSubtitlePreferredLanguage(settings.playback.subtitles.preferredLanguage)

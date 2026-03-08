@@ -30,11 +30,20 @@ internal fun PlayerRuntimeController.releasePlayer() {
     hideSubtitleDelayOverlayJob?.cancel()
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
+    mpvStateCollectionJob?.cancel()
+    mpvStateCollectionJob = null
+    mpvSubtitleCueCollectionJob?.cancel()
+    mpvSubtitleCueCollectionJob = null
+    observedMpvSession = null
+    builtInAiSubtitleTranslationJob?.cancel()
+    builtInAiSubtitleTranslationJob = null
+    mpvSession?.requestRelease()
     _exoPlayer?.release()
     _exoPlayer = null
 }
 
 internal fun PlayerRuntimeController.notifyAudioSessionUpdate(active: Boolean) {
+    if (usesLibmpvBackend()) return
     _exoPlayer?.let { player ->
         try {
             val intent = Intent(

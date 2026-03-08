@@ -324,9 +324,15 @@ internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode:
             
             if (saved.isInProgress()) {
                 pendingResumeProgress = saved
-                _exoPlayer?.let { player ->
-                    if (player.playbackState == Player.STATE_READY) {
-                        tryApplyPendingResumeProgress(player)
+                if (backendIsReady()) {
+                    if (usesLibmpvBackend()) {
+                        tryApplyPendingResumeProgressForCurrentBackend()
+                    } else {
+                        _exoPlayer?.let { player ->
+                            if (player.playbackState == Player.STATE_READY) {
+                                tryApplyPendingResumeProgress(player)
+                            }
+                        }
                     }
                 }
             }
@@ -460,6 +466,7 @@ internal fun PlayerRuntimeController.cancelFirstFrameWatchdog() {
 }
 
 internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
+    if (usesLibmpvBackend()) return
     if (hasRenderedFirstFrame || !currentStreamHasVideoTrack) return
     val player = _exoPlayer ?: return
     if (player.playbackState != Player.STATE_READY || !player.playWhenReady) return

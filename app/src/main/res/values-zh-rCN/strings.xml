@@ -20,6 +20,8 @@
   <string name="playback_osd_clock">OSD 时钟</string>
   <string name="sub_startup_mode_all">全部字幕</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - 实验性音频兼容性</string>
+  <string name="audio_libmpv_passthrough_title">libmpv 音频直通</string>
+  <string name="audio_libmpv_passthrough_sub">当设备支持时，允许 libmpv 直通 AC-3、E-AC-3、DTS、DTS-HD 和 TrueHD</string>
   <string name="audio_dv_experimental_preserve_mapping_title">DV7 - 保留映射</string>
   <string name="settings_rounded_ui">圆角界面</string>
   <string name="settings_catalogs">目录</string>
@@ -137,4 +139,16 @@
   <string name="streams_filter_wrong_episodes_sub">Hide episodic streams whose parsed season or episode tags do not match the requested episode.</string>
   <string name="streams_filter_wrong_movie_year_title">Filter Wrong Movie Year</string>
   <string name="streams_filter_wrong_movie_year_sub">Hide movie-like streams whose parsed year does not match the requested title year.</string>
+  <string name="playback_player_libmpv">libmpv</string>
+  <string name="playback_player_libmpv_desc">使用 libmpv 播放后端并保留相同的 Nexio 控制覆盖层</string>
+  <string name="libmpv_video_output_title">libmpv 视频输出</string>
+  <string name="libmpv_video_output_auto">自动</string>
+  <string name="libmpv_video_output_auto_desc">优先尝试 gpu-next，其次 gpu，若 GPU 渲染失败则回退到 mediacodec_embed。</string>
+  <string name="libmpv_video_output_gpu_next">gpu-next</string>
+  <string name="libmpv_video_output_gpu_next_desc">首选 Vulkan 渲染器，在兼容设备上提供完整的覆盖层和字幕支持。</string>
+  <string name="libmpv_video_output_gpu">gpu</string>
+  <string name="libmpv_video_output_gpu_desc">OpenGL 回退渲染器，保留完整的覆盖层和字幕支持。</string>
+  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
+  <string name="libmpv_video_output_mediacodec_embed_desc">直接输出到 Android Surface，优先保证兼容性和 HDR 信号，但 mpv 渲染功能较少。</string>
+  <string name="stream_player_libmpv">libmpv</string>
 </resources>

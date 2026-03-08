@@ -164,7 +164,8 @@ class StreamScreenViewModel @Inject constructor(
         playerPreference: PlayerPreference,
         streamAutoPlayMode: StreamAutoPlayMode
     ): Boolean {
-        return playerPreference == PlayerPreference.INTERNAL &&
+        return (playerPreference == PlayerPreference.INTERNAL ||
+            playerPreference == PlayerPreference.LIBMPV) &&
             streamAutoPlayMode != StreamAutoPlayMode.MANUAL
     }
 
@@ -716,6 +717,7 @@ data class StreamPlaybackInfo(
     val url: String?,
     val title: String,
     val streamName: String,
+    val playerBackend: PlayerPreference = PlayerPreference.INTERNAL,
     val year: String?,
     val isExternal: Boolean,
     val isTorrent: Boolean,

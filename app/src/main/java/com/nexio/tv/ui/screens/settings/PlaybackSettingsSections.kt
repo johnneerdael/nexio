@@ -55,6 +55,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
@@ -75,7 +76,8 @@ private data class PlaybackGeneralUi(
 )
 
 private data class PlaybackStreamSelectionUi(
-    val playerPreferenceLabel: String
+    val playerPreferenceLabel: String,
+    val libmpvVideoOutputLabel: String
 )
 
 private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode, off: String, onStart: String, onStartStop: String): String {
@@ -91,6 +93,7 @@ internal fun PlaybackSettingsSections(
     initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
     onShowPlayerPreferenceDialog: () -> Unit,
+    onShowLibmpvVideoOutputDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
@@ -124,6 +127,7 @@ internal fun PlaybackSettingsSections(
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
+    onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
@@ -182,8 +186,16 @@ internal fun PlaybackSettingsSections(
     val streamSelectionUi = PlaybackStreamSelectionUi(
         playerPreferenceLabel = when (playerSettings.playerPreference) {
             PlayerPreference.INTERNAL -> stringResource(R.string.playback_player_internal)
+            PlayerPreference.LIBMPV -> stringResource(R.string.playback_player_libmpv)
             PlayerPreference.EXTERNAL -> stringResource(R.string.playback_player_external)
             PlayerPreference.ASK_EVERY_TIME -> stringResource(R.string.playback_player_ask)
+        },
+        libmpvVideoOutputLabel = when (playerSettings.libmpvVideoOutputMode) {
+            LibmpvVideoOutputMode.AUTO -> stringResource(R.string.libmpv_video_output_auto)
+            LibmpvVideoOutputMode.GPU_NEXT -> stringResource(R.string.libmpv_video_output_gpu_next)
+            LibmpvVideoOutputMode.GPU -> stringResource(R.string.libmpv_video_output_gpu)
+            LibmpvVideoOutputMode.MEDIACODEC_EMBED ->
+                stringResource(R.string.libmpv_video_output_mediacodec_embed)
         }
     )
 
@@ -296,6 +308,18 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
+            if (playerSettings.playerPreference == PlayerPreference.LIBMPV) {
+                item(key = "stream_libmpv_video_output") {
+                    NavigationSettingsItem(
+                        icon = Icons.Default.Image,
+                        title = stringResource(R.string.libmpv_video_output_title),
+                        subtitle = streamSelectionUi.libmpvVideoOutputLabel,
+                        onClick = onShowLibmpvVideoOutputDialog,
+                        onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
+                    )
+                }
+            }
+
             autoPlaySettingsItems(
                 playerSettings = playerSettings,
                 onShowModeDialog = onShowStreamAutoPlayModeDialog,
@@ -328,33 +352,14 @@ internal fun PlaybackSettingsSections(
             focusRequester = audioHeaderFocus,
             onHeaderFocused = { focusedSection = PlaybackSection.AUDIO }
         ) {
-            item(key = "video_afr_header") {
-                PlaybackSectionHeader(
-                    title = stringResource(R.string.playback_auto_frame_rate),
-                    description = generalUi.frameRateMatchingLabel,
-                    expanded = afrExpanded,
-                    onToggle = { afrExpanded = !afrExpanded },
-                    focusRequester = afrHeaderFocus,
-                    onFocused = { focusedSection = PlaybackSection.AUDIO },
-                    enabled = !generalUi.isExternalPlayer
-                )
-            }
-
-            if (afrExpanded) {
-                item(key = "video_afr_options") {
-                    FrameRateMatchingModeOptions(
-                        selectedMode = playerSettings.frameRateMatchingMode,
-                        resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
-                        onSelect = onSetFrameRateMatchingMode,
-                        onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
-                        onFocused = { focusedSection = PlaybackSection.AUDIO },
-                        enabled = !generalUi.isExternalPlayer
-                    )
-                }
-            }
-
             videoSettingsItems(
                 playerSettings = playerSettings,
+                frameRateMatchingLabel = generalUi.frameRateMatchingLabel,
+                afrExpanded = afrExpanded,
+                onToggleAfrExpanded = { afrExpanded = !afrExpanded },
+                afrHeaderFocusRequester = afrHeaderFocus,
+                onSetFrameRateMatchingMode = onSetFrameRateMatchingMode,
+                onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
                 onSetExperimentalDv5ToDv81Enabled = onSetExperimentalDv5ToDv81Enabled,
@@ -370,6 +375,7 @@ internal fun PlaybackSettingsSections(
                 onShowSecondaryAudioLanguageDialog = onShowSecondaryAudioLanguageDialog,
                 onShowDecoderPriorityDialog = onShowDecoderPriorityDialog,
                 onSetSkipSilence = onSetSkipSilence,
+                onSetLibmpvAudioPassthroughEnabled = onSetLibmpvAudioPassthroughEnabled,
                 onSetExperimentalDtsIecPassthroughEnabled = onSetExperimentalDtsIecPassthroughEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
                 enabled = !generalUi.isExternalPlayer
@@ -462,7 +468,7 @@ private fun LazyListScope.playbackCollapsibleSection(
 }
 
 @Composable
-private fun PlaybackSectionHeader(
+internal fun PlaybackSectionHeader(
     title: String,
     description: String,
     expanded: Boolean,
@@ -486,7 +492,7 @@ private fun PlaybackSectionHeader(
 }
 
 @Composable
-private fun FrameRateMatchingModeOptions(
+internal fun FrameRateMatchingModeOptions(
     selectedMode: FrameRateMatchingMode,
     resolutionMatchingEnabled: Boolean,
     onSelect: (FrameRateMatchingMode) -> Unit,
@@ -545,6 +551,7 @@ internal fun PlaybackSettingsDialogsHost(
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
     showPlayerPreferenceDialog: Boolean,
+    showLibmpvVideoOutputDialog: Boolean,
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
     showSubtitleStartupModeDialog: Boolean,
@@ -561,7 +568,9 @@ internal fun PlaybackSettingsDialogsHost(
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
+    onSetLibmpvVideoOutputMode: (LibmpvVideoOutputMode) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
+    onDismissLibmpvVideoOutputDialog: () -> Unit,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
     onSetAddonSubtitleStartupMode: (AddonSubtitleStartupMode) -> Unit,
@@ -601,6 +610,17 @@ internal fun PlaybackSettingsDialogsHost(
                 onDismissPlayerPreferenceDialog()
             },
             onDismiss = onDismissPlayerPreferenceDialog
+        )
+    }
+
+    if (showLibmpvVideoOutputDialog) {
+        LibmpvVideoOutputDialog(
+            currentMode = playerSettings.libmpvVideoOutputMode,
+            onModeSelected = {
+                onSetLibmpvVideoOutputMode(it)
+                onDismissLibmpvVideoOutputDialog()
+            },
+            onDismiss = onDismissLibmpvVideoOutputDialog
         )
     }
 
@@ -679,6 +699,7 @@ private fun PlayerPreferenceDialog(
 
     val options = listOf(
         Triple(PlayerPreference.INTERNAL, stringResource(R.string.playback_player_internal), "Use NEXIO's built-in player"),
+        Triple(PlayerPreference.LIBMPV, stringResource(R.string.playback_player_libmpv), stringResource(R.string.playback_player_libmpv_desc)),
         Triple(PlayerPreference.EXTERNAL, stringResource(R.string.playback_player_external), stringResource(R.string.playback_player_external_desc)),
         Triple(PlayerPreference.ASK_EVERY_TIME, stringResource(R.string.playback_player_ask), stringResource(R.string.playback_player_ask_desc))
     )
@@ -707,6 +728,111 @@ private fun PlayerPreferenceDialog(
 
                     Card(
                         onClick = { onPreferenceSelected(preference) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                        colors = CardDefaults.colors(
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        scale = CardDefaults.scale(focusedScale = 1f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = description,
+                                    color = NexioColors.TextSecondary,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = stringResource(R.string.cd_selected),
+                                    tint = NexioColors.Primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibmpvVideoOutputDialog(
+    currentMode: LibmpvVideoOutputMode,
+    onModeSelected: (LibmpvVideoOutputMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    val options = listOf(
+        Triple(
+            LibmpvVideoOutputMode.AUTO,
+            stringResource(R.string.libmpv_video_output_auto),
+            stringResource(R.string.libmpv_video_output_auto_desc)
+        ),
+        Triple(
+            LibmpvVideoOutputMode.GPU_NEXT,
+            stringResource(R.string.libmpv_video_output_gpu_next),
+            stringResource(R.string.libmpv_video_output_gpu_next_desc)
+        ),
+        Triple(
+            LibmpvVideoOutputMode.GPU,
+            stringResource(R.string.libmpv_video_output_gpu),
+            stringResource(R.string.libmpv_video_output_gpu_desc)
+        ),
+        Triple(
+            LibmpvVideoOutputMode.MEDIACODEC_EMBED,
+            stringResource(R.string.libmpv_video_output_mediacodec_embed),
+            stringResource(R.string.libmpv_video_output_mediacodec_embed_desc)
+        )
+    )
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.libmpv_video_output_title),
+        width = 460.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 360.dp)
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(
+                    count = options.size,
+                    key = { index -> options[index].first.name }
+                ) { index ->
+                    val (mode, title, description) = options[index]
+                    val isSelected = mode == currentMode
+
+                    Card(
+                        onClick = { onModeSelected(mode) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),

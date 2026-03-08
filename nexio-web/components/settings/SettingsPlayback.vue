@@ -17,6 +17,10 @@
         <BaseSelect v-model="settings.playback.streamSelection.playerPreference" :options="playerOptions" />
       </SettingRow>
 
+      <SettingRow label="libmpv Video Output" description="Choose how libmpv renders video on Android TV. Auto tries gpu-next, then gpu, then mediacodec_embed.">
+        <BaseSelect v-model="settings.playback.general.libmpvVideoOutputMode" :options="libmpvVideoOutputOptions" />
+      </SettingRow>
+
       <SettingRow label="Uniform Stream Formatting" description="Use the normalized stream parser and formatter across addons.">
         <BaseToggle v-model="settings.playback.streamSelection.uniformStreamFormattingEnabled" />
       </SettingRow>
@@ -90,7 +94,7 @@
       <div class="space-y-4">
         <div class="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Video</div>
 
-        <SettingRow label="Frame Rate Matching" description="Switch refresh rate to match the content.">
+        <SettingRow label="Auto Frame Rate" description="Switch refresh rate to match the content.">
           <BaseSelect v-model="settings.playback.general.frameRateMatchingMode" :options="frameRateOptions" />
         </SettingRow>
 
@@ -126,6 +130,10 @@
 
         <SettingRow label="Decoder Priority" description="Renderer preference for playback codecs.">
           <BaseSelect v-model="settings.playback.audio.decoderPriority" :options="decoderPriorityOptions" />
+        </SettingRow>
+
+        <SettingRow label="libmpv Audio Passthrough" description="Allow libmpv to bitstream AC3, E-AC3, DTS, DTS-HD, and TrueHD when the device supports passthrough.">
+          <BaseToggle v-model="settings.playback.audio.libmpvAudioPassthroughEnabled" />
         </SettingRow>
 
         <SettingRow label="Fire OS - Experimental Audio Compatibility" description="Enable the Fire OS experimental IEC compatibility path.">
@@ -211,8 +219,16 @@ const frameRateOptions = [
 
 const playerOptions = [
   { label: 'Internal ExoPlayer', value: 'INTERNAL' },
+  { label: 'Internal libmpv', value: 'LIBMPV' },
   { label: 'External App', value: 'EXTERNAL' },
   { label: 'Ask Every Time', value: 'ASK_EVERY_TIME' },
+]
+
+const libmpvVideoOutputOptions = [
+  { label: 'Auto', value: 'AUTO' },
+  { label: 'gpu-next', value: 'GPU_NEXT' },
+  { label: 'gpu', value: 'GPU' },
+  { label: 'mediacodec_embed', value: 'MEDIACODEC_EMBED' },
 ]
 
 const autoPlayOptions = [

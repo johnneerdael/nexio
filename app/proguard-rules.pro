@@ -73,6 +73,11 @@
 -keep interface com.google.android.exoplayer2.** { *; }
 -keep class com.google.android.exoplayer2.ext.** { *; }
 
+# ── libmpv JNI bridge ─────────────────────────────────────────────────────────
+# JNI requires exact class and method names for the bridge and callback entrypoints.
+-keep class is.xyz.mpv.** { *; }
+-keep class com.nexio.tv.core.mpv.** { *; }
+
 # ── Supabase / Ktor / Kotlinx Serialization ───────────────────────────────────
 -keep class io.github.jan.supabase.** { *; }
 -keep class io.ktor.** { *; }

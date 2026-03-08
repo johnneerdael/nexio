@@ -197,8 +197,15 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'playback.general.skipIntroEnabled', label: 'Skip intro', description: 'Enable intro skip actions.', kind: 'toggle' },
         { path: 'playback.streamSelection.playerPreference', label: 'Player preference', description: 'Choose the default player flow.', kind: 'select', options: [
           { label: 'Internal', value: 'INTERNAL' },
+          { label: 'libmpv', value: 'LIBMPV' },
           { label: 'External', value: 'EXTERNAL' },
           { label: 'Ask every time', value: 'ASK_EVERY_TIME' }
+        ] },
+        { path: 'playback.general.libmpvVideoOutputMode', label: 'libmpv video output', description: 'Choose how libmpv renders video on Android TV. Auto prefers gpu-next, then gpu, then mediacodec_embed.', kind: 'select', options: [
+          { label: 'Auto', value: 'AUTO' },
+          { label: 'gpu-next', value: 'GPU_NEXT' },
+          { label: 'gpu', value: 'GPU' },
+          { label: 'mediacodec_embed', value: 'MEDIACODEC_EMBED' }
         ] },
         { path: 'playback.streamSelection.streamReuseLastLinkEnabled', label: 'Reuse last stream', description: 'Prefer the last successful stream link.', kind: 'toggle' },
         { path: 'playback.streamSelection.streamReuseLastLinkCacheHours', label: 'Reuse cache window', description: 'How long previous stream links stay reusable.', kind: 'select', options: [1, 6, 12, 24, 48, 72, 168].map((value) => ({ label: `${value}h`, value })) },
@@ -254,6 +261,7 @@ export const accountGroups: Record<string, PortalGroup[]> = {
         { path: 'playback.audio.preferredAudioLanguage', label: 'Preferred audio language', description: 'Primary synced audio preference.', kind: 'text', placeholder: 'device' },
         { path: 'playback.audio.secondaryPreferredAudioLanguage', label: 'Secondary audio language', description: 'Fallback audio language code.', kind: 'text', placeholder: 'en' },
         { path: 'playback.audio.skipSilence', label: 'Skip silence', description: 'Use silence skipping when available.', kind: 'toggle' },
+        { path: 'playback.audio.libmpvAudioPassthroughEnabled', label: 'libmpv audio passthrough', description: 'Allow libmpv to bitstream AC3, E-AC3, DTS, DTS-HD, and TrueHD when supported by the device.', kind: 'toggle' },
         { path: 'playback.audio.decoderPriority', label: 'Decoder priority', description: 'Renderer preference for playback codecs.', kind: 'select', options: [
           { label: '0', value: 0 },
           { label: '1', value: 1 },

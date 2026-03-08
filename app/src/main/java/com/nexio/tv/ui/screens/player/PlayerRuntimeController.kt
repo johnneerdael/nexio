@@ -8,8 +8,10 @@ import androidx.media3.common.C
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.nexio.tv.core.mpv.NexioMpvSession
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
+import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
@@ -74,6 +76,9 @@ class PlayerRuntimeController(
     )
 
     internal val navigationArgs = PlayerNavigationArgs.from(savedStateHandle)
+    internal val playerBackendPreference: PlayerPreference =
+        runCatching { PlayerPreference.valueOf(navigationArgs.playerBackend) }
+            .getOrDefault(PlayerPreference.INTERNAL)
     internal val initialStreamUrl: String = navigationArgs.streamUrl
     internal val title: String = navigationArgs.title
     internal val streamName: String? = navigationArgs.streamName
@@ -167,6 +172,15 @@ class PlayerRuntimeController(
     internal var _exoPlayer: ExoPlayer? = null
     val exoPlayer: ExoPlayer?
         get() = _exoPlayer
+    internal var mpvSession: NexioMpvSession? =
+        if (playerBackendPreference == PlayerPreference.LIBMPV) {
+            NexioMpvSession(
+                context = context.applicationContext,
+                externalScope = scope
+            )
+        } else {
+            null
+        }
 
     internal var progressJob: Job? = null
     internal var vodTelemetryJob: Job? = null
@@ -184,6 +198,10 @@ class PlayerRuntimeController(
     internal var sourceStreamsJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
+    internal var mpvStateCollectionJob: Job? = null
+    internal var mpvSubtitleCueCollectionJob: Job? = null
+    internal var observedMpvSession: NexioMpvSession? = null
+    internal var builtInAiSubtitleTranslationJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
     internal var hostActivityRef: WeakReference<Activity>? = null
     internal var initialPlaybackStarted: Boolean = false
@@ -227,6 +245,7 @@ class PlayerRuntimeController(
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
+    internal var lastMpvSubtitleVisibility: Boolean? = null
 
     internal var lastBufferLogTimeMs: Long = 0L
     internal var lastVodTelemetryRefreshTimeMs: Long = 0L
