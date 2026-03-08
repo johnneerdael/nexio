@@ -11,6 +11,7 @@ abstract class BaseMPVView(
     context: Context,
     attrs: AttributeSet?
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
+    private var surfaceAttached = false
 
     fun initialize(configDir: String, cacheDir: String) {
         MPVLib.create(context)
@@ -25,6 +26,7 @@ abstract class BaseMPVView(
         MPVLib.setOptionString("force-window", "no")
         MPVLib.setOptionString("idle", "once")
         holder.addCallback(this)
+        attachSurfaceIfReady()
         observeProperties()
     }
 
@@ -41,7 +43,12 @@ abstract class BaseMPVView(
     private var voInUse: String = "gpu"
 
     fun playFile(filePath: String) {
-        this.filePath = filePath
+        if (ensureSurfaceAttached()) {
+            MPVLib.command(arrayOf("loadfile", filePath))
+            this.filePath = null
+        } else {
+            this.filePath = filePath
+        }
     }
 
     fun setVo(vo: String) {
@@ -54,7 +61,9 @@ abstract class BaseMPVView(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        if (surfaceAttached) return
         Log.w(TAG, "attaching surface")
+        surfaceAttached = true
         MPVLib.attachSurface(holder.surface)
         MPVLib.setOptionString("force-window", "yes")
 
@@ -69,9 +78,28 @@ abstract class BaseMPVView(
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         Log.w(TAG, "detaching surface")
+        surfaceAttached = false
         MPVLib.setPropertyString("vo", "null")
         MPVLib.setPropertyString("force-window", "no")
         MPVLib.detachSurface()
+    }
+
+    private fun ensureSurfaceAttached(): Boolean {
+        if (surfaceAttached) return true
+        return attachSurfaceIfReady()
+    }
+
+    private fun attachSurfaceIfReady(): Boolean {
+        if (surfaceAttached) return true
+        if (!holder.surface.isValid) return false
+        Log.w(TAG, "surface already valid, attaching eagerly")
+        surfaceCreated(holder)
+        val width = width.takeIf { it > 0 } ?: holder.surfaceFrame.width()
+        val height = height.takeIf { it > 0 } ?: holder.surfaceFrame.height()
+        if (width > 0 && height > 0) {
+            surfaceChanged(holder, 0, width, height)
+        }
+        return surfaceAttached
     }
 
     companion object {

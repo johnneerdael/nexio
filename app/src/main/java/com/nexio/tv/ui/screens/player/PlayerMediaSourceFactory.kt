@@ -22,6 +22,9 @@ import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.text.SubtitleParser
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import okhttp3.ConnectionPool
@@ -39,6 +42,8 @@ import kotlin.io.deleteRecursively
 
 internal class PlayerMediaSourceFactory(private val context: Context) {
     private var okHttpClient: OkHttpClient? = null
+    private var customExtractorsFactory: ExtractorsFactory? = null
+    private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
     @Volatile private var currentVodCacheUrl: String? = null
     @Volatile private var currentVodCacheResolvedUrl: String? = null
@@ -64,6 +69,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
         }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
+
+    fun configureSubtitleParsing(
+        extractorsFactory: ExtractorsFactory?,
+        subtitleParserFactory: SubtitleParser.Factory?
+    ) {
+        customExtractorsFactory = extractorsFactory
+        customSubtitleParserFactory = subtitleParserFactory
+    }
 
     fun createMediaSource(
         url: String,
@@ -183,17 +196,23 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             currentProgressiveIsEligibleForWarmAhead = false
             progressiveUpstreamFactory
         }
-        val defaultProgressiveFactory = DefaultMediaSourceFactory(progressiveFactory)
-            .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+        val extractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
+        val defaultProgressiveFactory = DefaultMediaSourceFactory(progressiveFactory, extractorsFactory).apply {
+            setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+            customSubtitleParserFactory?.let { parserFactory ->
+                setSubtitleParserFactory(parserFactory)
+            }
+        }
+        val forceDefaultFactory = customExtractorsFactory != null || customSubtitleParserFactory != null
         if (subtitleConfigurations.isNotEmpty()) {
             return defaultProgressiveFactory.createMediaSource(mediaItem)
         }
         return when {
-            isHls -> HlsMediaSource.Factory(okHttpFactory)
+            isHls && !forceDefaultFactory -> HlsMediaSource.Factory(okHttpFactory)
                 .setAllowChunklessPreparation(true)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
-            isDash -> DashMediaSource.Factory(okHttpFactory)
+            isDash && !forceDefaultFactory -> DashMediaSource.Factory(okHttpFactory)
                 .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
                 .createMediaSource(mediaItem)
             else -> defaultProgressiveFactory.createMediaSource(mediaItem)

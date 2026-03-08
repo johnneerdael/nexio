@@ -17,6 +17,8 @@ import kotlin.math.roundToLong
 
 private const val MPV_TAG = "NexioMpvSurfaceView"
 private const val MPV_ANDROID_TV_CACHE_BYTES = 64L * 1024L * 1024L
+private const val MPV_NVIDIA_SHIELD_FORWARD_CACHE_BYTES = 150L * 1024L * 1024L
+private const val MPV_NVIDIA_SHIELD_BACK_CACHE_BYTES = 50L * 1024L * 1024L
 private const val MPV_SUBTITLE_VERTICAL_OFFSET_BASELINE_SHIFT = 25
 private const val LIBMPV_DV_RESHAPE_EXPERIMENTAL_NATIVE_AVAILABLE = false
 
@@ -40,18 +42,27 @@ data class NexioMpvTrackSnapshot(
 private data class NexioMpvViewVideoOutputCandidate(
     val videoOutput: String,
     val hardwareDecode: String,
+    val hardwareDecodeCodecs: String = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1",
     val gpuApi: String? = null,
     val gpuContext: String? = null,
-    val openglEs: Boolean = false
+    val openglEs: Boolean = false,
+    val mpvProfile: String = "fast",
+    val audioChannelsOverride: String? = null,
+    val demuxerMaxBytesOverride: Long? = null,
+    val demuxerMaxBackBytesOverride: Long? = null,
+    val optionOverrides: List<Pair<String, String>> = emptyList()
 )
 
 private data class NexioMpvResolvedProfile(
     val candidate: NexioMpvViewVideoOutputCandidate,
     val enableDolbyVisionReshaping: Boolean,
     val hardwareDecode: String,
-    val toneMapping: String? = null,
-    val hdrComputePeak: String? = null,
-    val targetColorspaceHint: String? = null
+    val hardwareDecodeCodecs: String,
+    val mpvProfile: String,
+    val audioChannels: String,
+    val demuxerMaxBytes: Long,
+    val demuxerMaxBackBytes: Long,
+    val optionOverrides: List<Pair<String, String>>
 ) {
     val profileKey: String =
         buildString {
@@ -61,9 +72,19 @@ private data class NexioMpvResolvedProfile(
             append('|')
             append(candidate.gpuContext ?: "")
             append('|')
+            append(mpvProfile)
+            append('|')
             append(hardwareDecode)
             append('|')
+            append(hardwareDecodeCodecs)
+            append('|')
             append(enableDolbyVisionReshaping)
+            optionOverrides.forEach { (name, value) ->
+                append('|')
+                append(name)
+                append('=')
+                append(value)
+            }
         }
 }
 
@@ -71,7 +92,6 @@ private data class NexioMpvViewConfig(
     val videoOutputMode: LibmpvVideoOutputMode,
     val videoOutputCandidates: List<NexioMpvViewVideoOutputCandidate>,
     val gpuNextDolbyVisionReshapingEnabled: Boolean,
-    val hardwareDecodeCodecs: String,
     val audioOutput: String,
     val audioSpdifCodecs: String,
     val audioChannels: String,
@@ -80,7 +100,8 @@ private data class NexioMpvViewConfig(
         private val gpuNextVulkanCandidate = NexioMpvViewVideoOutputCandidate(
             videoOutput = "gpu-next",
             hardwareDecode = "mediacodec",
-            gpuApi = "vulkan"
+            gpuApi = "vulkan",
+            gpuContext = "androidvk"
         )
 
         private val gpuNextAndroidOpenGlCandidate = NexioMpvViewVideoOutputCandidate(
@@ -98,6 +119,36 @@ private data class NexioMpvViewConfig(
             openglEs = true
         )
 
+        private val shieldExperimentalCandidate = NexioMpvViewVideoOutputCandidate(
+            videoOutput = "gpu-next",
+            hardwareDecode = "mediacodec-copy",
+            hardwareDecodeCodecs = "all",
+            gpuApi = "opengl",
+            gpuContext = "android",
+            openglEs = true,
+            mpvProfile = "high-quality",
+            audioChannelsOverride = "stereo,5.1,7.1",
+            demuxerMaxBytesOverride = MPV_NVIDIA_SHIELD_FORWARD_CACHE_BYTES,
+            demuxerMaxBackBytesOverride = MPV_NVIDIA_SHIELD_BACK_CACHE_BYTES,
+            optionOverrides = listOf(
+                "cache" to "yes",
+                // Shield's gpu-next AImageReader path times out on 4K HDR; use copy-back compatibility mode.
+                "vd-lavc-dr" to "no",
+                "scale" to "ewa_lanczossharp",
+                "cscale" to "ewa_lanczossharp",
+                "dscale" to "mitchell",
+                "correct-downscaling" to "yes",
+                "linear-downscaling" to "no",
+                "sigmoid-upscaling" to "yes",
+                "deband" to "yes",
+                "dither-depth" to "auto",
+                "target-colorspace-hint" to "yes",
+                "tone-mapping" to "bt.2446a",
+                "hdr-compute-peak" to "yes",
+                "blend-subtitles" to "yes"
+            )
+        )
+
         private val mediaCodecEmbedCandidate = NexioMpvViewVideoOutputCandidate(
             videoOutput = "mediacodec_embed",
             hardwareDecode = "mediacodec"
@@ -113,6 +164,8 @@ private data class NexioMpvViewConfig(
                     gpuAndroidOpenGlCandidate,
                     mediaCodecEmbedCandidate
                 )
+                LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL -> listOf(shieldExperimentalCandidate)
+                LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE -> listOf(shieldExperimentalCandidate)
                 LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL -> listOf(gpuNextAndroidOpenGlCandidate)
                 LibmpvVideoOutputMode.GPU_NEXT_VULKAN -> listOf(gpuNextVulkanCandidate)
                 LibmpvVideoOutputMode.GPU_ANDROID_OPENGL -> listOf(gpuAndroidOpenGlCandidate)
@@ -122,7 +175,6 @@ private data class NexioMpvViewConfig(
                 videoOutputMode = settings.libmpvVideoOutputMode,
                 videoOutputCandidates = candidates,
                 gpuNextDolbyVisionReshapingEnabled = gpuNextDolbyVisionReshapingEnabled,
-                hardwareDecodeCodecs = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1",
                 // Keep the proven mpv-android AO order and let audio-spdif
                 // decide passthrough, instead of forcing a custom AO split.
                 audioOutput = "audiotrack,opensles",
@@ -437,9 +489,13 @@ class NexioMpvSurfaceView @JvmOverloads constructor(
                 ?.takeIf { it.isNotBlank() }
             val selectedByFlag = MPVLib.getPropertyBoolean("track-list/$i/selected") == true
             val external = MPVLib.getPropertyBoolean("track-list/$i/external") == true
-            val channelCount = MPVLib.getPropertyInt("track-list/$i/demux-channel-count")
-                ?: MPVLib.getPropertyInt("track-list/$i/audio-channels")
-                ?: MPVLib.getPropertyInt("track-list/$i/channels")
+            val channelCount = if (type == "audio") {
+                MPVLib.getPropertyInt("track-list/$i/demux-channel-count")
+                    ?: MPVLib.getPropertyInt("track-list/$i/audio-channels")
+                    ?: MPVLib.getPropertyInt("track-list/$i/channels")
+            } else {
+                null
+            }
             val forced = (MPVLib.getPropertyBoolean("track-list/$i/forced") == true) || listOfNotNull(title, language).any {
                 it.contains("forced", ignoreCase = true)
             }
@@ -511,7 +567,7 @@ class NexioMpvSurfaceView @JvmOverloads constructor(
                 "dvReshape=${profile.enableDolbyVisionReshaping} " +
                 "audioSpdif=\"${currentConfig.audioSpdifCodecs}\""
         )
-        MPVLib.setOptionString("profile", "fast")
+        MPVLib.setOptionString("profile", profile.mpvProfile)
         setVo(candidate.videoOutput)
         candidate.gpuContext?.let { MPVLib.setOptionString("gpu-context", it) }
         candidate.gpuApi?.let { MPVLib.setOptionString("gpu-api", it) }
@@ -520,19 +576,19 @@ class NexioMpvSurfaceView @JvmOverloads constructor(
         }
         MPVLib.setOptionString("sub-ass-override", "force")
         MPVLib.setOptionString("hwdec", profile.hardwareDecode)
-        MPVLib.setOptionString("hwdec-codecs", currentConfig.hardwareDecodeCodecs)
-        profile.toneMapping?.let { MPVLib.setOptionString("tone-mapping", it) }
-        profile.hdrComputePeak?.let { MPVLib.setOptionString("hdr-compute-peak", it) }
-        profile.targetColorspaceHint?.let { MPVLib.setOptionString("target-colorspace-hint", it) }
+        MPVLib.setOptionString("hwdec-codecs", profile.hardwareDecodeCodecs)
+        profile.optionOverrides.forEach { (name, value) ->
+            MPVLib.setOptionString(name, value)
+        }
         MPVLib.setOptionString("ao", currentConfig.audioOutput)
         MPVLib.setOptionString("audio-set-media-role", "yes")
         MPVLib.setOptionString("audio-spdif", currentConfig.audioSpdifCodecs)
-        MPVLib.setOptionString("audio-channels", currentConfig.audioChannels)
+        MPVLib.setOptionString("audio-channels", profile.audioChannels)
         MPVLib.setOptionString("tls-verify", "yes")
         MPVLib.setOptionString("tls-ca-file", "${context.filesDir.path}/cacert.pem")
         MPVLib.setOptionString("input-default-bindings", "yes")
-        MPVLib.setOptionString("demuxer-max-bytes", MPV_ANDROID_TV_CACHE_BYTES.toString())
-        MPVLib.setOptionString("demuxer-max-back-bytes", MPV_ANDROID_TV_CACHE_BYTES.toString())
+        MPVLib.setOptionString("demuxer-max-bytes", profile.demuxerMaxBytes.toString())
+        MPVLib.setOptionString("demuxer-max-back-bytes", profile.demuxerMaxBackBytes.toString())
         MPVLib.setOptionString("keep-open", "yes")
         activeProfileKey = profile.profileKey
     }
@@ -540,11 +596,11 @@ class NexioMpvSurfaceView @JvmOverloads constructor(
     override fun postInitOptions() {
         MPVLib.setOptionString("save-position-on-quit", "no")
         MPVLib.setPropertyString("audio-spdif", currentConfig.audioSpdifCodecs)
-        MPVLib.setPropertyString("audio-channels", currentConfig.audioChannels)
+        MPVLib.setPropertyString("audio-channels", resolveProfile().audioChannels)
         Log.i(
             MPV_TAG,
             "postInitOptions: audioSpdif=\"${currentConfig.audioSpdifCodecs}\" " +
-                "audioChannels=${currentConfig.audioChannels}"
+                "audioChannels=${resolveProfile().audioChannels}"
         )
     }
 
@@ -570,9 +626,15 @@ class NexioMpvSurfaceView @JvmOverloads constructor(
 
     private fun resolveProfile(): NexioMpvResolvedProfile {
         val candidate = currentConfig.videoOutputCandidates.first()
+        val isShieldDvReshapeMode =
+            currentConfig.videoOutputMode == LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE
         val enableReshaping =
             LIBMPV_DV_RESHAPE_EXPERIMENTAL_NATIVE_AVAILABLE &&
                 currentConfig.gpuNextDolbyVisionReshapingEnabled &&
+                (isShieldDvReshapeMode ||
+                    currentConfig.videoOutputMode == LibmpvVideoOutputMode.AUTO ||
+                    currentConfig.videoOutputMode == LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL ||
+                    currentConfig.videoOutputMode == LibmpvVideoOutputMode.GPU_NEXT_VULKAN) &&
                 candidate.videoOutput == "gpu-next" &&
                 isLikelyDolbyVisionProfile5Stream()
         return if (enableReshaping) {
@@ -581,15 +643,31 @@ class NexioMpvSurfaceView @JvmOverloads constructor(
                 enableDolbyVisionReshaping = true,
                 // DV reshaping needs copy-back surfaces; normal Android playback should stay on zero-copy.
                 hardwareDecode = "mediacodec-copy",
-                toneMapping = "bt.2446a",
-                hdrComputePeak = "yes",
-                targetColorspaceHint = "no"
+                hardwareDecodeCodecs = candidate.hardwareDecodeCodecs,
+                mpvProfile = candidate.mpvProfile,
+                audioChannels = candidate.audioChannelsOverride ?: currentConfig.audioChannels,
+                demuxerMaxBytes = candidate.demuxerMaxBytesOverride ?: MPV_ANDROID_TV_CACHE_BYTES,
+                demuxerMaxBackBytes =
+                    candidate.demuxerMaxBackBytesOverride ?: MPV_ANDROID_TV_CACHE_BYTES,
+                optionOverrides = candidate.optionOverrides + listOf(
+                    "vd-lavc-dr" to "no",
+                    "target-colorspace-hint" to "no",
+                    "tone-mapping" to "bt.2446a",
+                    "hdr-compute-peak" to "yes"
+                )
             )
         } else {
             NexioMpvResolvedProfile(
                 candidate = candidate,
                 enableDolbyVisionReshaping = false,
-                hardwareDecode = candidate.hardwareDecode
+                hardwareDecode = candidate.hardwareDecode,
+                hardwareDecodeCodecs = candidate.hardwareDecodeCodecs,
+                mpvProfile = candidate.mpvProfile,
+                audioChannels = candidate.audioChannelsOverride ?: currentConfig.audioChannels,
+                demuxerMaxBytes = candidate.demuxerMaxBytesOverride ?: MPV_ANDROID_TV_CACHE_BYTES,
+                demuxerMaxBackBytes =
+                    candidate.demuxerMaxBackBytesOverride ?: MPV_ANDROID_TV_CACHE_BYTES,
+                optionOverrides = candidate.optionOverrides
             )
         }
     }

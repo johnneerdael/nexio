@@ -43,13 +43,6 @@ internal fun PlayerRuntimeController.attachMpvView(view: NexioMpvSurfaceView?) {
         view.applySubtitleStyle(_uiState.value.subtitleStyle)
         view.setSubtitleDelayMs(_uiState.value.subtitleDelayMs)
         view.setPaused(false)
-        val pendingSeek = _uiState.value.pendingSeekPosition
-            ?: pendingResumeProgress?.position
-        if (pendingSeek != null && pendingSeek > 0L) {
-            view.seekToMs(pendingSeek)
-            _uiState.update { it.copy(pendingSeekPosition = null) }
-            pendingResumeProgress = null
-        }
         hasRenderedFirstFrame = false
         _uiState.update {
             it.copy(
@@ -162,13 +155,6 @@ internal fun PlayerRuntimeController.initializeLibmpvPlayer(
     view.applySubtitleStyle(_uiState.value.subtitleStyle)
     view.setSubtitleDelayMs(_uiState.value.subtitleDelayMs)
     view.setPaused(false)
-    val pendingSeek = _uiState.value.pendingSeekPosition
-        ?: pendingResumeProgress?.position
-    if (pendingSeek != null && pendingSeek > 0L) {
-        view.seekToMs(pendingSeek)
-        _uiState.update { it.copy(pendingSeekPosition = null) }
-        pendingResumeProgress = null
-    }
     hasRenderedFirstFrame = false
     cancelPauseOverlay()
     startProgressUpdates()
@@ -462,4 +448,27 @@ internal fun PlayerRuntimeController.tryApplyPendingResumeProgressForCurrentBack
         _uiState.update { it.copy(pendingSeekPosition = null) }
         pendingResumeProgress = null
     }
+}
+
+internal fun PlayerRuntimeController.tryApplyPendingLibmpvStartupSeek(
+    playerDuration: Long,
+    playingNow: Boolean,
+    cacheBuffering: Boolean
+) {
+    if (!usesLibmpvBackend()) return
+    val view = mpvView ?: return
+    val requestedSeek = _uiState.value.pendingSeekPosition ?: pendingResumeProgress?.position ?: return
+    if (requestedSeek <= 0L) return
+
+    val coreReadyForSeek = playerDuration > 0L || (playingNow && !cacheBuffering && !view.isCoreIdleNow())
+    if (!coreReadyForSeek) return
+
+    val target = pendingResumeProgress?.let { saved ->
+        if (playerDuration > 0L) saved.resolveResumePosition(playerDuration) else saved.position
+    } ?: requestedSeek
+    if (target <= 0L) return
+
+    view.seekToMs(target)
+    _uiState.update { it.copy(pendingSeekPosition = null) }
+    pendingResumeProgress = null
 }

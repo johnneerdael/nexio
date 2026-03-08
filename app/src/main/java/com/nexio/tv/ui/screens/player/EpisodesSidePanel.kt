@@ -37,11 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -526,8 +528,16 @@ private fun EpisodeItem(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .padding(8.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.Black.copy(alpha = 0.75f))
+                            .drawWithCache {
+                                val radius = 6.dp.toPx()
+                                val badgeColor = Color.Black.copy(alpha = 0.75f)
+                                onDrawBehind {
+                                    drawRoundRect(
+                                        color = badgeColor,
+                                        cornerRadius = CornerRadius(radius, radius)
+                                    )
+                                }
+                            }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -544,8 +554,16 @@ private fun EpisodeItem(
                             .align(Alignment.TopEnd)
                             .padding(6.dp)
                             .size(22.dp)
-                            .clip(RoundedCornerShape(11.dp))
-                            .background(NexioColors.Primary),
+                            .drawWithCache {
+                                val radius = size.minDimension / 2f
+                                val indicatorColor = NexioColors.Primary
+                                onDrawBehind {
+                                    drawRoundRect(
+                                        color = indicatorColor,
+                                        cornerRadius = CornerRadius(radius, radius)
+                                    )
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -592,5 +610,4 @@ private fun EpisodeItem(
         }
     }
 }
-
 

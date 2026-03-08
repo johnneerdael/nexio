@@ -292,6 +292,11 @@ class PlayerRuntimeController(
     internal var hasRequestedScrobbleStartForCurrentItem: Boolean = false
     internal var scrobbleStartRequestGeneration: Long = 0L
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false
+    internal var requestedUseLibassByUser: Boolean = false
+    internal var libassPipelineOverrideForCurrentStream: Boolean? = null
+    internal var activePlayerUsesLibass: Boolean = false
+    internal var libassPipelineSwitchInFlight: Boolean = false
+    internal var libassPipelineDecisionStreamUrl: String? = null
     internal var currentStreamHasVideoTrack: Boolean = false
     internal var currentVideoTrackIsLikelyVc1: Boolean = false
     internal var currentVideoTrackMimeType: String? = null

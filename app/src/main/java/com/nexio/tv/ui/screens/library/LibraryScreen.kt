@@ -43,9 +43,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
@@ -366,6 +368,7 @@ fun LibraryScreen(
 
     val transientMessage = uiState.transientMessage
     if (!transientMessage.isNullOrBlank()) {
+        val transientMessageBg = NexioColors.BackgroundElevated
         Box(
             modifier = Modifier
                 .fillMaxSize(),
@@ -377,7 +380,15 @@ fun LibraryScreen(
                 color = NexioColors.TextPrimary,
                 modifier = Modifier
                     .padding(top = 24.dp)
-                    .background(NexioColors.BackgroundElevated, RoundedCornerShape(10.dp))
+                    .drawWithCache {
+                        val radius = 10.dp.toPx()
+                        onDrawBehind {
+                            drawRoundRect(
+                                color = transientMessageBg,
+                                cornerRadius = CornerRadius(radius, radius)
+                            )
+                        }
+                    }
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             )
         }
@@ -633,10 +644,19 @@ private fun ManageListsDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        val manageDialogBg = NexioColors.BackgroundElevated
         Box(
             modifier = Modifier
                 .width(620.dp)
-                .background(NexioColors.BackgroundElevated, RoundedCornerShape(16.dp))
+                .drawWithCache {
+                    val radius = 16.dp.toPx()
+                    onDrawBehind {
+                        drawRoundRect(
+                            color = manageDialogBg,
+                            cornerRadius = CornerRadius(radius, radius)
+                        )
+                    }
+                }
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
