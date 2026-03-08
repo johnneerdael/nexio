@@ -45,7 +45,8 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -65,6 +66,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -123,6 +125,25 @@ private data class DetailReturnEpisodeFocusRequest(
     val season: Int?,
     val episode: Int?
 )
+
+private fun applyDither(bmp: android.graphics.Bitmap) {
+    val pixels = IntArray(bmp.width * bmp.height)
+    bmp.getPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+    val rng = java.util.Random(0)
+    for (i in pixels.indices) {
+        val p = pixels[i]
+        val a = (p ushr 24) and 0xFF
+        val r = (p ushr 16) and 0xFF
+        val g = (p ushr 8) and 0xFF
+        val b = p and 0xFF
+        val noise = rng.nextInt(3) - 1
+        pixels[i] = ((a shl 24) or
+            ((r + noise).coerceIn(0, 255) shl 16) or
+            ((g + noise).coerceIn(0, 255) shl 8) or
+            (b + noise).coerceIn(0, 255))
+    }
+    bmp.setPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+}
 
 private fun resolveDetailReturnEpisodeFocusTarget(
     meta: Meta,
@@ -611,7 +632,7 @@ private fun MetaDetailsContent(
     var pendingRestoreMoreLikeItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
-    var initialDetailReturnFocusHandled by rememberSaveable(
+    var initialDetailReturnFocusHandled by remember(
         meta.id,
         detailReturnEpisodeFocusRequest?.season,
         detailReturnEpisodeFocusRequest?.episode
@@ -892,33 +913,6 @@ private fun MetaDetailsContent(
 
     val backgroundColor = NexioColors.Background
 
-    // Pre-compute gradient brushes once
-    val leftGradient = remember(backgroundColor) {
-        Brush.horizontalGradient(
-            colorStops = arrayOf(
-                0.0f to backgroundColor,
-                0.20f to backgroundColor.copy(alpha = 0.95f),
-                0.35f to backgroundColor.copy(alpha = 0.8f),
-                0.45f to backgroundColor.copy(alpha = 0.6f),
-                0.55f to backgroundColor.copy(alpha = 0.4f),
-                0.65f to backgroundColor.copy(alpha = 0.2f),
-                0.75f to Color.Transparent,
-                1.0f to Color.Transparent
-            )
-        )
-    }
-    val bottomGradient = remember(backgroundColor) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.0f to Color.Transparent,
-                0.38f to Color.Transparent,
-                0.56f to backgroundColor.copy(alpha = 0.38f),
-                0.72f to backgroundColor.copy(alpha = 0.74f),
-                0.86f to backgroundColor.copy(alpha = 0.94f),
-                1.0f to backgroundColor.copy(alpha = 1.0f)
-            )
-        )
-    }
     val dimColor = remember(backgroundColor) { backgroundColor.copy(alpha = 0.08f) }
 
     // Stable hero play callback
@@ -985,6 +979,63 @@ private fun MetaDetailsContent(
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
     }
+    val leftGradientBitmap = remember(backgroundColor, backdropWidthPx) {
+        val w = backdropWidthPx.coerceAtLeast(1)
+        val transparent = backgroundColor.copy(alpha = 0f).toArgb()
+        val bmp = android.graphics.Bitmap.createBitmap(w, 2, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val shader = android.graphics.LinearGradient(
+            0f, 0f, w * 0.78f, 0f,
+            intArrayOf(
+                backgroundColor.copy(alpha = 1f).toArgb(),
+                backgroundColor.copy(alpha = 0.95f).toArgb(),
+                backgroundColor.copy(alpha = 0.84f).toArgb(),
+                backgroundColor.copy(alpha = 0.70f).toArgb(),
+                backgroundColor.copy(alpha = 0.52f).toArgb(),
+                backgroundColor.copy(alpha = 0.34f).toArgb(),
+                backgroundColor.copy(alpha = 0.18f).toArgb(),
+                backgroundColor.copy(alpha = 0.07f).toArgb(),
+                transparent
+            ),
+            floatArrayOf(0f, 0.10f, 0.22f, 0.36f, 0.52f, 0.66f, 0.78f, 0.90f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, 0f, w.toFloat(), 2f, android.graphics.Paint().apply {
+            this.shader = shader
+            isDither = true
+        })
+        applyDither(bmp)
+        bmp.asImageBitmap()
+    }
+    val bottomGradientBitmap = remember(backgroundColor, backdropHeightPx) {
+        val h = backdropHeightPx.coerceAtLeast(1)
+        val transparent = backgroundColor.copy(alpha = 0f).toArgb()
+        val bmp = android.graphics.Bitmap.createBitmap(2, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val startY = h * 0.38f
+        val shader = android.graphics.LinearGradient(
+            0f, startY, 0f, h.toFloat(),
+            intArrayOf(
+                transparent,
+                backgroundColor.copy(alpha = 0.05f).toArgb(),
+                backgroundColor.copy(alpha = 0.18f).toArgb(),
+                backgroundColor.copy(alpha = 0.38f).toArgb(),
+                backgroundColor.copy(alpha = 0.60f).toArgb(),
+                backgroundColor.copy(alpha = 0.78f).toArgb(),
+                backgroundColor.copy(alpha = 0.91f).toArgb(),
+                backgroundColor.copy(alpha = 0.97f).toArgb(),
+                backgroundColor.copy(alpha = 1f).toArgb()
+            ),
+            floatArrayOf(0f, 0.10f, 0.22f, 0.36f, 0.52f, 0.66f, 0.78f, 0.90f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, 0f, 2f, h.toFloat(), android.graphics.Paint().apply {
+            this.shader = shader
+            isDither = true
+        })
+        applyDither(bmp)
+        bmp.asImageBitmap()
+    }
 
     // Animated gradient alpha (moved outside subcomposition scope)
     val gradientAlpha by animateFloatAsState(
@@ -1013,27 +1064,28 @@ private fun MetaDetailsContent(
                 contentScale = ContentScale.Crop
             )
 
-            // Light global dim so text remains readable
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(dimColor)
-            )
-
-            // Left side gradient fade for text readability (fades out during trailer)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = gradientAlpha }
-                    .background(leftGradient)
-            )
-
-            // Bottom gradient — always composed, alpha-controlled to avoid layout churn
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = bottomGradientAlpha }
-                    .background(bottomGradient)
+                    .drawWithCache {
+                        onDrawBehind {
+                            drawRect(color = dimColor, size = size)
+                            if (gradientAlpha > 0f) {
+                                drawImage(
+                                    leftGradientBitmap,
+                                    dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                                    alpha = gradientAlpha
+                                )
+                            }
+                            if (bottomGradientAlpha > 0f) {
+                                drawImage(
+                                    bottomGradientBitmap,
+                                    dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                                    alpha = bottomGradientAlpha
+                                )
+                            }
+                        }
+                    }
             )
         }
 
@@ -1558,4 +1610,3 @@ private fun LibraryListPickerDialog(
         }
     }
 }
-

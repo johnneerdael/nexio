@@ -96,7 +96,6 @@ fun HomeScreen(
         if (activity != null) {
             FrameRateUtils.setBlockDisplayModeChangesOutsideMainPlayer(true)
             FrameRateUtils.setMainPlayerDisplayModeSessionActive(false)
-            FrameRateUtils.enforceUiBaselineRefreshRate(activity)
         }
     }
 
@@ -654,4 +653,3 @@ private fun HomeLibraryListPickerDialog(
         }
     }
 }
-

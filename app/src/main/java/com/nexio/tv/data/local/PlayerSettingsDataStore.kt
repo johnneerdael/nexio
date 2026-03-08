@@ -155,7 +155,8 @@ data class PlayerSettings(
     val mapDV7ToHevc: Boolean = false,
     // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
     val experimentalDv7ToDv81Enabled: Boolean = true,
-    // Experimental: enable Fire OS audio-path quirks (DTS core fallback, capability routing, etc).
+    // Experimental: enable the Kodi-style Fire OS IEC passthrough path.
+    // When disabled, the legacy Fire TV DTS-core fallback compatibility path remains active.
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
@@ -255,10 +256,24 @@ enum class PlayerPreference {
 
 enum class LibmpvVideoOutputMode {
     AUTO,
+    SHIELD_EXPERIMENTAL,
+    SHIELD_EXPERIMENTAL_DV_RESHAPE,
     GPU_NEXT_ANDROID_OPENGL,
     GPU_NEXT_VULKAN,
     GPU_ANDROID_OPENGL,
     MEDIACODEC_EMBED;
+
+    fun usesGpuNextRenderer(): Boolean {
+        return when (this) {
+            AUTO,
+            SHIELD_EXPERIMENTAL,
+            SHIELD_EXPERIMENTAL_DV_RESHAPE,
+            GPU_NEXT_ANDROID_OPENGL,
+            GPU_NEXT_VULKAN -> true
+            GPU_ANDROID_OPENGL,
+            MEDIACODEC_EMBED -> false
+        }
+    }
 
     companion object {
         fun fromStoredValue(rawValue: String?): LibmpvVideoOutputMode {
@@ -266,6 +281,8 @@ enum class LibmpvVideoOutputMode {
                 null,
                 "",
                 "AUTO" -> AUTO
+                "SHIELD_EXPERIMENTAL" -> SHIELD_EXPERIMENTAL
+                "SHIELD_EXPERIMENTAL_DV_RESHAPE" -> SHIELD_EXPERIMENTAL_DV_RESHAPE
                 "GPU_NEXT",
                 "GPU_NEXT_VULKAN" -> GPU_NEXT_VULKAN
                 "GPU",

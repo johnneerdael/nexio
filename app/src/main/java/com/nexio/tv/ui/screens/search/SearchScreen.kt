@@ -10,7 +10,6 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,15 +49,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -583,14 +587,11 @@ private fun SearchInputField(
             modifier = Modifier
                 .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
                 .size(56.dp)
-                .border(
-                    width = if (isDiscoverButtonFocused) 2.dp else 1.dp,
-                    color = if (isDiscoverButtonFocused) NexioColors.FocusRing else NexioColors.Border,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .background(
-                    color = NexioColors.BackgroundCard,
-                    shape = RoundedCornerShape(12.dp)
+                .searchInputButtonChrome(
+                    isFocused = isDiscoverButtonFocused,
+                    fillColor = NexioColors.BackgroundCard,
+                    focusedBorderColor = NexioColors.FocusRing,
+                    unfocusedBorderColor = NexioColors.Border
                 )
         ) {
             Icon(
@@ -615,14 +616,11 @@ private fun SearchInputField(
                     )
                     .onFocusChanged { isVoiceButtonFocused = it.isFocused }
                     .size(56.dp)
-                    .border(
-                        width = if (isVoiceButtonFocused) 2.dp else 1.dp,
-                        color = if (isVoiceButtonFocused) NexioColors.FocusRing else NexioColors.Border,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .background(
-                        color = NexioColors.BackgroundCard,
-                        shape = RoundedCornerShape(12.dp)
+                    .searchInputButtonChrome(
+                        isFocused = isVoiceButtonFocused,
+                        fillColor = NexioColors.BackgroundCard,
+                        focusedBorderColor = NexioColors.FocusRing,
+                        unfocusedBorderColor = NexioColors.Border
                     )
             ) {
                 Icon(
@@ -686,6 +684,30 @@ private fun SearchInputField(
                 unfocusedTextColor = NexioColors.TextPrimary,
                 cursorColor = NexioColors.FocusRing
             )
+        )
+    }
+}
+
+private fun Modifier.searchInputButtonChrome(
+    isFocused: Boolean,
+    fillColor: Color,
+    focusedBorderColor: Color,
+    unfocusedBorderColor: Color,
+    cornerRadius: Dp = 12.dp
+): Modifier = this.drawWithCache {
+    val radius = cornerRadius.toPx()
+    val borderWidthPx = if (isFocused) 2.dp.toPx() else 1.dp.toPx()
+    val borderColor = if (isFocused) focusedBorderColor else unfocusedBorderColor
+    val stroke = Stroke(width = borderWidthPx)
+    onDrawBehind {
+        drawRoundRect(
+            color = fillColor,
+            cornerRadius = CornerRadius(radius, radius)
+        )
+        drawRoundRect(
+            color = borderColor,
+            cornerRadius = CornerRadius(radius, radius),
+            style = stroke
         )
     }
 }

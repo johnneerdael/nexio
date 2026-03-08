@@ -44,7 +44,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.domain.model.Subtitle
-import io.github.peerless2012.ass.media.kt.buildWithAssSupport
+import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -73,8 +73,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             resetLoadingOverlayForNewStream()
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
-            AudioCapabilities.setExperimentalFireOsAudioQuirksEnabled(
+            val experimentalFireOsIecPassthroughEnabled =
                 playerSettings.experimentalDtsIecPassthroughEnabled
+            AudioCapabilities.setExperimentalFireOsIecPassthroughEnabled(
+                experimentalFireOsIecPassthroughEnabled
+            )
+            AudioCapabilities.setLimitedFireTvDtsCoreFallbackEnabled(
+                !experimentalFireOsIecPassthroughEnabled
             )
             _uiState.update {
                 it.copy(
@@ -87,6 +92,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 frameRateMatchingMode = playerSettings.frameRateMatchingMode,
                 resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
             )
+            requestedUseLibassByUser = playerSettings.useLibass
+            if (libassPipelineDecisionStreamUrl != currentStreamUrl) {
+                libassPipelineDecisionStreamUrl = currentStreamUrl
+                libassPipelineOverrideForCurrentStream = null
+                libassPipelineSwitchInFlight = false
+            }
             val startupSubtitlePreparation = prepareStartupSubtitles(
                 mode = playerSettings.addonSubtitleStartupMode,
                 preferredLanguage = playerSettings.subtitleStyle.preferredLanguage,
@@ -108,8 +119,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 }
                 return@launch
             }
-            val useLibass = false // Temporarily disabled for maintenance
-            val libassRenderType = playerSettings.libassRenderType.toAssRenderType()
+            val useLibass = when {
+                !requestedUseLibassByUser -> false
+                libassPipelineOverrideForCurrentStream != null -> libassPipelineOverrideForCurrentStream == true
+                else -> true
+            }
+            val requestedLibassRenderType = playerSettings.libassRenderType.toAssRenderType()
+            val libassRenderType = when {
+                !useLibass -> requestedLibassRenderType
+                requestedLibassRenderType == AssRenderType.OVERLAY_OPEN_GL -> AssRenderType.EFFECTS_OPEN_GL
+                requestedLibassRenderType == AssRenderType.OVERLAY_CANVAS -> AssRenderType.EFFECTS_CANVAS
+                else -> requestedLibassRenderType
+            }
             DoviBridge.resetRuntimeCounters()
             MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
             val dv7ToDv81Probe = if (playerSettings.experimentalDv7ToDv81Enabled) {
@@ -288,19 +309,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "host=${url.safeHost()}"
             )
 
-            _exoPlayer = if (useLibass) {
-                
-                ExoPlayer.Builder(context)
-                    .setLoadControl(loadControl)
-                    .setTrackSelector(trackSelector!!)
-                    .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
-                    .buildWithAssSupport(
-                        context = context,
-                        renderType = libassRenderType,
-                        renderersFactory = renderersFactory
-                    )
-            } else {
-                
+            val buildDefaultPlayer = {
+                mediaSourceFactory.configureSubtitleParsing(
+                    extractorsFactory = null,
+                    subtitleParserFactory = null
+                )
                 ExoPlayer.Builder(context)
                     .setTrackSelector(trackSelector!!)
                     .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
@@ -308,6 +321,24 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     .setLoadControl(loadControl)
                     .build()
             }
+
+            _exoPlayer = if (useLibass) {
+                ExoPlayer.Builder(context)
+                    .setLoadControl(loadControl)
+                    .setTrackSelector(trackSelector!!)
+                    .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
+                    .buildWithAssSupportCompat(
+                        context = context,
+                        renderType = libassRenderType,
+                        playerMediaSourceFactory = mediaSourceFactory,
+                        extractorsFactory = extractorsFactory,
+                        renderersFactory = renderersFactory
+                    )
+            } else {
+                buildDefaultPlayer()
+            }
+            activePlayerUsesLibass = useLibass
+            libassPipelineSwitchInFlight = false
 
             _exoPlayer?.apply {
                 

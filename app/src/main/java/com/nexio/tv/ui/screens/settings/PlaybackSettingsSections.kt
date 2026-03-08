@@ -192,6 +192,10 @@ internal fun PlaybackSettingsSections(
         },
         libmpvVideoOutputLabel = when (playerSettings.libmpvVideoOutputMode) {
             LibmpvVideoOutputMode.AUTO -> stringResource(R.string.libmpv_video_output_auto)
+            LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL ->
+                stringResource(R.string.libmpv_video_output_shield_experimental)
+            LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE ->
+                stringResource(R.string.libmpv_video_output_shield_experimental_dv_reshape)
             LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL ->
                 stringResource(R.string.libmpv_video_output_gpu_next_android_opengl)
             LibmpvVideoOutputMode.GPU_NEXT_VULKAN ->
@@ -331,9 +335,7 @@ internal fun PlaybackSettingsSections(
                         isChecked = playerSettings.libmpvGpuNextDolbyVisionReshapingEnabled,
                         onCheckedChange = onSetLibmpvGpuNextDolbyVisionReshapingEnabled,
                         onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION },
-                        enabled = playerSettings.libmpvVideoOutputMode == LibmpvVideoOutputMode.AUTO ||
-                            playerSettings.libmpvVideoOutputMode == LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL ||
-                            playerSettings.libmpvVideoOutputMode == LibmpvVideoOutputMode.GPU_NEXT_VULKAN
+                        enabled = playerSettings.libmpvVideoOutputMode.usesGpuNextRenderer()
                     )
                 }
             }
@@ -633,6 +635,10 @@ internal fun PlaybackSettingsDialogsHost(
     if (showLibmpvVideoOutputDialog) {
         LibmpvVideoOutputDialog(
             currentMode = playerSettings.libmpvVideoOutputMode,
+            showShieldExperimentalDvReshapeOption =
+                playerSettings.libmpvGpuNextDolbyVisionReshapingEnabled ||
+                    playerSettings.libmpvVideoOutputMode ==
+                    LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE,
             onModeSelected = {
                 onSetLibmpvVideoOutputMode(it)
                 onDismissLibmpvVideoOutputDialog()
@@ -794,6 +800,7 @@ private fun PlayerPreferenceDialog(
 @Composable
 private fun LibmpvVideoOutputDialog(
     currentMode: LibmpvVideoOutputMode,
+    showShieldExperimentalDvReshapeOption: Boolean,
     onModeSelected: (LibmpvVideoOutputMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -808,6 +815,11 @@ private fun LibmpvVideoOutputDialog(
             LibmpvVideoOutputMode.AUTO,
             stringResource(R.string.libmpv_video_output_auto),
             stringResource(R.string.libmpv_video_output_auto_desc)
+        ),
+        Triple(
+            LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL,
+            stringResource(R.string.libmpv_video_output_shield_experimental),
+            stringResource(R.string.libmpv_video_output_shield_experimental_desc)
         ),
         Triple(
             LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL,
@@ -829,7 +841,17 @@ private fun LibmpvVideoOutputDialog(
             stringResource(R.string.libmpv_video_output_mediacodec_embed),
             stringResource(R.string.libmpv_video_output_mediacodec_embed_desc)
         )
-    )
+    ).let { baseOptions ->
+        if (showShieldExperimentalDvReshapeOption) {
+            baseOptions + Triple(
+                LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE,
+                stringResource(R.string.libmpv_video_output_shield_experimental_dv_reshape),
+                stringResource(R.string.libmpv_video_output_shield_experimental_dv_reshape_desc)
+            )
+        } else {
+            baseOptions
+        }
+    }
 
     NexioDialog(
         onDismiss = onDismiss,

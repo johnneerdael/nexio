@@ -29,22 +29,29 @@ import java.io.FileOutputStream
 private const val MPV_TAG = "NexioMpvSession"
 private const val MPV_ANDROID_TV_FORWARD_CACHE_BYTES = 64L * 1024L * 1024L
 private const val MPV_ANDROID_TV_BACK_CACHE_BYTES = 64L * 1024L * 1024L
+private const val MPV_NVIDIA_SHIELD_FORWARD_CACHE_BYTES = 150L * 1024L * 1024L
+private const val MPV_NVIDIA_SHIELD_BACK_CACHE_BYTES = 50L * 1024L * 1024L
 private const val MPV_ANDROID_TV_READAHEAD_SECS = 0
 private const val MPV_AUTO_VIDEO_OUTPUT_STARTUP_TIMEOUT_MS = 3_000L
 
 private data class NexioMpvVideoOutputCandidate(
     val videoOutput: String,
     val hardwareDecode: String,
+    val hardwareDecodeCodecs: String = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1",
     val gpuApi: String? = null,
     val gpuContext: String? = null,
-    val openglEs: Boolean = false
+    val openglEs: Boolean = false,
+    val mpvProfile: String = "fast",
+    val audioChannelsOverride: String? = null,
+    val demuxerMaxBytesOverride: Long? = null,
+    val demuxerMaxBackBytesOverride: Long? = null,
+    val optionOverrides: List<Pair<String, String>> = emptyList()
 )
 
 private data class NexioMpvConfig(
     val videoOutputMode: LibmpvVideoOutputMode,
     val videoOutputCandidates: List<NexioMpvVideoOutputCandidate>,
     val gpuNextDolbyVisionReshapingEnabled: Boolean,
-    val hardwareDecodeCodecs: String,
     val audioOutput: String,
     val audioSpdifCodecs: String,
     val audioChannels: String,
@@ -58,7 +65,8 @@ private data class NexioMpvConfig(
         private val gpuNextVulkanCandidate = NexioMpvVideoOutputCandidate(
             videoOutput = "gpu-next",
             hardwareDecode = "mediacodec",
-            gpuApi = "vulkan"
+            gpuApi = "vulkan",
+            gpuContext = "androidvk"
         )
 
         private val gpuNextAndroidOpenGlCandidate = NexioMpvVideoOutputCandidate(
@@ -76,6 +84,35 @@ private data class NexioMpvConfig(
             openglEs = true
         )
 
+        private val shieldExperimentalCandidate = NexioMpvVideoOutputCandidate(
+            videoOutput = "gpu-next",
+            hardwareDecode = "mediacodec-copy",
+            hardwareDecodeCodecs = "all",
+            gpuApi = "opengl",
+            gpuContext = "android",
+            openglEs = true,
+            mpvProfile = "high-quality",
+            audioChannelsOverride = "stereo,5.1,7.1",
+            demuxerMaxBytesOverride = MPV_NVIDIA_SHIELD_FORWARD_CACHE_BYTES,
+            demuxerMaxBackBytesOverride = MPV_NVIDIA_SHIELD_BACK_CACHE_BYTES,
+            optionOverrides = listOf(
+                "cache" to "yes",
+                "vd-lavc-dr" to "no",
+                "scale" to "ewa_lanczossharp",
+                "cscale" to "ewa_lanczossharp",
+                "dscale" to "mitchell",
+                "correct-downscaling" to "yes",
+                "linear-downscaling" to "no",
+                "sigmoid-upscaling" to "yes",
+                "deband" to "yes",
+                "dither-depth" to "auto",
+                "target-colorspace-hint" to "yes",
+                "tone-mapping" to "bt.2446a",
+                "hdr-compute-peak" to "yes",
+                "blend-subtitles" to "yes"
+            )
+        )
+
         private val mediaCodecEmbedCandidate = NexioMpvVideoOutputCandidate(
             videoOutput = "mediacodec_embed",
             hardwareDecode = "mediacodec"
@@ -89,6 +126,8 @@ private data class NexioMpvConfig(
                     gpuAndroidOpenGlCandidate,
                     mediaCodecEmbedCandidate
                 )
+                LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL -> listOf(shieldExperimentalCandidate)
+                LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE -> listOf(shieldExperimentalCandidate)
                 LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL -> listOf(gpuNextAndroidOpenGlCandidate)
                 LibmpvVideoOutputMode.GPU_NEXT_VULKAN -> listOf(gpuNextVulkanCandidate)
                 LibmpvVideoOutputMode.GPU_ANDROID_OPENGL -> listOf(gpuAndroidOpenGlCandidate)
@@ -99,7 +138,6 @@ private data class NexioMpvConfig(
                 videoOutputCandidates = videoOutputCandidates,
                 gpuNextDolbyVisionReshapingEnabled =
                     settings.libmpvGpuNextDolbyVisionReshapingEnabled,
-                hardwareDecodeCodecs = "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1",
                 audioOutput = "audiotrack,opensles",
                 audioSpdifCodecs = if (settings.libmpvAudioPassthroughEnabled) {
                     "ac3,eac3,dts,dts-hd,truehd"
@@ -471,37 +509,65 @@ class NexioMpvSession(
 
     private fun applyInitialConfig() {
         val activeCandidate = activeVideoOutputCandidate()
+        setOption("profile", activeCandidate.mpvProfile)
         setOption("vo", activeCandidate.videoOutput)
-        setOption("hwdec", activeCandidate.hardwareDecode)
-        setOption("hwdec-codecs", currentConfig.hardwareDecodeCodecs)
+        setOption("hwdec", resolvedHardwareDecode())
+        setOption("hwdec-codecs", activeCandidate.hardwareDecodeCodecs)
         setOption("ao", currentConfig.audioOutput)
         setOption("audio-spdif", currentConfig.audioSpdifCodecs)
-        setOption("audio-channels", currentConfig.audioChannels)
-        setOption("demuxer-max-bytes", currentConfig.demuxerMaxBytes.toString())
-        setOption("demuxer-max-back-bytes", currentConfig.demuxerMaxBackBytes.toString())
+        setOption("audio-channels", activeCandidate.audioChannelsOverride ?: currentConfig.audioChannels)
+        setOption(
+            "demuxer-max-bytes",
+            (activeCandidate.demuxerMaxBytesOverride ?: currentConfig.demuxerMaxBytes).toString()
+        )
+        setOption(
+            "demuxer-max-back-bytes",
+            (activeCandidate.demuxerMaxBackBytesOverride ?: currentConfig.demuxerMaxBackBytes).toString()
+        )
         setOption("audio-set-media-role", "yes")
         activeCandidate.gpuApi?.let { setOption("gpu-api", it) }
         activeCandidate.gpuContext?.let { setOption("gpu-context", it) }
         if (activeCandidate.openglEs) {
             setOption("opengl-es", "yes")
         }
+        activeCandidate.optionOverrides.forEach { (name, value) ->
+            setOption(name, value)
+        }
     }
 
     private fun applyRuntimeProperties() {
         setPropertyString("audio-spdif", currentConfig.audioSpdifCodecs)
-        setPropertyString("audio-channels", currentConfig.audioChannels)
-        setPropertyString("demuxer-max-bytes", currentConfig.demuxerMaxBytes.toString())
-        setPropertyString("demuxer-max-back-bytes", currentConfig.demuxerMaxBackBytes.toString())
+        setPropertyString("audio-channels", activeVideoOutputCandidate().audioChannelsOverride ?: currentConfig.audioChannels)
+        setPropertyString(
+            "demuxer-max-bytes",
+            (activeVideoOutputCandidate().demuxerMaxBytesOverride ?: currentConfig.demuxerMaxBytes).toString()
+        )
+        setPropertyString(
+            "demuxer-max-back-bytes",
+            (activeVideoOutputCandidate().demuxerMaxBackBytesOverride ?: currentConfig.demuxerMaxBackBytes).toString()
+        )
     }
 
     private fun applyActiveVideoOutputProperties() {
         val activeCandidate = activeVideoOutputCandidate()
         setPropertyString("vo", activeCandidate.videoOutput)
-        setPropertyString("hwdec", activeCandidate.hardwareDecode)
+        setPropertyString("hwdec", resolvedHardwareDecode())
         activeCandidate.gpuApi?.let { setPropertyString("gpu-api", it) }
         activeCandidate.gpuContext?.let { setPropertyString("gpu-context", it) }
         if (activeCandidate.openglEs) {
             setPropertyString("opengl-es", "yes")
+        }
+    }
+
+    private fun resolvedHardwareDecode(): String {
+        val activeCandidate = activeVideoOutputCandidate()
+        val allowReshaping =
+            currentConfig.gpuNextDolbyVisionReshapingEnabled &&
+                currentConfig.videoOutputMode == LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE
+        return if (allowReshaping) {
+            "mediacodec-copy"
+        } else {
+            activeCandidate.hardwareDecode
         }
     }
 

@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -98,6 +99,17 @@ fun SeasonTabs(
         val specials = seasons.filter { it == 0 }
         regularSeasons + specials
     }
+    val tabShape = remember { RoundedCornerShape(20.dp) }
+    val tabBorder = CardDefaults.border(
+        focusedBorder = Border(
+            border = BorderStroke(2.dp, NexioColors.FocusRing),
+            shape = RoundedCornerShape(20.dp)
+        )
+    )
+    val tabScale = CardDefaults.scale(focusedScale = 1.0f)
+    val typography = MaterialTheme.typography
+    val tabTextStyle = remember(typography) { typography.titleMedium }
+    val textSecondary = NexioTheme.extendedColors.textSecondary
 
     LazyRow(
         modifier = Modifier
@@ -157,28 +169,21 @@ fun SeasonTabs(
                         }
                         false
                     },
-                shape = CardDefaults.shape(
-                    shape = RoundedCornerShape(20.dp)
-                ),
+                shape = CardDefaults.shape(shape = tabShape),
                 colors = CardDefaults.colors(
                     containerColor = if (isSelected) NexioColors.SurfaceVariant else NexioColors.BackgroundCard,
                     focusedContainerColor = NexioColors.Secondary
                 ),
-                border = CardDefaults.border(
-                    focusedBorder = Border(
-                        border = BorderStroke(2.dp, NexioColors.FocusRing),
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                ),
-                scale = CardDefaults.scale(focusedScale = 1.0f)
+                border = tabBorder,
+                scale = tabScale
             ) {
                 Text(
                     text = if (season == 0) stringResource(R.string.episodes_specials) else stringResource(R.string.episodes_season, season),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = tabTextStyle,
                     color = when {
                         isFocused -> NexioColors.OnSecondary
                         isSelected -> NexioColors.TextPrimary
-                        else -> NexioTheme.extendedColors.textSecondary
+                        else -> textSecondary
                     },
                     modifier = Modifier.padding(vertical = 10.dp, horizontal = 20.dp)
                 )
@@ -222,6 +227,13 @@ fun EpisodesRow(
     val lazyListState = rememberLazyListState(prefetchStrategy = rowPrefetchStrategy)
     var lastHorizontalKeyRepeatTime by remember { mutableStateOf(0L) }
     val episodeIds = remember(episodes) { episodes.mapTo(mutableSetOf()) { it.id } }
+    val context = LocalContext.current
+    val imdbLogoRequest = remember(context) {
+        ImageRequest.Builder(context)
+            .data(R.raw.imdb_logo_2016)
+            .crossfade(false)
+            .build()
+    }
 
     LaunchedEffect(episodeIds, episodeFocusRequesters) {
         episodeFocusRequesters.keys.retainAll(episodeIds)
@@ -230,6 +242,11 @@ fun EpisodesRow(
     LaunchedEffect(restoreFocusToken, restoreEpisodeId, restoreTargetRequester, episodes) {
         if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
         if (episodes.none { it.id == restoreEpisodeId }) return@LaunchedEffect
+        val index = episodes.indexOfFirst { it.id == restoreEpisodeId }
+        if (index >= 0) {
+            val offsetPx = with(density) { (cardMetrics.cardWidth * 2f / 3f - cardMetrics.itemSpacing).roundToPx() }
+            lazyListState.scrollToItem(index, scrollOffset = -offsetPx)
+        }
         restoreTargetRequester?.requestFocusAfterFrames()
     }
 
@@ -273,22 +290,20 @@ fun EpisodesRow(
             key = { it.id },
             contentType = { EPISODE_CARD_CONTENT_TYPE }
         ) { episode ->
-            val progress = episode.season?.let { s ->
-                episode.episode?.let { e ->
-                    episodeProgressMap[s to e]
-                }
+            val seasonEp = remember(episode.season, episode.episode) {
+                episode.season?.let { s -> episode.episode?.let { e -> s to e } }
             }
-            val imdbRating = episode.season?.let { s ->
-                episode.episode?.let { e ->
-                    episodeRatings[s to e]
-                }
+            val progress = remember(seasonEp, episodeProgressMap) { seasonEp?.let { episodeProgressMap[it] } }
+            val imdbRating = remember(seasonEp, episodeRatings) { seasonEp?.let { episodeRatings[it] } }
+            val isMarkedWatched = remember(seasonEp, watchedEpisodes) { seasonEp?.let { watchedEpisodes.contains(it) } ?: false }
+            val episodeFocusRequester = remember(episode.id) { episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() } }
+            val episodeOnClick = remember(episode.id) { { onEpisodeClick(episode) } }
+            val episodeOnLongPress = remember(episode.id) { { optionsEpisode = episode } }
+            val episodeOnFocused = remember(episode.id) { { onEpisodeFocused(episode.id) } }
+            val isRestoreTarget = episode.id == restoreEpisodeId
+            val episodeOnFocusRestored = remember(isRestoreTarget, onRestoreFocusHandled) {
+                if (isRestoreTarget) onRestoreFocusHandled else null
             }
-            val isMarkedWatched = episode.season?.let { s ->
-                episode.episode?.let { e ->
-                    watchedEpisodes.contains(s to e)
-                }
-            } ?: false
-            val episodeFocusRequester = episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() }
             EpisodeCard(
                 episode = episode,
                 watchProgress = progress,
@@ -296,15 +311,14 @@ fun EpisodesRow(
                 isMarkedWatched = isMarkedWatched,
                 blurUnwatched = blurUnwatchedEpisodes,
                 cardMetrics = cardMetrics,
-                onClick = { onEpisodeClick(episode) },
-                onLongPress = { optionsEpisode = episode },
+                onClick = episodeOnClick,
+                onLongPress = episodeOnLongPress,
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
+                imdbLogoRequest = imdbLogoRequest,
                 focusRequester = episodeFocusRequester,
-                onFocused = {
-                    onEpisodeFocused(episode.id)
-                },
-                onFocusRestored = if (episode.id == restoreEpisodeId) onRestoreFocusHandled else null
+                onFocused = episodeOnFocused,
+                onFocusRestored = episodeOnFocusRestored
             )
         }
     }
@@ -370,6 +384,7 @@ private fun EpisodeCard(
     isMarkedWatched: Boolean = false,
     blurUnwatched: Boolean = false,
     cardMetrics: EpisodeCardMetrics,
+    imdbLogoRequest: ImageRequest,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
@@ -431,12 +446,6 @@ private fun EpisodeCard(
                     transformations(com.nexio.tv.ui.util.BlurTransformation())
                 }
             }
-            .build()
-    }
-    val imdbLogoRequest = remember(context) {
-        ImageRequest.Builder(context)
-            .data(R.raw.imdb_logo_2016)
-            .crossfade(false)
             .build()
     }
     val strEpisode = stringResource(R.string.episodes_episode)
@@ -504,7 +513,7 @@ private fun EpisodeCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Box(
             modifier = Modifier
@@ -667,18 +676,23 @@ private fun EpisodeCard(
                             bottom = cardMetrics.contentPadding * 0.5f
                         )
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
                         .height(cardMetrics.progressBarHeight)
-                        .background(Color.Black.copy(alpha = 0.45f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progressPercent)
-                            .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
-                            .height(cardMetrics.progressBarHeight)
-                            .background(NexioColors.Primary)
-                    )
-                }
+                        .clip(RoundedCornerShape(cardMetrics.progressBarHeight / 2))
+                        .drawWithCache {
+                            val trackColor = Color.Black.copy(alpha = 0.45f)
+                            val fillColor = NexioColors.Primary
+                            val clamped = progressPercent.coerceIn(0f, 1f)
+                            onDrawBehind {
+                                drawRect(color = trackColor, size = size)
+                                if (clamped > 0f) {
+                                    drawRect(
+                                        color = fillColor,
+                                        size = Size(size.width * clamped, size.height)
+                                    )
+                                }
+                            }
+                        }
+                )
             }
 
             if (showCompletedBadge) {
@@ -701,7 +715,7 @@ private fun EpisodeCard(
                     )
                 }
             } else if (showNotStartedBadge) {
-                Canvas(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(
@@ -709,15 +723,17 @@ private fun EpisodeCard(
                             top = cardMetrics.statusBadgeInset
                         )
                         .size(cardMetrics.statusBadgeSize)
-                ) {
-                    drawCircle(
-                        color = NexioColors.TextSecondary.copy(alpha = 0.9f),
-                        style = Stroke(
-                            width = 2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
-                        )
-                    )
-                }
+                        .drawWithCache {
+                            val stroke = Stroke(
+                                width = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
+                            )
+                            val ringColor = NexioColors.TextSecondary.copy(alpha = 0.9f)
+                            onDrawBehind {
+                                drawCircle(color = ringColor, style = stroke)
+                            }
+                        }
+                )
             }
         }
     }
