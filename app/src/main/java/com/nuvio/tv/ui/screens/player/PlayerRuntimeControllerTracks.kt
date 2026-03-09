@@ -173,7 +173,14 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
 internal fun PlayerRuntimeController.maybeAdjustLibassPipelineForTracks(tracks: Tracks) {
     if (libassPipelineSwitchInFlight) return
 
-    val desiredUseLibass = requestedUseLibassByUser && tracks.hasAssSsaTextTrack()
+    val hasAssSsaTrack = tracks.hasAssSsaTextTrack()
+    if (hasAssSsaTrack) {
+        hasDetectedAssSsaTrackForCurrentStream = true
+    }
+    // Keep libass sticky only after we have actually detected ASS/SSA for this stream.
+    // This avoids startup ping-pong but does not keep libass on for streams that never
+    // expose ASS/SSA tracks.
+    val desiredUseLibass = requestedUseLibassByUser && hasDetectedAssSsaTrackForCurrentStream
     if (desiredUseLibass == activePlayerUsesLibass) return
 
     val player = _exoPlayer ?: return

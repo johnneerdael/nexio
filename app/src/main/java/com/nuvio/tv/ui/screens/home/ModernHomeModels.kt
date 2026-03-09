@@ -266,13 +266,19 @@ internal fun buildCatalogItem(
     item: MetaPreview,
     row: CatalogRow,
     useLandscapePosters: Boolean,
-    occurrence: Int
+    occurrence: Int,
+    strTypeMovie: String = "",
+    strTypeSeries: String = ""
 ): ModernCarouselItem {
     val heroPreview = HeroPreview(
         title = item.name,
         logo = item.logo,
         description = item.description,
-        contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
+        contentTypeText = when (item.apiType.lowercase()) {
+            "movie" -> strTypeMovie.ifBlank { item.apiType.replaceFirstChar { ch -> ch.uppercase() } }
+            "series" -> strTypeSeries.ifBlank { item.apiType.replaceFirstChar { ch -> ch.uppercase() } }
+            else -> item.apiType.replaceFirstChar { ch -> ch.uppercase() }
+        },
         isSeries = isSeriesType(item.apiType),
         yearText = extractYear(item.releaseInfo),
         runtimeText = formatHeroRuntime(item.runtime),

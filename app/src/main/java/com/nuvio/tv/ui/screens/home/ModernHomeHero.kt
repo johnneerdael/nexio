@@ -43,8 +43,10 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.ui.theme.NuvioColors
+import androidx.compose.ui.res.stringResource
 
 private data class ModernHeroSecondaryMeta(
     val highlightText: String?,
@@ -254,6 +256,15 @@ internal fun HeroTitleBlock(
             )
         }
 
+        val strStatusEnded = stringResource(R.string.series_status_ended)
+        val strStatusContinuing = stringResource(R.string.series_status_continuing)
+        val strStatusCurrent = stringResource(R.string.series_status_current)
+        val strStatusCancelled = stringResource(R.string.series_status_cancelled)
+        val strStatusReleased = stringResource(R.string.series_status_released)
+        val strStatusPlanned = stringResource(R.string.series_status_planned)
+        val strStatusRumored = stringResource(R.string.series_status_rumored)
+        val strStatusInProduction = stringResource(R.string.series_status_in_production)
+        val strStatusPostProduction = stringResource(R.string.series_status_post_production)
         val secondaryMeta = remember(
             preview.secondaryHighlightText,
             preview.ageRatingText,
@@ -263,7 +274,18 @@ internal fun HeroTitleBlock(
             ModernHeroSecondaryMeta(
                 highlightText = preview.secondaryHighlightText?.trim()?.takeIf { it.isNotBlank() },
                 ageRating = preview.ageRatingText?.trim()?.takeIf { it.isNotBlank() },
-                status = preview.statusText?.trim()?.takeIf { it.isNotBlank() }?.uppercase(),
+                status = when (preview.statusText?.trim()?.lowercase()) {
+                    "ended" -> strStatusEnded.uppercase()
+                    "continuing", "returning series" -> strStatusContinuing.uppercase()
+                    "current" -> strStatusCurrent.uppercase()
+                    "cancelled", "canceled" -> strStatusCancelled.uppercase()
+                    "released" -> strStatusReleased.uppercase()
+                    "planned" -> strStatusPlanned.uppercase()
+                    "rumored" -> strStatusRumored.uppercase()
+                    "in production" -> strStatusInProduction.uppercase()
+                    "post production" -> strStatusPostProduction.uppercase()
+                    else -> preview.statusText?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
+                },
                 details = buildList {
                     preview.languageText?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
                 }

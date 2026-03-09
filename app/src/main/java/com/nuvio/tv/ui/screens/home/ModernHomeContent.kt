@@ -246,7 +246,9 @@ fun ModernHomeContent(
                                 item = item,
                                 row = row,
                                 useLandscapePosters = useLandscapePosters,
-                                occurrence = occurrence
+                                occurrence = occurrence,
+                                strTypeMovie = strTypeMovie,
+                                strTypeSeries = strTypeSeries
                             )
                         }
                     )
