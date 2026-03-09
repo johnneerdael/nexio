@@ -282,7 +282,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     )
     
     resetLoadingOverlayForNewStream()
-    _exoPlayer?.stop()
+    releasePlayer(flushPlaybackState = false)
 
     currentStreamUrl = url
     currentHeaders = newHeaders
@@ -311,37 +311,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     showStreamSourceIndicator(stream)
     resetNextEpisodeCardState(clearEpisode = false)
 
-    _exoPlayer?.let { player ->
-        scope.launch {
-            try {
-                val playerSettings = playerSettingsDataStore.playerSettings.first()
-                val startupSubtitlePreparation = prepareStreamStartSubtitles(playerSettings)
-                runAfrPreflightIfEnabled(
-                    url = url,
-                    headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
-                )
-                applyStartupSubtitlePreparation(startupSubtitlePreparation)
-                player.setMediaSource(
-                    mediaSourceFactory.createMediaSource(
-                        url = url,
-                        headers = newHeaders,
-                        subtitleConfigurations = buildStartupSubtitleConfigurations(startupSubtitlePreparation)
-                    )
-                )
-                player.playWhenReady = true
-                player.prepare()
-                if (!startupSubtitlePreparation.fetchCompleted) {
-                    fetchAddonSubtitles()
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
-            }
-        }
-    } ?: run {
-        initializePlayer(url, newHeaders)
-    }
+    initializePlayer(url, newHeaders)
 
     loadSavedProgressFor(currentSeason, currentEpisode)
 }
@@ -580,7 +550,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     // Reset transient playback flags before stopping, so stop callbacks never
     // persist stale positions into the newly selected episode.
     resetLoadingOverlayForNewStream()
-    _exoPlayer?.stop()
+    releasePlayer(flushPlaybackState = false)
 
     currentStreamUrl = url
     currentHeaders = newHeaders
@@ -643,37 +613,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
 
-    _exoPlayer?.let { player ->
-        scope.launch {
-            try {
-                val playerSettings = playerSettingsDataStore.playerSettings.first()
-                val startupSubtitlePreparation = prepareStreamStartSubtitles(playerSettings)
-                runAfrPreflightIfEnabled(
-                    url = url,
-                    headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
-                )
-                applyStartupSubtitlePreparation(startupSubtitlePreparation)
-                player.setMediaSource(
-                    mediaSourceFactory.createMediaSource(
-                        url = url,
-                        headers = newHeaders,
-                        subtitleConfigurations = buildStartupSubtitleConfigurations(startupSubtitlePreparation)
-                    )
-                )
-                player.playWhenReady = true
-                player.prepare()
-                if (!startupSubtitlePreparation.fetchCompleted) {
-                    fetchAddonSubtitles()
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
-            }
-        }
-    } ?: run {
-        initializePlayer(url, newHeaders)
-    }
+    initializePlayer(url, newHeaders)
 
     loadSavedProgressFor(currentSeason, currentEpisode)
 }
