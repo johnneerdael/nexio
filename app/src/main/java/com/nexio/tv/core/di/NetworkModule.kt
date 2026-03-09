@@ -62,15 +62,23 @@ object NetworkModule {
     fun provideTraktOkHttpClient(
         okHttpClient: OkHttpClient
     ): OkHttpClient = okHttpClient.newBuilder()
+        // Discovery feeds are app-cached separately; disable OkHttp disk cache for Trakt traffic.
+        .cache(null)
         .addInterceptor { chain ->
             val request = chain.request()
             val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-            val newRequest = request.newBuilder()
+            val requestBuilder = request.newBuilder()
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "NEXIO/$version")
                 .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
                 .header("trakt-api-version", "2")
-                .build()
+            // Keep app-level Trakt snapshot caching, but bypass OkHttp disk cache for live Trakt GET data.
+            if (request.method.equals("GET", ignoreCase = true)) {
+                requestBuilder
+                    .header("Cache-Control", "no-cache")
+                    .header("Pragma", "no-cache")
+            }
+            val newRequest = requestBuilder.build()
 
             if (!BuildConfig.DEBUG) {
                 return@addInterceptor chain.proceed(newRequest)
@@ -111,6 +119,17 @@ object NetworkModule {
                 )
                 throw error
             }
+        }
+        .addNetworkInterceptor { chain ->
+            val request = chain.request()
+            val response = chain.proceed(request)
+            if (!request.method.equals("GET", ignoreCase = true)) {
+                return@addNetworkInterceptor response
+            }
+            response.newBuilder()
+                .removeHeader("Pragma")
+                .header("Cache-Control", "no-store")
+                .build()
         }
         .build()
 
