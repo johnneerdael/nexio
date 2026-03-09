@@ -406,6 +406,11 @@ private fun ModernHomeRoute(
             viewModel.saveFocusState(vi, vo, ri, ii, m)
         }
     }
+    val preloadAdjacentItem = remember(viewModel) {
+        { item: MetaPreview ->
+            viewModel.preloadAdjacentItem(item)
+        }
+    }
     ModernHomeContent(
         uiState = uiState,
         focusState = focusState,
@@ -425,6 +430,7 @@ private fun ModernHomeRoute(
         onItemFocus = { item ->
             viewModel.onItemFocus(item)
         },
+        onPreloadAdjacentItem = preloadAdjacentItem,
         onSaveFocusState = saveModernFocusState
     )
 }

@@ -64,6 +64,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
+        internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
     }
 
@@ -124,6 +125,8 @@ class HomeViewModel @Inject constructor(
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
+    internal var adjacentItemPrefetchJob: Job? = null
+    internal var pendingAdjacentPrefetchItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var movieWatchedBatchJob: Job? = null
@@ -175,6 +178,8 @@ class HomeViewModel @Inject constructor(
     )
 
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
+
+    fun preloadAdjacentItem(item: MetaPreview) = preloadAdjacentItemPipeline(item)
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 

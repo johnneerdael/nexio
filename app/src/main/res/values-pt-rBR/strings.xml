@@ -85,7 +85,7 @@
     <string name="episodes_mark_season_unwatched">Marcar temporada como não assistida</string>
     <string name="episodes_mark_previous_watched">Marcar anteriores como assistidos</string>
     <string name="episodes_play">Assistir</string>
-    <string name="play_manually">Assistir Manualmente</string
+    <string name="play_manually">Assistir Manualmente</string>
     <string name="episodes_season_actions">Opções da temporada</string>
 
     <!-- MetaDetailsViewModel -->
