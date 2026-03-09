@@ -32,6 +32,10 @@ internal fun PlayerRuntimeController.fetchMetaDetails(id: String?, type: String?
 
 internal fun PlayerRuntimeController.applyMetaDetails(meta: Meta) {
     metaVideos = meta.videos
+    observeEpisodeWatchProgress()
+    if (pendingResumeProgress == null && currentSeason != null && currentEpisode != null) {
+        loadSavedProgressFor(currentSeason, currentEpisode)
+    }
     val description = resolveDescription(meta)
 
     _uiState.update { state ->

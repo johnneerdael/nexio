@@ -130,12 +130,17 @@ internal fun PlayerRuntimeController.observeEpisodeWatchProgress() {
     val type = contentType ?: return
     if (type.lowercase() != "series") return
     val baseId = id.split(":").firstOrNull() ?: id
-    scope.launch {
-        watchProgressRepository.getAllEpisodeProgress(baseId).collectLatest { progressMap ->
+    episodeWatchProgressJob?.cancel()
+    episodeWatchProgressJob = scope.launch {
+        watchProgressRepository.getAllEpisodeProgress(
+            contentId = baseId,
+            addonVideos = metaVideos
+        ).collectLatest { progressMap ->
             _uiState.update { it.copy(episodeWatchProgressMap = progressMap) }
         }
     }
-    scope.launch {
+    if (watchedEpisodesJob != null) return
+    watchedEpisodesJob = scope.launch {
         watchedItemsPreferences.getWatchedEpisodesForContent(baseId).collectLatest { watchedSet ->
             _uiState.update { it.copy(watchedEpisodeKeys = watchedSet) }
         }
@@ -232,7 +237,12 @@ internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode:
     scope.launch {
         pendingResumeProgress = null
         val progress = if (season != null && episode != null) {
-            watchProgressRepository.getEpisodeProgress(contentId, season, episode).firstOrNull()
+            watchProgressRepository.getEpisodeProgress(
+                contentId = contentId,
+                season = season,
+                episode = episode,
+                addonVideos = metaVideos
+            ).firstOrNull()
         } else {
             watchProgressRepository.getProgress(contentId).firstOrNull()
         }

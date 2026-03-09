@@ -276,19 +276,27 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId)
+            _uiState
+                .map { state -> state.meta?.videos.orEmpty() }
                 .distinctUntilChanged()
-                .collectLatest { progressMap ->
-                _uiState.update { state ->
-                    if (state.episodeProgressMap == progressMap) {
-                        state
-                    } else {
-                        state.copy(episodeProgressMap = progressMap)
-                    }
+                .collectLatest { addonVideos ->
+                    watchProgressRepository.getAllEpisodeProgress(
+                        contentId = itemId,
+                        addonVideos = addonVideos
+                    )
+                        .distinctUntilChanged()
+                        .collectLatest { progressMap ->
+                            _uiState.update { state ->
+                                if (state.episodeProgressMap == progressMap) {
+                                    state
+                                } else {
+                                    state.copy(episodeProgressMap = progressMap)
+                                }
+                            }
+                            // Recalculate next to watch when progress changes
+                            calculateNextToWatch()
+                        }
                 }
-                // Recalculate next to watch when progress changes
-                calculateNextToWatch()
-            }
         }
     }
 

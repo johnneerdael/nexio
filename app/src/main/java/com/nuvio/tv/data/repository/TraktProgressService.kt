@@ -23,6 +23,7 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktSeasonSummaryDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktSeasonEpisodeDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
+import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -157,6 +158,7 @@ class TraktProgressService @Inject constructor(
     private var lastKnownEpisodeActivityFingerprint: String? = null
 
     private val showSeasonsCache = mutableMapOf<String, TimedCache<List<TraktSeasonSummaryDto>>>()
+    private val episodeOrderingCache = mutableMapOf<String, TimedCache<Map<Pair<Int, Int>, Pair<Int, Int>>>>()
     private val showSeasonsCacheTtlMs = 30 * 60_000L
     @Volatile
     private var lastManualRefreshSignalMs: Long = 0L
@@ -462,6 +464,27 @@ class TraktProgressService @Inject constructor(
 
         invalidateEpisodeProgressCache(corrected.contentId)
         refreshNow()
+    }
+
+    suspend fun remapEpisodeProgressToAddonKeys(
+        contentId: String,
+        addonEpisodes: List<Video>,
+        progressMap: Map<Pair<Int, Int>, WatchProgress>
+    ): Map<Pair<Int, Int>, WatchProgress> {
+        if (progressMap.isEmpty()) return progressMap
+
+        val eligibleAddonEpisodes = addonEpisodes.filter { it.season != null && it.episode != null }
+        if (eligibleAddonEpisodes.isEmpty()) return progressMap
+
+        val traktToAddonKeyMap = getTraktToAddonEpisodeKeyMap(
+            contentId = contentId,
+            addonEpisodes = eligibleAddonEpisodes
+        ) ?: return progressMap
+
+        return EpisodeOrderingMapper.remapProgressToAddonKeys(
+            progressMap = progressMap,
+            traktToAddonKeyMap = traktToAddonKeyMap
+        )
     }
 
     suspend fun isMovieWatched(contentId: String): Boolean {
@@ -1269,6 +1292,27 @@ class TraktProgressService @Inject constructor(
         }
     }
 
+    private suspend fun getTraktToAddonEpisodeKeyMap(
+        contentId: String,
+        addonEpisodes: List<Video>
+    ): Map<Pair<Int, Int>, Pair<Int, Int>>? {
+        val pathId = toTraktPathId(contentId)
+        val cacheKey = "$pathId:${addonEpisodeSignature(addonEpisodes)}"
+        val now = System.currentTimeMillis()
+        val cached = episodeOrderingCache[cacheKey]
+        if (cached != null && now - cached.updatedAtMs < showSeasonsCacheTtlMs) {
+            return cached.value
+        }
+
+        val seasons = fetchShowSeasons(contentId) ?: return null
+        val mapping = EpisodeOrderingMapper.buildTraktToAddonKeyMap(
+            addonVideos = addonEpisodes,
+            traktSeasons = seasons
+        )
+        episodeOrderingCache[cacheKey] = TimedCache(mapping, now)
+        return mapping
+    }
+
     private suspend fun resolveEpisodeMismatch(
         contentId: String,
         addonSeason: Int,
@@ -1344,6 +1388,19 @@ class TraktProgressService @Inject constructor(
             .replace(Regex("[^a-z0-9\\s]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+
+    private fun addonEpisodeSignature(addonEpisodes: List<Video>): Int {
+        return addonEpisodes
+            .asSequence()
+            .mapNotNull { video ->
+                val season = video.season ?: return@mapNotNull null
+                val episode = video.episode ?: return@mapNotNull null
+                "$season:$episode:${normalizeTitle(video.title)}"
+            }
+            .sorted()
+            .joinToString("|")
+            .hashCode()
     }
 
     private fun computeAbsoluteFromAddonVideoId(videoId: String?, addonSeason: Int, addonEpisode: Int): Int? {

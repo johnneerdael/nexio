@@ -158,6 +158,8 @@ class PlayerRuntimeController(
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null
     internal var watchProgressSaveJob: Job? = null
+    internal var episodeWatchProgressJob: Job? = null
+    internal var watchedEpisodesJob: Job? = null
     internal var seekProgressSyncJob: Job? = null
     internal var frameRateProbeJob: Job? = null
     internal var frameRateProbeToken: Long = 0L
