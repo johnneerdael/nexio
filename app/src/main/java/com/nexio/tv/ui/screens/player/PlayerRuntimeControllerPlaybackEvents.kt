@@ -332,12 +332,15 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     }
 }
 
-internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = null) {
+internal fun PlayerRuntimeController.emitScrobbleStop(
+    progressPercent: Float? = null,
+    allowWithoutStart: Boolean = false
+) {
     val item = currentScrobbleItem
     if (item == null) return
 
     val provided = progressPercent
-    if (!hasRequestedScrobbleStartForCurrentItem && (provided ?: 0f) < 80f) return
+    if (!allowWithoutStart && !hasRequestedScrobbleStartForCurrentItem && (provided ?: 0f) < 80f) return
 
     val percent = provided ?: currentPlaybackProgressPercent()
     scope.launch {
@@ -369,7 +372,12 @@ internal fun PlayerRuntimeController.emitStopScrobbleForCurrentProgress() {
 }
 
 internal fun PlayerRuntimeController.flushPlaybackSnapshotForSwitchOrExit() {
-    emitStopScrobbleForCurrentProgress()
+    val progressPercent = currentPlaybackProgressPercent()
+    // Teardown path: persist watch state even if start state tracking got out of sync.
+    emitScrobbleStop(
+        progressPercent = progressPercent,
+        allowWithoutStart = progressPercent >= 1f
+    )
     saveWatchProgress()
 }
 
