@@ -26,6 +26,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -255,14 +256,14 @@ class StreamScreenViewModel @Inject constructor(
             val installedAddons = addonRepository.getInstalledAddons().first()
             val installedAddonOrder = installedAddons.map { it.displayName }
 
-            fun applySuccess(addonStreamGroups: List<AddonStreams>) {
+            fun applySuccess(addonStreamGroups: List<AddonStreams>, isAllLoaded: Boolean) {
                 val orderedAddonStreams = StreamAutoPlaySelector.orderAddonStreams(
                     addonStreamGroups,
                     installedAddonOrder
                 )
                 val allStreams = orderedAddonStreams.flatMap { it.streams }
                 val availableAddons = orderedAddonStreams.map { it.addonName }
-                val selectedAutoPlayStream = if (autoPlayHandledForSession) {
+                val selectedAutoPlayStream = if (autoPlayHandledForSession || !isAllLoaded) {
                     null
                 } else {
                     StreamAutoPlaySelector.selectAutoPlayStream(
@@ -314,7 +315,7 @@ class StreamScreenViewModel @Inject constructor(
                         TAG,
                         "Using embedded video streams for videoId=$videoId count=${embeddedAddonStreams.streams.size}"
                     )
-                    applySuccess(listOf(embeddedAddonStreams))
+                    applySuccess(listOf(embeddedAddonStreams), isAllLoaded = true)
                     updateSourceChipsForEmbedded(embeddedAddonStreams.addonName)
                     if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
                         directAutoPlayFlowEnabledForSession = false
@@ -332,44 +333,50 @@ class StreamScreenViewModel @Inject constructor(
 
             updateSourceChipsForFetchStart(installedAddons)
 
-            streamRepository.getStreamsFromAllAddons(
-                type = contentType,
-                videoId = videoId,
-                season = season,
-                episode = episode
-            ).collectLatest { result ->
-                when (result) {
-                    is NetworkResult.Success -> {
-                        applySuccess(result.data)
-                    }
-                    is NetworkResult.Error -> {
-                        if (directAutoPlayFlowEnabledForSession) {
-                            directAutoPlayFlowEnabledForSession = false
+            var lastSuccessData: List<AddonStreams>? = null
+            withTimeoutOrNull(5_000L) {
+                streamRepository.getStreamsFromAllAddons(
+                    type = contentType,
+                    videoId = videoId,
+                    season = season,
+                    episode = episode
+                ).collectLatest { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            lastSuccessData = result.data
+                            applySuccess(result.data, isAllLoaded = false)
                         }
-                        updateUiStateIfChanged {
-                            it.copy(
-                                isLoading = false,
-                                error = result.message,
-                                isDirectAutoPlayFlow = false,
-                                showDirectAutoPlayOverlay = false,
-                                directAutoPlayMessage = null
-                            )
+                        is NetworkResult.Error -> {
+                            if (directAutoPlayFlowEnabledForSession) {
+                                directAutoPlayFlowEnabledForSession = false
+                            }
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    isLoading = false,
+                                    error = result.message,
+                                    isDirectAutoPlayFlow = false,
+                                    showDirectAutoPlayOverlay = false,
+                                    directAutoPlayMessage = null
+                                )
+                            }
                         }
-                    }
-                    NetworkResult.Loading -> {
-                        updateUiStateIfChanged {
-                            it.copy(
-                                isLoading = true,
-                                showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
-                                    true
-                                } else {
-                                    it.showDirectAutoPlayOverlay
-                                }
-                            )
+                        NetworkResult.Loading -> {
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    isLoading = true,
+                                    showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
+                                        true
+                                    } else {
+                                        it.showDirectAutoPlayOverlay
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
+            // All addons responded (or timeout) — now run auto-select on full results
+            lastSuccessData?.let { applySuccess(it, isAllLoaded = true) }
 
             markRemainingSourceChipsAsError()
 
