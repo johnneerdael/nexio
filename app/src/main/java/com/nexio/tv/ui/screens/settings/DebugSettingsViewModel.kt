@@ -42,7 +42,12 @@ class DebugSettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collectLatest { settings ->
-                _uiState.update { it.copy(bufferLogsEnabled = settings.enableBufferLogs) }
+                _uiState.update {
+                    it.copy(
+                        bufferLogsEnabled = settings.enableBufferLogs,
+                        iecPackerLogsEnabled = settings.fireOsIecVerboseLoggingEnabled
+                    )
+                }
             }
         }
     }
@@ -73,6 +78,11 @@ class DebugSettingsViewModel @Inject constructor(
             is DebugSettingsEvent.ToggleStreamDiagnostics -> {
                 viewModelScope.launch { dataStore.setStreamDiagnosticsEnabled(event.enabled) }
             }
+            is DebugSettingsEvent.ToggleIecPackerLogs -> {
+                viewModelScope.launch {
+                    playerSettingsDataStore.setFireOsIecVerboseLoggingEnabled(event.enabled)
+                }
+            }
         }
     }
 }
@@ -82,6 +92,7 @@ data class DebugSettingsUiState(
     val syncCodeFeaturesEnabled: Boolean = false,
     val streamDiagnosticsEnabled: Boolean = false,
     val bufferLogsEnabled: Boolean = false,
+    val iecPackerLogsEnabled: Boolean = false,
     val signInLoading: Boolean = false,
     val signInResult: String? = null
 )
@@ -91,5 +102,6 @@ sealed class DebugSettingsEvent {
     data class ToggleSyncCodeFeatures(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleStreamDiagnostics(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleBufferLogs(val enabled: Boolean) : DebugSettingsEvent()
+    data class ToggleIecPackerLogs(val enabled: Boolean) : DebugSettingsEvent()
     data class SignIn(val email: String, val password: String) : DebugSettingsEvent()
 }

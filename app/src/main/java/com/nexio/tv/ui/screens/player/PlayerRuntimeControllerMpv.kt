@@ -279,6 +279,8 @@ internal fun PlayerRuntimeController.releaseMpvPlayer() {
 internal fun PlayerRuntimeController.pausePlaybackForLifecycle() {
     if (usesLibmpvBackend()) {
         mpvView?.setPaused(true)
+        emitStopScrobbleForCurrentProgress()
+        saveWatchProgress()
         stopWatchProgressSaving()
         stopProgressUpdates()
         _uiState.update { it.copy(isPlaying = false) }

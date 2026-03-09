@@ -503,8 +503,10 @@ fun PlayerScreen(
                             if (!uiState.showControls) {
                                 val repeatCount = keyEvent.nativeKeyEvent.repeatCount
                                 val deltaMs = when {
+                                    repeatCount >= 30 -> 120_000L
+                                    repeatCount >= 15 -> 60_000L
                                     repeatCount >= 8 -> 30_000L
-                                    repeatCount >= 3 -> 20_000L
+                                    repeatCount >= 3 -> 15_000L
                                     else -> 10_000L
                                 }
                                 val signedDeltaMs =
@@ -1440,6 +1442,15 @@ private fun ProgressBar(
             }
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
+                val repeatCount = keyEvent.nativeKeyEvent.repeatCount
+                val deltaMs = when {
+                    repeatCount >= 30 -> 120_000L
+                    repeatCount >= 15 -> 60_000L
+                    repeatCount >= 8 -> 30_000L
+                    repeatCount >= 3 -> 15_000L
+                    else -> 10_000L
+                }
+
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_LEFT,
@@ -1455,33 +1466,19 @@ private fun ProgressBar(
                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
                     when (keyEvent.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (downFocusRequester != null) {
-                                try {
-                                    downFocusRequester.requestFocus()
-                                } catch (_: Exception) {
-                                }
-                                true
-                            } else {
-                                false
-                            }
+                            downFocusRequester?.requestFocus()
+                            true
                         }
                         KeyEvent.KEYCODE_DPAD_UP -> {
-                            if (upFocusRequester != null) {
-                                try {
-                                    upFocusRequester.requestFocus()
-                                } catch (_: Exception) {
-                                }
-                                true
-                            } else {
-                                false
-                            }
+                            upFocusRequester?.requestFocus()
+                            true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
-                            onSeekPreview(-10_000L)
+                            onSeekPreview(-deltaMs)
                             true
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            onSeekPreview(10_000L)
+                            onSeekPreview(deltaMs)
                             true
                         }
                         else -> false

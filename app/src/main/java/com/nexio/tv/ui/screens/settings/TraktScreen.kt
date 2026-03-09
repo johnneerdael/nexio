@@ -516,7 +516,7 @@ fun TraktScreen(
                         val selected = option.key in uiState.catalogPreferences.selectedPopularListKeys
                         SettingsToggleRow(
                             title = option.title,
-                            subtitle = "${option.itemCount} items",
+                            subtitle = stringResource(R.string.mdblist_list_item_count_subtitle, option.itemCount),
                             checked = selected,
                             onToggle = {
                                 viewModel.onPopularListSelected(option.key, !selected)

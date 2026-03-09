@@ -1,5 +1,6 @@
 package com.nexio.tv.core.network
 
+import kotlinx.coroutines.CancellationException
 import retrofit2.Response
 
 suspend fun <T> safeApiCall(apiCall: suspend () -> Response<T>): NetworkResult<T> {
@@ -12,6 +13,8 @@ suspend fun <T> safeApiCall(apiCall: suspend () -> Response<T>): NetworkResult<T
         } else {
             NetworkResult.Error(response.message(), response.code())
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         NetworkResult.Error(e.message ?: "Unknown error occurred")
     }

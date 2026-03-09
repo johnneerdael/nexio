@@ -24,6 +24,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     progressJob?.cancel()
     hideControlsJob?.cancel()
     watchProgressSaveJob?.cancel()
+    scrobbleHeartbeatJob?.cancel()
     seekProgressSyncJob?.cancel()
     frameRateProbeJob?.cancel()
     hideStreamSourceIndicatorJob?.cancel()

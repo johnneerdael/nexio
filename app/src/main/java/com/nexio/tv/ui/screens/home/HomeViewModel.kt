@@ -137,6 +137,8 @@ class HomeViewModel @Inject constructor(
     internal var traktDiscoveryObserved: Boolean = false
     @Volatile
     internal var mdbListDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var lastForegroundRefreshMs: Long = 0L
 
     init {
         restorePersistedCatalogSnapshot()
@@ -179,6 +181,8 @@ class HomeViewModel @Inject constructor(
     private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
 
     private fun observeAccountSyncRefresh() = observeAccountSyncRefreshPipeline()
+
+    fun onForeground() = onForegroundPipeline()
 
     private fun restorePersistedCatalogSnapshot() = restorePersistedCatalogSnapshotPipeline()
 

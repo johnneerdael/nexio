@@ -125,6 +125,15 @@ fun DebugSettingsContent(
                 )
             }
 
+            item(key = "debug_toggle_iec_packer_logs") {
+                DebugToggleCard(
+                    title = stringResource(R.string.debug_iec_packer_logs_title),
+                    subtitle = stringResource(R.string.debug_iec_packer_logs_subtitle),
+                    checked = uiState.iecPackerLogsEnabled,
+                    onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleIecPackerLogs(it)) }
+                )
+            }
+
             item(key = "debug_toggle_stream_diagnostics") {
                 DebugToggleCard(
                     title = stringResource(R.string.debug_stream_diagnostics_title),

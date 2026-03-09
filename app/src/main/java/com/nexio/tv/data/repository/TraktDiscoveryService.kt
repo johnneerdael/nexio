@@ -93,6 +93,7 @@ class TraktDiscoveryService @Inject constructor(
     private var lastActivitiesFingerprint: String? = null
 
     private val minRefreshIntervalMs = 30_000L
+    private val fallbackRefreshIntervalMs = 15 * 60_000L
     private val maxItemsPerRail = 20
     @Volatile
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
@@ -164,7 +165,15 @@ class TraktDiscoveryService @Inject constructor(
             if (!force && lockedNow - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
                 return
             }
-            if (!force && !hasActivitiesChanged()) {
+            val snapshot = rawSnapshotState.value
+            val snapshotAgeMs = if (snapshot.updatedAtMs > 0L) {
+                (lockedNow - snapshot.updatedAtMs).coerceAtLeast(0L)
+            } else {
+                Long.MAX_VALUE
+            }
+            val fallbackRefreshDue = snapshotAgeMs >= fallbackRefreshIntervalMs
+
+            if (!force && !hasActivitiesChanged() && !fallbackRefreshDue) {
                 lastRefreshMs = lockedNow
                 return
             }
