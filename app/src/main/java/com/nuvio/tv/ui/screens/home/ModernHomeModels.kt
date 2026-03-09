@@ -11,7 +11,7 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.components.formatRemainingTime
+import com.nuvio.tv.ui.components.formatContinueWatchingProgressLabel
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 internal const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
@@ -142,17 +142,10 @@ internal fun buildContinueWatchingItem(
     val secondaryHighlightText = when (item) {
         is ContinueWatchingItem.InProgress -> {
             val progress = item.progress
-            when {
-                progress.duration > 0L -> formatRemainingTime(
-                    remainingMs = progress.remainingTime,
-                    strHoursMinLeft = context.getString(R.string.cw_hours_min_left),
-                    strMinLeft = context.getString(R.string.cw_min_left),
-                    strAlmostDone = context.getString(R.string.cw_almost_done)
-                )
-                progress.progressPercent != null ->
-                    "${progress.progressPercent.toInt().coerceIn(0, 100)}% watched"
-                else -> context.getString(R.string.cw_resume)
-            }
+            formatContinueWatchingProgressLabel(
+                progress = progress,
+                resumeLabel = context.getString(R.string.cw_resume)
+            )
         }
         is ContinueWatchingItem.NextUp -> {
             if (!item.info.hasAired) {
