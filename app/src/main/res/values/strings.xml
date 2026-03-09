@@ -351,6 +351,9 @@
     <string name="autoplay_scope_addons">Installed addons only</string>
     <string name="autoplay_scope_plugins">Enabled plugins only</string>
     <string name="autoplay_scope">Auto-play Source Scope</string>
+    <string name="autoplay_timeout_title">Stream Selection Timeout</string>
+    <string name="autoplay_timeout_sub">Wait time for addons before selecting. 0 = first result wins.</string>
+    <string name="autoplay_timeout_instant">Instant</string>
     <string name="autoplay_allowed_addons">Allowed Addons</string>
     <string name="autoplay_all_addons">All installed addons</string>
     <string name="autoplay_allowed_plugins">Allowed Plugins</string>

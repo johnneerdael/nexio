@@ -399,8 +399,11 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
-            // After 5s: if streams arrived, auto-select now; if not, wait for first result from inner job
-            delay(5_000L)
+            // After timeout: if streams arrived, auto-select now; if not, wait for first result from inner job
+            val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
+            if (timeoutMs > 0L) {
+                delay(timeoutMs)
+            }
             timeoutElapsed = true
             if (!autoSelectTriggered && lastSuccessData != null) {
                 autoSelectTriggered = true

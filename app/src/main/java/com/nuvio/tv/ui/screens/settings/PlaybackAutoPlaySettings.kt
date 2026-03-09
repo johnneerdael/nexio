@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
@@ -81,6 +82,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
+    onSetStreamAutoPlayTimeoutSeconds: (Int) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
@@ -120,6 +122,29 @@ internal fun LazyListScope.autoPlaySettingsItems(
             onClick = onShowModeDialog,
             onFocused = onItemFocused
         )
+    }
+
+    if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
+        item(key = "autoplay_stream_timeout") {
+            val timeoutSec = playerSettings.streamAutoPlayTimeoutSeconds
+            val valueText = if (timeoutSec == 0) {
+                stringResource(R.string.autoplay_timeout_instant)
+            } else {
+                "${timeoutSec}s"
+            }
+            SliderSettingsItem(
+                icon = Icons.Default.Timer,
+                title = stringResource(R.string.autoplay_timeout_title),
+                subtitle = stringResource(R.string.autoplay_timeout_sub),
+                value = timeoutSec,
+                valueText = valueText,
+                minValue = 0,
+                maxValue = 10,
+                step = 1,
+                onValueChange = { onSetStreamAutoPlayTimeoutSeconds(it) },
+                onFocused = onItemFocused
+            )
+        }
     }
 
     item(key = "autoplay_next_episode") {

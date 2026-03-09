@@ -822,7 +822,10 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 }
             }
 
-            delay(5_000L)
+            val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
+            if (timeoutMs > 0L) {
+                delay(timeoutMs)
+            }
             timeoutElapsed = true
             if (!autoSelectTriggered && lastSuccessData != null) {
                 autoSelectTriggered = true
