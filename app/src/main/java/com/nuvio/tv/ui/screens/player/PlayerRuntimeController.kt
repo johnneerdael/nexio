@@ -230,6 +230,7 @@ class PlayerRuntimeController(
     internal var libassPipelineOverrideForCurrentStream: Boolean? = null
     internal var activePlayerUsesLibass: Boolean = false
     internal var libassPipelineSwitchInFlight: Boolean = false
+    internal var hasDetectedAssSsaTrackForCurrentStream: Boolean = false
     internal var libassPipelineDecisionStreamUrl: String? = null
     internal var episodeStreamsJob: Job? = null
     internal var episodeStreamsCacheRequestKey: String? = null
