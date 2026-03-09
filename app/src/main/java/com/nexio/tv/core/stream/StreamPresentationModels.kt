@@ -267,8 +267,8 @@ object StreamPresentationEngine {
             0
         }
         val groupedItems = groupedPreSortItems.sortedWith(
-            compareByDescending<StreamCardModel> { it.parsed.sizeBytes ?: -1L }
-                .thenByDescending { resolutionRank(it.parsed.resolution) }
+            compareByDescending<StreamCardModel> { resolutionRank(it.parsed.resolution) }
+                .thenByDescending { it.parsed.sizeBytes ?: -1L }
                 .thenByDescending { it.parsed.isCached == true }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }
                 .thenBy { it.title.lowercase(Locale.US) }
