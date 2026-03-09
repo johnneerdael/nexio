@@ -124,27 +124,25 @@ internal fun LazyListScope.autoPlaySettingsItems(
         )
     }
 
-    if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
-        item(key = "autoplay_stream_timeout") {
-            val timeoutSec = playerSettings.streamAutoPlayTimeoutSeconds
-            val valueText = if (timeoutSec == 0) {
-                stringResource(R.string.autoplay_timeout_instant)
-            } else {
-                "${timeoutSec}s"
-            }
-            SliderSettingsItem(
-                icon = Icons.Default.Timer,
-                title = stringResource(R.string.autoplay_timeout_title),
-                subtitle = stringResource(R.string.autoplay_timeout_sub),
-                value = timeoutSec,
-                valueText = valueText,
-                minValue = 0,
-                maxValue = 10,
-                step = 1,
-                onValueChange = { onSetStreamAutoPlayTimeoutSeconds(it) },
-                onFocused = onItemFocused
-            )
+    item(key = "autoplay_stream_timeout") {
+        val timeoutSec = playerSettings.streamAutoPlayTimeoutSeconds
+        val valueText = if (timeoutSec == 0) {
+            stringResource(R.string.autoplay_timeout_instant)
+        } else {
+            "${timeoutSec}s"
         }
+        SliderSettingsItem(
+            icon = Icons.Default.Timer,
+            title = stringResource(R.string.autoplay_timeout_title),
+            subtitle = stringResource(R.string.autoplay_timeout_sub),
+            value = timeoutSec,
+            valueText = valueText,
+            minValue = 0,
+            maxValue = 10,
+            step = 1,
+            onValueChange = { onSetStreamAutoPlayTimeoutSeconds(it) },
+            onFocused = onItemFocused
+        )
     }
 
     item(key = "autoplay_next_episode") {
