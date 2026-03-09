@@ -823,7 +823,7 @@ internal fun PlayerRuntimeController.playNextEpisode() {
             }
 
             val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
-            if (timeoutMs > 0L) {
+            if (timeoutMs > 0L && playerSettings.streamAutoPlayTimeoutSeconds < 11) {
                 delay(timeoutMs)
             }
             timeoutElapsed = true

@@ -126,10 +126,10 @@ internal fun LazyListScope.autoPlaySettingsItems(
 
     item(key = "autoplay_stream_timeout") {
         val timeoutSec = playerSettings.streamAutoPlayTimeoutSeconds
-        val valueText = if (timeoutSec == 0) {
-            stringResource(R.string.autoplay_timeout_instant)
-        } else {
-            "${timeoutSec}s"
+        val valueText = when (timeoutSec) {
+            0 -> stringResource(R.string.autoplay_timeout_instant)
+            11 -> stringResource(R.string.autoplay_timeout_unlimited)
+            else -> "${timeoutSec}s"
         }
         SliderSettingsItem(
             icon = Icons.Default.Timer,
@@ -138,7 +138,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
             value = timeoutSec,
             valueText = valueText,
             minValue = 0,
-            maxValue = 10,
+            maxValue = 11,
             step = 1,
             onValueChange = { onSetStreamAutoPlayTimeoutSeconds(it) },
             onFocused = onItemFocused

@@ -285,6 +285,7 @@
     <string name="autoplay_timeout_title">Limit czasu wyboru strumienia</string>
     <string name="autoplay_timeout_sub">Czas oczekiwania na dodatki przed wyborem.</string>
     <string name="autoplay_timeout_instant">Natychmiast</string>
+    <string name="autoplay_timeout_unlimited">Bez limitu</string>
     <string name="autoplay_allowed_addons">Dozwolone dodatki</string>
     <string name="autoplay_all_addons">Wszystkie zainstalowane dodatki</string>
     <string name="autoplay_allowed_plugins">Dozwolone wtyczki</string>
