@@ -295,44 +295,62 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
     if (pendingTmdbEnrichItemId == item.id) return
 
+    // Clear enriching for previous item immediately when focus moves away
+    if (_enrichingItemId.value != null && _enrichingItemId.value != item.id) {
+        setEnrichingItemId(null)
+    }
+
+    val willEnrich = currentTmdbSettings.enabled || externalMetaPrefetchEnabled
+    if (willEnrich) setEnrichingItemId(item.id)
+
     pendingTmdbEnrichItemId = item.id
     tmdbEnrichFocusJob?.cancel()
     tmdbEnrichFocusJob = viewModelScope.launch(Dispatchers.IO) {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
-        if (pendingTmdbEnrichItemId != item.id) return@launch
-        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return@launch
-
-        if (currentTmdbSettings.enabled) {
-            val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
-            val enrichment = if (tmdbId != null) runCatching {
-                tmdbMetadataService.fetchEnrichment(
-                    tmdbId = tmdbId,
-                    contentType = item.type,
-                    language = currentTmdbSettings.language
-                )
-            }.getOrNull() else null
-
-            if (enrichment != null) {
-                prefetchedTmdbIds.add(item.id)
-                prefetchedExternalMetaIds.add(item.id)
-                updateCatalogItemWithTmdb(item.id, enrichment)
-                return@launch
-            }
+        if (pendingTmdbEnrichItemId != item.id) {
+            if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
+            return@launch
+        }
+        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) {
+            if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
+            return@launch
         }
 
-        if (!externalMetaPrefetchEnabled) return@launch
-        if (item.id in prefetchedExternalMetaIds) return@launch
-        if (!externalMetaPrefetchInFlightIds.add(item.id)) return@launch
         try {
-            val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
-                .first { it is NetworkResult.Success || it is NetworkResult.Error }
-            if (result is NetworkResult.Success) {
-                prefetchedExternalMetaIds.add(item.id)
-                updateCatalogItemWithMeta(item.id, result.data)
+            var tmdbEnriched = false
+            if (currentTmdbSettings.enabled) {
+                val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
+                val enrichment = if (tmdbId != null) runCatching {
+                    tmdbMetadataService.fetchEnrichment(
+                        tmdbId = tmdbId,
+                        contentType = item.type,
+                        language = currentTmdbSettings.language
+                    )
+                }.getOrNull() else null
+                if (enrichment != null) {
+                    prefetchedTmdbIds.add(item.id)
+                    prefetchedExternalMetaIds.add(item.id)
+                    updateCatalogItemWithTmdb(item.id, enrichment)
+                    tmdbEnriched = true
+                }
+            }
+            if (!tmdbEnriched && externalMetaPrefetchEnabled &&
+                item.id !in prefetchedExternalMetaIds &&
+                externalMetaPrefetchInFlightIds.add(item.id)) {
+                try {
+                    val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
+                        .first { it is NetworkResult.Success || it is NetworkResult.Error }
+                    if (result is NetworkResult.Success) {
+                        prefetchedExternalMetaIds.add(item.id)
+                        updateCatalogItemWithMeta(item.id, result.data)
+                    }
+                } finally {
+                    externalMetaPrefetchInFlightIds.remove(item.id)
+                    if (pendingTmdbEnrichItemId == item.id) pendingTmdbEnrichItemId = null
+                }
             }
         } finally {
-            externalMetaPrefetchInFlightIds.remove(item.id)
-            if (pendingTmdbEnrichItemId == item.id) pendingTmdbEnrichItemId = null
+            if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
         }
     }
 }
@@ -343,12 +361,19 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
         if (currentTmdbSettings.useBasicInfo) {
             merged = merged.copy(
                 name = enrichment.localizedTitle ?: merged.name,
-                description = enrichment.description ?: merged.description
+                description = enrichment.description ?: merged.description,
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres
             )
         }
         if (currentTmdbSettings.useArtwork) {
             merged = merged.copy(
                 logo = enrichment.logo ?: merged.logo
+            )
+        }
+        if (currentTmdbSettings.useDetails) {
+            merged = merged.copy(
+                ageRating = enrichment.ageRating ?: merged.ageRating,
+                status = enrichment.status ?: merged.status
             )
         }
         return merged
@@ -394,7 +419,6 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         background = meta.backdropUrl ?: currentItem.backdropUrl,
         logo = meta.logo ?: currentItem.logo,
         description = meta.description ?: currentItem.description,
-        releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
         imdbRating = meta.imdbRating ?: currentItem.imdbRating,
         genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres,
         runtime = meta.runtime ?: currentItem.runtime,

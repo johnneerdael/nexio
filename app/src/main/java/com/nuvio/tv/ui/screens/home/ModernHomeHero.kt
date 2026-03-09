@@ -1,11 +1,8 @@
 package com.nuvio.tv.ui.screens.home
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -177,11 +174,16 @@ internal fun ModernHeroMediaLayer(
 @Composable
 internal fun HeroTitleBlock(
     preview: HeroPreview?,
+    enriching: Boolean = false,
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (preview == null) return
-
+    val alpha by animateFloatAsState(
+        targetValue = if (enriching) 0f else 1f,
+        animationSpec = tween(if (enriching) 120 else 220),
+        label = "heroTitleAlpha"
+    )
     val descriptionMaxLines = if (portraitMode) 4 else 5
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
@@ -200,7 +202,7 @@ internal fun HeroTitleBlock(
         preview.logo?.let {
             ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(true)
+                .crossfade(false)
                 .size(width = logoMaxWidthPx, height = logoHeightPx)
                 .build()
         }
@@ -225,16 +227,11 @@ internal fun HeroTitleBlock(
     }
 
     Column(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer { this.alpha = alpha },
         verticalArrangement = Arrangement.spacedBy(titleSpacing)
     ) {
         var logoLoadFailed by remember(preview.logo) { mutableStateOf(false) }
         val showLogo = !preview.logo.isNullOrBlank() && !logoLoadFailed
-        AnimatedContent(
-            targetState = if (showLogo) preview.logo else preview.title,
-            transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
-            label = "heroTitleOrLogo"
-        ) { _ ->
         if (showLogo) {
             AsyncImage(
                 model = logoModel,
@@ -255,7 +252,6 @@ internal fun HeroTitleBlock(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-        }
         }
 
         val secondaryMeta = remember(
@@ -430,19 +426,13 @@ internal fun HeroTitleBlock(
         }
 
         preview.description?.takeIf { it.isNotBlank() }?.let { description ->
-            AnimatedContent(
-                targetState = description,
-                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
-                label = "heroDescription"
-            ) { desc ->
             Text(
-                text = desc,
+                text = description,
                 style = scaledDescriptionStyle,
                 color = NuvioColors.TextPrimary,
                 maxLines = descriptionMaxLines,
                 overflow = TextOverflow.Ellipsis
             )
-            }
         }
     }
 }

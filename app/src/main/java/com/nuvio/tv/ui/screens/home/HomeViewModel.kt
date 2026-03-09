@@ -82,6 +82,10 @@ class HomeViewModel @Inject constructor(
     internal val _loadingCatalogs = MutableStateFlow<Set<String>>(emptySet())
     val loadingCatalogs: StateFlow<Set<String>> = _loadingCatalogs.asStateFlow()
 
+    internal val _enrichingItemId = MutableStateFlow<String?>(null)
+    val enrichingItemId: StateFlow<String?> = _enrichingItemId.asStateFlow()
+    internal fun setEnrichingItemId(id: String?) { _enrichingItemId.value = id }
+
     internal val catalogsMap = linkedMapOf<String, CatalogRow>()
     internal val catalogOrder = mutableListOf<String>()
     internal var addonsCache: List<Addon> = emptyList()
