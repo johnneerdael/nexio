@@ -26,7 +26,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -334,17 +333,25 @@ class StreamScreenViewModel @Inject constructor(
             updateSourceChipsForFetchStart(installedAddons)
 
             var lastSuccessData: List<AddonStreams>? = null
-            withTimeoutOrNull(5_000L) {
+            var autoSelectTriggered = false
+            var timeoutElapsed = false
+
+            val streamLoadInner = viewModelScope.launch {
                 streamRepository.getStreamsFromAllAddons(
                     type = contentType,
                     videoId = videoId,
                     season = season,
                     episode = episode
-                ).collectLatest { result ->
+                ).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
                             lastSuccessData = result.data
                             applySuccess(result.data, isAllLoaded = false)
+                            // After timeout, auto-select on first result that arrives
+                            if (timeoutElapsed && !autoSelectTriggered) {
+                                autoSelectTriggered = true
+                                applySuccess(result.data, isAllLoaded = true)
+                            }
                         }
                         is NetworkResult.Error -> {
                             if (directAutoPlayFlowEnabledForSession) {
@@ -374,21 +381,30 @@ class StreamScreenViewModel @Inject constructor(
                         }
                     }
                 }
-            }
-            // All addons responded (or timeout) — now run auto-select on full results
-            lastSuccessData?.let { applySuccess(it, isAllLoaded = true) }
-
-            markRemainingSourceChipsAsError()
-
-            if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
-                directAutoPlayFlowEnabledForSession = false
-                updateUiStateIfChanged {
-                    it.copy(
-                        isDirectAutoPlayFlow = false,
-                        showDirectAutoPlayOverlay = false,
-                        directAutoPlayMessage = null
-                    )
+                // All addons finished — run auto-select if not yet triggered
+                if (!autoSelectTriggered) {
+                    autoSelectTriggered = true
+                    lastSuccessData?.let { applySuccess(it, isAllLoaded = true) }
                 }
+                markRemainingSourceChipsAsError()
+                if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
+                    directAutoPlayFlowEnabledForSession = false
+                    updateUiStateIfChanged {
+                        it.copy(
+                            isDirectAutoPlayFlow = false,
+                            showDirectAutoPlayOverlay = false,
+                            directAutoPlayMessage = null
+                        )
+                    }
+                }
+            }
+
+            // After 5s: if streams arrived, auto-select now; if not, wait for first result from inner job
+            delay(5_000L)
+            timeoutElapsed = true
+            if (!autoSelectTriggered && lastSuccessData != null) {
+                autoSelectTriggered = true
+                applySuccess(lastSuccessData!!, isAllLoaded = true)
             }
         }
     }
