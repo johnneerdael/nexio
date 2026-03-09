@@ -4,7 +4,13 @@ import android.content.Intent
 import android.media.audiofx.AudioEffect
 
 internal fun PlayerRuntimeController.releasePlayer() {
-    flushPlaybackSnapshotForSwitchOrExit()
+    releasePlayer(flushPlaybackState = true)
+}
+
+internal fun PlayerRuntimeController.releasePlayer(flushPlaybackState: Boolean) {
+    if (flushPlaybackState) {
+        flushPlaybackSnapshotForSwitchOrExit()
+    }
 
     notifyAudioSessionUpdate(false)
 
