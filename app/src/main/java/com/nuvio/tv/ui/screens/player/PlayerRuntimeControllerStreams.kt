@@ -5,6 +5,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
+import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.ui.components.SourceChipItem
@@ -12,7 +13,6 @@ import com.nuvio.tv.ui.components.SourceChipStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -771,37 +771,64 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 playerSettings.streamAutoPlayRegex
             }
             var selectedStream: Stream? = null
-            val terminalResult = streamRepository.getStreamsFromAllAddons(
-                type = type,
-                videoId = nextVideo.id,
-                season = nextVideo.season,
-                episode = nextVideo.episode
-            ).firstOrNull { result ->
-                when (result) {
-                    is NetworkResult.Success -> {
-                        val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
-                        val allStreams = orderedStreams.flatMap { it.streams }
-                        selectedStream = StreamAutoPlaySelector.selectAutoPlayStream(
-                            streams = allStreams,
-                            mode = effectiveMode,
-                            regexPattern = effectiveRegex,
-                            source = effectiveSource,
-                            installedAddonNames = installedAddonOrder.toSet(),
-                            selectedAddons = effectiveSelectedAddons,
-                            selectedPlugins = effectiveSelectedPlugins,
-                            preferredBingeGroup = if (playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) {
-                                currentStreamBingeGroup
-                            } else {
-                                null
-                            },
-                            preferBingeGroupInSelection = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
-                        )
-                        selectedStream != null
+            var lastSuccessData: List<AddonStreams>? = null
+            var autoSelectTriggered = false
+            var timeoutElapsed = false
+            var lastError: NetworkResult.Error? = null
+
+            fun trySelectStream(data: List<AddonStreams>): Stream? {
+                val orderedStreams = StreamAutoPlaySelector.orderAddonStreams(data, installedAddonOrder)
+                val allStreams = orderedStreams.flatMap { it.streams }
+                return StreamAutoPlaySelector.selectAutoPlayStream(
+                    streams = allStreams,
+                    mode = effectiveMode,
+                    regexPattern = effectiveRegex,
+                    source = effectiveSource,
+                    installedAddonNames = installedAddonOrder.toSet(),
+                    selectedAddons = effectiveSelectedAddons,
+                    selectedPlugins = effectiveSelectedPlugins,
+                    preferredBingeGroup = if (playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode) {
+                        currentStreamBingeGroup
+                    } else {
+                        null
+                    },
+                    preferBingeGroupInSelection = playerSettings.streamAutoPlayPreferBingeGroupForNextEpisode
+                )
+            }
+
+            val innerJob = scope.launch {
+                streamRepository.getStreamsFromAllAddons(
+                    type = type,
+                    videoId = nextVideo.id,
+                    season = nextVideo.season,
+                    episode = nextVideo.episode
+                ).collect { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            lastSuccessData = result.data
+                            if (timeoutElapsed && !autoSelectTriggered) {
+                                autoSelectTriggered = true
+                                selectedStream = trySelectStream(result.data)
+                            }
+                        }
+                        is NetworkResult.Error -> lastError = result
+                        NetworkResult.Loading -> Unit
                     }
-                    is NetworkResult.Error -> true
-                    NetworkResult.Loading -> false
+                }
+                // All addons finished
+                if (!autoSelectTriggered) {
+                    autoSelectTriggered = true
+                    lastSuccessData?.let { selectedStream = trySelectStream(it) }
                 }
             }
+
+            delay(5_000L)
+            timeoutElapsed = true
+            if (!autoSelectTriggered && lastSuccessData != null) {
+                autoSelectTriggered = true
+                selectedStream = trySelectStream(lastSuccessData!!)
+            }
+            innerJob.join()
 
             val streamToPlay = selectedStream
             if (streamToPlay != null) {
@@ -840,7 +867,7 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 }
                 showEpisodeStreamPicker(
                     video = nextVideo,
-                    forceRefresh = terminalResult is NetworkResult.Error
+                    forceRefresh = lastError != null
                 )
             }
         } catch (e: CancellationException) {
