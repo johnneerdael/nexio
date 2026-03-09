@@ -16,6 +16,7 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.Stream
@@ -53,6 +54,7 @@ class StreamScreenViewModel @Inject constructor(
     private val metaRepository: MetaRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -61,6 +63,7 @@ class StreamScreenViewModel @Inject constructor(
     private var streamLoadJob: Job? = null
     private var sourceChipErrorDismissJob: Job? = null
     private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
+    private var streamDiagnosticsEnabled: Boolean = false
 
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
@@ -113,6 +116,11 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch {
+            debugSettingsDataStore.streamDiagnosticsEnabled.collectLatest { enabled ->
+                streamDiagnosticsEnabled = enabled
+            }
+        }
         if (manualSelection) {
             // Returning from a playback error: keep the user on stream selection.
             autoPlayHandledForSession = true
@@ -298,6 +306,10 @@ class StreamScreenViewModel @Inject constructor(
                         selectedAutoPlayStream = selectedAutoPlayStream
                     )
                 }
+                logPresentationDiagnostics(
+                    origin = "stream_screen",
+                    organizedResult = organizedResult.organizedStreams
+                )
 
                 val selectedAutoPlayStream = organizedResult.selectedAutoPlayStream
                 if (selectedAutoPlayStream != null) {
@@ -357,7 +369,8 @@ class StreamScreenViewModel @Inject constructor(
                 type = contentType,
                 videoId = videoId,
                 season = season,
-                episode = episode
+                episode = episode,
+                requestOrigin = "stream_screen"
             ).collectLatest { result ->
                 when (result) {
                     is NetworkResult.Success -> {
@@ -613,6 +626,10 @@ class StreamScreenViewModel @Inject constructor(
                     requestContext = buildStreamRequestContext()
                 )
             }
+            logPresentationDiagnostics(
+                origin = "stream_screen_filter",
+                organizedResult = organizedStreams
+            )
             updateUiStateIfChanged {
                 it.copy(
                     selectedAddonFilter = organizedStreams.selectedAddonFilter,
@@ -689,6 +706,23 @@ class StreamScreenViewModel @Inject constructor(
             season = season,
             episode = episode,
             episodeTitle = episodeName
+        )
+    }
+
+    private fun logPresentationDiagnostics(
+        origin: String,
+        organizedResult: com.nexio.tv.core.stream.OrganizedStreams
+    ) {
+        if (!streamDiagnosticsEnabled) return
+        val d = organizedResult.diagnostics
+        Log.d(
+            TAG,
+            "STREAM_DIAG presentation origin=$origin input=${d.inputCount} droppedEpisode=${d.droppedEpisodeMismatchCount} " +
+                "droppedYear=${d.droppedMovieYearMismatchCount} droppedWebDv=${d.droppedWebDolbyVisionCount} " +
+                "droppedDedupe=${d.droppedDeduplicateCount} mixedCacheClusters=${d.dedupeMixedCachedUncachedClusterCount} " +
+                "cachedDroppedForUncachedClusters=${d.dedupeCachedDroppedForUncachedClusterCount} " +
+                "droppedAddonFilter=${d.droppedAddonFilterCount} " +
+                "presented=${d.finalPresentedCount}"
         )
     }
 }

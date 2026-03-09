@@ -153,7 +153,21 @@ data class OrganizedStreams(
     val items: List<StreamCardModel>,
     val availableAddons: List<String>,
     val selectedAddonFilter: String?,
-    val showAddonFilters: Boolean
+    val showAddonFilters: Boolean,
+    val diagnostics: StreamFilteringDiagnostics = StreamFilteringDiagnostics()
+)
+
+@Immutable
+data class StreamFilteringDiagnostics(
+    val inputCount: Int = 0,
+    val droppedEpisodeMismatchCount: Int = 0,
+    val droppedMovieYearMismatchCount: Int = 0,
+    val droppedWebDolbyVisionCount: Int = 0,
+    val droppedDeduplicateCount: Int = 0,
+    val dedupeMixedCachedUncachedClusterCount: Int = 0,
+    val dedupeCachedDroppedForUncachedClusterCount: Int = 0,
+    val droppedAddonFilterCount: Int = 0,
+    val finalPresentedCount: Int = 0
 )
 
 object StreamPresentationEngine {
@@ -175,16 +189,38 @@ object StreamPresentationEngine {
             )
         }
 
+        var droppedEpisodeMismatchCount = 0
+        var droppedMovieYearMismatchCount = 0
+
         val filteredByRequest = parsed.filterNot { item ->
-            shouldFilterForRequest(
+            val dropEpisode = shouldFilterEpisodeMismatch(
                 parsed = item.parsed,
                 requestContext = requestContext,
                 flags = flags
             )
+            if (dropEpisode) {
+                droppedEpisodeMismatchCount += 1
+                return@filterNot true
+            }
+
+            val dropYear = shouldFilterMovieYearMismatch(
+                parsed = item.parsed,
+                requestContext = requestContext,
+                flags = flags
+            )
+            if (dropYear) {
+                droppedMovieYearMismatchCount += 1
+            }
+            dropYear
         }
 
+        var droppedWebDolbyVisionCount = 0
         val filteredByDv = if (flags.filterWebDolbyVisionStreamsEnabled) {
-            filteredByRequest.filterNot { it.parsed.isWebDl && it.parsed.isDolbyVision }
+            filteredByRequest.filterNot {
+                val shouldDrop = it.parsed.isWebDl && it.parsed.isDolbyVision
+                if (shouldDrop) droppedWebDolbyVisionCount += 1
+                shouldDrop
+            }
         } else {
             filteredByRequest
         }
@@ -198,36 +234,68 @@ object StreamPresentationEngine {
             } else {
                 filteredByDv.filter { it.stream.addonName == effectiveFilter }
             }
+            val droppedAddonFilterCount = if (effectiveFilter == null) 0 else (filteredByDv.size - visibleItems.size)
+            val diagnostics = StreamFilteringDiagnostics(
+                inputCount = parsed.size,
+                droppedEpisodeMismatchCount = droppedEpisodeMismatchCount,
+                droppedMovieYearMismatchCount = droppedMovieYearMismatchCount,
+                droppedWebDolbyVisionCount = droppedWebDolbyVisionCount,
+                droppedDeduplicateCount = 0,
+                dedupeMixedCachedUncachedClusterCount = 0,
+                dedupeCachedDroppedForUncachedClusterCount = 0,
+                droppedAddonFilterCount = droppedAddonFilterCount,
+                finalPresentedCount = visibleItems.size
+            )
             return OrganizedStreams(
                 items = visibleItems,
                 availableAddons = availableAddons,
                 selectedAddonFilter = effectiveFilter,
-                showAddonFilters = true
+                showAddonFilters = true,
+                diagnostics = diagnostics
             )
         }
 
-        val groupedItems = if (flags.deduplicateGroupedStreamsEnabled) {
+        val dedupeResult = if (flags.deduplicateGroupedStreamsEnabled) {
             deduplicate(filteredByDv)
         } else {
-            filteredByDv
-        }.sortedWith(
+            DeduplicationResult(items = filteredByDv)
+        }
+        val groupedPreSortItems = dedupeResult.items
+        val droppedDeduplicateCount = if (flags.deduplicateGroupedStreamsEnabled) {
+            (filteredByDv.size - groupedPreSortItems.size).coerceAtLeast(0)
+        } else {
+            0
+        }
+        val groupedItems = groupedPreSortItems.sortedWith(
             compareByDescending<StreamCardModel> { it.parsed.sizeBytes ?: -1L }
                 .thenByDescending { resolutionRank(it.parsed.resolution) }
                 .thenByDescending { it.parsed.isCached == true }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }
                 .thenBy { it.title.lowercase(Locale.US) }
         )
+        val diagnostics = StreamFilteringDiagnostics(
+            inputCount = parsed.size,
+            droppedEpisodeMismatchCount = droppedEpisodeMismatchCount,
+            droppedMovieYearMismatchCount = droppedMovieYearMismatchCount,
+            droppedWebDolbyVisionCount = droppedWebDolbyVisionCount,
+            droppedDeduplicateCount = droppedDeduplicateCount,
+            dedupeMixedCachedUncachedClusterCount = dedupeResult.mixedCachedUncachedClusterCount,
+            dedupeCachedDroppedForUncachedClusterCount = dedupeResult.cachedDroppedForUncachedClusterCount,
+            droppedAddonFilterCount = 0,
+            finalPresentedCount = groupedItems.size
+        )
 
         return OrganizedStreams(
             items = groupedItems,
             availableAddons = emptyList(),
             selectedAddonFilter = null,
-            showAddonFilters = false
+            showAddonFilters = false,
+            diagnostics = diagnostics
         )
     }
 
-    private fun deduplicate(items: List<StreamCardModel>): List<StreamCardModel> {
-        if (items.size < 2) return items
+    private fun deduplicate(items: List<StreamCardModel>): DeduplicationResult {
+        if (items.size < 2) return DeduplicationResult(items = items)
 
         val disjointSet = IntDisjointSet(items.size)
         val keyToIndexes = LinkedHashMap<String, MutableList<Int>>()
@@ -252,13 +320,43 @@ object StreamPresentationEngine {
             clusters.getOrPut(root) { mutableListOf() }.add(item)
         }
 
-        return clusters.values.flatMap { cluster ->
+        var mixedCachedUncachedClusterCount = 0
+        var cachedDroppedForUncachedClusterCount = 0
+
+        val deduplicatedItems = clusters.values.flatMap { cluster ->
             if (cluster.size == 1) {
                 cluster
             } else {
-                selectDeduplicatedCluster(cluster)
+                val hasCachedCandidate = cluster.any {
+                    it.parsed.transportKind == StreamTransportKind.CACHED && it.parsed.hasUsablePlaybackTarget
+                }
+                val hasUncachedCandidate = cluster.any {
+                    it.parsed.transportKind == StreamTransportKind.UNCACHED && it.parsed.hasUsablePlaybackTarget
+                }
+                if (hasCachedCandidate && hasUncachedCandidate) {
+                    mixedCachedUncachedClusterCount += 1
+                }
+
+                val selected = selectDeduplicatedCluster(cluster)
+                val selectedHasCached = selected.any {
+                    it.parsed.transportKind == StreamTransportKind.CACHED && it.parsed.hasUsablePlaybackTarget
+                }
+                val selectedHasUncached = selected.any {
+                    it.parsed.transportKind == StreamTransportKind.UNCACHED && it.parsed.hasUsablePlaybackTarget
+                }
+                if (hasCachedCandidate && !selectedHasCached && selectedHasUncached) {
+                    cachedDroppedForUncachedClusterCount += 1
+                }
+
+                selected
             }
         }
+
+        return DeduplicationResult(
+            items = deduplicatedItems,
+            mixedCachedUncachedClusterCount = mixedCachedUncachedClusterCount,
+            cachedDroppedForUncachedClusterCount = cachedDroppedForUncachedClusterCount
+        )
     }
 
     private fun dedupeKeys(item: StreamCardModel): Set<String> {
@@ -304,44 +402,8 @@ object StreamPresentationEngine {
             .values
             .map { pickBestRepresentative(it) }
 
-        val cached = exactCollapsed.filter { it.parsed.transportKind == StreamTransportKind.CACHED && it.parsed.hasUsablePlaybackTarget }
-        if (cached.isNotEmpty()) {
-            return retainPerService(cached)
-        }
-
-        val uncached = exactCollapsed.filter { it.parsed.transportKind == StreamTransportKind.UNCACHED && it.parsed.hasUsablePlaybackTarget }
-        if (uncached.isNotEmpty()) {
-            return retainPerService(uncached)
-        }
-
-        val p2p = exactCollapsed.filter { it.parsed.transportKind == StreamTransportKind.P2P && it.parsed.hasUsablePlaybackTarget }
-        if (p2p.isNotEmpty()) {
-            return listOf(pickBestRepresentative(p2p))
-        }
-
-        val http = exactCollapsed.filter {
-            it.parsed.transportKind == StreamTransportKind.HTTP ||
-                it.parsed.transportKind == StreamTransportKind.EXTERNAL
-        }
-        if (http.isNotEmpty()) {
-            return listOf(pickBestRepresentative(http))
-        }
-
-        val youtube = exactCollapsed.filter { it.parsed.transportKind == StreamTransportKind.YOUTUBE }
-        if (youtube.isNotEmpty()) {
-            return listOf(pickBestRepresentative(youtube))
-        }
-
-        return listOf(pickBestRepresentative(exactCollapsed))
-    }
-
-    private fun retainPerService(items: List<StreamCardModel>): List<StreamCardModel> {
-        val withKnownService = items.filter { it.parsed.serviceRetentionKey != null }
-        val source = if (withKnownService.isNotEmpty()) withKnownService else items
-        return source
-            .groupBy { it.parsed.serviceRetentionKey ?: "unknown" }
-            .values
-            .map { pickBestRepresentative(it) }
+        if (exactCollapsed.isEmpty()) return emptyList()
+        return exactCollapsed
     }
 
     private fun pickBestRepresentative(items: List<StreamCardModel>): StreamCardModel {
@@ -587,15 +649,6 @@ object StreamPresentationEngine {
         }
     }
 
-    private fun shouldFilterForRequest(
-        parsed: ParsedStreamInfo,
-        requestContext: StreamRequestContext,
-        flags: StreamFeatureFlags
-    ): Boolean {
-        return shouldFilterEpisodeMismatch(parsed, requestContext, flags) ||
-            shouldFilterMovieYearMismatch(parsed, requestContext, flags)
-    }
-
     private fun shouldFilterEpisodeMismatch(
         parsed: ParsedStreamInfo,
         requestContext: StreamRequestContext,
@@ -670,6 +723,12 @@ object StreamPresentationEngine {
         return Regex("""\b(19|20)\d{2}\b""").containsMatchIn(rawText)
     }
 }
+
+private data class DeduplicationResult(
+    val items: List<StreamCardModel>,
+    val mixedCachedUncachedClusterCount: Int = 0,
+    val cachedDroppedForUncachedClusterCount: Int = 0
+)
 
 private object AioStyleStreamParser {
     private val seasonEpisodeTokenRegex = Regex("""(?i)^s\d{1,2}e\d{1,2}$""")
@@ -761,6 +820,9 @@ private object AioStyleStreamParser {
     private val releaseGroupRegex = Regex("""-([A-Za-z0-9][A-Za-z0-9._-]*)$""", RegexOption.IGNORE_CASE)
     private val cachedSymbols = listOf("⚡", "🚀", "cached")
     private val uncachedSymbols = listOf("⏳", "download", "uncached", "☁️")
+    private val cachedDebridPlusMarkerRegex = Regex(
+        pattern = """(?i)(?:^|[\s\[\(\|])(?:rd|pm|ad|dl|tb|ed|pk)\+(?:$|[\s\]\)\|])"""
+    )
 
     private val servicePatterns = linkedMapOf(
         "RD" to listOf("realdebrid", "real-debrid", "rd"),
@@ -944,6 +1006,7 @@ private object AioStyleStreamParser {
         return when {
             uncachedSymbols.any { lowered.contains(it.lowercase(Locale.US)) } -> false
             cachedSymbols.any { lowered.contains(it.lowercase(Locale.US)) } -> true
+            cachedDebridPlusMarkerRegex.containsMatchIn(lowered) -> true
             else -> null
         }
     }

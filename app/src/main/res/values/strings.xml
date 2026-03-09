@@ -249,8 +249,10 @@
     <string name="audio_dv_sub">Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support</string>
     <string name="audio_dv_experimental_title">DV7 - Experimental DV8.1</string>
     <string name="audio_dv_experimental_sub">Experimental native conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
-    <string name="audio_dts_iec_experimental_title">Fire OS - Experimental Audio Compatibility</string>
-    <string name="audio_dts_iec_experimental_sub">Experimental Fire OS audio quirk path. Enables the Fire TV compatibility layer in the Media3 audio stack, including DTS core fallback and capability-routing quirks. Default off because it can regress non-Fire devices.</string>
+    <string name="audio_dts_iec_experimental_title">Fire OS - IEC Packer</string>
+    <string name="audio_dts_iec_experimental_sub">Enables the custom Kodi-style Fire OS IEC packer path. Disable this to use the normal Media3 passthrough path instead.</string>
+    <string name="audio_fire_os_compatibility_fallback_title">Fire OS - Compatibility Fallback</string>
+    <string name="audio_fire_os_compatibility_fallback_sub">Allows Fire TV compatibility fallbacks, including legacy DTS-core downgrade and runtime passthrough recovery. Disable this with the IEC packer for strict Kodi-style parity.</string>
     <string name="audio_dv5_compatibility_title">DV5 - Compatibility Remap</string>
     <string name="audio_dv5_compatibility_sub">Allows DV5 streams to use the DV8.1 compatibility path. May fix color/signaling issues on some devices, but can regress others.</string>
     <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Preserve Mapping</string>
@@ -594,6 +596,8 @@
     <string name="debug_sync_code_subtitle">Show Generate/Enter Sync Code buttons in Account settings</string>
     <string name="debug_buffer_logs_title">Enable BUFFER Logs</string>
     <string name="debug_buffer_logs_subtitle">Emit periodic player buffer diagnostics to logcat (disabled by default)</string>
+    <string name="debug_stream_diagnostics_title">Stream Diagnostics Logging</string>
+    <string name="debug_stream_diagnostics_subtitle">Emit detailed addon fetch and stream filtering diagnostics to logcat (debugging only)</string>
     <string name="debug_section_account">Account</string>
     <string name="debug_manual_signin_title">Manual Sign In</string>
     <string name="debug_manual_signin_subtitle">Sign in with email and password (Supabase auth)</string>

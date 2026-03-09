@@ -147,6 +147,7 @@ internal fun LazyListScope.audioSettingsItems(
     onSetSkipSilence: (Boolean) -> Unit,
     onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
+    onSetFireOsCompatibilityFallbackEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -252,6 +253,18 @@ internal fun LazyListScope.audioSettingsItems(
             subtitle = stringResource(R.string.audio_dts_iec_experimental_sub),
             isChecked = playerSettings.experimentalDtsIecPassthroughEnabled,
             onCheckedChange = onSetExperimentalDtsIecPassthroughEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "audio_fire_os_compatibility_fallback") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_fire_os_compatibility_fallback_title),
+            subtitle = stringResource(R.string.audio_fire_os_compatibility_fallback_sub),
+            isChecked = playerSettings.fireOsCompatibilityFallbackEnabled,
+            onCheckedChange = onSetFireOsCompatibilityFallbackEnabled,
             onFocused = onItemFocused,
             enabled = enabled
         )

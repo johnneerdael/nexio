@@ -125,6 +125,15 @@ fun DebugSettingsContent(
                 )
             }
 
+            item(key = "debug_toggle_stream_diagnostics") {
+                DebugToggleCard(
+                    title = stringResource(R.string.debug_stream_diagnostics_title),
+                    subtitle = stringResource(R.string.debug_stream_diagnostics_subtitle),
+                    checked = uiState.streamDiagnosticsEnabled,
+                    onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleStreamDiagnostics(it)) }
+                )
+            }
+
             // ── Manual Sign In ──
             item(key = "debug_account_header") {
                 Spacer(modifier = Modifier.height(8.dp))

@@ -280,6 +280,11 @@ fun PlaybackSettingsContent(
                         viewModel.setExperimentalDtsIecPassthroughEnabled(enabled)
                     }
                 },
+                onSetFireOsCompatibilityFallbackEnabled = {
+                    enabled -> coroutineScope.launch {
+                        viewModel.setFireOsCompatibilityFallbackEnabled(enabled)
+                    }
+                },
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled = {
                     enabled ->
                     coroutineScope.launch {
