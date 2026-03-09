@@ -45,9 +45,11 @@ import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -87,6 +89,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             AudioCapabilities.setFireOsCompatibilityFallbackEnabled(
                 fireOsCompatibilityFallbackEnabled
+            )
+            AudioCapabilities.setFireOsIecVerboseLoggingEnabled(
+                playerSettings.fireOsIecVerboseLoggingEnabled
             )
             _uiState.update {
                 it.copy(
@@ -399,13 +404,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 val startupSubtitleConfigurations = startupSubtitlePreparation.attachedSubtitles
                     .distinctBy { "${it.id}|${it.url}" }
                     .map { subtitle -> toSubtitleConfiguration(subtitle) }
-                setMediaSource(
+                val initialMediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(
                         url = url,
                         headers = headers,
                         subtitleConfigurations = startupSubtitleConfigurations
                     )
-                )
+                }
+                setMediaSource(initialMediaSource)
                 playWhenReady = true
                 prepare()
 
