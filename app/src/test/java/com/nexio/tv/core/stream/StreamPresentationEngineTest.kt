@@ -305,6 +305,51 @@ class StreamPresentationEngineTest {
         )
     }
 
+    @Test
+    fun `grouped sorting orders cached then unknown then uncached before resolution and size`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.2026.720p.WEB-DL.x265.CachedLow.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ RD",
+                    videoSizeBytes = 2L * 1024L * 1024L * 1024L
+                ),
+                stream(
+                    filename = "Movie.2026.2160p.WEB-DL.x265.UnknownHigh.mkv",
+                    addonName = "Addon B",
+                    name = "No cache marker",
+                    videoSizeBytes = 20L * 1024L * 1024L * 1024L
+                ),
+                stream(
+                    filename = "Movie.2026.2160p.WEB-DL.x265.UncachedHigh.mkv",
+                    addonName = "Addon C",
+                    name = "download RD",
+                    videoSizeBytes = 25L * 1024L * 1024L * 1024L
+                ),
+                stream(
+                    filename = "Movie.2026.1080p.WEB-DL.x265.CachedMid.mkv",
+                    addonName = "Addon D",
+                    name = "⚡ PM",
+                    videoSizeBytes = 8L * 1024L * 1024L * 1024L
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B", "Addon C", "Addon D"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        assertEquals(
+            listOf(true, true, null, false),
+            result.items.map { it.parsed.isCached }
+        )
+        assertEquals(
+            listOf("1080p", "720p", "2160p", "2160p"),
+            result.items.map { it.parsed.resolution }
+        )
+    }
+
     private fun organize(stream: Stream) = StreamPresentationEngine.organize(
         streams = listOf(stream),
         availableAddons = listOf(stream.addonName),

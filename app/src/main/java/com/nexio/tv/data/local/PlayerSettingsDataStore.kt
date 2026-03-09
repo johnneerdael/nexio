@@ -161,6 +161,8 @@ data class PlayerSettings(
     // Fire OS compatibility fallback path for legacy DTS-core downgrade and passthrough recovery.
     // Disable this together with the IEC packer to keep Fire OS audio handling strict.
     val fireOsCompatibilityFallbackEnabled: Boolean = true,
+    // Debug: verbose Fire OS IEC packer logs for ADB troubleshooting.
+    val fireOsIecVerboseLoggingEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
     // Experimental: preserve mapping metadata when converting DV7 -> DV8.1.
@@ -348,6 +350,8 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
     private val fireOsCompatibilityFallbackEnabledKey =
         booleanPreferencesKey("fire_os_compatibility_fallback_enabled")
+    private val fireOsIecVerboseLoggingEnabledKey =
+        booleanPreferencesKey("fire_os_iec_verbose_logging_enabled")
     private val experimentalDv5ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv5_to_dv81_enabled")
     private val experimentalDv7ToDv81PreserveMappingEnabledKey =
@@ -591,6 +595,8 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
                 fireOsCompatibilityFallbackEnabled =
                     prefs[fireOsCompatibilityFallbackEnabledKey] ?: true,
+                fireOsIecVerboseLoggingEnabled =
+                    prefs[fireOsIecVerboseLoggingEnabledKey] ?: false,
                 experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
                 experimentalDv7ToDv81PreserveMappingEnabled =
                     prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false,
@@ -1010,6 +1016,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setFireOsCompatibilityFallbackEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[fireOsCompatibilityFallbackEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setFireOsIecVerboseLoggingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[fireOsIecVerboseLoggingEnabledKey] = enabled
         }
     }
 

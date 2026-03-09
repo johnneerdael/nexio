@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import javax.inject.Inject
 
 private const val TAG = "StreamScreenViewModel"
@@ -62,6 +63,7 @@ class StreamScreenViewModel @Inject constructor(
     private var directAutoPlayFlowEnabledForSession = false
     private var streamLoadJob: Job? = null
     private var sourceChipErrorDismissJob: Job? = null
+    private var activeStreamSearchRequestId: String? = null
     private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     private var streamDiagnosticsEnabled: Boolean = false
 
@@ -164,8 +166,17 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
             StreamScreenEvent.OnRetry -> loadStreams()
-            StreamScreenEvent.OnBackPress -> { /* Handle in screen */ }
+            StreamScreenEvent.OnBackPress -> cancelActiveStreamSearch()
         }
+    }
+
+    fun cancelActiveStreamSearch() {
+        activeStreamSearchRequestId?.let(streamRepository::cancelActiveStreamRequests)
+        activeStreamSearchRequestId = null
+        streamLoadJob?.cancel()
+        streamLoadJob = null
+        sourceChipErrorDismissJob?.cancel()
+        sourceChipErrorDismissJob = null
     }
 
     private fun shouldUseDirectAutoPlayFlow(
@@ -178,55 +189,57 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun loadStreams() {
-        streamLoadJob?.cancel()
-        sourceChipErrorDismissJob?.cancel()
+        cancelActiveStreamSearch()
+        val requestId = UUID.randomUUID().toString()
+        activeStreamSearchRequestId = requestId
         streamLoadJob = viewModelScope.launch {
-            val playerSettings = playerSettingsDataStore.playerSettings.first()
-            streamFeatureFlags = playerSettings.toStreamFeatureFlags()
-            if (manualSelection) {
-                directAutoPlayModeInitializedForSession = true
-                directAutoPlayFlowEnabledForSession = false
-                autoPlayHandledForSession = true
-            } else if (!directAutoPlayModeInitializedForSession) {
-                directAutoPlayFlowEnabledForSession = shouldUseDirectAutoPlayFlow(
-                    playerPreference = playerSettings.playerPreference,
-                    streamAutoPlayMode = playerSettings.streamAutoPlayMode
-                )
-                directAutoPlayModeInitializedForSession = true
-            }
-
-            val rawRegex = playerSettings.streamAutoPlayRegex.orEmpty().trim()
-            val isEffectivelyEmptyRegex = rawRegex.isEmpty() || !rawRegex.any { it.isLetterOrDigit() }
-
-            if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH && isEffectivelyEmptyRegex) {
-                directAutoPlayFlowEnabledForSession = false
-                autoPlayHandledForSession = true
-            }
-
-            val directFlowActive = directAutoPlayFlowEnabledForSession
-            var resolvedAutoPlayTarget = false
-
-            if (directFlowActive) {
-                updateUiStateIfChanged {
-                    it.copy(
-                        isDirectAutoPlayFlow = true,
-                        showDirectAutoPlayOverlay = true,
-                        directAutoPlayMessage = context.getString(R.string.stream_finding_source)
-                    )
-                }
-            }
-
-            if (!autoPlayHandledForSession && playerSettings.streamReuseLastLinkEnabled) {
-                val cached = streamLinkCacheDataStore.getValid(
-                    contentKey = streamCacheKey,
-                    maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
-                )
-                if (cached != null) {
+            try {
+                val playerSettings = playerSettingsDataStore.playerSettings.first()
+                streamFeatureFlags = playerSettings.toStreamFeatureFlags()
+                if (manualSelection) {
+                    directAutoPlayModeInitializedForSession = true
+                    directAutoPlayFlowEnabledForSession = false
                     autoPlayHandledForSession = true
-                    resolvedAutoPlayTarget = true
+                } else if (!directAutoPlayModeInitializedForSession) {
+                    directAutoPlayFlowEnabledForSession = shouldUseDirectAutoPlayFlow(
+                        playerPreference = playerSettings.playerPreference,
+                        streamAutoPlayMode = playerSettings.streamAutoPlayMode
+                    )
+                    directAutoPlayModeInitializedForSession = true
+                }
+
+                val rawRegex = playerSettings.streamAutoPlayRegex.orEmpty().trim()
+                val isEffectivelyEmptyRegex = rawRegex.isEmpty() || !rawRegex.any { it.isLetterOrDigit() }
+
+                if (playerSettings.streamAutoPlayMode == StreamAutoPlayMode.REGEX_MATCH && isEffectivelyEmptyRegex) {
+                    directAutoPlayFlowEnabledForSession = false
+                    autoPlayHandledForSession = true
+                }
+
+                val directFlowActive = directAutoPlayFlowEnabledForSession
+                var resolvedAutoPlayTarget = false
+
+                if (directFlowActive) {
                     updateUiStateIfChanged {
                         it.copy(
-                            autoPlayPlaybackInfo = StreamPlaybackInfo(
+                            isDirectAutoPlayFlow = true,
+                            showDirectAutoPlayOverlay = true,
+                            directAutoPlayMessage = context.getString(R.string.stream_finding_source)
+                        )
+                    }
+                }
+
+                if (!autoPlayHandledForSession && playerSettings.streamReuseLastLinkEnabled) {
+                    val cached = streamLinkCacheDataStore.getValid(
+                        contentKey = streamCacheKey,
+                        maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
+                    )
+                    if (cached != null) {
+                        autoPlayHandledForSession = true
+                        resolvedAutoPlayTarget = true
+                        updateUiStateIfChanged {
+                            it.copy(
+                                autoPlayPlaybackInfo = StreamPlaybackInfo(
                                 url = cached.url,
                                 title = title,
                                 streamName = cached.streamName,
@@ -252,23 +265,23 @@ class StreamScreenViewModel @Inject constructor(
                                 filename = cached.filename,
                                 videoHash = cached.videoHash,
                                 videoSize = cached.videoSize
+                                )
                             )
-                        )
+                        }
                     }
                 }
-            }
 
-            updateUiStateIfChanged {
-                it.copy(
-                    isLoading = true,
-                    error = null,
-                    showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
-                    showDirectAutoPlayOverlay = if (directFlowActive) true else it.showDirectAutoPlayOverlay
-                )
-            }
+                updateUiStateIfChanged {
+                    it.copy(
+                        isLoading = true,
+                        error = null,
+                        showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
+                        showDirectAutoPlayOverlay = if (directFlowActive) true else it.showDirectAutoPlayOverlay
+                    )
+                }
 
-            val installedAddons = addonRepository.getInstalledAddons().first()
-            val installedAddonOrder = installedAddons.map { it.displayName }
+                val installedAddons = addonRepository.getInstalledAddons().first()
+                val installedAddonOrder = installedAddons.map { it.displayName }
 
             suspend fun applySuccess(addonStreamGroups: List<AddonStreams>) {
                 val selectedFilter = _uiState.value.selectedAddonFilter
@@ -341,81 +354,87 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
-            if (shouldAttemptEmbeddedMetaStreamLookup()) {
-                getEmbeddedStreamsFromMeta()?.let { embeddedAddonStreams ->
-                    Log.d(
-                        TAG,
-                        "Using embedded video streams for videoId=$videoId count=${embeddedAddonStreams.streams.size}"
-                    )
-                    applySuccess(listOf(embeddedAddonStreams))
-                    updateSourceChipsForEmbedded(embeddedAddonStreams.addonName)
-                    if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
-                        directAutoPlayFlowEnabledForSession = false
-                        updateUiStateIfChanged {
-                            it.copy(
-                                isDirectAutoPlayFlow = false,
-                                showDirectAutoPlayOverlay = false,
-                                directAutoPlayMessage = null
-                            )
-                        }
-                    }
-                    return@launch
-                }
-            }
-
-            updateSourceChipsForFetchStart(installedAddons)
-
-            streamRepository.getStreamsFromAllAddons(
-                type = contentType,
-                videoId = videoId,
-                season = season,
-                episode = episode,
-                requestOrigin = "stream_screen"
-            ).collectLatest { result ->
-                when (result) {
-                    is NetworkResult.Success -> {
-                        applySuccess(result.data)
-                    }
-                    is NetworkResult.Error -> {
-                        if (directAutoPlayFlowEnabledForSession) {
+                if (shouldAttemptEmbeddedMetaStreamLookup()) {
+                    getEmbeddedStreamsFromMeta()?.let { embeddedAddonStreams ->
+                        Log.d(
+                            TAG,
+                            "Using embedded video streams for videoId=$videoId count=${embeddedAddonStreams.streams.size}"
+                        )
+                        applySuccess(listOf(embeddedAddonStreams))
+                        updateSourceChipsForEmbedded(embeddedAddonStreams.addonName)
+                        if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
                             directAutoPlayFlowEnabledForSession = false
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    isDirectAutoPlayFlow = false,
+                                    showDirectAutoPlayOverlay = false,
+                                    directAutoPlayMessage = null
+                                )
+                            }
                         }
-                        updateUiStateIfChanged {
-                            it.copy(
-                                isLoading = false,
-                                error = result.message,
-                                isDirectAutoPlayFlow = false,
-                                showDirectAutoPlayOverlay = false,
-                                directAutoPlayMessage = null
-                            )
-                        }
+                        return@launch
                     }
-                    NetworkResult.Loading -> {
-                        updateUiStateIfChanged {
-                            it.copy(
-                                isLoading = true,
-                                showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
-                                showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
-                                    true
-                                } else {
-                                    it.showDirectAutoPlayOverlay
-                                }
-                            )
+                }
+
+                updateSourceChipsForFetchStart(installedAddons)
+
+                streamRepository.getStreamsFromAllAddons(
+                    type = contentType,
+                    videoId = videoId,
+                    season = season,
+                    episode = episode,
+                    requestOrigin = "stream_screen",
+                    requestId = requestId
+                ).collectLatest { result ->
+                    when (result) {
+                        is NetworkResult.Success -> {
+                            applySuccess(result.data)
+                        }
+                        is NetworkResult.Error -> {
+                            if (directAutoPlayFlowEnabledForSession) {
+                                directAutoPlayFlowEnabledForSession = false
+                            }
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    isLoading = false,
+                                    error = result.message,
+                                    isDirectAutoPlayFlow = false,
+                                    showDirectAutoPlayOverlay = false,
+                                    directAutoPlayMessage = null
+                                )
+                            }
+                        }
+                        NetworkResult.Loading -> {
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    isLoading = true,
+                                    showAddonFilters = !streamFeatureFlags.groupAcrossAddonsEnabled,
+                                    showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
+                                        true
+                                    } else {
+                                        it.showDirectAutoPlayOverlay
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            markRemainingSourceChipsAsError()
+                markRemainingSourceChipsAsError()
 
-            if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
-                directAutoPlayFlowEnabledForSession = false
-                updateUiStateIfChanged {
-                    it.copy(
-                        isDirectAutoPlayFlow = false,
-                        showDirectAutoPlayOverlay = false,
-                        directAutoPlayMessage = null
-                    )
+                if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
+                    directAutoPlayFlowEnabledForSession = false
+                    updateUiStateIfChanged {
+                        it.copy(
+                            isDirectAutoPlayFlow = false,
+                            showDirectAutoPlayOverlay = false,
+                            directAutoPlayMessage = null
+                        )
+                    }
+                }
+            } finally {
+                if (activeStreamSearchRequestId == requestId) {
+                    activeStreamSearchRequestId = null
                 }
             }
         }
@@ -693,9 +712,8 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        cancelActiveStreamSearch()
         super.onCleared()
-        streamLoadJob?.cancel()
-        sourceChipErrorDismissJob?.cancel()
     }
 
     private fun buildStreamRequestContext(): StreamRequestContext {

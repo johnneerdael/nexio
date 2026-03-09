@@ -8,6 +8,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
+import com.nexio.tv.data.remote.api.StreamSearchRequestTag
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AddonStreams
@@ -22,15 +23,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import java.net.URLEncoder
 import javax.inject.Inject
+import javax.inject.Named
 
 private const val TAG = "StreamRepositoryImpl"
 
 class StreamRepositoryImpl @Inject constructor(
-    private val api: AddonApi,
+    @Named("addonStreams") private val api: AddonApi,
     private val addonRepository: AddonRepository,
-    private val debugSettingsDataStore: DebugSettingsDataStore
+    private val debugSettingsDataStore: DebugSettingsDataStore,
+    @Named("addonStreams") private val okHttpClient: OkHttpClient
 ) : StreamRepository {
 
     override fun getStreamsFromAllAddons(
@@ -38,7 +42,8 @@ class StreamRepositoryImpl @Inject constructor(
         videoId: String,
         season: Int?,
         episode: Int?,
-        requestOrigin: String
+        requestOrigin: String,
+        requestId: String
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
         emit(NetworkResult.Loading)
 
@@ -76,7 +81,8 @@ class StreamRepositoryImpl @Inject constructor(
                                 videoId = videoId,
                                 addonName = addon.displayName,
                                 addonLogo = addon.logo,
-                                addonParserPreset = addon.parserPreset
+                                addonParserPreset = addon.parserPreset,
+                                requestTag = StreamSearchRequestTag(requestId)
                             )
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
@@ -169,6 +175,8 @@ class StreamRepositoryImpl @Inject constructor(
             if (e is CancellationException) throw e
             Log.e(TAG, "Failed to fetch streams: ${e.message}", e)
             emit(NetworkResult.Error(e.message ?: "Failed to fetch streams"))
+        } finally {
+            cancelActiveStreamRequests(requestId)
         }
     }
 
@@ -183,7 +191,8 @@ class StreamRepositoryImpl @Inject constructor(
             videoId = videoId,
             addonName = "Unknown",
             addonLogo = null,
-            addonParserPreset = AddonParserPreset.GENERIC
+            addonParserPreset = AddonParserPreset.GENERIC,
+            requestTag = StreamSearchRequestTag("standalone")
         )
     }
 
@@ -193,14 +202,15 @@ class StreamRepositoryImpl @Inject constructor(
         videoId: String,
         addonName: String,
         addonLogo: String?,
-        addonParserPreset: AddonParserPreset
+        addonParserPreset: AddonParserPreset,
+        requestTag: StreamSearchRequestTag
     ): NetworkResult<List<Stream>> {
         val encodedType = encodePathSegment(type)
         val encodedVideoId = encodePathSegment(videoId)
         val streamUrl = buildAddonRequestUrl(baseUrl, "stream/$encodedType/$encodedVideoId.json")
         Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=${sanitizeUrlForLogs(streamUrl)}")
 
-        return when (val result = safeApiCall { api.getStreams(streamUrl) }) {
+        return when (val result = safeApiCall { api.getStreams(streamUrl, requestTag) }) {
             is NetworkResult.Success -> {
                 val streams = result.data.streams?.map { 
                     it.toDomain(addonName, addonLogo, addonParserPreset)
@@ -216,6 +226,21 @@ class StreamRepositoryImpl @Inject constructor(
                 result
             }
             NetworkResult.Loading -> NetworkResult.Loading
+        }
+    }
+
+    override fun cancelActiveStreamRequests(requestId: String) {
+        val calls = okHttpClient.dispatcher.runningCalls() + okHttpClient.dispatcher.queuedCalls()
+        var cancelledCount = 0
+        calls.forEach { call ->
+            val tag = call.request().tag(StreamSearchRequestTag::class.java)
+            if (tag?.requestId == requestId) {
+                cancelledCount += 1
+                call.cancel()
+            }
+        }
+        if (cancelledCount > 0) {
+            Log.d(TAG, "Cancelled $cancelledCount in-flight addon stream request(s) requestId=$requestId")
         }
     }
 

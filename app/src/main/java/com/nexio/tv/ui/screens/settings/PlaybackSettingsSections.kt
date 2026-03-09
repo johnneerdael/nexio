@@ -175,6 +175,8 @@ internal fun PlaybackSettingsSections(
     val strSectionAudioDesc = stringResource(R.string.playback_section_audio_desc)
     val strSectionSubtitles = stringResource(R.string.playback_section_subtitles)
     val strSectionSubtitlesDesc = stringResource(R.string.playback_section_subtitles_desc)
+    val strSectionNetworkCache = stringResource(R.string.playback_section_network_cache)
+    val strSectionNetworkCacheDesc = stringResource(R.string.playback_section_network_cache_desc)
     val generalUi = PlaybackGeneralUi(
         isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL,
         frameRateMatchingLabel = frameRateMatchingModeLabel(
@@ -433,8 +435,8 @@ internal fun PlaybackSettingsSections(
 
         playbackCollapsibleSection(
             keyPrefix = "buffer_network",
-            title = "Network & Cache",
-            description = "Configure disk VOD cache and progressive stream transfer settings.",
+            title = strSectionNetworkCache,
+            description = strSectionNetworkCacheDesc,
             expanded = bufferAndNetworkExpanded,
             onToggle = { bufferAndNetworkExpanded = !bufferAndNetworkExpanded },
             focusRequester = bufferAndNetworkHeaderFocus,

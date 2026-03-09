@@ -118,6 +118,7 @@ class AccountSettingsSyncService @Inject constructor(
             merge(
                 themeDataStore.selectedTheme.drop(1).map { Unit },
                 themeDataStore.selectedFont.drop(1).map { Unit },
+                AppLocaleResolver.observeStoredLocaleTag(context).drop(1).map { Unit },
                 layoutPreferenceDataStore.selectedLayout.drop(1).map { Unit },
                 layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
                 layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
@@ -412,10 +413,15 @@ class AccountSettingsSyncService @Inject constructor(
         )
         themeDataStore.setTheme(enumValueOrDefault(settings.appearance.theme, AppTheme.WHITE))
         themeDataStore.setFont(enumValueOrDefault(settings.appearance.font, AppFont.INTER))
-        AppLocaleResolver.setStoredLocaleTag(
-            context,
-            settings.appearance.localeTag.takeUnless { it.equals("system", ignoreCase = true) }
-        )
+        // Locale: apply remote only when it is explicitly set to a language.
+        // Never allow remote "system" to clear/override a local preference.
+        val remoteLocaleTag = settings.appearance.localeTag
+            .takeUnless { it.equals("system", ignoreCase = true) }
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        if (remoteLocaleTag != null) {
+            AppLocaleResolver.setStoredLocaleTag(context, remoteLocaleTag)
+        }
 
         layoutPreferenceDataStore.setLayout(enumValueOrDefault(settings.layout.selectedLayout, HomeLayout.MODERN))
         layoutPreferenceDataStore.setModernLandscapePostersEnabled(settings.layout.modernLandscapePostersEnabled)

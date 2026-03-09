@@ -276,6 +276,7 @@ internal fun PlayerRuntimeController.currentPlaybackProgressPercent(): Float {
 }
 
 internal fun PlayerRuntimeController.refreshScrobbleItem() {
+    stopScrobbleHeartbeat()
     currentScrobbleItem = buildScrobbleItem()
     hasSentScrobbleStartForCurrentItem = false
     hasRequestedScrobbleStartForCurrentItem = false
@@ -318,6 +319,7 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     if (hasRequestedScrobbleStartForCurrentItem) return
 
     hasRequestedScrobbleStartForCurrentItem = true
+    startScrobbleHeartbeat()
     val requestGeneration = ++scrobbleStartRequestGeneration
     scope.launch {
         val progressPercent = currentPlaybackProgressPercent()
@@ -344,26 +346,15 @@ internal fun PlayerRuntimeController.emitScrobbleStop(progressPercent: Float? = 
             progressPercent = percent
         )
     }
+    stopScrobbleHeartbeat()
     scrobbleStartRequestGeneration++
     hasRequestedScrobbleStartForCurrentItem = false
     hasSentScrobbleStartForCurrentItem = false
 }
 
 internal fun PlayerRuntimeController.emitPauseScrobble(progressPercent: Float) {
-    if (progressPercent < 1f || progressPercent >= 80f) return
-    val item = currentScrobbleItem
-    if (item == null) return
-    if (!hasRequestedScrobbleStartForCurrentItem) return
-
-    scope.launch {
-        traktScrobbleService.scrobblePause(
-            item = item,
-            progressPercent = progressPercent
-        )
-    }
-    scrobbleStartRequestGeneration++
-    hasRequestedScrobbleStartForCurrentItem = false
-    hasSentScrobbleStartForCurrentItem = false
+    if (progressPercent < 1f) return
+    emitScrobbleStop(progressPercent = progressPercent)
 }
 
 internal fun PlayerRuntimeController.emitCompletionScrobbleStop(progressPercent: Float) {
@@ -374,8 +365,7 @@ internal fun PlayerRuntimeController.emitCompletionScrobbleStop(progressPercent:
 
 internal fun PlayerRuntimeController.emitStopScrobbleForCurrentProgress() {
     val progressPercent = currentPlaybackProgressPercent()
-    emitPauseScrobble(progressPercent = progressPercent)
-    emitCompletionScrobbleStop(progressPercent = progressPercent)
+    emitScrobbleStop(progressPercent = progressPercent)
 }
 
 internal fun PlayerRuntimeController.flushPlaybackSnapshotForSwitchOrExit() {
@@ -396,6 +386,30 @@ internal fun PlayerRuntimeController.scheduleProgressSyncAfterSeek() {
             emitScrobbleStart()
         }
     }
+}
+
+private fun PlayerRuntimeController.startScrobbleHeartbeat() {
+    if (scrobbleHeartbeatJob?.isActive == true) return
+    val item = currentScrobbleItem ?: return
+    if (!hasRequestedScrobbleStartForCurrentItem) return
+
+    scrobbleHeartbeatJob = scope.launch {
+        while (isActive) {
+            delay(scrobbleHeartbeatIntervalMs)
+            if (!isActive || !backendIsPlaying() || !hasRequestedScrobbleStartForCurrentItem) continue
+            val progressPercent = currentPlaybackProgressPercent()
+            if (progressPercent < 1f || progressPercent >= 95f) continue
+            traktScrobbleService.scrobbleStart(
+                item = item,
+                progressPercent = progressPercent
+            )
+        }
+    }
+}
+
+private fun PlayerRuntimeController.stopScrobbleHeartbeat() {
+    scrobbleHeartbeatJob?.cancel()
+    scrobbleHeartbeatJob = null
 }
 
 fun PlayerRuntimeController.scheduleHideControls() {

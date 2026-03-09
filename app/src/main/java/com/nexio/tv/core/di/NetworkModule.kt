@@ -23,6 +23,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Cache
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -124,6 +125,33 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("addonStreams")
+    fun provideAddonStreamsOkHttpClient(
+        okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .dispatcher(
+            Dispatcher().apply {
+                maxRequests = 128
+                maxRequestsPerHost = 32
+            }
+        )
+        .build()
+
+    @Provides
+    @Singleton
+    @Named("addonStreams")
+    fun provideAddonStreamsRetrofit(
+        @Named("addonStreams") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://placeholder.Nexio.tv/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
     @Named("tmdb")
     fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
@@ -149,6 +177,13 @@ object NetworkModule {
     @Singleton
     fun provideAddonApi(retrofit: Retrofit): AddonApi =
         retrofit.create(AddonApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("addonStreams")
+    fun provideAddonStreamsApi(
+        @Named("addonStreams") retrofit: Retrofit
+    ): AddonApi = retrofit.create(AddonApi::class.java)
 
     @Provides
     @Singleton

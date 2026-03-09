@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
+private const val FOREGROUND_REFRESH_THROTTLE_MS = 20_000L
+
 internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
     viewModelScope.launch {
         accountSyncRefreshNotifier.events.collect {
@@ -39,6 +41,37 @@ internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
             } else {
                 scheduleUpdateCatalogRows()
             }
+        }
+    }
+}
+
+internal fun HomeViewModel.onForegroundPipeline() {
+    viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        if (now - lastForegroundRefreshMs < FOREGROUND_REFRESH_THROTTLE_MS) {
+            return@launch
+        }
+        lastForegroundRefreshMs = now
+        startupRefreshPending = true
+
+        traktDiscoveryRefreshInProgress = true
+        runCatching { traktDiscoveryService.ensureFresh(force = false) }
+            .onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed to refresh Trakt discovery on foreground", error)
+            }
+        traktDiscoveryRefreshInProgress = false
+
+        mdbListDiscoveryRefreshInProgress = true
+        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
+            .onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery on foreground", error)
+            }
+        mdbListDiscoveryRefreshInProgress = false
+
+        if (addonsCache.isNotEmpty()) {
+            loadAllCatalogsPipeline(addonsCache, forceReload = true)
+        } else {
+            scheduleUpdateCatalogRows()
         }
     }
 }

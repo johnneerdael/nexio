@@ -267,9 +267,9 @@ object StreamPresentationEngine {
             0
         }
         val groupedItems = groupedPreSortItems.sortedWith(
-            compareByDescending<StreamCardModel> { resolutionRank(it.parsed.resolution) }
+            compareBy<StreamCardModel> { cacheStateRank(it.parsed.isCached) }
+                .thenByDescending { resolutionRank(it.parsed.resolution) }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
-                .thenByDescending { it.parsed.isCached == true }
                 .thenBy { it.stream.addonName.lowercase(Locale.US) }
                 .thenBy { it.title.lowercase(Locale.US) }
         )
@@ -646,6 +646,14 @@ object StreamPresentationEngine {
             "240p" -> 2
             "144p" -> 1
             else -> 0
+        }
+    }
+
+    private fun cacheStateRank(isCached: Boolean?): Int {
+        return when (isCached) {
+            true -> 0
+            null -> 1
+            false -> 2
         }
     }
 

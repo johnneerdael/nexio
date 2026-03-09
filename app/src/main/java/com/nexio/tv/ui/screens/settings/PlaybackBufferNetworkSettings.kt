@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.Border
@@ -20,6 +21,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.R
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.theme.NexioColors
@@ -37,7 +39,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
 ) {
     item {
         Text(
-            text = "Disk Cache",
+            text = stringResource(R.string.playback_buffer_disk_cache_title),
             style = MaterialTheme.typography.titleMedium,
             color = NexioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -48,8 +50,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         val vodCacheEnabled = playerSettings.vodCacheSizeMode == VodCacheSizeMode.ON
         ToggleSettingsItem(
             icon = Icons.Default.Storage,
-            title = "Enable VOD Cache",
-            subtitle = "Cache progressive VOD on disk to absorb bandwidth spikes.",
+            title = stringResource(R.string.playback_buffer_enable_vod_cache),
+            subtitle = stringResource(R.string.playback_buffer_enable_vod_cache_sub),
             isChecked = vodCacheEnabled,
             onCheckedChange = { enabled ->
                 onSetVodCacheSizeMode(if (enabled) VodCacheSizeMode.ON else VodCacheSizeMode.OFF)
@@ -68,8 +70,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             )
             SliderSettingsItem(
                 icon = Icons.Default.Storage,
-                title = "VOD Cache Size",
-                subtitle = "Maximum disk usage for progressive VOD cache (LRU-evicted).",
+                title = stringResource(R.string.playback_buffer_vod_cache_size),
+                subtitle = stringResource(R.string.playback_buffer_vod_cache_size_sub),
                 value = manualCacheMb,
                 valueText = "${manualCacheMb} MB",
                 minValue = PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
@@ -86,16 +88,18 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         val freeDiskLabel = formatStorageSize(freeDiskBytes)
         val maxManualCacheMb = resolveManualVodCacheMaxMb(freeDiskBytes)
         val cacheStateText = if (playerSettings.vodCacheSizeMode == VodCacheSizeMode.ON) {
-            "Enabled"
+            stringResource(R.string.subtitle_on)
         } else {
-            "Disabled"
+            stringResource(R.string.subtitle_off)
         }
-        val infoText = buildString {
-            append("State: $cacheStateText. ")
-            append("Range: ${PlayerSettings.MIN_VOD_CACHE_SIZE_MB}-${maxManualCacheMb} MB. ")
-            append("Keeps about ${VOD_CACHE_FREE_SPACE_RESERVE_MB}MB headroom. ")
-            append("Free disk available: $freeDiskLabel.")
-        }
+        val infoText = stringResource(
+            R.string.playback_buffer_info,
+            cacheStateText,
+            PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
+            maxManualCacheMb,
+            VOD_CACHE_FREE_SPACE_RESERVE_MB,
+            freeDiskLabel
+        )
         Text(
             text = infoText,
             style = MaterialTheme.typography.bodySmall,
@@ -106,7 +110,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
 
     item {
         Text(
-            text = "Network",
+            text = stringResource(R.string.playback_buffer_network_title),
             style = MaterialTheme.typography.titleMedium,
             color = NexioColors.TextSecondary,
             modifier = Modifier.padding(vertical = 8.dp)
@@ -116,8 +120,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     item {
         ToggleSettingsItem(
             icon = Icons.Default.Wifi,
-            title = "Parallel Connections",
-            subtitle = "Use multiple connections in parallel for progressive streams.",
+            title = stringResource(R.string.playback_buffer_parallel_connections),
+            subtitle = stringResource(R.string.playback_buffer_parallel_connections_sub),
             isChecked = playerSettings.useParallelConnections,
             onCheckedChange = onSetUseParallelConnections
         )
@@ -127,8 +131,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         item {
             SliderSettingsItem(
                 icon = Icons.Default.Hub,
-                title = "Connection Count",
-                subtitle = "Number of parallel TCP connections.",
+                title = stringResource(R.string.playback_buffer_connection_count),
+                subtitle = stringResource(R.string.playback_buffer_connection_count_sub),
                 value = playerSettings.parallelConnectionCount,
                 valueText = playerSettings.parallelConnectionCount.toString(),
                 minValue = MemoryBudget.MIN_CONNECTIONS,
@@ -146,8 +150,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             val chunkSizeMb = playerSettings.parallelChunkSizeMb.coerceAtMost(maxChunkSizeMb)
             SliderSettingsItem(
                 icon = Icons.Default.Storage,
-                title = "Chunk Size",
-                subtitle = "Size of each download chunk per connection.",
+                title = stringResource(R.string.playback_buffer_chunk_size),
+                subtitle = stringResource(R.string.playback_buffer_chunk_size_sub),
                 value = chunkSizeMb,
                 valueText = "$chunkSizeMb MB",
                 minValue = MemoryBudget.MIN_CHUNK_MB,
@@ -174,7 +178,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             )
         ) {
             Text(
-                text = "Reset to Default",
+                text = stringResource(R.string.layout_reset_default),
                 style = MaterialTheme.typography.labelLarge,
                 color = NexioColors.TextPrimary
             )

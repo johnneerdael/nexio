@@ -3,14 +3,17 @@
 package com.nexio.tv.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,13 +21,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -75,7 +82,7 @@ fun TraktSettingsContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SettingsDetailHeader(
-            title = "Trakt",
+            title = stringResource(R.string.mdblist_trakt_title),
             subtitle = stringResource(R.string.trakt_description)
         )
 
@@ -215,6 +222,21 @@ fun TraktSettingsContent(
     }
 
     if (showCatalogDialog && uiState.mode == TraktConnectionMode.CONNECTED) {
+        var popularListSearch by remember { mutableStateOf("") }
+        val filteredPopularLists = remember(uiState.popularLists, popularListSearch) {
+            val query = popularListSearch.trim().lowercase()
+            if (query.isBlank()) {
+                uiState.popularLists
+            } else {
+                uiState.popularLists.filter { option ->
+                    option.title.lowercase().contains(query) ||
+                        option.userId.lowercase().contains(query) ||
+                        option.listId.lowercase().contains(query) ||
+                        option.key.lowercase().contains(query)
+                }
+            }
+        }
+
         NexioDialog(
             onDismiss = { showCatalogDialog = false },
             title = stringResource(R.string.trakt_catalogs_title),
@@ -256,19 +278,74 @@ fun TraktSettingsContent(
                             style = MaterialTheme.typography.bodySmall,
                             color = NexioColors.TextSecondary
                         )
+                        Card(
+                            onClick = {},
+                            colors = CardDefaults.colors(
+                                containerColor = NexioColors.BackgroundElevated,
+                                focusedContainerColor = NexioColors.BackgroundElevated
+                            ),
+                            border = CardDefaults.border(
+                                border = Border(
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NexioColors.Border),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                                ),
+                                focusedBorder = Border(
+                                    border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                                )
+                            ),
+                            shape = CardDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                            scale = CardDefaults.scale(focusedScale = 1f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                BasicTextField(
+                                    value = popularListSearch,
+                                    onValueChange = { popularListSearch = it },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
+                                    cursorBrush = SolidColor(NexioColors.Primary),
+                                    singleLine = true,
+                                    decorationBox = { inner ->
+                                        if (popularListSearch.isBlank()) {
+                                            Text(
+                                                text = stringResource(R.string.trakt_popular_lists_search_hint),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = NexioColors.TextTertiary
+                                            )
+                                        }
+                                        inner()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                     }
 
                     items(
-                        items = uiState.popularLists,
+                        items = filteredPopularLists,
                         key = { it.key }
                     ) { option ->
                         val selected = option.key in uiState.catalogPreferences.selectedPopularListKeys
                         SettingsToggleRow(
                             title = option.title,
-                            subtitle = "${option.itemCount} items",
+                            subtitle = stringResource(R.string.mdblist_list_item_count_subtitle, option.itemCount),
                             checked = selected,
                             onToggle = { viewModel.onPopularListSelected(option.key, !selected) }
                         )
+                    }
+
+                    if (filteredPopularLists.isEmpty()) {
+                        item(key = "popular_lists_empty") {
+                            Text(
+                                text = if (uiState.popularLists.isEmpty()) {
+                                    stringResource(R.string.trakt_popular_lists_empty)
+                                } else {
+                                    stringResource(R.string.trakt_popular_lists_no_search_results)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NexioColors.TextSecondary
+                            )
+                        }
                     }
                 }
 

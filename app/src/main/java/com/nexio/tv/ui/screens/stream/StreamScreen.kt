@@ -152,7 +152,14 @@ fun StreamScreen(
     }
 
     BackHandler {
+        viewModel.onEvent(StreamScreenEvent.OnBackPress)
         onBackPress()
+    }
+
+    DisposableEffect(viewModel) {
+        onDispose {
+            viewModel.cancelActiveStreamSearch()
+        }
     }
 
     LaunchedEffect(uiState.autoPlayStream) {

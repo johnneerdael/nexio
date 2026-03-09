@@ -7,6 +7,7 @@ import com.nexio.tv.data.remote.dto.StreamResponseDto
 import com.nexio.tv.data.remote.dto.SubtitleResponseDto
 import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.Tag
 import retrofit2.http.Url
 
 interface AddonApi {
@@ -21,7 +22,10 @@ interface AddonApi {
     suspend fun getMeta(@Url metaUrl: String): Response<MetaResponseDto>
 
     @GET
-    suspend fun getStreams(@Url streamUrl: String): Response<StreamResponseDto>
+    suspend fun getStreams(
+        @Url streamUrl: String,
+        @Tag requestTag: StreamSearchRequestTag
+    ): Response<StreamResponseDto>
 
     @GET
     suspend fun getSubtitles(@Url subtitleUrl: String): Response<SubtitleResponseDto>

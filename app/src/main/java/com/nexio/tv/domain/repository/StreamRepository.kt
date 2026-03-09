@@ -4,6 +4,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 
 interface StreamRepository {
     /**
@@ -19,7 +20,8 @@ interface StreamRepository {
         videoId: String,
         season: Int? = null,
         episode: Int? = null,
-        requestOrigin: String = "unknown"
+        requestOrigin: String = "unknown",
+        requestId: String = UUID.randomUUID().toString()
     ): Flow<NetworkResult<List<AddonStreams>>>
 
     /**
@@ -34,4 +36,6 @@ interface StreamRepository {
         type: String,
         videoId: String
     ): NetworkResult<List<Stream>>
+
+    fun cancelActiveStreamRequests(requestId: String)
 }
