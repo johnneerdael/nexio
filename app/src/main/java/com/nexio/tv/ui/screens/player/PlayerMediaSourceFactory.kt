@@ -8,6 +8,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
@@ -18,6 +19,8 @@ import androidx.media3.database.DatabaseProvider
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.ConcatenatingMediaSource
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -25,14 +28,20 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.extractor.ts.TsExtractor
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.SocketTimeoutException
 import java.net.URLDecoder
+import java.util.Locale
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -45,6 +54,17 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
+    private data class RemoteBlurayResolution(
+        val playlistName: String,
+        val segmentUris: List<Uri>
+    )
+
+    private data class ParsedMplsPlaylist(
+        val name: String,
+        val clipIds: List<String>,
+        val duration90kHz: Long
+    )
+
     @Volatile private var currentVodCacheUrl: String? = null
     @Volatile private var currentVodCacheResolvedUrl: String? = null
     @Volatile private var currentVodCacheActive: Boolean = false
@@ -87,19 +107,23 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val sanitizedHeaders = sanitizeHeaders(headers)
         val okHttpFactory = OkHttpDataSource.Factory(getOrCreateOkHttpClient()).apply {
             setDefaultRequestProperties(sanitizedHeaders)
-            setUserAgent(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
+            if (!sanitizedHeaders.containsKey("User-Agent")) {
+                setUserAgent(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+            }
         }
+        val baseDataSourceFactory = DefaultDataSource.Factory(context, okHttpFactory)
+        val lowerPath = extractPath(url).lowercase(Locale.US)
 
-        val isHls = url.contains(".m3u8", ignoreCase = true) ||
-            url.contains("/playlist", ignoreCase = true) ||
-            url.contains("/hls", ignoreCase = true) ||
-            url.contains("m3u8", ignoreCase = true)
+        val isHls = lowerPath.contains(".m3u8") ||
+            lowerPath.contains("/playlist") ||
+            lowerPath.contains("/hls") ||
+            lowerPath.contains("m3u8")
 
-        val isDash = url.contains(".mpd", ignoreCase = true) ||
-            url.contains("/dash", ignoreCase = true)
+        val isDash = lowerPath.contains(".mpd") ||
+            lowerPath.contains("/dash")
 
         val mediaItemBuilder = MediaItem.Builder().setUri(url)
         when {
@@ -112,6 +136,20 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
 
         val mediaItem = mediaItemBuilder.build()
+        val blurayLocalSource = BlurayPlaylistResolver.resolve(url)
+        if (blurayLocalSource != null) {
+            currentVodCacheUrl = url
+            currentVodCacheResolvedUrl = null
+            currentVodCacheActive = false
+            currentProgressiveUpstreamFactory = null
+            currentProgressiveIsEligibleForWarmAhead = false
+            return createBlurayMediaSource(
+                source = blurayLocalSource,
+                dataSourceFactory = baseDataSourceFactory,
+                subtitleConfigurations = subtitleConfigurations
+            )
+        }
+
         parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
         activeReadBytePosition.set(0L)
         val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
@@ -196,7 +234,40 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             currentProgressiveIsEligibleForWarmAhead = false
             progressiveUpstreamFactory
         }
-        val extractorsFactory = customExtractorsFactory ?: DefaultExtractorsFactory()
+
+        if (!isHls && !isDash) {
+            if (isLikelyHttpBdavStream(url = url, headers = sanitizedHeaders)) {
+                return createBdavM2tsMediaSource(
+                    mediaItem = mediaItem,
+                    dataSourceFactory = progressiveFactory
+                )
+            }
+
+            val remoteBluraySource = resolveHttpBlurayDirectory(
+                url = url,
+                headers = sanitizedHeaders
+            )
+            if (remoteBluraySource != null) {
+                currentVodCacheActive = false
+                currentProgressiveUpstreamFactory = null
+                currentProgressiveIsEligibleForWarmAhead = false
+                return createBlurayMediaSource(
+                    playlistName = remoteBluraySource.playlistName,
+                    segmentUris = remoteBluraySource.segmentUris,
+                    dataSourceFactory = baseDataSourceFactory,
+                    subtitleConfigurations = subtitleConfigurations
+                )
+            }
+        }
+
+        if (BlurayPlaylistResolver.isLikelyBdavM2tsUrl(url)) {
+            return createBdavM2tsMediaSource(
+                mediaItem = mediaItem,
+                dataSourceFactory = progressiveFactory
+            )
+        }
+
+        val extractorsFactory = customExtractorsFactory ?: createDefaultExtractorsFactory()
         val defaultProgressiveFactory = DefaultMediaSourceFactory(progressiveFactory, extractorsFactory).apply {
             setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
             customSubtitleParserFactory?.let { parserFactory ->
@@ -217,6 +288,297 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                 .createMediaSource(mediaItem)
             else -> defaultProgressiveFactory.createMediaSource(mediaItem)
         }
+    }
+
+    private fun createDefaultExtractorsFactory(): ExtractorsFactory {
+        return DefaultExtractorsFactory()
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
+            .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+    }
+
+    private fun createBdavExtractorsFactory(): ExtractorsFactory {
+        val tsFlags =
+            DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
+                DefaultTsPayloadReaderFactory.FLAG_IGNORE_SPLICE_INFO_STREAM
+        return DefaultExtractorsFactory()
+            .setTsExtractorFlags(tsFlags)
+            .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+    }
+
+    private fun createBlurayMediaSource(
+        source: BlurayPlaylistResolver.ResolvedBluraySource,
+        dataSourceFactory: DataSource.Factory,
+        subtitleConfigurations: List<MediaItem.SubtitleConfiguration>
+    ): MediaSource {
+        return createBlurayMediaSource(
+            playlistName = source.playlistFile.name,
+            segmentUris = source.segments.map { segment -> Uri.fromFile(segment) },
+            dataSourceFactory = dataSourceFactory,
+            subtitleConfigurations = subtitleConfigurations
+        )
+    }
+
+    private fun createBlurayMediaSource(
+        playlistName: String,
+        segmentUris: List<Uri>,
+        dataSourceFactory: DataSource.Factory,
+        subtitleConfigurations: List<MediaItem.SubtitleConfiguration>
+    ): MediaSource {
+        val concatenatingMediaSource = ConcatenatingMediaSource()
+        segmentUris.forEachIndexed { index, segmentUri ->
+            val mediaItemBuilder = MediaItem.Builder()
+                .setUri(segmentUri)
+                .setMediaId("$playlistName#$index")
+            if (segmentUris.size == 1 && subtitleConfigurations.isNotEmpty()) {
+                mediaItemBuilder.setSubtitleConfigurations(subtitleConfigurations)
+            }
+            val segmentMediaItem = mediaItemBuilder.build()
+            concatenatingMediaSource.addMediaSource(
+                createBdavM2tsMediaSource(
+                    mediaItem = segmentMediaItem,
+                    dataSourceFactory = dataSourceFactory
+                )
+            )
+        }
+        return concatenatingMediaSource
+    }
+
+    private fun createBdavM2tsMediaSource(
+        mediaItem: MediaItem,
+        dataSourceFactory: DataSource.Factory
+    ): MediaSource {
+        val bdavDataSourceFactory = BdavM2tsDataSourceFactory(dataSourceFactory)
+        val extractorsFactory = createBdavExtractorsFactory()
+        return ProgressiveMediaSource.Factory(bdavDataSourceFactory, extractorsFactory)
+            .createMediaSource(mediaItem)
+    }
+
+    private fun isLikelyHttpBdavStream(url: String, headers: Map<String, String>): Boolean {
+        val httpUrl = url.toHttpUrlOrNull() ?: return false
+        if (httpUrl.scheme !in listOf("http", "https")) return false
+
+        val requestBuilder = Request.Builder().url(url).get()
+        headers.forEach { (key, value) -> requestBuilder.addHeader(key, value) }
+        val request = requestBuilder.build()
+
+        return try {
+            getOrCreateOkHttpClient().newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return false
+
+                val contentType = response.header("Content-Type").orEmpty().lowercase(Locale.US)
+                val body = response.body ?: return false
+                val sample = body.byteStream().use { input ->
+                    val buffer = ByteArray(4096)
+                    val read = input.read(buffer)
+                    if (read <= 0) ByteArray(0) else buffer.copyOf(read)
+                }
+                if (sample.isEmpty()) return false
+
+                val likelyTsMime =
+                    contentType.contains("video/vnd.dlna.mpeg-tts") ||
+                        contentType.contains("video/mp2t") ||
+                        contentType.contains("mpeg-tts")
+                if (!likelyTsMime) return false
+
+                matchesBdavPacketPattern(sample)
+            }
+        } catch (error: Exception) {
+            Log.w(
+                TAG,
+                "HTTP BDAV probe failed for ${summarizeUrlForLog(url)}: ${error.javaClass.simpleName}"
+            )
+            false
+        }
+    }
+
+    private fun matchesBdavPacketPattern(bytes: ByteArray): Boolean {
+        if (bytes.size < 5) return false
+        if ((bytes[4].toInt() and 0xFF) != 0x47) return false
+        if (bytes.size >= 197 && (bytes[196].toInt() and 0xFF) == 0x47) return true
+        return bytes.size < 197
+    }
+
+    private fun resolveHttpBlurayDirectory(
+        url: String,
+        headers: Map<String, String>
+    ): RemoteBlurayResolution? {
+        val httpUrl = url.toHttpUrlOrNull() ?: return null
+        if (httpUrl.scheme !in listOf("http", "https")) return null
+
+        val rootProbe = fetchText(url = httpUrl.toString(), headers = headers, maxBytes = 256 * 1024)
+            ?: return null
+        if (!looksLikeBlurayDirectoryHtml(rootProbe)) return null
+
+        val rootUrl = if (httpUrl.encodedPath.endsWith("/")) {
+            httpUrl
+        } else {
+            httpUrl.newBuilder().addPathSegment("").build()
+        }
+        val playlistDirUrl = rootUrl.resolve("BDMV/PLAYLIST/") ?: return null
+        val playlistHtml = fetchText(
+            url = playlistDirUrl.toString(),
+            headers = headers,
+            maxBytes = 512 * 1024
+        ) ?: return null
+        val playlistNames = extractPlaylistNames(playlistHtml)
+        if (playlistNames.isEmpty()) return null
+
+        val parsedPlaylists = playlistNames.mapNotNull { playlistName ->
+            val playlistUrl = playlistDirUrl.resolve(playlistName) ?: return@mapNotNull null
+            val bytes = fetchBytes(
+                url = playlistUrl.toString(),
+                headers = headers,
+                maxBytes = 1024 * 1024
+            ) ?: return@mapNotNull null
+            parseMplsPlaylist(name = playlistName, data = bytes)
+        }
+        if (parsedPlaylists.isEmpty()) return null
+
+        val selected = parsedPlaylists.maxWithOrNull(
+            compareBy<ParsedMplsPlaylist> { it.duration90kHz }
+                .thenBy { it.clipIds.size }
+                .thenBy { it.name }
+        ) ?: return null
+
+        val streamDirUrl = rootUrl.resolve("BDMV/STREAM/") ?: return null
+        val segmentUris = selected.clipIds.mapNotNull { clipId ->
+            streamDirUrl.resolve("$clipId.m2ts")?.let { Uri.parse(it.toString()) }
+        }
+        if (segmentUris.isEmpty()) return null
+        return RemoteBlurayResolution(
+            playlistName = selected.name,
+            segmentUris = segmentUris
+        )
+    }
+
+    private fun fetchText(url: String, headers: Map<String, String>, maxBytes: Int): String? {
+        val bytes = fetchBytes(url, headers, maxBytes) ?: return null
+        return runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
+    }
+
+    private fun fetchBytes(url: String, headers: Map<String, String>, maxBytes: Int): ByteArray? {
+        val requestBuilder = Request.Builder().url(url).get()
+        headers.forEach { (key, value) -> requestBuilder.addHeader(key, value) }
+        val request = requestBuilder.build()
+        return try {
+            getOrCreateOkHttpClient().newCall(request).execute().use { response ->
+                val body = response.body ?: return null
+                body.byteStream().use { input ->
+                    val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
+                    val buffer = ByteArray(8 * 1024)
+                    var total = 0
+                    while (total < maxBytes) {
+                        val toRead = minOf(buffer.size, maxBytes - total)
+                        val read = input.read(buffer, 0, toRead)
+                        if (read <= 0) break
+                        output.write(buffer, 0, read)
+                        total += read
+                    }
+                    if (!response.isSuccessful) return null
+                    output.toByteArray()
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun looksLikeBlurayDirectoryHtml(content: String): Boolean {
+        val lower = content.lowercase(Locale.US)
+        return (lower.contains("<html") || lower.contains("<a ")) &&
+            lower.contains("bdmv") &&
+            (lower.contains("certificate") || lower.contains("playlist"))
+    }
+
+    private fun extractPlaylistNames(content: String): List<String> {
+        return Regex("""(?i)(\d{5}\.mpls)""")
+            .findAll(content)
+            .map { match -> match.groupValues[1] }
+            .distinct()
+            .toList()
+    }
+
+    private fun parseMplsPlaylist(name: String, data: ByteArray): ParsedMplsPlaylist? {
+        if (data.size < 32) return null
+        val header = readAscii(data, 0, 4)
+        if (header != "MPLS") return null
+
+        val playlistStart = readUInt32(data, 8).toInt()
+        if (playlistStart <= 0 || playlistStart + 10 > data.size) return null
+
+        val sectionStart = playlistStart + 4
+        val playItemCount = readUInt16(data, sectionStart + 2)
+        var cursor = sectionStart + 6
+        val clipIds = ArrayList<String>(playItemCount)
+        var duration90kHz = 0L
+
+        repeat(playItemCount) {
+            if (cursor + 2 > data.size) return@repeat
+            val itemLength = readUInt16(data, cursor)
+            if (itemLength <= 0) return@repeat
+            val itemStart = cursor + 2
+            val itemEnd = itemStart + itemLength
+            if (itemEnd > data.size || itemStart + 20 > data.size) return@repeat
+
+            val clipId = readAscii(data, itemStart, 5)
+            val codecId = readAscii(data, itemStart + 5, 4)
+            if (
+                clipId.length == 5 &&
+                clipId.all { char -> char.isDigit() } &&
+                codecId.equals("M2TS", ignoreCase = true)
+            ) {
+                clipIds += clipId
+            }
+
+            val inTime = readUInt32(data, itemStart + 12)
+            val outTime = readUInt32(data, itemStart + 16)
+            if (outTime > inTime) {
+                duration90kHz += (outTime - inTime)
+            }
+            cursor = itemEnd
+        }
+
+        if (clipIds.isEmpty()) return null
+        return ParsedMplsPlaylist(name = name, clipIds = clipIds, duration90kHz = duration90kHz)
+    }
+
+    private fun readUInt16(data: ByteArray, offset: Int): Int {
+        if (offset + 1 >= data.size) return 0
+        return ((data[offset].toInt() and 0xFF) shl 8) or
+            (data[offset + 1].toInt() and 0xFF)
+    }
+
+    private fun readUInt32(data: ByteArray, offset: Int): Long {
+        if (offset + 3 >= data.size) return 0L
+        return ((data[offset].toLong() and 0xFF) shl 24) or
+            ((data[offset + 1].toLong() and 0xFF) shl 16) or
+            ((data[offset + 2].toLong() and 0xFF) shl 8) or
+            (data[offset + 3].toLong() and 0xFF)
+    }
+
+    private fun readAscii(data: ByteArray, offset: Int, length: Int): String {
+        if (offset < 0 || length <= 0 || offset + length > data.size) return ""
+        return String(data, offset, length, Charsets.US_ASCII).trim()
+    }
+
+    private fun summarizeUrlForLog(url: String): String {
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return url.substringBefore('?')
+        val scheme = uri.scheme
+        val host = uri.host
+        val path = uri.path.orEmpty()
+        return when {
+            !scheme.isNullOrBlank() && !host.isNullOrBlank() -> "$scheme://$host$path"
+            !scheme.isNullOrBlank() && path.isNotBlank() -> "$scheme:$path"
+            else -> url.substringBefore('?')
+        }
+    }
+
+    private fun extractPath(url: String): String {
+        val parsed = runCatching { Uri.parse(url) }.getOrNull()
+        if (parsed != null && !parsed.path.isNullOrBlank()) {
+            return parsed.path ?: url
+        }
+        return url.substringBefore('?')
     }
 
     fun shutdown() {
@@ -251,6 +613,20 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
+            .addInterceptor { chain ->
+                val originalRequest = chain.request()
+                val response = chain.proceed(originalRequest)
+
+                if (response.isRedirect) {
+                    val location = response.header("Location") ?: return@addInterceptor response
+                    val newRequest = originalRequest.newBuilder()
+                        .url(location)
+                        .build()
+                    response.close()
+                    return@addInterceptor chain.proceed(newRequest)
+                }
+                response
+            }
             .build()
             .also { okHttpClient = it }
     }

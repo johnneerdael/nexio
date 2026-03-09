@@ -395,7 +395,10 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode,
                     resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
                 )
-                player.setMediaSource(mediaSourceFactory.createMediaSource(url, newHeaders))
+                val mediaSource = withContext(Dispatchers.IO) {
+                    mediaSourceFactory.createMediaSource(url, newHeaders)
+                }
+                player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
             } catch (e: Exception) {
@@ -715,7 +718,10 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode,
                     resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
                 )
-                player.setMediaSource(mediaSourceFactory.createMediaSource(url, newHeaders))
+                val mediaSource = withContext(Dispatchers.IO) {
+                    mediaSourceFactory.createMediaSource(url, newHeaders)
+                }
+                player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
             } catch (e: Exception) {
