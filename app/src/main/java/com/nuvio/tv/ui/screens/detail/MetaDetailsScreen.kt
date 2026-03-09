@@ -520,6 +520,14 @@ fun MetaDetailsScreen(
             }
         }
 
+        uiState.episodeMismatchInfo?.let { info ->
+            EpisodeMismatchDialog(
+                info = info,
+                onConfirm = { viewModel.onEvent(MetaDetailsEvent.OnConfirmEpisodeMismatch) },
+                onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnDismissEpisodeMismatch) }
+            )
+        }
+
         if (uiState.showListPicker) {
             LibraryListPickerDialog(
                 title = uiState.meta?.name ?: stringResource(R.string.detail_lists_fallback),
