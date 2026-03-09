@@ -21,6 +21,7 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.NextToWatch
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -314,7 +315,20 @@ class MetaDetailsViewModel @Inject constructor(
                             if (preferredMeta != null) {
                                 applyMetaWithEnrichment(preferredMeta)
                             } else {
-                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                                if (tryApplyStreamOnlyFallback(result.message)) {
+                                    _uiState.update { state ->
+                                        if (state.userMessage == null) {
+                                            state.copy(
+                                                userMessage = "Metadata unavailable. Opening stream selection.",
+                                                userMessageIsError = false
+                                            )
+                                        } else {
+                                            state
+                                        }
+                                    }
+                                } else {
+                                    _uiState.update { it.copy(isLoading = false, error = result.message) }
+                                }
                             }
                         }
                         NetworkResult.Loading -> {
@@ -340,7 +354,20 @@ class MetaDetailsViewModel @Inject constructor(
                         when (result) {
                             is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
                             is NetworkResult.Error -> {
-                                _uiState.update { it.copy(isLoading = false, error = result.message) }
+                                if (tryApplyStreamOnlyFallback(result.message)) {
+                                    _uiState.update { state ->
+                                        if (state.userMessage == null) {
+                                            state.copy(
+                                                userMessage = "Metadata unavailable. Opening stream selection.",
+                                                userMessageIsError = false
+                                            )
+                                        } else {
+                                            state
+                                        }
+                                    }
+                                } else {
+                                    _uiState.update { it.copy(isLoading = false, error = result.message) }
+                                }
                             }
                             NetworkResult.Loading -> {
                                 _uiState.update { it.copy(isLoading = true) }
@@ -363,6 +390,61 @@ class MetaDetailsViewModel @Inject constructor(
             ?: return raw
 
         return tmdbService.tmdbToImdb(tmdbNumericId, itemType) ?: raw
+    }
+
+    private fun tryApplyStreamOnlyFallback(errorMessage: String?): Boolean {
+        if (!shouldUseStreamOnlyFallback(errorMessage)) return false
+        val fallbackMeta = buildStreamOnlyFallbackMeta()
+        applyMeta(fallbackMeta)
+        return true
+    }
+
+    private fun shouldUseStreamOnlyFallback(errorMessage: String?): Boolean {
+        val normalized = errorMessage?.trim()?.lowercase().orEmpty()
+        if (normalized.isBlank()) return false
+        return normalized.contains("meta not found") ||
+            normalized.contains("no addons support meta")
+    }
+
+    private fun buildStreamOnlyFallbackMeta(): Meta {
+        val fallbackName = deriveFallbackName(itemId)
+        return Meta(
+            id = itemId,
+            type = ContentType.fromString(itemType),
+            rawType = itemType,
+            name = fallbackName,
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            writer = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList(),
+            trailerYtIds = emptyList()
+        )
+    }
+
+    private fun deriveFallbackName(sourceId: String): String {
+        val candidate = sourceId
+            .substringAfterLast(':')
+            .substringBefore('?')
+            .replace('_', ' ')
+            .replace('.', ' ')
+            .trim()
+        return candidate.ifBlank { sourceId }
     }
 
     private fun applyMeta(meta: Meta) {
@@ -1346,4 +1428,3 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 }
-
