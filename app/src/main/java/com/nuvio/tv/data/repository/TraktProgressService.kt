@@ -366,14 +366,31 @@ class TraktProgressService @Inject constructor(
         title: String?,
         year: Int?
     ) {
+        Log.d(TAG, "markAsWatched: contentId=${progress.contentId} videoId=${progress.videoId} " +
+            "season=${progress.season} episode=${progress.episode} " +
+            "contentType=${progress.contentType} title=$title year=$year")
+
         val body = buildHistoryAddRequest(progress, title, year)
             ?: throw IllegalStateException("Insufficient Trakt IDs to mark watched")
+
+        Log.d(TAG, "markAsWatched REQUEST: shows=${body.shows?.map { show ->
+            "ids=${show.ids} title=${show.title} year=${show.year} seasons=${show.seasons?.map { s ->
+                "number=${s.number} episodes=${s.episodes?.map { e -> "number=${e.number} watchedAt=${e.watchedAt}" }}"
+            }}"
+        }} movies=${body.movies?.map { m -> "ids=${m.ids} title=${m.title}" }}")
 
         val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.addHistory(authHeader, body)
         } ?: throw IllegalStateException("Trakt request failed")
 
         val responseBody = response.body()
+        Log.d(TAG, "markAsWatched RESPONSE: code=${response.code()} " +
+            "added=[movies=${responseBody?.added?.movies} episodes=${responseBody?.added?.episodes} " +
+            "shows=${responseBody?.added?.shows} seasons=${responseBody?.added?.seasons}] " +
+            "notFound=[movies=${responseBody?.notFound?.movies?.map { it.ids }} " +
+            "shows=${responseBody?.notFound?.shows?.map { it.ids }} " +
+            "episodes=${responseBody?.notFound?.episodes?.map { "s=${it.season} e=${it.number} ids=${it.ids}" }}]")
+
         if (!response.isSuccessful || hasHistoryAddNotFound(responseBody)) {
             throw IllegalStateException("Failed to mark watched on Trakt (${response.code()})")
         }
@@ -452,11 +469,14 @@ class TraktProgressService @Inject constructor(
     }
 
     suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
+        Log.d(TAG, "removeFromHistory: contentId=$contentId season=$season episode=$episode")
         applyOptimisticRemoval(contentId, season, episode)
 
         val parsed = parseContentIds(contentId)
         val ids = toTraktIds(parsed)
+        Log.d(TAG, "removeFromHistory: parsed ids=$ids")
         if (!ids.hasAnyId()) {
+            Log.d(TAG, "removeFromHistory: no valid Trakt IDs, skipping")
             refreshNow()
             return
         }
@@ -483,9 +503,14 @@ class TraktProgressService @Inject constructor(
             )
         }
 
-        traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+        Log.d(TAG, "removeFromHistory REQUEST: shows=${removeBody.shows?.map { s ->
+            "ids=${s.ids} seasons=${s.seasons?.map { ss -> "number=${ss.number} episodes=${ss.episodes?.map { e -> e.number }}" }}"
+        }} movies=${removeBody.movies?.map { it.ids }}")
+
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.removeHistory(authHeader, removeBody)
         }
+        Log.d(TAG, "removeFromHistory RESPONSE: code=${response?.code()} body=${response?.body()}")
 
         if (!likelySeries) {
             setMovieWatchedInCache(
@@ -1113,6 +1138,7 @@ class TraktProgressService @Inject constructor(
         year: Int?
     ): TraktHistoryAddRequestDto? {
         val ids = resolveHistoryIds(progress)
+        Log.d(TAG, "buildHistoryAddRequest: resolvedIds=$ids contentId=${progress.contentId} videoId=${progress.videoId}")
         if (!ids.hasAnyId()) return null
         val watchedAt = toTraktUtcDateTime(progress.lastWatched)
 
