@@ -264,6 +264,47 @@ class StreamPresentationEngineTest {
         assertEquals(2, result.diagnostics.finalPresentedCount)
     }
 
+    @Test
+    fun `grouped sorting orders by resolution first then size`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.2026.1080p.WEB-DL.x265.Small.mkv",
+                    addonName = "Addon A",
+                    videoSizeBytes = 4L * 1024L * 1024L * 1024L
+                ),
+                stream(
+                    filename = "Movie.2026.2160p.WEB-DL.x265.Small.mkv",
+                    addonName = "Addon B",
+                    videoSizeBytes = 10L * 1024L * 1024L * 1024L
+                ),
+                stream(
+                    filename = "Movie.2026.1080p.WEB-DL.x265.Large.mkv",
+                    addonName = "Addon C",
+                    videoSizeBytes = 8L * 1024L * 1024L * 1024L
+                ),
+                stream(
+                    filename = "Movie.2026.2160p.WEB-DL.x265.Large.mkv",
+                    addonName = "Addon D",
+                    videoSizeBytes = 20L * 1024L * 1024L * 1024L
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B", "Addon C", "Addon D"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        assertEquals(
+            listOf("2160p", "2160p", "1080p", "1080p"),
+            result.items.map { it.parsed.resolution }
+        )
+        assertEquals(
+            listOf(20L, 10L, 8L, 4L),
+            result.items.map { (it.parsed.sizeBytes ?: 0L) / (1024L * 1024L * 1024L) }
+        )
+    }
+
     private fun organize(stream: Stream) = StreamPresentationEngine.organize(
         streams = listOf(stream),
         availableAddons = listOf(stream.addonName),
@@ -280,7 +321,8 @@ class StreamPresentationEngineTest {
         description: String? = filename,
         parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
         addonName: String = "Test Addon",
-        infoHash: String? = null
+        infoHash: String? = null,
+        videoSizeBytes: Long? = null
     ): Stream {
         return Stream(
             name = name,
@@ -297,7 +339,8 @@ class StreamPresentationEngineTest {
                 countryWhitelist = null,
                 proxyHeaders = null,
                 videoHash = null,
-                videoSize = if (filename.startsWith("Shelter")) 11L * 1024L * 1024L * 1024L else (2.7 * 1024 * 1024 * 1024).toLong(),
+                videoSize = videoSizeBytes
+                    ?: if (filename.startsWith("Shelter")) 11L * 1024L * 1024L * 1024L else (2.7 * 1024 * 1024 * 1024).toLong(),
                 filename = filename
             ),
             addonName = addonName,
