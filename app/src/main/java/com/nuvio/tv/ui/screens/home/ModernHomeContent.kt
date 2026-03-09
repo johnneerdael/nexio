@@ -110,6 +110,7 @@ private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
 fun ModernHomeContent(
     uiState: HomeUiState,
     focusState: HomeScreenFocusState,
+    enrichingItemId: String? = null,
     trailerPreviewUrls: Map<String, String>,
     trailerPreviewAudioUrls: Map<String, String>,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -550,6 +551,15 @@ fun ModernHomeContent(
     ) {
         val rowHorizontalPadding = 52.dp
 
+        val activeCarouselItem by remember(activeRow, clampedActiveItemIndex) {
+            derivedStateOf { activeRow?.items?.getOrNull(clampedActiveItemIndex) }
+        }
+        val activeItemId by remember(activeCarouselItem) {
+            derivedStateOf { activeCarouselItem?.metaPreview?.id }
+        }
+        val heroMatchesActiveItem by remember(heroItem, activeCarouselItem) {
+            derivedStateOf { heroItem == null || heroItem == activeCarouselItem?.heroPreview }
+        }
         val resolvedHero by remember(heroItem, activeRow, clampedActiveItemIndex) {
             derivedStateOf {
                 heroItem
@@ -675,6 +685,7 @@ fun ModernHomeContent(
         )
         HeroTitleBlock(
             preview = resolvedHero,
+            enriching = !heroMatchesActiveItem || (enrichingItemId != null && enrichingItemId == activeItemId),
             portraitMode = !useLandscapePosters,
             modifier = Modifier
                 .align(Alignment.BottomStart)
