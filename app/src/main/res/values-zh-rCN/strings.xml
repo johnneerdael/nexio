@@ -345,6 +345,8 @@
   <string name="audio_dv_sub">对于不支持杜比视界 (DV) 硬件的设备，将 DV Profile 7 映射到标准 HEVC</string>
   <string name="audio_fire_os_compatibility_fallback_title">Fire OS - 兼容性回退</string>
   <string name="audio_fire_os_compatibility_fallback_sub">允许 Fire TV 的兼容性回退方案，包括旧版 DTS 核心降级和直通恢复。如果您需要严格的 Kodi 风格一致性，请将其与 IEC 打包程序一起禁用。</string>
+  <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - 监控音频延迟</string>
+  <string name="audio_fire_os_supervise_audio_delay_sub">Kodi 风格的 IEC 启动延迟监控。仅在受影响的 Fire OS 固件上启用（当直通启动时出现数秒不同步）。</string>
   <string name="audio_decoder_device_only_desc">仅使用内置硬件解码器。兼容性最高，但可能不支持所有格式。</string>
   <string name="audio_decoder_prefer_device_desc">优先使用硬件解码，失败则回退到 FFmpeg。推荐大多数设备使用。</string>
   <string name="audio_decoder_prefer_app_desc">优先使用 FFmpeg 解码器。格式支持更好，但 CPU 占用更高。</string>

@@ -345,6 +345,8 @@
   <string name="audio_dv_sub">Ordne Dolby Vision Profile 7 dem Standard-HEVC für Geräte ohne DV-Hardwareunterstützung zu</string>
   <string name="audio_fire_os_compatibility_fallback_title">Fire OS - Kompatibilitäts-Fallback</string>
   <string name="audio_fire_os_compatibility_fallback_sub">Ermöglicht Fire TV-Kompatibilitäts-Fallbacks, einschließlich Downgrade des alten DTS-Cores und Laufzeit-Passthrough-Wiederherstellung. Deaktiviere dies zusammen mit dem IEC-Packer für eine strikte Parität im Kodi-Stil.</string>
+  <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - Audioverzögerung überwachen</string>
+  <string name="audio_fire_os_supervise_audio_delay_sub">Kodi-ähnliche Überwachung der IEC-Startverzögerung. Nur bei betroffener Fire OS-Firmware aktivieren, wenn Passthrough mit Sekunden Versatz startet.</string>
   <string name="audio_decoder_device_only_desc">Nur integrierte Hardware-Decoder verwenden. Am kompatibelsten, unterstützt jedoch möglicherweise nicht alle Formate.</string>
   <string name="audio_decoder_prefer_device_desc">Hardware-Decoder verwenden, sofern verfügbar, und auf FFmpeg zurückgreifen. Empfohlen für die meisten Geräte.</string>
   <string name="audio_decoder_prefer_app_desc">FFmpeg-Decoder verwenden, sofern verfügbar. Bessere Formatunterstützung, aber höhere CPU-Auslastung.</string>

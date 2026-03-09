@@ -90,6 +90,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             AudioCapabilities.setFireOsCompatibilityFallbackEnabled(
                 fireOsCompatibilityFallbackEnabled
             )
+            AudioCapabilities.setFireOsIecSuperviseAudioDelayEnabled(
+                playerSettings.fireOsIecSuperviseAudioDelayEnabled
+            )
             AudioCapabilities.setFireOsIecVerboseLoggingEnabled(
                 playerSettings.fireOsIecVerboseLoggingEnabled
             )

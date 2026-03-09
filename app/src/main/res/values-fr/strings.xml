@@ -763,6 +763,8 @@
   <string name="video_section">Vidéo</string>
   <string name="audio_fire_os_compatibility_fallback_title">Fire OS – Compatibilité de secours</string>
   <string name="audio_fire_os_compatibility_fallback_sub">Permet les solutions de secours de compatibilité Fire TV, y compris le rétrogradage du DTS ancien et la récupération passthrough à l\'exécution. Désactive ceci avec le packer IEC pour une parité stricte de style Kodi.</string>
+  <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - Superviser le délai audio</string>
+  <string name="audio_fire_os_supervise_audio_delay_sub">Supervision du délai de démarrage IEC de style Kodi. Active-la uniquement sur les firmwares Fire OS affectés quand le passthrough démarre avec plusieurs secondes de décalage.</string>
   <string name="sub_mode_overlay_canvas_sub">Prise en charge HDR avec rendu Canvas. Peut bloquer le fil de l\'interface (UI).</string>
   <string name="autoplay_prefer_binge_group">Préférer le groupe Binge (prochain épisode)</string>
   <string name="autoplay_prefer_binge_group_sub">Tente d\'abord le même profil source (même addon/groupe de qualité) avant les règles normales de lecture automatique.</string>

@@ -148,6 +148,7 @@ internal fun LazyListScope.audioSettingsItems(
     onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onSetFireOsCompatibilityFallbackEnabled: (Boolean) -> Unit,
+    onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -267,6 +268,18 @@ internal fun LazyListScope.audioSettingsItems(
             onCheckedChange = onSetFireOsCompatibilityFallbackEnabled,
             onFocused = onItemFocused,
             enabled = enabled
+        )
+    }
+
+    item(key = "audio_fire_os_supervise_audio_delay") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_fire_os_supervise_audio_delay_title),
+            subtitle = stringResource(R.string.audio_fire_os_supervise_audio_delay_sub),
+            isChecked = playerSettings.fireOsIecSuperviseAudioDelayEnabled,
+            onCheckedChange = onSetFireOsIecSuperviseAudioDelayEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
         )
     }
 }

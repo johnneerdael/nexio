@@ -161,6 +161,8 @@ data class PlayerSettings(
     // Fire OS compatibility fallback path for legacy DTS-core downgrade and passthrough recovery.
     // Disable this together with the IEC packer to keep Fire OS audio handling strict.
     val fireOsCompatibilityFallbackEnabled: Boolean = true,
+    // Fire OS IEC startup delay supervision workaround (Kodi superviseaudiodelay equivalent).
+    val fireOsIecSuperviseAudioDelayEnabled: Boolean = false,
     // Debug: verbose Fire OS IEC packer logs for ADB troubleshooting.
     val fireOsIecVerboseLoggingEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
@@ -350,6 +352,8 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
     private val fireOsCompatibilityFallbackEnabledKey =
         booleanPreferencesKey("fire_os_compatibility_fallback_enabled")
+    private val fireOsIecSuperviseAudioDelayEnabledKey =
+        booleanPreferencesKey("fire_os_iec_supervise_audio_delay_enabled")
     private val fireOsIecVerboseLoggingEnabledKey =
         booleanPreferencesKey("fire_os_iec_verbose_logging_enabled")
     private val experimentalDv5ToDv81EnabledKey =
@@ -595,6 +599,8 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
                 fireOsCompatibilityFallbackEnabled =
                     prefs[fireOsCompatibilityFallbackEnabledKey] ?: true,
+                fireOsIecSuperviseAudioDelayEnabled =
+                    prefs[fireOsIecSuperviseAudioDelayEnabledKey] ?: false,
                 fireOsIecVerboseLoggingEnabled =
                     prefs[fireOsIecVerboseLoggingEnabledKey] ?: false,
                 experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
@@ -1022,6 +1028,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setFireOsIecVerboseLoggingEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[fireOsIecVerboseLoggingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setFireOsIecSuperviseAudioDelayEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[fireOsIecSuperviseAudioDelayEnabledKey] = enabled
         }
     }
 
