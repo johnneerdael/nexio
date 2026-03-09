@@ -953,4 +953,10 @@
     <string name="series_status_ended">Zakończony</string>
     <string name="series_status_continuing">W trakcie</string>
     <string name="series_status_current">Na żywo</string>
+    <string name="series_status_cancelled">Anulowany</string>
+    <string name="series_status_released">Wydany</string>
+    <string name="series_status_planned">Planowany</string>
+    <string name="series_status_rumored">Plotki</string>
+    <string name="series_status_in_production">W produkcji</string>
+    <string name="series_status_post_production">Postprodukcja</string>
 </resources>
