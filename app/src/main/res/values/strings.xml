@@ -269,6 +269,8 @@
     <string name="audio_dts_iec_experimental_sub">Enables the custom Kodi-style Fire OS IEC packer path. Disable this to use the normal Media3 passthrough path instead.</string>
     <string name="audio_fire_os_compatibility_fallback_title">Fire OS - Compatibility Fallback</string>
     <string name="audio_fire_os_compatibility_fallback_sub">Allows Fire TV compatibility fallbacks, including legacy DTS-core downgrade and runtime passthrough recovery. Disable this with the IEC packer for strict Kodi-style parity.</string>
+    <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - Supervise Audio Delay</string>
+    <string name="audio_fire_os_supervise_audio_delay_sub">Kodi-style IEC startup delay supervision. Enable this only on affected Fire OS firmware where passthrough starts seconds out of sync.</string>
     <string name="audio_dv5_compatibility_title">DV5 - Compatibility Remap</string>
     <string name="audio_dv5_compatibility_sub">Allows DV5 streams to use the DV8.1 compatibility path. May fix color/signaling issues on some devices, but can regress others.</string>
     <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Preserve Mapping</string>

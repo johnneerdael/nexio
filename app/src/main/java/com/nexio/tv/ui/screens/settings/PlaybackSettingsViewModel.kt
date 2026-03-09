@@ -117,6 +117,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setFireOsCompatibilityFallbackEnabled(enabled)
     }
 
+    suspend fun setFireOsIecSuperviseAudioDelayEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setFireOsIecSuperviseAudioDelayEnabled(enabled)
+    }
+
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDv5ToDv81Enabled(enabled)
     }

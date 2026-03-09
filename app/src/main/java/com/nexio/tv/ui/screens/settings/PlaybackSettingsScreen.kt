@@ -285,6 +285,11 @@ fun PlaybackSettingsContent(
                         viewModel.setFireOsCompatibilityFallbackEnabled(enabled)
                     }
                 },
+                onSetFireOsIecSuperviseAudioDelayEnabled = {
+                    enabled -> coroutineScope.launch {
+                        viewModel.setFireOsIecSuperviseAudioDelayEnabled(enabled)
+                    }
+                },
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled = {
                     enabled ->
                     coroutineScope.launch {
