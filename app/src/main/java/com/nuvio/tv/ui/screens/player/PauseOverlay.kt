@@ -200,11 +200,12 @@ private fun PauseMetadataView(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (!logo.isNullOrBlank()) {
-                var logoFailed by remember { mutableStateOf(false) }
+                var logoFailed by remember(logo) { mutableStateOf(false) }
                 if (!logoFailed) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(logo)
+                            .memoryCacheKey(logo)
                             .crossfade(true)
                             .build(),
                         contentDescription = title,

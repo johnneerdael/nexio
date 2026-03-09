@@ -251,7 +251,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
-                    allProgress.map { items ->
+                    traktProgressService.observeAllProgress().map { items ->
                         items
                             .filter { it.contentId == contentId }
                             .maxByOrNull { it.lastWatched }
@@ -267,7 +267,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
-                    allProgress.map { items ->
+                    traktProgressService.observeAllProgress().map { items ->
                         items.firstOrNull {
                             it.contentId == contentId && it.season == season && it.episode == episode
                         }
