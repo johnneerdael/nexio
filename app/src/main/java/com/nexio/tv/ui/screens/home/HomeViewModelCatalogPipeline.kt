@@ -505,7 +505,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             preserveAddonRows = hasPersistedCatalogSnapshot &&
                 (restoredCatalogSnapshotActive || startupHydrationPending || startupRefreshPending || catalogsLoadInProgress),
             preserveTraktRows = shouldPreserveTraktCachedRows(
-                prefs = traktPrefs,
                 snapshot = traktSnapshot,
                 refreshInProgress = startupHydrationPending || startupRefreshPending || traktDiscoveryRefreshInProgress
             ),
@@ -732,11 +731,13 @@ private data class CachedHomePreservationState(
 )
 
 private fun shouldPreserveTraktCachedRows(
-    prefs: TraktCatalogPreferences,
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
     refreshInProgress: Boolean
 ): Boolean {
-    return refreshInProgress || shouldRefreshTraktDiscoveryForState(prefs, snapshot)
+    if (refreshInProgress) return true
+    // Only keep stale Trakt rows while hydrating the first discovery snapshot.
+    if (snapshot.updatedAtMs <= 0L) return true
+    return false
 }
 
 private fun shouldPreserveMDBListCachedRows(
@@ -942,6 +943,11 @@ internal fun shouldRefreshTraktDiscoveryForState(
     prefs: TraktCatalogPreferences,
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
 ): Boolean {
+    // Popular list metadata should only gate refresh when custom Trakt popular lists are enabled.
+    if (prefs.selectedPopularListKeys.isEmpty()) {
+        return snapshot.updatedAtMs <= 0L
+    }
+
     if (snapshot.popularLists.isEmpty()) {
         return true
     }

@@ -55,7 +55,7 @@ internal fun HomeViewModel.onForegroundPipeline() {
         startupRefreshPending = true
 
         traktDiscoveryRefreshInProgress = true
-        runCatching { traktDiscoveryService.ensureFresh(force = false) }
+        runCatching { traktDiscoveryService.ensureFresh(force = true) }
             .onFailure { error ->
                 Log.w(HomeViewModel.TAG, "Failed to refresh Trakt discovery on foreground", error)
             }
