@@ -509,7 +509,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 refreshInProgress = startupHydrationPending || startupRefreshPending || traktDiscoveryRefreshInProgress
             ),
             preserveMDBListRows = shouldPreserveMDBListCachedRows(
-                prefs = mdbListPrefs,
                 snapshot = mdbListSnapshot,
                 refreshInProgress = startupHydrationPending || startupRefreshPending || mdbListDiscoveryRefreshInProgress
             ),
@@ -741,11 +740,13 @@ private fun shouldPreserveTraktCachedRows(
 }
 
 private fun shouldPreserveMDBListCachedRows(
-    prefs: MDBListCatalogPreferences,
     snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
     refreshInProgress: Boolean
 ): Boolean {
-    return refreshInProgress || shouldRefreshMDBListDiscoveryForState(prefs, snapshot)
+    if (refreshInProgress) return true
+    // Only keep stale MDBList rows while hydrating the first discovery snapshot.
+    if (snapshot.updatedAtMs <= 0L) return true
+    return false
 }
 
 private fun mergeCachedRowsWithLiveRows(

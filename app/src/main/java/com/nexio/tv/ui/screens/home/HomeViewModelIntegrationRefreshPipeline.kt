@@ -62,7 +62,7 @@ internal fun HomeViewModel.onForegroundPipeline() {
         traktDiscoveryRefreshInProgress = false
 
         mdbListDiscoveryRefreshInProgress = true
-        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
+        runCatching { mdbListDiscoveryService.ensureFresh(force = true) }
             .onFailure { error ->
                 Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery on foreground", error)
             }
