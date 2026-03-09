@@ -926,6 +926,7 @@ internal fun LanguageSelectionDialog(
     onDismiss: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
+    val sortedLanguages = remember { AVAILABLE_SUBTITLE_LANGUAGES.sortedBy { it.displayName.lowercase() } }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -977,10 +978,10 @@ internal fun LanguageSelectionDialog(
                 }
 
                 items(
-                    count = AVAILABLE_SUBTITLE_LANGUAGES.size,
-                    key = { index -> AVAILABLE_SUBTITLE_LANGUAGES[index].code }
+                    count = sortedLanguages.size,
+                    key = { index -> sortedLanguages[index].code }
                 ) { index ->
-                    val language = AVAILABLE_SUBTITLE_LANGUAGES[index]
+                    val language = sortedLanguages[index]
                     LanguageOptionItem(
                         name = language.displayName,
                         code = language.code,
