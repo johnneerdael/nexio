@@ -64,6 +64,206 @@ class StreamPresentationEngineTest {
         assertTrue(item.detailLines.none { it.contains("PM • DL") })
     }
 
+    @Test
+    fun `torrentio PM plus marker is recognized as cached`() {
+        val item = organize(
+            stream(
+                filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                name = "[PM+] Torrentio"
+            )
+        )
+
+        assertEquals(true, item.parsed.isCached)
+    }
+
+    @Test
+    fun `download marker overrides PM plus and remains uncached`() {
+        val item = organize(
+            stream(
+                filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                name = "[PM+] Torrentio",
+                description = "[PM download] TorrentsDB"
+            )
+        )
+
+        assertEquals(false, item.parsed.isCached)
+    }
+
+    @Test
+    fun `diagnostics count episode mismatch drops`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(filename = "Show.S01E03.1080p.WEB-DL.x265.mkv")
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(filterEpisodeMismatchStreamsEnabled = true),
+            requestContext = StreamRequestContext(
+                contentType = "series",
+                season = 1,
+                episode = 2
+            )
+        )
+
+        assertEquals(1, result.diagnostics.inputCount)
+        assertEquals(1, result.diagnostics.droppedEpisodeMismatchCount)
+        assertEquals(0, result.diagnostics.finalPresentedCount)
+        assertTrue(result.items.isEmpty())
+    }
+
+    @Test
+    fun `diagnostics count movie year mismatch drops`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(filename = "Some.Movie.2023.1080p.BluRay.x264.mkv")
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(filterMovieYearMismatchStreamsEnabled = true),
+            requestContext = StreamRequestContext(
+                contentType = "movie",
+                year = "2024"
+            )
+        )
+
+        assertEquals(1, result.diagnostics.inputCount)
+        assertEquals(1, result.diagnostics.droppedMovieYearMismatchCount)
+        assertEquals(0, result.diagnostics.finalPresentedCount)
+        assertTrue(result.items.isEmpty())
+    }
+
+    @Test
+    fun `diagnostics count web dl dolby vision drops`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(filename = "Some.Movie.2024.2160p.WEB-DL.DV.HEVC.mkv")
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(filterWebDolbyVisionStreamsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        assertEquals(1, result.diagnostics.inputCount)
+        assertEquals(1, result.diagnostics.droppedWebDolbyVisionCount)
+        assertEquals(0, result.diagnostics.finalPresentedCount)
+        assertTrue(result.items.isEmpty())
+    }
+
+    @Test
+    fun `diagnostics count grouped dedupe drops`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon A",
+                    infoHash = "abc123"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon B",
+                    infoHash = "abc123"
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.diagnostics.inputCount)
+        assertEquals(1, result.diagnostics.droppedDeduplicateCount)
+        assertEquals(1, result.diagnostics.finalPresentedCount)
+        assertEquals(1, result.items.size)
+    }
+
+    @Test
+    fun `dedupe keeps cached over uncached when duplicate cluster contains both`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon A",
+                    infoHash = "abc123",
+                    name = "⚡ RD"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon B",
+                    infoHash = "abc123",
+                    name = "download RD"
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(1, result.items.size)
+        assertEquals(true, result.items.single().parsed.isCached)
+        assertEquals(1, result.diagnostics.dedupeMixedCachedUncachedClusterCount)
+        assertEquals(0, result.diagnostics.dedupeCachedDroppedForUncachedClusterCount)
+    }
+
+    @Test
+    fun `dedupe keeps distinct cached releases from same service`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.GroupA.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ RD"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.GroupB.mkv",
+                    addonName = "Addon B",
+                    name = "⚡ RD"
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(0, result.diagnostics.droppedDeduplicateCount)
+    }
+
+    @Test
+    fun `diagnostics does not change visible stream ordering`() {
+        val streams = listOf(
+            stream(filename = "Show.S01E02.720p.WEB-DL.x264.mkv", addonName = "Addon A"),
+            stream(filename = "Show.S01E02.1080p.WEB-DL.x265.mkv", addonName = "Addon B")
+        )
+
+        val result = StreamPresentationEngine.organize(
+            streams = streams,
+            availableAddons = listOf("Addon A", "Addon B"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(groupAcrossAddonsEnabled = true),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(0, result.diagnostics.droppedEpisodeMismatchCount)
+        assertEquals(0, result.diagnostics.droppedMovieYearMismatchCount)
+        assertEquals(0, result.diagnostics.droppedWebDolbyVisionCount)
+        assertEquals(0, result.diagnostics.droppedDeduplicateCount)
+        assertEquals(0, result.diagnostics.droppedAddonFilterCount)
+        assertEquals(2, result.diagnostics.finalPresentedCount)
+    }
+
     private fun organize(stream: Stream) = StreamPresentationEngine.organize(
         streams = listOf(stream),
         availableAddons = listOf(stream.addonName),
@@ -78,7 +278,9 @@ class StreamPresentationEngineTest {
         filename: String,
         name: String? = null,
         description: String? = filename,
-        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+        addonName: String = "Test Addon",
+        infoHash: String? = null
     ): Stream {
         return Stream(
             name = name,
@@ -86,7 +288,7 @@ class StreamPresentationEngineTest {
             description = description,
             url = "https://example.com/video.mkv",
             ytId = null,
-            infoHash = null,
+            infoHash = infoHash,
             fileIdx = null,
             externalUrl = null,
             behaviorHints = StreamBehaviorHints(
@@ -98,7 +300,7 @@ class StreamPresentationEngineTest {
                 videoSize = if (filename.startsWith("Shelter")) 11L * 1024L * 1024L * 1024L else (2.7 * 1024 * 1024 * 1024).toLong(),
                 filename = filename
             ),
-            addonName = "Test Addon",
+            addonName = addonName,
             addonLogo = null,
             addonParserPreset = parserPreset
         )

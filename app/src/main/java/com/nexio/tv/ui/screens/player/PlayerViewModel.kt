@@ -10,6 +10,7 @@ import com.nexio.tv.core.mpv.NexioMpvSurfaceView
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -34,6 +35,7 @@ class PlayerViewModel @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore,
     private val geminiSettingsDataStore: GeminiSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
@@ -48,9 +50,10 @@ class PlayerViewModel @Inject constructor(
         addonRepository = addonRepository,
         subtitleRepository = subtitleRepository,
         traktScrobbleService = traktScrobbleService,
-        skipIntroRepository = skipIntroRepository,
-        playerSettingsDataStore = playerSettingsDataStore,
-        geminiSettingsDataStore = geminiSettingsDataStore,
+            skipIntroRepository = skipIntroRepository,
+            playerSettingsDataStore = playerSettingsDataStore,
+            debugSettingsDataStore = debugSettingsDataStore,
+            geminiSettingsDataStore = geminiSettingsDataStore,
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         geminiSubtitleTranslationService = geminiSubtitleTranslationService,

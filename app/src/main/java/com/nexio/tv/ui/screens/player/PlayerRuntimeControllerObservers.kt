@@ -182,6 +182,14 @@ internal fun PlayerRuntimeController.observeBlurUnwatchedEpisodes() {
     }
 }
 
+internal fun PlayerRuntimeController.observeDebugSettings() {
+    scope.launch {
+        debugSettingsDataStore.streamDiagnosticsEnabled.collectLatest { enabled ->
+            streamDiagnosticsEnabled = enabled
+        }
+    }
+}
+
 internal fun PlayerRuntimeController.observeEpisodeWatchProgress() {
     val id = contentId ?: return
     val type = contentType ?: return

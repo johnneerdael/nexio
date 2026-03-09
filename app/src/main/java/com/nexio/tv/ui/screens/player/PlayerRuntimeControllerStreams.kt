@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player
 
+import android.util.Log
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamPresentationEngine
@@ -119,7 +120,8 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
             type = type,
             videoId = vid,
             season = seasonArg,
-            episode = episodeArg
+            episode = episodeArg,
+            requestOrigin = "player_sources"
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
@@ -136,6 +138,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                             requestContext = buildSourceStreamRequestContext(type, seasonArg, episodeArg)
                         )
                     }
+                    logSourcePresentationDiagnostics("player_sources", organizedStreams)
                     _uiState.update {
                         it.copy(
                             isLoadingSourceStreams = false,
@@ -201,6 +204,7 @@ internal fun PlayerRuntimeController.filterSourceStreamsByAddon(addonName: Strin
                 )
             )
         }
+        logSourcePresentationDiagnostics("player_sources_filter", organizedStreams)
         _uiState.update {
             it.copy(
                 sourceSelectedAddonFilter = organizedStreams.selectedAddonFilter,
@@ -308,6 +312,23 @@ private fun PlayerRuntimeController.buildSourceStreamRequestContext(
         season = season,
         episode = episode,
         episodeTitle = navigationArgs.initialEpisodeTitle ?: currentEpisodeTitle
+    )
+}
+
+private fun PlayerRuntimeController.logSourcePresentationDiagnostics(
+    origin: String,
+    organizedStreams: com.nexio.tv.core.stream.OrganizedStreams
+) {
+    if (!streamDiagnosticsEnabled) return
+    val d = organizedStreams.diagnostics
+    Log.d(
+        PlayerRuntimeController.TAG,
+        "STREAM_DIAG presentation origin=$origin input=${d.inputCount} droppedEpisode=${d.droppedEpisodeMismatchCount} " +
+            "droppedYear=${d.droppedMovieYearMismatchCount} droppedWebDv=${d.droppedWebDolbyVisionCount} " +
+            "droppedDedupe=${d.droppedDeduplicateCount} mixedCacheClusters=${d.dedupeMixedCachedUncachedClusterCount} " +
+            "cachedDroppedForUncachedClusters=${d.dedupeCachedDroppedForUncachedClusterCount} " +
+            "droppedAddonFilter=${d.droppedAddonFilterCount} " +
+            "presented=${d.finalPresentedCount}"
     )
 }
 
@@ -541,7 +562,8 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
             type = type,
             videoId = video.id,
             season = video.season,
-            episode = video.episode
+            episode = video.episode,
+            requestOrigin = "episode_picker"
         ).collect { result ->
             when (result) {
                 is NetworkResult.Success -> {
@@ -798,7 +820,8 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 type = type,
                 videoId = nextVideo.id,
                 season = nextVideo.season,
-                episode = nextVideo.episode
+                episode = nextVideo.episode,
+                requestOrigin = "next_episode_autoplay"
             ).firstOrNull { result ->
                 when (result) {
                     is NetworkResult.Success -> {

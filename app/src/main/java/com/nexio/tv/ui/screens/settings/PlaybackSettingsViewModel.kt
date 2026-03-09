@@ -113,6 +113,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setExperimentalDtsIecPassthroughEnabled(enabled)
     }
 
+    suspend fun setFireOsCompatibilityFallbackEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setFireOsCompatibilityFallbackEnabled(enabled)
+    }
+
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDv5ToDv81Enabled(enabled)
     }

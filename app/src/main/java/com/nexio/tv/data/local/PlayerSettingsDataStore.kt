@@ -156,8 +156,11 @@ data class PlayerSettings(
     // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
     val experimentalDv7ToDv81Enabled: Boolean = true,
     // Experimental: enable the Kodi-style Fire OS IEC passthrough path.
-    // When disabled, the legacy Fire TV DTS-core fallback compatibility path remains active.
+    // When disabled, the normal Media3 passthrough path remains active.
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
+    // Fire OS compatibility fallback path for legacy DTS-core downgrade and passthrough recovery.
+    // Disable this together with the IEC packer to keep Fire OS audio handling strict.
+    val fireOsCompatibilityFallbackEnabled: Boolean = true,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
     // Experimental: preserve mapping metadata when converting DV7 -> DV8.1.
@@ -343,6 +346,8 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
     private val experimentalDtsIecPassthroughEnabledKey =
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
+    private val fireOsCompatibilityFallbackEnabledKey =
+        booleanPreferencesKey("fire_os_compatibility_fallback_enabled")
     private val experimentalDv5ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv5_to_dv81_enabled")
     private val experimentalDv7ToDv81PreserveMappingEnabledKey =
@@ -584,6 +589,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: true,
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
+                fireOsCompatibilityFallbackEnabled =
+                    prefs[fireOsCompatibilityFallbackEnabledKey] ?: true,
                 experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
                 experimentalDv7ToDv81PreserveMappingEnabled =
                     prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false,
@@ -997,6 +1004,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDtsIecPassthroughEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDtsIecPassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setFireOsCompatibilityFallbackEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[fireOsCompatibilityFallbackEnabledKey] = enabled
         }
     }
 

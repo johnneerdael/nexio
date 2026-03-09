@@ -17,6 +17,7 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
@@ -48,6 +49,7 @@ class PlayerRuntimeController(
     internal val traktScrobbleService: TraktScrobbleService,
     internal val skipIntroRepository: SkipIntroRepository,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
+    internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val geminiSettingsDataStore: GeminiSettingsDataStore,
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
@@ -248,6 +250,7 @@ class PlayerRuntimeController(
     internal var lastVodTelemetryRefreshTimeMs: Long = 0L
     internal var cachedVodCacheLogState: String = "vod=warming"
     internal var bufferLogsEnabled: Boolean = false
+    internal var streamDiagnosticsEnabled: Boolean = false
     internal var lastProgressUiUpdateUptimeMs: Long = 0L
     internal var lastSkipIntervalEvaluationUptimeMs: Long = 0L
     internal var lastNextEpisodeEvaluationUptimeMs: Long = 0L
@@ -320,6 +323,7 @@ class PlayerRuntimeController(
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode)
         }
+        observeDebugSettings()
         observeSubtitleSettings()
         observeGeminiSettings()
         fetchMetaDetails(contentId, contentType)

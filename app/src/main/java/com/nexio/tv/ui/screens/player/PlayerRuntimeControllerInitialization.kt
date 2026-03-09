@@ -75,11 +75,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val experimentalFireOsIecPassthroughEnabled =
                 playerSettings.experimentalDtsIecPassthroughEnabled
+            val fireOsCompatibilityFallbackEnabled =
+                playerSettings.fireOsCompatibilityFallbackEnabled
+            val strictKodiFireOsIecModeEnabled =
+                isStrictKodiFireOsIecModeEnabled(
+                    experimentalFireOsIecPassthroughEnabled,
+                    fireOsCompatibilityFallbackEnabled
+                )
             AudioCapabilities.setExperimentalFireOsIecPassthroughEnabled(
                 experimentalFireOsIecPassthroughEnabled
             )
-            AudioCapabilities.setLimitedFireTvDtsCoreFallbackEnabled(
-                !experimentalFireOsIecPassthroughEnabled
+            AudioCapabilities.setFireOsCompatibilityFallbackEnabled(
+                fireOsCompatibilityFallbackEnabled
             )
             _uiState.update {
                 it.copy(
@@ -175,8 +182,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
-            val safeAudioModeEnabled = safeAudioForcedStreamUrls.contains(url)
-            val audioDisabledForStream = audioDisabledForcedStreamUrls.contains(url)
+            if (strictKodiFireOsIecModeEnabled) {
+                safeAudioForcedStreamUrls.remove(url)
+                audioDisabledForcedStreamUrls.remove(url)
+            }
+            val safeAudioModeEnabled =
+                !strictKodiFireOsIecModeEnabled && safeAudioForcedStreamUrls.contains(url)
+            val audioDisabledForStream =
+                !strictKodiFireOsIecModeEnabled && audioDisabledForcedStreamUrls.contains(url)
             val vc1TrackSelectionBypassActive = vc1TrackSelectionBypassStreamUrls.contains(url)
             isSafeAudioModeActiveForCurrentPlayback = safeAudioModeEnabled
             isAudioDisabledForCurrentPlayback = audioDisabledForStream
@@ -621,52 +634,72 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
 
                         if (error.isAudioTrackInitializationFailure()) {
-                            if (!isSafeAudioModeActiveForCurrentPlayback) {
+                            if (strictKodiFireOsIecModeEnabled) {
                                 Log.w(
                                     PlayerRuntimeController.TAG,
-                                    "AudioTrack init failed, retrying with safe audio mode " +
+                                    "AudioTrack init failed in strict Fire OS IEC mode; " +
+                                        "not retrying with safe audio fallback " +
                                         "host=${currentStreamUrl.safeHost()} " +
                                         "positionMs=$currentPosition"
                                 )
-                                safeAudioForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                return
-                            }
-                            if (!isAudioDisabledForCurrentPlayback) {
-                                Log.w(
-                                    PlayerRuntimeController.TAG,
-                                    "AudioTrack init still failing in safe audio mode, retrying " +
-                                        "with audio disabled host=${currentStreamUrl.safeHost()} " +
-                                        "positionMs=$currentPosition"
-                                )
-                                audioDisabledForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithAudioDisabled(currentPosition)
-                                return
+                            } else {
+                                if (!isSafeAudioModeActiveForCurrentPlayback) {
+                                    Log.w(
+                                        PlayerRuntimeController.TAG,
+                                        "AudioTrack init failed, retrying with safe audio mode " +
+                                            "host=${currentStreamUrl.safeHost()} " +
+                                            "positionMs=$currentPosition"
+                                    )
+                                    safeAudioForcedStreamUrls.add(currentStreamUrl)
+                                    retryCurrentStreamWithSafeAudioFallback(currentPosition)
+                                    return
+                                }
+                                if (!isAudioDisabledForCurrentPlayback) {
+                                    Log.w(
+                                        PlayerRuntimeController.TAG,
+                                        "AudioTrack init still failing in safe audio mode, retrying " +
+                                            "with audio disabled host=${currentStreamUrl.safeHost()} " +
+                                            "positionMs=$currentPosition"
+                                    )
+                                    audioDisabledForcedStreamUrls.add(currentStreamUrl)
+                                    retryCurrentStreamWithAudioDisabled(currentPosition)
+                                    return
+                                }
                             }
                         }
 
                         if (error.isStuckPlayingNoProgress()) {
-                            if (!isSafeAudioModeActiveForCurrentPlayback) {
+                            if (strictKodiFireOsIecModeEnabled) {
                                 Log.w(
                                     PlayerRuntimeController.TAG,
-                                    "Stuck player detected, retrying with safe audio mode " +
+                                    "Stuck player detected in strict Fire OS IEC mode; " +
+                                        "not retrying with safe audio fallback " +
                                         "host=${currentStreamUrl.safeHost()} " +
                                         "positionMs=$currentPosition"
                                 )
-                                safeAudioForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                return
-                            }
-                            if (!isAudioDisabledForCurrentPlayback) {
-                                Log.w(
-                                    PlayerRuntimeController.TAG,
-                                    "Stuck player persists in safe audio mode, retrying with " +
-                                        "audio disabled host=${currentStreamUrl.safeHost()} " +
-                                        "positionMs=$currentPosition"
-                                )
-                                audioDisabledForcedStreamUrls.add(currentStreamUrl)
-                                retryCurrentStreamWithAudioDisabled(currentPosition)
-                                return
+                            } else {
+                                if (!isSafeAudioModeActiveForCurrentPlayback) {
+                                    Log.w(
+                                        PlayerRuntimeController.TAG,
+                                        "Stuck player detected, retrying with safe audio mode " +
+                                            "host=${currentStreamUrl.safeHost()} " +
+                                            "positionMs=$currentPosition"
+                                    )
+                                    safeAudioForcedStreamUrls.add(currentStreamUrl)
+                                    retryCurrentStreamWithSafeAudioFallback(currentPosition)
+                                    return
+                                }
+                                if (!isAudioDisabledForCurrentPlayback) {
+                                    Log.w(
+                                        PlayerRuntimeController.TAG,
+                                        "Stuck player persists in safe audio mode, retrying with " +
+                                            "audio disabled host=${currentStreamUrl.safeHost()} " +
+                                            "positionMs=$currentPosition"
+                                    )
+                                    audioDisabledForcedStreamUrls.add(currentStreamUrl)
+                                    retryCurrentStreamWithAudioDisabled(currentPosition)
+                                    return
+                                }
                             }
                         }
 
@@ -1132,6 +1165,13 @@ private fun describeExtensionRendererMode(mode: Int): String {
         DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER -> "prefer"
         else -> mode.toString()
     }
+}
+
+private fun isStrictKodiFireOsIecModeEnabled(
+    experimentalFireOsIecPassthroughEnabled: Boolean,
+    fireOsCompatibilityFallbackEnabled: Boolean
+): Boolean {
+    return experimentalFireOsIecPassthroughEnabled && !fireOsCompatibilityFallbackEnabled
 }
 
 private fun DefaultRenderersFactory.applyMapDv7ToHevcIfSupported(

@@ -22,6 +22,7 @@ class DebugSettingsDataStore @Inject constructor(
 
     private val accountTabEnabledKey = booleanPreferencesKey("account_tab_enabled")
     private val syncCodeFeaturesEnabledKey = booleanPreferencesKey("sync_code_features_enabled")
+    private val streamDiagnosticsEnabledKey = booleanPreferencesKey("stream_diagnostics_enabled")
 
     val accountTabEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[accountTabEnabledKey] ?: false
@@ -29,6 +30,10 @@ class DebugSettingsDataStore @Inject constructor(
 
     val syncCodeFeaturesEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[syncCodeFeaturesEnabledKey] ?: false
+    }
+
+    val streamDiagnosticsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[streamDiagnosticsEnabledKey] ?: false
     }
 
     suspend fun setAccountTabEnabled(enabled: Boolean) {
@@ -40,6 +45,12 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setSyncCodeFeaturesEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[syncCodeFeaturesEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[streamDiagnosticsEnabledKey] = enabled
         }
     }
 }

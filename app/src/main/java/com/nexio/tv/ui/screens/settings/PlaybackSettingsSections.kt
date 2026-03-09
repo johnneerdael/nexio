@@ -132,6 +132,7 @@ internal fun PlaybackSettingsSections(
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
+    onSetFireOsCompatibilityFallbackEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
     onSetSubtitleVerticalOffset: (Int) -> Unit,
@@ -396,6 +397,7 @@ internal fun PlaybackSettingsSections(
                 onSetSkipSilence = onSetSkipSilence,
                 onSetLibmpvAudioPassthroughEnabled = onSetLibmpvAudioPassthroughEnabled,
                 onSetExperimentalDtsIecPassthroughEnabled = onSetExperimentalDtsIecPassthroughEnabled,
+                onSetFireOsCompatibilityFallbackEnabled = onSetFireOsCompatibilityFallbackEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
                 enabled = !generalUi.isExternalPlayer
             )
