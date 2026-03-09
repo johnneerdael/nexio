@@ -949,4 +949,8 @@
     <string name="update_open_settings">Otwórz ustawienia</string>
     <string name="update_install">Zainstaluj</string>
     <string name="update_ignore">Ignoruj</string>
+    <string name="episodes_unavailable">Niedostępny</string>
+    <string name="series_status_ended">Zakończony</string>
+    <string name="series_status_continuing">W trakcie</string>
+    <string name="series_status_current">Na żywo</string>
 </resources>
