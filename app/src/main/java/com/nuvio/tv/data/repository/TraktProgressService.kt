@@ -343,6 +343,15 @@ class TraktProgressService @Inject constructor(
             .distinctUntilChanged()
     }
 
+    suspend fun getEpisodeProgressSnapshot(
+        contentId: String
+    ): Map<Pair<Int, Int>, WatchProgress> {
+        return ensureEpisodeProgressSnapshot(
+            contentId = contentId,
+            forceRefresh = false
+        )
+    }
+
     fun observeMovieWatched(contentId: String): Flow<Boolean> {
         val rawKey = contentId.trim()
         val canonicalKey = canonicalLookupKey(rawKey)

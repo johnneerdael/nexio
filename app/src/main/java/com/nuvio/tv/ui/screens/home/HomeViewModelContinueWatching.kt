@@ -3,7 +3,6 @@ package com.nuvio.tv.ui.screens.home
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.TraktSettingsDataStore
-import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.Video
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -53,6 +51,12 @@ private data class NextUpArtworkFallback(
 private data class NextUpResolution(
     val episode: Video,
     val lastWatched: Long
+)
+
+private data class ContinueWatchingLookupCache(
+    val metaCache: MutableMap<String, Meta?> = mutableMapOf(),
+    val episodeProgressByContent: MutableMap<String, Map<Pair<Int, Int>, WatchProgress>> = mutableMapOf(),
+    val watchedEpisodesByContent: Map<String, Map<Pair<Int, Int>, Long>> = emptyMap()
 )
 
 private fun ContinueWatchingSettingsSnapshot.isEquivalentForContinueWatching(
@@ -129,14 +133,22 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 }
             }
 
+            val lookupCache = ContinueWatchingLookupCache(
+                watchedEpisodesByContent = loadWatchedEpisodesByContent(recentItems)
+            )
+
             // Then enrich Next Up and item details in background.
             enrichContinueWatchingProgressively(
                 allProgress = recentItems,
                 inProgressItems = inProgressOnly,
                 dismissedNextUp = dismissedNextUp,
-                showUnairedNextUp = showUnairedNextUp
+                showUnairedNextUp = showUnairedNextUp,
+                lookupCache = lookupCache
             )
-            enrichInProgressEpisodeDetailsProgressively(inProgressOnly)
+            enrichInProgressEpisodeDetailsProgressively(
+                inProgressItems = inProgressOnly,
+                lookupCache = lookupCache
+            )
         }
     }
 }
@@ -163,9 +175,9 @@ private fun shouldTreatAsInProgressForContinueWatching(progress: WatchProgress):
 
 private suspend fun HomeViewModel.resolveCurrentEpisodeDescription(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>
+    lookupCache: ContinueWatchingLookupCache
 ): String? {
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return null
     if (isSeriesTypeCW(progress.contentType)) {
         val video = resolveVideoForProgress(progress, meta)
         val episodeOverview = video?.overview?.takeIf { it.isNotBlank() }
@@ -177,41 +189,41 @@ private suspend fun HomeViewModel.resolveCurrentEpisodeDescription(
 
 private suspend fun HomeViewModel.resolveCurrentEpisodeThumbnail(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>
+    lookupCache: ContinueWatchingLookupCache
 ): String? {
     if (!isSeriesTypeCW(progress.contentType)) return null
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return null
     val video = resolveVideoForProgress(progress, meta) ?: return null
     return video.thumbnail?.takeIf { it.isNotBlank() }
 }
 
 private suspend fun HomeViewModel.resolveCurrentEpisodeImdbRating(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>
+    lookupCache: ContinueWatchingLookupCache
 ): Float? {
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return null
     return meta.imdbRating
 }
 
 private suspend fun HomeViewModel.resolveCurrentGenres(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>
+    lookupCache: ContinueWatchingLookupCache
 ): List<String> {
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return emptyList()
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return emptyList()
     return meta.genres.take(3)
 }
 
 private suspend fun HomeViewModel.resolveCurrentReleaseInfo(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>
+    lookupCache: ContinueWatchingLookupCache
 ): String? {
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return null
     return meta.releaseInfo?.takeIf { it.isNotBlank() }
 }
 
 private suspend fun HomeViewModel.resolveDisplayProgressMetadata(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>
+    lookupCache: ContinueWatchingLookupCache
 ): WatchProgress {
     val needsMeta =
         progress.name.isBlank() ||
@@ -222,7 +234,7 @@ private suspend fun HomeViewModel.resolveDisplayProgressMetadata(
             (isSeriesTypeCW(progress.contentType) && progress.episodeTitle.isNullOrBlank())
     if (!needsMeta) return progress
 
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return progress
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return progress
     val video = resolveVideoForProgress(progress, meta)
     val shouldOverrideName = progress.name.isBlank() || progress.name == progress.contentId
     val backdrop = progress.backdrop ?: meta.backdropUrl ?: video?.thumbnail
@@ -258,7 +270,8 @@ private suspend fun HomeViewModel.enrichContinueWatchingProgressively(
     allProgress: List<WatchProgress>,
     inProgressItems: List<ContinueWatchingItem.InProgress>,
     dismissedNextUp: Set<String>,
-    showUnairedNextUp: Boolean
+    showUnairedNextUp: Boolean,
+    lookupCache: ContinueWatchingLookupCache
 ) = coroutineScope {
     val inProgressIds = inProgressItems
         .map { it.progress.contentId }
@@ -296,7 +309,6 @@ private suspend fun HomeViewModel.enrichContinueWatchingProgressively(
     val lookupSemaphore = Semaphore(CW_MAX_NEXT_UP_CONCURRENCY)
     val mergeMutex = Mutex()
     val nextUpByContent = linkedMapOf<String, ContinueWatchingItem.NextUp>()
-    val metaCache = mutableMapOf<String, Meta?>()
     var lastEmittedNextUpCount = 0
 
     val jobs = latestCompletedBySeries.map { progress ->
@@ -304,8 +316,8 @@ private suspend fun HomeViewModel.enrichContinueWatchingProgressively(
             lookupSemaphore.withPermit {
                 val nextUp = buildNextUpItem(
                     progress = progress,
-                    metaCache = metaCache,
-                    showUnairedNextUp = showUnairedNextUp
+                    showUnairedNextUp = showUnairedNextUp,
+                    lookupCache = lookupCache
                 ) ?: return@withPermit
                 mergeMutex.withLock {
                     nextUpByContent[progress.contentId] = nextUp
@@ -357,21 +369,21 @@ private suspend fun HomeViewModel.enrichContinueWatchingProgressively(
 }
 
 private suspend fun HomeViewModel.enrichInProgressEpisodeDetailsProgressively(
-    inProgressItems: List<ContinueWatchingItem.InProgress>
+    inProgressItems: List<ContinueWatchingItem.InProgress>,
+    lookupCache: ContinueWatchingLookupCache
 ) = coroutineScope {
     if (inProgressItems.isEmpty()) return@coroutineScope
 
-    val metaCache = mutableMapOf<String, Meta?>()
     val enrichedByProgress = linkedMapOf<WatchProgress, ContinueWatchingItem.InProgress>()
     var lastAppliedCount = 0
 
     for (item in inProgressItems) {
-        val description = resolveCurrentEpisodeDescription(item.progress, metaCache)
-        val thumbnail = resolveCurrentEpisodeThumbnail(item.progress, metaCache)
-        val imdbRating = resolveCurrentEpisodeImdbRating(item.progress, metaCache)
-        val genres = resolveCurrentGenres(item.progress, metaCache)
-        val releaseInfo = resolveCurrentReleaseInfo(item.progress, metaCache)
-        val enrichedProgress = resolveDisplayProgressMetadata(item.progress, metaCache)
+        val description = resolveCurrentEpisodeDescription(item.progress, lookupCache)
+        val thumbnail = resolveCurrentEpisodeThumbnail(item.progress, lookupCache)
+        val imdbRating = resolveCurrentEpisodeImdbRating(item.progress, lookupCache)
+        val genres = resolveCurrentGenres(item.progress, lookupCache)
+        val releaseInfo = resolveCurrentReleaseInfo(item.progress, lookupCache)
+        val enrichedProgress = resolveDisplayProgressMetadata(item.progress, lookupCache)
         val enrichedItem = item.copy(
             progress = enrichedProgress,
             episodeDescription = description,
@@ -454,18 +466,20 @@ private fun mergeContinueWatchingItems(
 
 private suspend fun HomeViewModel.buildNextUpItem(
     progress: WatchProgress,
-    metaCache: MutableMap<String, Meta?>,
-    showUnairedNextUp: Boolean
+    showUnairedNextUp: Boolean,
+    lookupCache: ContinueWatchingLookupCache
 ): ContinueWatchingItem.NextUp? {
-    val meta = resolveMetaForProgress(progress, metaCache) ?: return null
+    val meta = resolveMetaForProgress(progress, lookupCache.metaCache) ?: return null
     val nextUp = findNextUpEpisodeFromProgressMap(
         contentId = progress.contentId,
         meta = meta,
-        showUnairedNextUp = showUnairedNextUp
+        showUnairedNextUp = showUnairedNextUp,
+        lookupCache = lookupCache
     ) ?: findNextUpEpisodeFromLatestProgress(
         progress = progress,
         meta = meta,
-        showUnairedNextUp = showUnairedNextUp
+        showUnairedNextUp = showUnairedNextUp,
+        lookupCache = lookupCache
     ) ?: return null
     val video = nextUp.episode
     val nextSeason = requireNotNull(video.season)
@@ -525,26 +539,21 @@ private suspend fun HomeViewModel.buildNextUpItem(
 private suspend fun HomeViewModel.findNextUpEpisodeFromProgressMap(
     contentId: String,
     meta: Meta,
-    showUnairedNextUp: Boolean
+    showUnairedNextUp: Boolean,
+    lookupCache: ContinueWatchingLookupCache
 ): NextUpResolution? {
     val episodes = meta.videos
         .filter { it.season != null && it.episode != null && it.season != 0 }
         .sortedWith(compareBy<Video> { it.season }.thenBy { it.episode })
     if (episodes.isEmpty()) return null
 
-    val progressMap = runCatching {
-        withTimeoutOrNull(2_500L) {
-            watchProgressRepository.getAllEpisodeProgress(contentId)
-                .first { it.isNotEmpty() }
-        } ?: watchProgressRepository.getAllEpisodeProgress(contentId).firstOrNull().orEmpty()
-    }.getOrElse {
-        emptyMap()
-    }
+    val progressMap = getEpisodeProgressSnapshot(
+        contentId = contentId,
+        lookupCache = lookupCache
+    )
     if (progressMap.isEmpty()) return null
 
-    val watchedEpisodesMap = runCatching {
-        watchedItemsPreferences.getWatchedEpisodesWithTimestamps(contentId).first()
-    }.getOrElse { emptyMap() }
+    val watchedEpisodesMap = lookupCache.watchedEpisodesByContent[contentId].orEmpty()
     val watchedEpisodes = watchedEpisodesMap.keys
 
     val completedProgress = progressMap.values
@@ -631,7 +640,8 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromProgressMap(
 private suspend fun HomeViewModel.findNextUpEpisodeFromLatestProgress(
     progress: WatchProgress,
     meta: Meta,
-    showUnairedNextUp: Boolean
+    showUnairedNextUp: Boolean,
+    lookupCache: ContinueWatchingLookupCache
 ): NextUpResolution? {
     val episodes = meta.videos
         .filter { it.season != null && it.episode != null && it.season != 0 }
@@ -641,9 +651,7 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromLatestProgress(
     val currentSeason = progress.season ?: return null
     val currentEpisode = progress.episode ?: return null
 
-    val watchedEpisodesMap = runCatching {
-        watchedItemsPreferences.getWatchedEpisodesWithTimestamps(progress.contentId).first()
-    }.getOrElse { emptyMap() }
+    val watchedEpisodesMap = lookupCache.watchedEpisodesByContent[progress.contentId].orEmpty()
     val watchedEpisodes = watchedEpisodesMap.keys
 
     val currentIndex = episodes.indexOfFirst {
@@ -667,6 +675,51 @@ private suspend fun HomeViewModel.findNextUpEpisodeFromLatestProgress(
         episode = nextEpisode,
         lastWatched = maxOf(progress.lastWatched, latestWatchedAt)
     )
+}
+
+private suspend fun HomeViewModel.loadWatchedEpisodesByContent(
+    recentItems: List<WatchProgress>
+): Map<String, Map<Pair<Int, Int>, Long>> {
+    val relevantContentIds = recentItems
+        .asSequence()
+        .map { it.contentId.trim() }
+        .filter { it.isNotBlank() }
+        .toSet()
+    if (relevantContentIds.isEmpty()) return emptyMap()
+
+    return runCatching {
+        watchedItemsPreferences.getAllItems()
+            .asSequence()
+            .filter { item ->
+                item.contentId in relevantContentIds &&
+                    item.season != null &&
+                    item.episode != null
+            }
+            .groupBy { it.contentId }
+            .mapValues { (_, items) ->
+                items.associate { watchedItem ->
+                    (watchedItem.season!! to watchedItem.episode!!) to watchedItem.watchedAt
+                }
+            }
+    }.getOrElse { emptyMap() }
+}
+
+private suspend fun HomeViewModel.getEpisodeProgressSnapshot(
+    contentId: String,
+    lookupCache: ContinueWatchingLookupCache
+): Map<Pair<Int, Int>, WatchProgress> {
+    synchronized(lookupCache.episodeProgressByContent) {
+        lookupCache.episodeProgressByContent[contentId]?.let { return it }
+    }
+
+    val snapshot = runCatching {
+        watchProgressRepository.getAllEpisodeProgressSnapshot(contentId)
+    }.getOrElse { emptyMap() }
+
+    synchronized(lookupCache.episodeProgressByContent) {
+        lookupCache.episodeProgressByContent[contentId] = snapshot
+    }
+    return snapshot
 }
 
 private suspend fun HomeViewModel.resolveMetaForProgress(
