@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -17,6 +16,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -105,29 +105,14 @@ internal fun PlayerOverlayScaffold(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
+                    .drawWithCache {
+                        val horizontalGradient = Brush.horizontalGradient(
                             colors = listOf(
                                 Color.Black.copy(alpha = 0.88f),
                                 Color.Transparent
                             )
                         )
-                    )
-            )
-
-            if (overlayTint.alpha > 0f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(overlayTint)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
+                        val verticalGradient = Brush.verticalGradient(
                             colorStops = arrayOf(
                                 0f to Color.Black.copy(alpha = 0.6f),
                                 0.3f to Color.Black.copy(alpha = 0.4f),
@@ -135,12 +120,14 @@ internal fun PlayerOverlayScaffold(
                                 1f to Color.Transparent
                             )
                         )
-                    )
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
+                        onDrawBehind {
+                            drawRect(brush = horizontalGradient)
+                            if (overlayTint.alpha > 0f) {
+                                drawRect(color = overlayTint)
+                            }
+                            drawRect(brush = verticalGradient)
+                        }
+                    }
                     .padding(contentPadding)
             ) {
                 if (topEndContent != null) {
