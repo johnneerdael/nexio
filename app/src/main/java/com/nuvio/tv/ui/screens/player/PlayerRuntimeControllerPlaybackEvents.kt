@@ -157,17 +157,25 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
     val ids = toTraktIds(parsedIds)
     val parsedYear = extractYear(year)
     val normalizedType = contentType?.lowercase()
+    val currentMappingKey = currentEpisodeMappingCacheKey()
+    val mappedEpisode = if (currentTraktEpisodeMappingKey == currentMappingKey) {
+        currentTraktEpisodeMapping
+    } else {
+        null
+    }
+    val effectiveSeason = mappedEpisode?.season ?: currentSeason
+    val effectiveEpisode = mappedEpisode?.episode ?: currentEpisode
 
     val isEpisode = normalizedType in listOf("series", "tv") &&
-        currentSeason != null && currentEpisode != null
+        effectiveSeason != null && effectiveEpisode != null
 
     val item = if (isEpisode) {
         TraktScrobbleItem.Episode(
             showTitle = contentName ?: title,
             showYear = parsedYear,
             showIds = ids,
-            season = currentSeason ?: return null,
-            number = currentEpisode ?: return null,
+            season = effectiveSeason ?: return null,
+            number = effectiveEpisode ?: return null,
             episodeTitle = currentEpisodeTitle
         )
     } else {

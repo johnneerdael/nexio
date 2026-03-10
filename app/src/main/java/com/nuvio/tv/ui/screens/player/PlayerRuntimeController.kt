@@ -14,6 +14,8 @@ import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.repository.ParentalGuideRepository
 import com.nuvio.tv.data.repository.SkipIntroRepository
 import com.nuvio.tv.data.repository.SkipInterval
+import com.nuvio.tv.data.repository.EpisodeMappingEntry
+import com.nuvio.tv.data.repository.TraktEpisodeMappingService
 import com.nuvio.tv.data.repository.TraktScrobbleItem
 import com.nuvio.tv.data.repository.TraktScrobbleService
 import com.nuvio.tv.domain.model.Video
@@ -41,6 +43,7 @@ class PlayerRuntimeController(
     internal val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     internal val parentalGuideRepository: ParentalGuideRepository,
     internal val traktScrobbleService: TraktScrobbleService,
+    internal val traktEpisodeMappingService: TraktEpisodeMappingService,
     internal val skipIntroRepository: SkipIntroRepository,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
@@ -229,9 +232,12 @@ class PlayerRuntimeController(
     internal var pendingResumeProgress: WatchProgress? = null
     internal var hasRetriedCurrentStreamAfter416: Boolean = false
     internal var currentScrobbleItem: TraktScrobbleItem? = null
+    internal var currentTraktEpisodeMapping: EpisodeMappingEntry? = null
+    internal var currentTraktEpisodeMappingKey: String? = null
     internal var hasSentScrobbleStartForCurrentItem: Boolean = false
     internal var hasRequestedScrobbleStartForCurrentItem: Boolean = false
     internal var scrobbleStartRequestGeneration: Long = 0L
+    internal var playbackPreparationJob: Job? = null
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false
     internal var requestedUseLibassByUser: Boolean = false
     internal var libassPipelineOverrideForCurrentStream: Boolean? = null
@@ -248,7 +254,6 @@ class PlayerRuntimeController(
     }
 
     init {
-        refreshScrobbleItem()
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode)
         }

@@ -318,9 +318,11 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     showStreamSourceIndicator(stream)
     resetNextEpisodeCardState(clearEpisode = false)
 
-    initializePlayer(url, newHeaders)
-
-    loadSavedProgressFor(currentSeason, currentEpisode)
+    preparePlaybackBeforeStart(
+        url = url,
+        headers = newHeaders,
+        loadSavedProgress = true
+    )
 }
 
 internal fun PlayerRuntimeController.dismissEpisodesPanel() {
@@ -579,7 +581,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode
     currentEpisodeTitle = targetVideo?.title ?: _uiState.value.episodeStreamsTitle ?: currentEpisodeTitle
-    refreshScrobbleItem()
+    currentTraktEpisodeMapping = null
+    currentTraktEpisodeMappingKey = null
     lastSavedPosition = 0L
 
     _uiState.update {
@@ -627,9 +630,11 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     fetchParentalGuide(contentId, contentType, currentSeason, currentEpisode)
     fetchSkipIntervals(contentId, currentSeason, currentEpisode)
 
-    initializePlayer(url, newHeaders)
-
-    loadSavedProgressFor(currentSeason, currentEpisode)
+    preparePlaybackBeforeStart(
+        url = url,
+        headers = newHeaders,
+        loadSavedProgress = true
+    )
 }
 
 internal fun PlayerRuntimeController.showEpisodeStreamPicker(video: Video, forceRefresh: Boolean = true) {
