@@ -686,6 +686,23 @@
     <string name="catalog_order_disabled_on_home">Disabled on Home</string>
     <string name="catalog_order_enable">Enable</string>
     <string name="catalog_order_disable">Disable</string>
+    <string name="android_tv_channels_title">Android TV Launcher Feeds</string>
+    <string name="android_tv_channels_subtitle">Choose which feeds publish to the launcher. Stored only on this device.</string>
+    <string name="android_tv_channels_value_off">Off</string>
+    <string name="android_tv_channels_value_count">%1$d feeds</string>
+    <string name="android_tv_channels_dialog_title">Android TV Launcher Feeds</string>
+    <string name="android_tv_channels_dialog_subtitle">This stays app-local and is not synced to your account or web portal. Hidden home catalogs can still be added here.</string>
+    <string name="android_tv_channels_enabled">Launcher publishing is on</string>
+    <string name="android_tv_channels_disabled">Launcher publishing is off</string>
+    <string name="android_tv_channels_enabled_body">Selected feeds will be published as Android TV preview channels.</string>
+    <string name="android_tv_channels_disabled_body">Turn this on to start publishing selected feeds as Android TV preview channels.</string>
+    <string name="android_tv_channels_turn_on">Turn on</string>
+    <string name="android_tv_channels_turn_off">Turn off</string>
+    <string name="android_tv_channels_disabled_note">Select feeds after enabling this feature. Existing launcher channels will be removed while it is off.</string>
+    <string name="android_tv_channels_empty_selection">No launcher feeds selected yet.</string>
+    <string name="android_tv_channels_hidden_on_home">Hidden on Home, still available here</string>
+    <string name="android_tv_channels_selected">Selected</string>
+    <string name="android_tv_channels_not_selected">Not selected</string>
 
 
     <!-- StreamScreen -->
