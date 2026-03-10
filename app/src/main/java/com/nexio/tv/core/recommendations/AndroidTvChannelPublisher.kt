@@ -37,6 +37,7 @@ private const val TAG = "AndroidTvChannels"
 private const val CHANNEL_ID_PREFIX = "nexio_android_tv_channel_"
 private const val PROGRAM_ID_PREFIX = "nexio_android_tv_program_"
 private const val MAX_PROGRAMS_PER_CHANNEL = 30
+private const val EXTRA_RECOMMENDATION_FEED_KEY = "recommendation_feed_key"
 private const val EXTRA_RECOMMENDATION_CONTENT_ID = "recommendation_content_id"
 private const val EXTRA_RECOMMENDATION_CONTENT_TYPE = "recommendation_content_type"
 private const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
@@ -112,13 +113,18 @@ class AndroidTvChannelPublisher @Inject constructor(
                 val providerId = channelProviderId(key)
                 activeProviderIds += providerId
                 val existing = existingChannels[providerId]
-                val channelId = upsertChannel(
+                val channelResult = upsertChannel(
                     option = row.option,
                     providerId = providerId,
-                    existingChannelId = existing?.id,
+                    existingChannel = existing,
                     publishAsDefault = existingChannels.isEmpty() && index == 0
                 )
-                if (channelId == null) return@forEachIndexed
+                val channelId = channelResult?.channelId ?: return@forEachIndexed
+                if (channelResult.needsBrowsableRequest) {
+                    dataStore.enqueueBrowsableChannelId(channelId)
+                } else {
+                    dataStore.clearBrowsableChannelRequest(channelId)
+                }
                 clearPrograms(channelId)
                 row.items
                     .take(MAX_PROGRAMS_PER_CHANNEL)
@@ -168,34 +174,32 @@ class AndroidTvChannelPublisher @Inject constructor(
     private fun upsertChannel(
         option: AndroidTvFeedOption,
         providerId: String,
-        existingChannelId: Long?,
+        existingChannel: PreviewChannel?,
         publishAsDefault: Boolean
-    ): Long? {
+    ): UpsertedChannel? {
         return runCatching {
             val channel = PreviewChannel.Builder()
                 .setDisplayName(option.title)
                 .setDescription(option.subtitle)
                 .setInternalProviderId(providerId)
-                .setAppLinkIntent(
-                    baseLaunchIntent()
-                        ?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        ?: Intent(Intent.ACTION_MAIN)
-                )
+                .setAppLinkIntent(buildChannelLaunchIntent(option.key))
                 .build()
 
+            val existingChannelId = existingChannel?.id?.takeIf { it > 0L }
             val channelId = if (existingChannelId != null) {
                 previewChannelHelper.updatePreviewChannel(existingChannelId, channel)
                 existingChannelId
             } else if (publishAsDefault) {
                 previewChannelHelper.publishDefaultChannel(channel)
             } else {
-                val id = previewChannelHelper.publishChannel(channel)
-                TvContractCompat.requestChannelBrowsable(context, id)
-                id
+                previewChannelHelper.publishChannel(channel)
             }
 
             storeChannelLogo(channelId)
-            channelId
+            UpsertedChannel(
+                channelId = channelId,
+                needsBrowsableRequest = !publishAsDefault && (existingChannel?.isBrowsable != true)
+            )
         }.getOrElse { error ->
             Log.w(TAG, "Failed to upsert Android TV channel ${option.key}", error)
             null
@@ -259,6 +263,7 @@ class AndroidTvChannelPublisher @Inject constructor(
                     (baseLaunchIntent() ?: Intent(Intent.ACTION_MAIN))
                         .setAction(Intent.ACTION_VIEW)
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(EXTRA_RECOMMENDATION_FEED_KEY, option.key)
                         .putExtra(EXTRA_RECOMMENDATION_CONTENT_ID, item.id)
                         .putExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE, contentType)
                         .putExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL, addonBaseUrl.orEmpty())
@@ -284,11 +289,16 @@ class AndroidTvChannelPublisher @Inject constructor(
         }
     }
 
-    private fun deleteChannel(channelId: Long) {
+    private suspend fun deleteChannel(channelId: Long) {
         runCatching {
             previewChannelHelper.deletePreviewChannel(channelId)
         }.onFailure { error ->
             Log.w(TAG, "Failed to delete Android TV channelId=$channelId", error)
+        }
+        runCatching {
+            dataStore.clearBrowsableChannelRequest(channelId)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to clear Android TV browsable request state channelId=$channelId", error)
         }
     }
 
@@ -313,7 +323,19 @@ class AndroidTvChannelPublisher @Inject constructor(
         return "$CHANNEL_ID_PREFIX$feedKey"
     }
 
+    private fun buildChannelLaunchIntent(feedKey: String): Intent {
+        return (baseLaunchIntent() ?: Intent(Intent.ACTION_MAIN))
+            .setAction(Intent.ACTION_VIEW)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_RECOMMENDATION_FEED_KEY, feedKey)
+    }
+
     private fun baseLaunchIntent(): Intent? {
         return context.packageManager.getLaunchIntentForPackage(context.packageName)
     }
+
+    private data class UpsertedChannel(
+        val channelId: Long,
+        val needsBrowsableRequest: Boolean
+    )
 }

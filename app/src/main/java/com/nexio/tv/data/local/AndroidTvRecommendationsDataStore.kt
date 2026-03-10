@@ -21,7 +21,9 @@ private val Context.androidTvRecommendationsDataStore: DataStore<Preferences> by
 
 data class AndroidTvRecommendationsPreferences(
     val enabled: Boolean = false,
-    val selectedFeedKeys: List<String> = emptyList()
+    val selectedFeedKeys: List<String> = emptyList(),
+    val pendingBrowsableChannelIds: List<Long> = emptyList(),
+    val requestedBrowsableChannelIds: List<Long> = emptyList()
 )
 
 @Singleton
@@ -33,11 +35,15 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
 
     private val enabledKey = booleanPreferencesKey("android_tv_recommendations_enabled")
     private val selectedFeedKeysKey = stringPreferencesKey("android_tv_recommendations_selected_feed_keys")
+    private val pendingBrowsableChannelIdsKey = stringPreferencesKey("android_tv_pending_browsable_channel_ids")
+    private val requestedBrowsableChannelIdsKey = stringPreferencesKey("android_tv_requested_browsable_channel_ids")
 
     val preferences: Flow<AndroidTvRecommendationsPreferences> = dataStore.data.map { prefs ->
         AndroidTvRecommendationsPreferences(
             enabled = prefs[enabledKey] ?: false,
-            selectedFeedKeys = parseKeys(prefs[selectedFeedKeysKey])
+            selectedFeedKeys = parseKeys(prefs[selectedFeedKeysKey]),
+            pendingBrowsableChannelIds = parseLongs(prefs[pendingBrowsableChannelIdsKey]),
+            requestedBrowsableChannelIds = parseLongs(prefs[requestedBrowsableChannelIdsKey])
         )
     }
 
@@ -77,6 +83,59 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
         }
     }
 
+    suspend fun enqueueBrowsableChannelId(channelId: Long) {
+        if (channelId <= 0L) return
+        dataStore.edit { prefs ->
+            val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey])
+            if (channelId in requested) return@edit
+
+            val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).toMutableList()
+            if (channelId !in pending) {
+                pending += channelId
+                prefs[pendingBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(pending))
+            }
+        }
+    }
+
+    suspend fun markBrowsableChannelRequested(channelId: Long) {
+        if (channelId <= 0L) return
+        dataStore.edit { prefs ->
+            val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).filterNot { it == channelId }
+            val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey]).toMutableList()
+            if (channelId !in requested) {
+                requested += channelId
+            }
+
+            if (pending.isEmpty()) {
+                prefs.remove(pendingBrowsableChannelIdsKey)
+            } else {
+                prefs[pendingBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(pending))
+            }
+
+            prefs[requestedBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(requested))
+        }
+    }
+
+    suspend fun clearBrowsableChannelRequest(channelId: Long) {
+        if (channelId <= 0L) return
+        dataStore.edit { prefs ->
+            val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).filterNot { it == channelId }
+            val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey]).filterNot { it == channelId }
+
+            if (pending.isEmpty()) {
+                prefs.remove(pendingBrowsableChannelIdsKey)
+            } else {
+                prefs[pendingBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(pending))
+            }
+
+            if (requested.isEmpty()) {
+                prefs.remove(requestedBrowsableChannelIdsKey)
+            } else {
+                prefs[requestedBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(requested))
+            }
+        }
+    }
+
     private fun parseKeys(raw: String?): List<String> {
         if (raw.isNullOrBlank()) return emptyList()
         return try {
@@ -87,10 +146,27 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
         }
     }
 
+    private fun parseLongs(raw: String?): List<Long> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<Long>>() {}.type
+            normalizeLongs(gson.fromJson<List<Long>>(raw, type).orEmpty())
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private fun normalizeKeys(keys: List<String>): List<String> {
         return keys.asSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+    }
+
+    private fun normalizeLongs(values: List<Long>): List<Long> {
+        return values.asSequence()
+            .filter { it > 0L }
             .distinct()
             .toList()
     }
