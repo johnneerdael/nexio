@@ -136,7 +136,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val startupSubtitlePreparation = prepareStartupSubtitles(
                 mode = playerSettings.addonSubtitleStartupMode,
                 preferredLanguage = playerSettings.subtitleStyle.preferredLanguage,
-                secondaryLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage
+                secondaryLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage,
+                retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
             )
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
             if (usesLibmpvBackend()) {
@@ -955,12 +956,16 @@ internal fun resolvePreferredAudioLanguages(
 internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
     mode: AddonSubtitleStartupMode,
     preferredLanguage: String,
-    secondaryLanguage: String?
+    secondaryLanguage: String?,
+    retainedSelectedSubtitle: Subtitle?
 ): StartupSubtitlePreparation {
+    val retainedAttachedSubtitles = listOfNotNull(retainedSelectedSubtitle)
+        .distinctBy { "${it.id}|${it.url}" }
+
     if (mode == AddonSubtitleStartupMode.FAST_STARTUP) {
         return StartupSubtitlePreparation(
             fetchedSubtitles = emptyList(),
-            attachedSubtitles = emptyList(),
+            attachedSubtitles = retainedAttachedSubtitles,
             fetchCompleted = false
         )
     }
@@ -968,7 +973,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
     if (buildSubtitleFetchRequest() == null) {
         return StartupSubtitlePreparation(
             fetchedSubtitles = emptyList(),
-            attachedSubtitles = emptyList(),
+            attachedSubtitles = retainedAttachedSubtitles,
             fetchCompleted = false
         )
     }
@@ -988,7 +993,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
     if (mode == AddonSubtitleStartupMode.PREFERRED_ONLY && preferredTargets.isEmpty()) {
         return StartupSubtitlePreparation(
             fetchedSubtitles = emptyList(),
-            attachedSubtitles = emptyList(),
+            attachedSubtitles = retainedAttachedSubtitles,
             fetchCompleted = false
         )
     }
@@ -1002,11 +1007,11 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
         )
     } ?: return StartupSubtitlePreparation(
         fetchedSubtitles = emptyList(),
-        attachedSubtitles = emptyList(),
+        attachedSubtitles = retainedAttachedSubtitles,
         fetchCompleted = false
     )
 
-    val attachedSubtitles = when (mode) {
+    val attachedSubtitles = (when (mode) {
         AddonSubtitleStartupMode.ALL_SUBTITLES -> fetchedSubtitles
         AddonSubtitleStartupMode.PREFERRED_ONLY -> fetchedSubtitles.filter { subtitle ->
             preferredTargets.any { target ->
@@ -1014,7 +1019,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
             }
         }
         AddonSubtitleStartupMode.FAST_STARTUP -> emptyList()
-    }
+    } + retainedAttachedSubtitles).distinctBy { "${it.id}|${it.url}" }
 
     return StartupSubtitlePreparation(
         fetchedSubtitles = fetchedSubtitles,
