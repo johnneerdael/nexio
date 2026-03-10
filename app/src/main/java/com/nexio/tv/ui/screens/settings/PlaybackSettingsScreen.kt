@@ -94,6 +94,7 @@ import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AudioLanguageOption
+import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
@@ -146,6 +147,7 @@ fun PlaybackSettingsContent(
     var showAudioLanguageDialog by remember { mutableStateOf(false) }
     var showSecondaryAudioLanguageDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
+    var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlaySourceDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
@@ -165,6 +167,7 @@ fun PlaybackSettingsContent(
         showAudioLanguageDialog = false
         showSecondaryAudioLanguageDialog = false
         showDecoderPriorityDialog = false
+        showIecPackerChannelLayoutDialog = false
         showStreamAutoPlayModeDialog = false
         showStreamAutoPlaySourceDialog = false
         showStreamAutoPlayAddonSelectionDialog = false
@@ -209,6 +212,7 @@ fun PlaybackSettingsContent(
                 onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
                 onShowSecondaryAudioLanguageDialog = { openDialog { showSecondaryAudioLanguageDialog = true } },
                 onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
+                onShowIecPackerChannelLayoutDialog = { openDialog { showIecPackerChannelLayoutDialog = true } },
                 onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
                 onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
                 onShowSubtitleStartupModeDialog = { openDialog { showSubtitleStartupModeDialog = true } },
@@ -280,15 +284,31 @@ fun PlaybackSettingsContent(
                         viewModel.setExperimentalDtsIecPassthroughEnabled(enabled)
                     }
                 },
-                onSetFireOsCompatibilityFallbackEnabled = {
-                    enabled -> coroutineScope.launch {
-                        viewModel.setFireOsCompatibilityFallbackEnabled(enabled)
-                    }
+                onSetIecPackerAc3PassthroughEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setIecPackerAc3PassthroughEnabled(enabled) }
+                },
+                onSetIecPackerEac3PassthroughEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setIecPackerEac3PassthroughEnabled(enabled) }
+                },
+                onSetIecPackerDtsPassthroughEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setIecPackerDtsPassthroughEnabled(enabled) }
+                },
+                onSetIecPackerTruehdPassthroughEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setIecPackerTruehdPassthroughEnabled(enabled) }
+                },
+                onSetIecPackerDtshdPassthroughEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setIecPackerDtshdPassthroughEnabled(enabled) }
+                },
+                onSetIecPackerDtshdCoreFallbackEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setIecPackerDtshdCoreFallbackEnabled(enabled) }
                 },
                 onSetFireOsIecSuperviseAudioDelayEnabled = {
                     enabled -> coroutineScope.launch {
                         viewModel.setFireOsIecSuperviseAudioDelayEnabled(enabled)
                     }
+                },
+                onSetIecPackerMaxPcmChannelLayout = { layout ->
+                    coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
                 },
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled = {
                     enabled ->
@@ -381,6 +401,7 @@ fun PlaybackSettingsContent(
         showAudioLanguageDialog = showAudioLanguageDialog,
         showSecondaryAudioLanguageDialog = showSecondaryAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
+        showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
         showStreamAutoPlayModeDialog = showStreamAutoPlayModeDialog,
         showStreamAutoPlaySourceDialog = showStreamAutoPlaySourceDialog,
         showStreamAutoPlayAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
@@ -422,6 +443,9 @@ fun PlaybackSettingsContent(
         onSetDecoderPriority = { priority ->
             coroutineScope.launch { viewModel.setDecoderPriority(priority) }
         },
+        onSetIecPackerMaxPcmChannelLayout = { layout: IecPackerChannelLayout ->
+            coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
+        },
         onSetStreamAutoPlayMode = { mode ->
             coroutineScope.launch { viewModel.setStreamAutoPlayMode(mode) }
         },
@@ -449,6 +473,7 @@ fun PlaybackSettingsContent(
         onDismissAudioLanguageDialog = ::dismissAllDialogs,
         onDismissSecondaryAudioLanguageDialog = ::dismissAllDialogs,
         onDismissDecoderPriorityDialog = ::dismissAllDialogs,
+        onDismissIecPackerChannelLayoutDialog = ::dismissAllDialogs,
         onDismissStreamAutoPlayModeDialog = ::dismissAllDialogs,
         onDismissStreamAutoPlaySourceDialog = ::dismissAllDialogs,
         onDismissStreamRegexDialog = ::dismissAllDialogs,
