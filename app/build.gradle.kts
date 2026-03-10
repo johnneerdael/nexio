@@ -273,6 +273,7 @@ dependencies {
     // Media3 core modules.
     if (useMedia3Source) {
         implementation(libs.media3.exoplayer)
+        implementation("androidx.media3:media3-exoplayer-kodi-native-sink")
         implementation(libs.media3.ui)
     }
     implementation(libs.media3.exoplayer.hls)

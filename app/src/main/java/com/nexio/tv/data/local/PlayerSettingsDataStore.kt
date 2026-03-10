@@ -129,6 +129,24 @@ object AudioLanguageOption {
     const val DEVICE = "device"    // Use device locale
 }
 
+enum class IecPackerChannelLayout(val storedValue: String, val kodiChannelLayoutValue: Int) {
+    CH_2_0("2.0", 1),
+    CH_2_1("2.1", 2),
+    CH_3_0("3.0", 3),
+    CH_3_1("3.1", 4),
+    CH_4_0("4.0", 5),
+    CH_4_1("4.1", 6),
+    CH_5_0("5.0", 7),
+    CH_5_1("5.1", 8),
+    CH_7_0("7.0", 9),
+    CH_7_1("7.1", 10);
+
+    companion object {
+        fun fromStoredValue(value: String?): IecPackerChannelLayout =
+            entries.firstOrNull { it.storedValue == value } ?: CH_7_1
+    }
+}
+
 /**
  * Data class representing player settings
  */
@@ -155,15 +173,22 @@ data class PlayerSettings(
     val mapDV7ToHevc: Boolean = false,
     // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
     val experimentalDv7ToDv81Enabled: Boolean = true,
-    // Experimental: enable the Kodi-style Fire OS IEC passthrough path.
+    // Experimental: enable the Kodi-style IEC packer custom AudioSink path.
     // When disabled, the normal Media3 passthrough path remains active.
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
-    // Fire OS compatibility fallback path for legacy DTS-core downgrade and passthrough recovery.
-    // Disable this together with the IEC packer to keep Fire OS audio handling strict.
-    val fireOsCompatibilityFallbackEnabled: Boolean = true,
-    // Fire OS IEC startup delay supervision workaround (Kodi superviseaudiodelay equivalent).
+    // IEC packer codec-level passthrough toggles modeled after Kodi.
+    val iecPackerAc3PassthroughEnabled: Boolean = true,
+    val iecPackerEac3PassthroughEnabled: Boolean = true,
+    val iecPackerDtsPassthroughEnabled: Boolean = true,
+    val iecPackerTruehdPassthroughEnabled: Boolean = true,
+    val iecPackerDtshdPassthroughEnabled: Boolean = true,
+    val iecPackerDtshdCoreFallbackEnabled: Boolean = true,
+    val iecPackerMaxPcmChannelLayout: IecPackerChannelLayout = IecPackerChannelLayout.CH_7_1,
+    // Legacy fallback toggle kept in storage for compatibility with older installs.
+    val fireOsCompatibilityFallbackEnabled: Boolean = false,
+    // IEC startup delay supervision workaround (Kodi superviseaudiodelay equivalent).
     val fireOsIecSuperviseAudioDelayEnabled: Boolean = false,
-    // Debug: verbose Fire OS IEC packer logs for ADB troubleshooting.
+    // Debug: verbose IEC packer logs for ADB troubleshooting.
     val fireOsIecVerboseLoggingEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
@@ -350,6 +375,20 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
     private val experimentalDtsIecPassthroughEnabledKey =
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
+    private val iecPackerAc3PassthroughEnabledKey =
+        booleanPreferencesKey("iec_packer_ac3_passthrough_enabled")
+    private val iecPackerEac3PassthroughEnabledKey =
+        booleanPreferencesKey("iec_packer_eac3_passthrough_enabled")
+    private val iecPackerDtsPassthroughEnabledKey =
+        booleanPreferencesKey("iec_packer_dts_passthrough_enabled")
+    private val iecPackerTruehdPassthroughEnabledKey =
+        booleanPreferencesKey("iec_packer_truehd_passthrough_enabled")
+    private val iecPackerDtshdPassthroughEnabledKey =
+        booleanPreferencesKey("iec_packer_dtshd_passthrough_enabled")
+    private val iecPackerDtshdCoreFallbackEnabledKey =
+        booleanPreferencesKey("iec_packer_dtshd_core_fallback_enabled")
+    private val iecPackerMaxPcmChannelLayoutKey =
+        stringPreferencesKey("iec_packer_max_pcm_channel_layout")
     private val fireOsCompatibilityFallbackEnabledKey =
         booleanPreferencesKey("fire_os_compatibility_fallback_enabled")
     private val fireOsIecSuperviseAudioDelayEnabledKey =
@@ -597,8 +636,23 @@ class PlayerSettingsDataStore @Inject constructor(
                 experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: true,
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
+                iecPackerAc3PassthroughEnabled =
+                    prefs[iecPackerAc3PassthroughEnabledKey] ?: true,
+                iecPackerEac3PassthroughEnabled =
+                    prefs[iecPackerEac3PassthroughEnabledKey] ?: true,
+                iecPackerDtsPassthroughEnabled =
+                    prefs[iecPackerDtsPassthroughEnabledKey] ?: true,
+                iecPackerTruehdPassthroughEnabled =
+                    prefs[iecPackerTruehdPassthroughEnabledKey] ?: true,
+                iecPackerDtshdPassthroughEnabled =
+                    prefs[iecPackerDtshdPassthroughEnabledKey] ?: true,
+                iecPackerDtshdCoreFallbackEnabled =
+                    prefs[iecPackerDtshdCoreFallbackEnabledKey] ?: true,
+                iecPackerMaxPcmChannelLayout = IecPackerChannelLayout.fromStoredValue(
+                    prefs[iecPackerMaxPcmChannelLayoutKey]
+                ),
                 fireOsCompatibilityFallbackEnabled =
-                    prefs[fireOsCompatibilityFallbackEnabledKey] ?: true,
+                    prefs[fireOsCompatibilityFallbackEnabledKey] ?: false,
                 fireOsIecSuperviseAudioDelayEnabled =
                     prefs[fireOsIecSuperviseAudioDelayEnabledKey] ?: false,
                 fireOsIecVerboseLoggingEnabled =
@@ -1016,6 +1070,48 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDtsIecPassthroughEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDtsIecPassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerAc3PassthroughEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerAc3PassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerEac3PassthroughEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerEac3PassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerDtsPassthroughEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerDtsPassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerTruehdPassthroughEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerTruehdPassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerDtshdPassthroughEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerDtshdPassthroughEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerDtshdCoreFallbackEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerDtshdCoreFallbackEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerMaxPcmChannelLayout(layout: IecPackerChannelLayout) {
+        store().edit { prefs ->
+            prefs[iecPackerMaxPcmChannelLayoutKey] = layout.storedValue
         }
     }
 
