@@ -303,27 +303,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
             }
     }
 
-    override suspend fun getAllEpisodeProgressSnapshot(
-        contentId: String,
-        addonVideos: List<Video>
-    ): Map<Pair<Int, Int>, WatchProgress> {
-        val progressMap = if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
-            traktProgressService.getEpisodeProgressSnapshot(contentId)
-        } else {
-            watchProgressPreferences.getAllEpisodeProgress(contentId).first()
-        }
-
-        return if (addonVideos.isEmpty()) {
-            progressMap
-        } else {
-            traktProgressService.remapEpisodeProgressToAddonKeys(
-                contentId = contentId,
-                addonEpisodes = addonVideos,
-                progressMap = progressMap
-            )
-        }
-    }
-
     @OptIn(FlowPreview::class)
     override fun observeWatchedMovieIds(): Flow<Set<String>> {
         return traktAuthDataStore.isEffectivelyAuthenticated

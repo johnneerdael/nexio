@@ -88,8 +88,6 @@
     <string name="episodes_play">चलाएँ</string>
     <string name="play_manually">मैन्युअली चलाएँ</string>
     <string name="episodes_season_actions">सीज़न एक्शन</string>
-    <string name="episodes_mismatch_title">एपिसोड नंबरिंग मेल नहीं खाती</string>
-    <string name="episodes_mismatch_cancel">रद्द करें</string>
 
     <!-- MetaDetailsViewModel -->
     <string name="detail_added_to_library">लाइब्रेरी में जोड़ा गया</string>

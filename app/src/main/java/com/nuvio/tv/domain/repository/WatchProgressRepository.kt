@@ -33,11 +33,6 @@ interface WatchProgressRepository {
      */
     fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>>
 
-    
-    suspend fun getAllEpisodeProgressSnapshot(
-        contentId: String,
-        addonVideos: List<Video> = emptyList()
-    ): Map<Pair<Int, Int>, WatchProgress>
 
     /**
      * Returns whether the item is marked as watched/completed.

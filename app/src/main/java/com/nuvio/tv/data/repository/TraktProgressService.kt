@@ -21,6 +21,8 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
+import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -392,7 +394,9 @@ class TraktProgressService @Inject constructor(
             traktApi.addHistory(authHeader, body)
         } ?: throw IllegalStateException("Trakt request failed")
 
-        val responseBody = response.body()
+        var responseBody = response.body()
+        val initialFailure = !response.isSuccessful || hasHistoryAddNotFound(responseBody)
+        var effectiveResponseCode = response.code()
         Log.d(TAG, "markAsWatched RESPONSE: code=${response.code()} " +
             "added=[movies=${responseBody?.added?.movies} episodes=${responseBody?.added?.episodes} " +
             "shows=${responseBody?.added?.shows} seasons=${responseBody?.added?.seasons}] " +
@@ -400,11 +404,34 @@ class TraktProgressService @Inject constructor(
             "shows=${responseBody?.notFound?.shows?.map { it.ids }} " +
             "episodes=${responseBody?.notFound?.episodes?.map { "s=${it.season} e=${it.number} ids=${it.ids}" }}]")
 
-        if (!response.isSuccessful || hasHistoryAddNotFound(responseBody)) {
-            throw IllegalStateException("Failed to mark watched on Trakt (${response.code()})")
+        val isSeriesEpisode = isSeriesEpisodeProgress(progress)
+        val shouldRetryRemap = isSeriesEpisode && (
+            !response.isSuccessful ||
+                hasHistoryAddNotFound(responseBody) ||
+                !hasSuccessfulHistoryAdd(responseBody)
+            )
+        var recoveredByRemap = false
+        if (shouldRetryRemap) {
+            val remappedResponse = attemptEpisodeRemapHistoryAdd(
+                progress = progress,
+                title = title,
+                year = year
+            )
+            if (remappedResponse != null) {
+                responseBody = remappedResponse.body()
+                effectiveResponseCode = remappedResponse.code()
+                recoveredByRemap =
+                    remappedResponse.isSuccessful &&
+                    !hasHistoryAddNotFound(responseBody) &&
+                    hasSuccessfulHistoryAdd(responseBody)
+            }
+        }
+
+        if (initialFailure && !recoveredByRemap) {
+            throw IllegalStateException("Failed to mark watched on Trakt ($effectiveResponseCode)")
         }
         if (!hasSuccessfulHistoryAdd(responseBody)) {
-            trace("markAsWatched: Trakt accepted request with no new history rows (code=${response.code()})")
+            trace("markAsWatched: Trakt accepted request with no new history rows (code=$effectiveResponseCode)")
         }
 
         if (progress.contentType.equals("movie", ignoreCase = true)) {
@@ -1198,6 +1225,167 @@ class TraktProgressService @Inject constructor(
         if (videoIds.hasAnyId()) return videoIds
 
         return contentIds
+    }
+
+    private suspend fun attemptEpisodeRemapHistoryAdd(
+        progress: WatchProgress,
+        title: String?,
+        year: Int?
+    ) = runCatching {
+        val remapped = resolveCanonicalEpisodeMapping(progress) ?: return@runCatching null
+        val currentSeason = progress.season
+        val currentEpisode = progress.episode
+        if (currentSeason == remapped.season && currentEpisode == remapped.episode) {
+            return@runCatching null
+        }
+
+        trace(
+            "markAsWatched: retrying with remapped episode " +
+                "from s=$currentSeason e=$currentEpisode to s=${remapped.season} e=${remapped.episode}"
+        )
+
+        val remappedBody = buildHistoryAddRequest(
+            progress = progress.copy(
+                season = remapped.season,
+                episode = remapped.episode
+            ),
+            title = title,
+            year = year
+        ) ?: return@runCatching null
+
+        val retryResponse = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+            traktApi.addHistory(authHeader, remappedBody)
+        } ?: return@runCatching null
+
+        val retryBody = retryResponse.body()
+        Log.d(
+            TAG,
+            "markAsWatched REMAP RESPONSE: code=${retryResponse.code()} " +
+                "added=[movies=${retryBody?.added?.movies} episodes=${retryBody?.added?.episodes} " +
+                "shows=${retryBody?.added?.shows} seasons=${retryBody?.added?.seasons}] " +
+                "notFound=[movies=${retryBody?.notFound?.movies?.map { it.ids }} " +
+                "shows=${retryBody?.notFound?.shows?.map { it.ids }} " +
+                "episodes=${retryBody?.notFound?.episodes?.map { "s=${it.season} e=${it.number} ids=${it.ids}" }}]"
+        )
+        retryResponse
+    }.getOrElse { error ->
+        Log.w(TAG, "markAsWatched: episode remap fallback failed", error)
+        null
+    }
+
+    private suspend fun resolveCanonicalEpisodeMapping(
+        progress: WatchProgress
+    ): EpisodeMappingEntry? {
+        val requestedSeason = progress.season ?: return null
+        val requestedEpisode = progress.episode ?: return null
+        val meta = fetchSeriesMeta(progress.contentId, progress.contentType) ?: return null
+        val addonEpisodes = meta.videos.toEpisodeMappingEntries()
+        if (addonEpisodes.isEmpty()) return null
+
+        val showLookupId = resolveShowLookupId(progress) ?: return null
+        val seasonsResponse = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getShowSeasons(
+                authorization = authHeader,
+                id = showLookupId,
+                extended = "episodes"
+            )
+        } ?: return null
+        if (!seasonsResponse.isSuccessful) return null
+
+        val traktEpisodes = seasonsResponse.body()
+            .orEmpty()
+            .asSequence()
+            .filter { (it.number ?: 0) > 0 }
+            .sortedBy { it.number }
+            .flatMap { season ->
+                season.episodes.orEmpty().asSequence()
+                    .mapNotNull { episode ->
+                        val seasonNumber = episode.season ?: season.number ?: return@mapNotNull null
+                        val episodeNumber = episode.number ?: return@mapNotNull null
+                        EpisodeMappingEntry(
+                            season = seasonNumber,
+                            episode = episodeNumber,
+                            title = episode.title
+                        )
+                    }
+            }
+            .toList()
+        if (traktEpisodes.isEmpty()) return null
+
+        return remapEpisodeByTitleOrIndex(
+            requestedSeason = requestedSeason,
+            requestedEpisode = requestedEpisode,
+            requestedVideoId = progress.videoId,
+            addonEpisodes = addonEpisodes,
+            traktEpisodes = traktEpisodes
+        )
+    }
+
+    private fun resolveShowLookupId(progress: WatchProgress): String? {
+        val ids = resolveHistoryIds(progress)
+        return when {
+            !ids.imdb.isNullOrBlank() -> ids.imdb
+            ids.trakt != null -> ids.trakt.toString()
+            !ids.slug.isNullOrBlank() -> ids.slug
+            else -> null
+        }
+    }
+
+    private suspend fun fetchSeriesMeta(contentId: String, contentType: String): Meta? {
+        val typeCandidates = buildList {
+            val normalized = contentType.lowercase()
+            if (normalized.isNotBlank()) add(normalized)
+            if (normalized in listOf("series", "tv")) {
+                add("series")
+                add("tv")
+            }
+        }.distinct()
+        if (typeCandidates.isEmpty()) return null
+
+        val idCandidates = buildList {
+            add(contentId)
+            if (contentId.startsWith("tmdb:")) add(contentId.substringAfter(':'))
+            if (contentId.startsWith("trakt:")) add(contentId.substringAfter(':'))
+        }.distinct()
+
+        for (type in typeCandidates) {
+            for (candidateId in idCandidates) {
+                val result = withTimeoutOrNull(3500) {
+                    metaRepository.getMetaFromAllAddons(type = type, id = candidateId)
+                        .first { it !is NetworkResult.Loading }
+                } ?: continue
+                val meta = (result as? NetworkResult.Success)?.data ?: continue
+                if (meta.videos.any { it.season != null && it.episode != null }) {
+                    return meta
+                }
+            }
+        }
+        return null
+    }
+
+    private fun List<Video>.toEpisodeMappingEntries(): List<EpisodeMappingEntry> {
+        return asSequence()
+            .mapNotNull { video ->
+                val season = video.season ?: return@mapNotNull null
+                val episode = video.episode ?: return@mapNotNull null
+                if (season <= 0) return@mapNotNull null
+                EpisodeMappingEntry(
+                    season = season,
+                    episode = episode,
+                    title = video.title,
+                    videoId = video.id.takeIf { it.isNotBlank() }
+                )
+            }
+            .distinctBy { it.videoId ?: "${it.season}:${it.episode}" }
+            .sortedWith(compareBy(EpisodeMappingEntry::season, EpisodeMappingEntry::episode))
+            .toList()
+    }
+
+    private fun isSeriesEpisodeProgress(progress: WatchProgress): Boolean {
+        val normalizedType = progress.contentType.lowercase()
+        return normalizedType in listOf("series", "tv") &&
+            progress.season != null &&
+            progress.episode != null
     }
 
     private fun toTraktUtcDateTime(lastWatchedMs: Long): String {
