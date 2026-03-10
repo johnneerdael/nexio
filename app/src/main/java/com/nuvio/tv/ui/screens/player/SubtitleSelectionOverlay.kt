@@ -896,7 +896,7 @@ private fun ToggleChip(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White,
+            color = if (isEnabled) NuvioColors.OnSecondary else Color.White,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
