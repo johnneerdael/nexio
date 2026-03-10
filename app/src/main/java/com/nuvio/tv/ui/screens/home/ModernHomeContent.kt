@@ -554,21 +554,15 @@ fun ModernHomeContent(
     ) {
         val rowHorizontalPadding = 52.dp
 
-        val activeCarouselItem by remember(activeRow, clampedActiveItemIndex) {
-            derivedStateOf { activeRow?.items?.getOrNull(clampedActiveItemIndex) }
+        val activeCarouselItem = remember(activeRow, clampedActiveItemIndex) {
+            activeRow?.items?.getOrNull(clampedActiveItemIndex)
         }
-        val activeItemId by remember(activeCarouselItem) {
-            derivedStateOf { activeCarouselItem?.metaPreview?.id }
-        }
-        val heroMatchesActiveItem by remember(heroItem, activeCarouselItem) {
-            derivedStateOf { heroItem == null || heroItem == activeCarouselItem?.heroPreview }
-        }
-        val resolvedHero by remember(heroItem, activeRow, clampedActiveItemIndex) {
-            derivedStateOf {
-                heroItem
-                    ?: activeRow?.items?.getOrNull(clampedActiveItemIndex)?.heroPreview
-                    ?: activeRow?.items?.firstOrNull()?.heroPreview
-            }
+        val activeItemId = activeCarouselItem?.metaPreview?.id
+        val heroMatchesActiveItem = heroItem == null || heroItem == activeCarouselItem?.heroPreview
+        val resolvedHero = remember(heroItem, activeRow, clampedActiveItemIndex) {
+            heroItem
+                ?: activeRow?.items?.getOrNull(clampedActiveItemIndex)?.heroPreview
+                ?: activeRow?.items?.firstOrNull()?.heroPreview
         }
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
@@ -665,11 +659,13 @@ fun ModernHomeContent(
             with(localDensity) { heroBackdropHeight.roundToPx() }
         }
 
-        val heroMediaModifier = Modifier
-            .align(Alignment.TopEnd)
-            .offset(x = 56.dp)
-            .fillMaxWidth(MODERN_HERO_MEDIA_WIDTH_FRACTION)
-            .height(heroBackdropHeight)
+        val heroMediaModifier = remember(heroBackdropHeight) {
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 56.dp)
+                .fillMaxWidth(MODERN_HERO_MEDIA_WIDTH_FRACTION)
+                .height(heroBackdropHeight)
+        }
 
         ModernHeroMediaLayer(
             heroBackdrop = heroBackdrop,
@@ -806,9 +802,11 @@ fun ModernHomeContent(
                         onCatalogItemLongPress = onCatalogItemLongPress,
                         onItemFocus = onItemFocus,
                         onPreloadAdjacentItem = onPreloadAdjacentItem,
-                        onCatalogSelectionFocused = { selection ->
-                            if (focusedCatalogSelection != selection) {
-                                focusedCatalogSelection = selection
+                        onCatalogSelectionFocused = remember(Unit) {
+                            { selection: FocusedCatalogSelection ->
+                                if (focusedCatalogSelection != selection) {
+                                    focusedCatalogSelection = selection
+                                }
                             }
                         },
                         onNavigateToDetail = onNavigateToDetail,

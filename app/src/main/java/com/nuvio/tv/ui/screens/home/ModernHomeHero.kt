@@ -381,10 +381,11 @@ internal fun HeroTitleBlock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(metaSpacing)
             ) {
-                secondaryHighlightText?.let { text ->
+                val semiBoldLabelMedium = remember(labelMedium) { labelMedium.copy(fontWeight = FontWeight.SemiBold) }
+        secondaryHighlightText?.let { text ->
                     Text(
                         text = text,
-                        style = labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = semiBoldLabelMedium,
                         color = NuvioColors.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -507,9 +508,10 @@ private fun HeroCombinedMetaBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        val semiBoldStyle = remember(textStyle) { textStyle.copy(fontWeight = FontWeight.SemiBold) }
         Text(
             text = leftText,
-            style = textStyle.copy(fontWeight = FontWeight.SemiBold),
+            style = semiBoldStyle,
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -522,7 +524,7 @@ private fun HeroCombinedMetaBadge(
         )
         Text(
             text = rightText,
-            style = textStyle.copy(fontWeight = FontWeight.SemiBold),
+            style = semiBoldStyle,
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -548,7 +550,7 @@ private fun HeroMetaBadge(
     ) {
         Text(
             text = text,
-            style = textStyle.copy(fontWeight = FontWeight.SemiBold),
+            style = remember(textStyle) { textStyle.copy(fontWeight = FontWeight.SemiBold) },
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

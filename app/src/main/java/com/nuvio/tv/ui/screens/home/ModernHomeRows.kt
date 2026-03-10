@@ -410,8 +410,8 @@ internal fun ModernRowSection(
                 ) { index, item ->
                     val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
-                    val onFocused = {
-                        onRowItemFocused(row.key, index, isContinueWatchingRow)
+                    val onFocused = remember(row.key, index, isContinueWatchingRow) {
+                        { onRowItemFocused(row.key, index, isContinueWatchingRow) }
                     }
 
                     when (val payload = item.payload) {
@@ -429,6 +429,9 @@ internal fun ModernRowSection(
 
                         is ModernPayload.Catalog -> {
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
+                            val isWatched = remember(item.metaPreview) {
+                                item.metaPreview?.let(isCatalogItemWatched) == true
+                            }
                             ModernCatalogRowItem(
                                 item = item,
                                 payload = payload,
@@ -445,7 +448,7 @@ internal fun ModernRowSection(
                                 expandedCatalogFocusKey = expandedCatalogFocusKey,
                                 expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
                                 expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
-                                isWatched = item.metaPreview?.let(isCatalogItemWatched) == true,
+                                isWatched = isWatched,
                                 onFocused = onFocused,
                                 onItemFocus = onItemFocus,
                                 onPreloadAdjacentItem = {
@@ -493,7 +496,7 @@ private fun ModernCarouselCard(
     onBackdropInteraction: () -> Unit,
     onTrailerEnded: () -> Unit
 ) {
-    val cardShape = RoundedCornerShape(cardCornerRadius)
+    val cardShape = remember(cardCornerRadius) { RoundedCornerShape(cardCornerRadius) }
     val context = LocalContext.current
     val density = LocalDensity.current
     val expandedCardWidth = cardHeight * (16f / 9f)
@@ -640,17 +643,19 @@ private fun ModernCarouselCard(
             scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                val mediaLayerModifier = if (hasLandscapeLogo) {
-                    Modifier
-                        .fillMaxSize()
-                        .drawWithCache {
-                            onDrawWithContent {
-                                drawContent()
-                                drawRect(brush = MODERN_LANDSCAPE_LOGO_GRADIENT, size = size)
+                val mediaLayerModifier = remember(hasLandscapeLogo) {
+                    if (hasLandscapeLogo) {
+                        Modifier
+                            .fillMaxSize()
+                            .drawWithCache {
+                                onDrawWithContent {
+                                    drawContent()
+                                    drawRect(brush = MODERN_LANDSCAPE_LOGO_GRADIENT, size = size)
+                                }
                             }
-                        }
-                } else {
-                    Modifier.fillMaxSize()
+                    } else {
+                        Modifier.fillMaxSize()
+                    }
                 }
 
                 Box(modifier = mediaLayerModifier) {
