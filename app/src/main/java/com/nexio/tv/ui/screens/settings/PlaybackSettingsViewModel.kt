@@ -154,6 +154,18 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setExperimentalDv5ToDv81Enabled(enabled)
     }
 
+    suspend fun setExperimentalDv5ToneMapToSdrEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDv5ToneMapToSdrEnabled(enabled)
+    }
+
+    suspend fun setExperimentalDv5HardwareToneMapToSdrEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDv5HardwareToneMapToSdrEnabled(enabled)
+    }
+
+    suspend fun setExperimentalDv5HardwareToneMapCpuFallbackEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setExperimentalDv5HardwareToneMapCpuFallbackEnabled(enabled)
+    }
+
     suspend fun setExperimentalDv7ToDv81PreserveMappingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDv7ToDv81PreserveMappingEnabled(enabled)
     }

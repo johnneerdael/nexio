@@ -2,6 +2,7 @@ package com.nexio.tv.core.player
 
 import android.net.Uri
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.util.DolbyVisionCompatibility
 import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.container.DolbyVisionConfig
@@ -47,13 +48,15 @@ object MatroskaDolbyVisionHookInstaller {
         enabled: Boolean,
         allowDv5Conversion: Boolean,
         preserveMappingEnabled: Boolean,
+        enableRpuTap: Boolean,
         streamUrl: String
     ): Boolean {
-        if (!enabled) {
+        if (!enabled && !enableRpuTap) {
             clearGlobalHooks()
             return false
         }
-        if (!DoviBridge.isAvailable()) {
+        val conversionEnabled = enabled && DoviBridge.isAvailable()
+        if (enabled && !conversionEnabled && !enableRpuTap) {
             clearGlobalHooks()
             Log.i(TAG, "Skip install: DoviBridge unavailable host=${streamUrl.safeHost()}")
             return false
@@ -62,8 +65,10 @@ object MatroskaDolbyVisionHookInstaller {
         return runCatching {
             val handler = createInvocationHandler(
                 host = streamUrl.safeHost(),
+                conversionEnabled = conversionEnabled,
                 allowDv5Conversion = allowDv5Conversion,
-                preserveMappingEnabled = preserveMappingEnabled
+                preserveMappingEnabled = preserveMappingEnabled,
+                enableRpuTap = enableRpuTap
             )
             val matroskaInstalled = installHook(
                 extractorsFactory = extractorsFactory,
@@ -129,11 +134,14 @@ object MatroskaDolbyVisionHookInstaller {
 
     private fun createInvocationHandler(
         host: String,
+        conversionEnabled: Boolean,
         allowDv5Conversion: Boolean,
-        preserveMappingEnabled: Boolean
+        preserveMappingEnabled: Boolean,
+        enableRpuTap: Boolean
     ): InvocationHandler {
         val lastDetectedProfile = AtomicReference<Int?>(null)
         val nonDv7ProfileLogged = AtomicBoolean(false)
+        val conversionUnavailableLogged = AtomicBoolean(false)
 
         fun rememberProfile(profile: Int?): Int? {
             if (profile != null) {
@@ -144,6 +152,16 @@ object MatroskaDolbyVisionHookInstaller {
         }
 
         fun shouldAllowConversion(profile: Int?): Boolean {
+            if (!conversionEnabled) {
+                lastSelectedConversionMode.set(null)
+                if (conversionUnavailableLogged.compareAndSet(false, true)) {
+                    Log.i(
+                        TAG,
+                        "Dolby Vision conversion disabled (native bridge unavailable) host=$host"
+                    )
+                }
+                return false
+            }
             val resolvedProfile = rememberProfile(profile)
             if (resolvedProfile == 7) {
                 return true
@@ -174,6 +192,13 @@ object MatroskaDolbyVisionHookInstaller {
                 "onDolbyVisionBlockAdditionalData" -> {
                     val blockAdditionalData = invocationArgs.getOrNull(0) as? ByteArray
                         ?: return@InvocationHandler null
+                    if (enableRpuTap) {
+                        tapPotentialRpuNal(
+                            nalPayload = blockAdditionalData,
+                            sampleTimeUs = C.TIME_UNSET,
+                            source = "mkv:blockAdditional"
+                        )
+                    }
                     val dolbyVisionConfigBytes = invocationArgs.getOrNull(2) as? ByteArray
                     val profile = resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes)
                     if (!shouldAllowConversion(profile)) {
@@ -186,7 +211,21 @@ object MatroskaDolbyVisionHookInstaller {
                         ?.takeIf { it.isNotEmpty() }
                 }
 
-                "onHevcSample" -> null
+                "onHevcSample" -> {
+                    if (enableRpuTap) {
+                        val sampleTimeUs =
+                            (invocationArgs.getOrNull(3) as? Number)?.toLong() ?: C.TIME_UNSET
+                        val blockAdditionalData = invocationArgs.getOrNull(1) as? ByteArray
+                        if (blockAdditionalData != null) {
+                            tapPotentialRpuNal(
+                                nalPayload = blockAdditionalData,
+                                sampleTimeUs = sampleTimeUs,
+                                source = "mkv:onHevcSample"
+                            )
+                        }
+                    }
+                    null
+                }
                 "onDolbyVisionCodecString" -> {
                     val codecs = invocationArgs.getOrNull(0) as? String
                     val dolbyVisionConfigBytes = invocationArgs.getOrNull(1) as? ByteArray
@@ -206,9 +245,38 @@ object MatroskaDolbyVisionHookInstaller {
                     val nalUnitLengthFieldLength =
                         (invocationArgs.getOrNull(1) as? Number)?.toInt() ?: return@InvocationHandler null
                     val thirdArg = invocationArgs.getOrNull(2)
+                    val fourthArg = invocationArgs.getOrNull(3)
+                    val fifthArg = invocationArgs.getOrNull(4)
                     val blockAdditionalData = thirdArg as? ByteArray
                     val codecs = thirdArg as? String
-                    val dolbyVisionConfigBytes = invocationArgs.getOrNull(3) as? ByteArray
+                    val dolbyVisionConfigBytes = when {
+                        thirdArg is ByteArray && fourthArg is ByteArray -> fourthArg
+                        else -> null
+                    }
+                    val sampleTimeUs = when {
+                        fifthArg is Number -> fifthArg.toLong()
+                        fourthArg is Number -> fourthArg.toLong()
+                        else -> C.TIME_UNSET
+                    }
+                    if (enableRpuTap) {
+                        tapRpuFromLengthDelimitedSample(
+                            sampleLengthDelimited = sampleLengthDelimited,
+                            nalUnitLengthFieldLength = nalUnitLengthFieldLength,
+                            sampleTimeUs = sampleTimeUs,
+                            source = when {
+                                blockAdditionalData != null -> "mkv:sample"
+                                codecs != null -> "mp4:sample"
+                                else -> "hevc:sample"
+                            }
+                        )
+                        if (blockAdditionalData != null) {
+                            tapPotentialRpuNal(
+                                nalPayload = blockAdditionalData,
+                                sampleTimeUs = sampleTimeUs,
+                                source = "mkv:blockAdditional"
+                            )
+                        }
+                    }
                     val profile = resolveDolbyVisionProfile(
                         codecs = codecs,
                         configBytes = dolbyVisionConfigBytes
@@ -244,6 +312,15 @@ object MatroskaDolbyVisionHookInstaller {
                     val nalPayload = invocationArgs.getOrNull(0) as? ByteArray
                         ?: return@InvocationHandler null
                     val codecs = invocationArgs.getOrNull(1) as? String
+                    val sampleTimeUs =
+                        (invocationArgs.getOrNull(2) as? Number)?.toLong() ?: C.TIME_UNSET
+                    if (enableRpuTap) {
+                        tapPotentialRpuNal(
+                            nalPayload = nalPayload,
+                            sampleTimeUs = sampleTimeUs,
+                            source = "ts:rpuNal"
+                        )
+                    }
                     val profile = resolveDolbyVisionProfile(codecs = codecs)
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
@@ -255,6 +332,92 @@ object MatroskaDolbyVisionHookInstaller {
                 "toString" -> "NEXIODv7MatroskaTransformerProxy(host=$host)"
                 else -> null
             }
+        }
+    }
+
+    private fun tapRpuFromLengthDelimitedSample(
+        sampleLengthDelimited: ByteArray,
+        nalUnitLengthFieldLength: Int,
+        sampleTimeUs: Long,
+        source: String
+    ) {
+        if (sampleLengthDelimited.isEmpty() || nalUnitLengthFieldLength !in 1..4) return
+        var offset = 0
+        while (offset + nalUnitLengthFieldLength <= sampleLengthDelimited.size) {
+            val nalSize = readLengthField(sampleLengthDelimited, offset, nalUnitLengthFieldLength)
+            if (nalSize <= 0) return
+            offset += nalUnitLengthFieldLength
+            if (offset + nalSize > sampleLengthDelimited.size) return
+            val nalPayload = sampleLengthDelimited.copyOfRange(offset, offset + nalSize)
+            tapPotentialRpuNal(nalPayload, sampleTimeUs, source)
+            offset += nalSize
+        }
+    }
+
+    private fun tapPotentialRpuNal(
+        nalPayload: ByteArray,
+        sampleTimeUs: Long,
+        source: String
+    ) {
+        if (nalPayload.isEmpty()) return
+        val directType = getNalUnitTypeOrMinusOne(nalPayload)
+        if (directType == NAL_TYPE_UNSPEC62) {
+            Dv5HardwareToneMapRpuTap.onRpuSample(sampleTimeUs, nalPayload, source)
+            return
+        }
+        tapRpuFromAnnexBStream(
+            annexBPayload = nalPayload,
+            sampleTimeUs = sampleTimeUs,
+            source = source
+        )
+    }
+
+    private fun tapRpuFromAnnexBStream(
+        annexBPayload: ByteArray,
+        sampleTimeUs: Long,
+        source: String
+    ) {
+        if (annexBPayload.size < 4) return
+        var start = findAnnexBStartCodeOffset(annexBPayload, 0)
+        while (start >= 0) {
+            val startCodeLength = annexBStartCodeLength(annexBPayload, start)
+            val nalStart = start + startCodeLength
+            if (nalStart >= annexBPayload.size) return
+            val nextStart = findAnnexBStartCodeOffset(annexBPayload, nalStart)
+            val nalEnd = if (nextStart >= 0) nextStart else annexBPayload.size
+            if (nalEnd > nalStart) {
+                val nalPayload = annexBPayload.copyOfRange(nalStart, nalEnd)
+                if (getNalUnitTypeOrMinusOne(nalPayload) == NAL_TYPE_UNSPEC62) {
+                    Dv5HardwareToneMapRpuTap.onRpuSample(sampleTimeUs, nalPayload, source)
+                }
+            }
+            start = nextStart
+        }
+    }
+
+    private fun findAnnexBStartCodeOffset(data: ByteArray, fromIndex: Int): Int {
+        var i = fromIndex.coerceAtLeast(0)
+        while (i + 3 < data.size) {
+            if (data[i] == 0.toByte() && data[i + 1] == 0.toByte()) {
+                if (data[i + 2] == 1.toByte()) return i
+                if (i + 3 < data.size && data[i + 2] == 0.toByte() && data[i + 3] == 1.toByte()) {
+                    return i
+                }
+            }
+            i++
+        }
+        return -1
+    }
+
+    private fun annexBStartCodeLength(data: ByteArray, startOffset: Int): Int {
+        return if (startOffset + 3 < data.size &&
+            data[startOffset] == 0.toByte() &&
+            data[startOffset + 1] == 0.toByte() &&
+            data[startOffset + 2] == 1.toByte()
+        ) {
+            3
+        } else {
+            4
         }
     }
 
@@ -329,6 +492,11 @@ object MatroskaDolbyVisionHookInstaller {
 
     private fun getNalUnitType(nalPayload: ByteArray): Int {
         return (nalPayload[0].toInt() ushr 1) and 0x3F
+    }
+
+    private fun getNalUnitTypeOrMinusOne(nalPayload: ByteArray): Int {
+        if (nalPayload.isEmpty()) return -1
+        return getNalUnitType(nalPayload)
     }
 
     private fun getNuhLayerId(nalPayload: ByteArray): Int {
@@ -452,4 +620,3 @@ object MatroskaDolbyVisionHookInstaller {
         return runCatching { Uri.parse(this).host ?: "unknown" }.getOrDefault("unknown")
     }
 }
-

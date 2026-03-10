@@ -2,9 +2,12 @@ package com.nexio.tv.ui.screens.player
 
 import android.content.Context
 import android.content.res.Resources
+import android.hardware.display.DisplayManager
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import android.view.Display
 import android.view.accessibility.CaptioningManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -31,11 +34,16 @@ import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.text.TextRenderer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.video.ExperimentalDv5HardwareToneMapVideoSink
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import androidx.media3.exoplayer.video.VideoRendererEventListener
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import androidx.media3.session.MediaSession
 import com.nexio.tv.core.player.DoviBridge
+import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
@@ -49,6 +57,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
+import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val STARTUP_SUBTITLE_PREFETCH_TIMEOUT_MS = 10_000L
@@ -129,6 +138,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 preferredLanguage = playerSettings.subtitleStyle.preferredLanguage,
                 secondaryLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage
             )
+            Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
             if (usesLibmpvBackend()) {
                 _uiState.update {
                     it.copy(
@@ -280,32 +290,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val extractorsFactory = DefaultExtractorsFactory()
                 .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
                 .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
-            val dolbyVisionHookInstalled = MatroskaDolbyVisionHookInstaller.maybeInstall(
-                extractorsFactory = extractorsFactory,
-                enabled = playerSettings.experimentalDv7ToDv81Enabled,
-                allowDv5Conversion = playerSettings.experimentalDv5ToDv81Enabled,
-                preserveMappingEnabled = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
-                streamUrl = url
-            )
-            if (dolbyVisionHookInstalled) {
-                isExperimentalDv7ToDv81ActiveForCurrentPlayback = true
-                if (dv7ToDv81LastProbeReasonForCurrentPlayback != "ready") {
-                    dv7ToDv81LastProbeReasonForCurrentPlayback = "extractor-hook-enabled"
-                }
-            }
-            if (isExperimentalDv7ToDv81ActiveForCurrentPlayback && !dolbyVisionHookInstalled) {
-                isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
-                dv7ToDv81LastProbeReasonForCurrentPlayback =
-                    "extractor-hook-install-failed"
-            }
-            if (playerSettings.experimentalDv7ToDv81Enabled) {
-                Log.i(
-                    PlayerRuntimeController.TAG,
-                    "DV7_DOVI: extractorHookInstalled=$dolbyVisionHookInstalled " +
-                        "active=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
-                        "host=${url.safeHost()}"
-                )
-            }
 
             
             subtitleDelayUs.set(_uiState.value.subtitleDelayMs.toLong() * 1000L)
@@ -313,21 +297,94 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 playerSettings.mapDV7ToHevc || dv7ToHevcForcedStreamUrls.contains(url)
             DolbyVisionCompatibility.setMapDv7ToHevcEnabled(mapDv7ToHevcEnabled)
             isMapDv7ToHevcActiveForCurrentPlayback = mapDv7ToHevcEnabled
-            val codecSelector = createDolbyVisionFallbackCodecSelector(mapDv7ToHevcEnabled)
+            val dv5SoftwareToneMapEnabled = playerSettings.experimentalDv5ToneMapToSdrEnabled
+            isDv5SoftwareToneMapSettingEnabledForCurrentPlayback = dv5SoftwareToneMapEnabled
+            val dv5HardwareToneMapEnabled =
+                playerSettings.experimentalDv5HardwareToneMapToSdrEnabled
+            val dv5HardwareToneMapCpuFallbackEnabled =
+                playerSettings.experimentalDv5HardwareToneMapCpuFallbackEnabled
+            isDv5HardwareToneMapSettingEnabledForCurrentPlayback = dv5HardwareToneMapEnabled
+            val dv5ToneMapNativeSupported = FfmpegLibrary.supportsExperimentalDv5ToneMapToSdr()
+            isDv5SoftwareToneMapNativeSupportedForCurrentPlayback = dv5ToneMapNativeSupported
+            val dv5SoftwareForced = dv5SoftwareToneMapPreferredStreamUrls.contains(url)
+            val likelyDv5ByStreamHints = isLikelyDolbyVisionProfile5Stream(
+                streamName = _uiState.value.currentStreamName,
+                filename = currentFilename,
+                streamUrl = url
+            )
+            val displaySupportsDolbyVision = context.supportsDolbyVisionHdrOutput()
+            isCurrentDisplayDolbyVisionCapable = displaySupportsDolbyVision
+            val shieldDevice = context.isNvidiaShieldDevice()
+            isCurrentDeviceNvidiaShield = shieldDevice
+            val dv5HardwareToneMapActive = dv5HardwareToneMapEnabled &&
+                dv5ToneMapNativeSupported &&
+                shieldDevice &&
+                !displaySupportsDolbyVision &&
+                likelyDv5ByStreamHints
+            isDv5HardwareToneMapActiveForCurrentPlayback = dv5HardwareToneMapActive
+            val dv5SoftwareToneMapActive = dv5SoftwareToneMapEnabled &&
+                !dv5HardwareToneMapActive &&
+                dv5ToneMapNativeSupported &&
+                !displaySupportsDolbyVision &&
+                (dv5SoftwareForced || likelyDv5ByStreamHints)
+            isDv5SoftwareToneMapActiveForCurrentPlayback = dv5SoftwareToneMapActive
+            Dv5HardwareToneMapRpuTap.setEnabledForPlayback(
+                enabled = dv5HardwareToneMapActive,
+                streamUrl = url
+            )
+            val dolbyVisionHookInstalledForPlayback = MatroskaDolbyVisionHookInstaller.maybeInstall(
+                extractorsFactory = extractorsFactory,
+                enabled = playerSettings.experimentalDv7ToDv81Enabled,
+                allowDv5Conversion = playerSettings.experimentalDv5ToDv81Enabled,
+                preserveMappingEnabled = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
+                enableRpuTap = dv5HardwareToneMapActive,
+                streamUrl = url
+            )
+            if (dolbyVisionHookInstalledForPlayback) {
+                isExperimentalDv7ToDv81ActiveForCurrentPlayback = true
+                if (dv7ToDv81LastProbeReasonForCurrentPlayback != "ready") {
+                    dv7ToDv81LastProbeReasonForCurrentPlayback = "extractor-hook-enabled"
+                }
+            }
+            if (isExperimentalDv7ToDv81ActiveForCurrentPlayback && !dolbyVisionHookInstalledForPlayback) {
+                isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
+                dv7ToDv81LastProbeReasonForCurrentPlayback =
+                    "extractor-hook-install-failed"
+            }
+            if (playerSettings.experimentalDv7ToDv81Enabled || dv5HardwareToneMapActive) {
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "DV7_DOVI: extractorHookInstalled=$dolbyVisionHookInstalledForPlayback " +
+                        "active=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
+                        "rpuTap=$dv5HardwareToneMapActive " +
+                        "host=${url.safeHost()}"
+                )
+            }
             val vc1SoftwareFallbackActive = vc1SoftwarePreferredStreamUrls.contains(url)
             isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
+            val codecSelector = createDolbyVisionFallbackCodecSelector(
+                forceHdr10Fallback = mapDv7ToHevcEnabled,
+                forceVc1SoftwareDecode = true,
+                forceDolbyVisionSoftwareDecode = dv5SoftwareToneMapActive
+            )
             val effectiveDecoderPriority = if (vc1SoftwareFallbackActive) {
+                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+            } else if (dv5SoftwareToneMapActive) {
                 DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
             } else {
                 playerSettings.decoderPriority
             }
+            FfmpegLibrary.setExperimentalDv5ToneMapToSdrEnabled(dv5SoftwareToneMapActive)
             val renderersFactory = SubtitleOffsetRenderersFactory(
                 context = context,
                 subtitleDelayUsProvider = subtitleDelayUs::get,
                 safeAudioModeEnabled = safeAudioModeEnabled,
                 cueGroupSubtitleTranslator = builtInSubtitleCueTranslator,
                 experimentalFireOsIecPassthroughEnabled =
-                    playerSettings.experimentalDtsIecPassthroughEnabled
+                    playerSettings.experimentalDtsIecPassthroughEnabled,
+                experimentalDv5HardwareToneMapEnabled = dv5HardwareToneMapActive,
+                experimentalDv5HardwareToneMapCpuFallbackEnabled =
+                    dv5HardwareToneMapCpuFallbackEnabled
             )
                 .setExtensionRendererMode(effectiveDecoderPriority)
                 .setEnableDecoderFallback(true)
@@ -336,6 +393,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             Log.i(
                 PlayerRuntimeController.TAG,
                 "VIDEO_PATH: decoderMode=${describeExtensionRendererMode(effectiveDecoderPriority)} " +
+                    "dv5ToneMapSetting=$dv5SoftwareToneMapEnabled " +
+                    "dv5HwToneMapSetting=$dv5HardwareToneMapEnabled " +
+                    "dv5HwCpuFallbackSetting=$dv5HardwareToneMapCpuFallbackEnabled " +
+                    "dv5ToneMapNativeSupported=$dv5ToneMapNativeSupported " +
+                    "dvDisplayCapable=$displaySupportsDolbyVision " +
+                    "shieldDevice=$shieldDevice " +
+                    "dv5LikelyByHints=$likelyDv5ByStreamHints " +
+                    "dv5Forced=$dv5SoftwareForced " +
+                    "dv5HwToneMapActive=$dv5HardwareToneMapActive " +
+                    "dv5ToneMapActive=$dv5SoftwareToneMapActive " +
                     "vc1FallbackActive=$vc1SoftwareFallbackActive " +
                     "vc1TrackBypassActive=$vc1TrackSelectionBypassActive " +
                     "host=${url.safeHost()}"
@@ -428,6 +495,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 setMediaSource(initialMediaSource)
                 playWhenReady = true
                 prepare()
+                if (dv5HardwareToneMapActive) {
+                    setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
+                        Dv5HardwareToneMapRpuTap.onFrameAboutToRender(presentationTimeUs)
+                    }
+                }
 
                 addListener(object : Player.Listener {
                     override fun onCues(cueGroup: CueGroup) {
@@ -650,6 +722,35 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             )
                             dv7ToHevcForcedStreamUrls.add(currentStreamUrl)
                             retryCurrentStreamWithDolbyVisionFallback(currentPosition)
+                            return
+                        }
+
+                        if (error.isVc1DecoderFailure() &&
+                            !isVc1SoftwareFallbackActiveForCurrentPlayback
+                        ) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "VC1 decode failure detected, retrying with FFmpeg software " +
+                                    "decoder preference host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            vc1SoftwarePreferredStreamUrls.add(currentStreamUrl)
+                            retryCurrentStreamWithVc1SoftwareFallback(currentPosition)
+                            return
+                        }
+
+                        if (error.isVc1DecoderFailure() &&
+                            isVc1SoftwareFallbackActiveForCurrentPlayback &&
+                            !isVc1TrackSelectionBypassActiveForCurrentPlayback
+                        ) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "VC1 decode failure persists, retrying with track-selection " +
+                                    "bypass host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            vc1TrackSelectionBypassStreamUrls.add(currentStreamUrl)
+                            retryCurrentStreamWithVc1TrackSelectionBypass(currentPosition)
                             return
                         }
 
@@ -968,8 +1069,61 @@ private class SubtitleOffsetRenderersFactory(
     private val subtitleDelayUsProvider: () -> Long,
     private val safeAudioModeEnabled: Boolean,
     private val cueGroupSubtitleTranslator: CueGroupSubtitleTranslator?,
-    private val experimentalFireOsIecPassthroughEnabled: Boolean
+    private val experimentalFireOsIecPassthroughEnabled: Boolean,
+    private val experimentalDv5HardwareToneMapEnabled: Boolean,
+    private val experimentalDv5HardwareToneMapCpuFallbackEnabled: Boolean
 ) : DefaultRenderersFactory(context) {
+
+    override fun buildVideoRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        eventHandler: android.os.Handler,
+        eventListener: VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long,
+        out: ArrayList<Renderer>
+    ) {
+        super.buildVideoRenderers(
+            context,
+            extensionRendererMode,
+            mediaCodecSelector,
+            enableDecoderFallback,
+            eventHandler,
+            eventListener,
+            allowedVideoJoiningTimeMs,
+            out
+        )
+        if (!experimentalDv5HardwareToneMapEnabled) {
+            return
+        }
+        val mediaCodecRendererIndex = out.indexOfFirst { it is MediaCodecVideoRenderer }
+        if (mediaCodecRendererIndex < 0) {
+            Log.w(PlayerRuntimeController.TAG, "DV5_HW_RENDER: MediaCodec renderer not found")
+            return
+        }
+        val dv5HardwareSink =
+            ExperimentalDv5HardwareToneMapVideoSink(
+                context,
+                allowedVideoJoiningTimeMs,
+                experimentalDv5HardwareToneMapCpuFallbackEnabled
+            )
+        val replacementRenderer = MediaCodecVideoRenderer.Builder(context)
+            .setCodecAdapterFactory(getCodecAdapterFactory())
+            .setMediaCodecSelector(mediaCodecSelector)
+            .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
+            .setEnableDecoderFallback(enableDecoderFallback)
+            .setEventHandler(eventHandler)
+            .setEventListener(eventListener)
+            .setMaxDroppedFramesToNotify(MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)
+            .setVideoSink(dv5HardwareSink)
+            .build()
+        out[mediaCodecRendererIndex] = replacementRenderer
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "DV5_HW_RENDER: enabled custom MediaCodec sink at index=$mediaCodecRendererIndex"
+        )
+    }
 
     @Suppress("DEPRECATION")
     override fun buildAudioSink(
@@ -1135,12 +1289,20 @@ private fun String.safeHost(): String {
 }
 
 private fun createDolbyVisionFallbackCodecSelector(
-    forceHdr10Fallback: Boolean
+    forceHdr10Fallback: Boolean,
+    forceVc1SoftwareDecode: Boolean,
+    forceDolbyVisionSoftwareDecode: Boolean
 ): MediaCodecSelector {
-    if (!forceHdr10Fallback) return MediaCodecSelector.DEFAULT
+    if (!forceHdr10Fallback && !forceVc1SoftwareDecode && !forceDolbyVisionSoftwareDecode) {
+        return MediaCodecSelector.DEFAULT
+    }
 
     return MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-        if (mimeType == MimeTypes.VIDEO_DOLBY_VISION) {
+        if (forceVc1SoftwareDecode && mimeType == MimeTypes.VIDEO_VC1) {
+            emptyList()
+        } else if (forceDolbyVisionSoftwareDecode && mimeType == MimeTypes.VIDEO_DOLBY_VISION) {
+            emptyList()
+        } else if (forceHdr10Fallback && mimeType == MimeTypes.VIDEO_DOLBY_VISION) {
             MediaCodecSelector.DEFAULT.getDecoderInfos(
                 MimeTypes.VIDEO_H265,
                 requiresSecureDecoder,
@@ -1154,6 +1316,94 @@ private fun createDolbyVisionFallbackCodecSelector(
             )
         }
     }
+}
+
+@Suppress("DEPRECATION")
+private fun Context.supportsDolbyVisionHdrOutput(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+    val displayManager = getSystemService(DisplayManager::class.java) ?: return false
+    val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY) ?: return false
+    val hdrTypes = display.hdrCapabilities?.supportedHdrTypes ?: return false
+    return hdrTypes.contains(Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION)
+}
+
+private fun Context.isNvidiaShieldDevice(): Boolean {
+    val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.ROOT)
+    val model = Build.MODEL.orEmpty().lowercase(Locale.ROOT)
+    val hardware = Build.HARDWARE.orEmpty().lowercase(Locale.ROOT)
+    val device = Build.DEVICE.orEmpty().lowercase(Locale.ROOT)
+    return manufacturer.contains("nvidia") ||
+        model.contains("shield") ||
+        hardware.contains("tegra") ||
+        device.contains("darcy") ||
+        device.contains("foster")
+}
+
+private val dv5ProfileHintRegex = Regex(
+    pattern = """(?i)\b(?:dv|dovi|dolby[ ._-]?vision)[ ._-]*(?:p(?:rofile)?[ ._-]*)?0?5\b"""
+)
+
+private val dv5CodecProfileHintRegex = Regex(
+    pattern = """(?i)\b(?:dvhe|dvh1)[._-]?0?5\b"""
+)
+
+private fun isLikelyDolbyVisionProfile5Stream(
+    sampleMimeType: String? = null,
+    codecs: String? = null,
+    label: String? = null,
+    streamName: String? = null,
+    filename: String? = null,
+    streamUrl: String? = null
+): Boolean {
+    if (resolveDolbyVisionProfileFromCodecString(codecs) == 5) return true
+    if (sampleMimeType != null &&
+        sampleMimeType != MimeTypes.VIDEO_DOLBY_VISION &&
+        codecs.isNullOrBlank()
+    ) {
+        return false
+    }
+    val haystack = listOfNotNull(codecs, label, streamName, filename, streamUrl)
+        .joinToString(" ")
+        .lowercase(Locale.ROOT)
+    if (haystack.isBlank()) return false
+    return dv5ProfileHintRegex.containsMatchIn(haystack) ||
+        dv5CodecProfileHintRegex.containsMatchIn(haystack)
+}
+
+private fun resolveDolbyVisionProfileFromCodecString(codecs: String?): Int? {
+    val entries = codecs
+        ?.split(',')
+        ?.asSequence()
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?: return null
+    for (entry in entries) {
+        val parts = entry.split('.')
+        if (parts.size < 2) continue
+        val prefix = parts[0].lowercase(Locale.ROOT)
+        if (prefix != "dvhe" && prefix != "dvh1") continue
+        val profile = parts[1].toIntOrNull()
+        if (profile != null) return profile
+    }
+    return null
+}
+
+private fun PlaybackException.isVc1DecoderFailure(): Boolean {
+    if (errorCode != PlaybackException.ERROR_CODE_DECODING_FAILED &&
+        errorCode != PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED
+    ) {
+        return false
+    }
+    val details = buildString {
+        append(message ?: "")
+        append(' ')
+        append(cause?.message ?: "")
+        append(' ')
+        append(cause?.cause?.message ?: "")
+    }.lowercase()
+    return details.contains("video/wvc1") ||
+        details.contains("vc-1") ||
+        details.contains(" wvc1")
 }
 
 private fun describeExtensionRendererMode(mode: Int): String {

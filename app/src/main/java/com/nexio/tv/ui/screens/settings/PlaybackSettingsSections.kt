@@ -132,6 +132,9 @@ internal fun PlaybackSettingsSections(
     onSetSkipSilence: (Boolean) -> Unit,
     onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
+    onSetExperimentalDv5ToneMapToSdrEnabled: (Boolean) -> Unit,
+    onSetExperimentalDv5HardwareToneMapToSdrEnabled: (Boolean) -> Unit,
+    onSetExperimentalDv5HardwareToneMapCpuFallbackEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerAc3PassthroughEnabled: (Boolean) -> Unit,
@@ -393,6 +396,11 @@ internal fun PlaybackSettingsSections(
                 onSetFrameRateMatchingMode = onSetFrameRateMatchingMode,
                 onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
+                onSetExperimentalDv5ToneMapToSdrEnabled = onSetExperimentalDv5ToneMapToSdrEnabled,
+                onSetExperimentalDv5HardwareToneMapToSdrEnabled =
+                    onSetExperimentalDv5HardwareToneMapToSdrEnabled,
+                onSetExperimentalDv5HardwareToneMapCpuFallbackEnabled =
+                    onSetExperimentalDv5HardwareToneMapCpuFallbackEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
                     onSetExperimentalDv7ToDv81PreserveMappingEnabled,

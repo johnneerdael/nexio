@@ -189,6 +189,7 @@ android {
             pickFirsts += listOf(
                 "lib/*/libc++_shared.so",
                 "lib/*/libavcodec.so",
+                "lib/*/libavformat.so",
                 "lib/*/libavutil.so",
                 "lib/*/libswscale.so",
                 "lib/*/libswresample.so"
@@ -275,6 +276,7 @@ dependencies {
         implementation(libs.media3.exoplayer)
         implementation("androidx.media3:media3-exoplayer-kodi-native-sink")
         implementation(libs.media3.ui)
+        implementation("androidx.media3:media3-decoder-ffmpeg")
     }
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
@@ -290,8 +292,20 @@ dependencies {
 
     // Local AAR libraries from forked ExoPlayer.
     if (useMedia3Source) {
-        // Source mode uses media/ for ExoPlayer + UI and keeps decoder extensions as AARs.
-        implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-decoder-*.aar"))))
+        // Source mode uses media/ for ExoPlayer + UI + FFmpeg decoder.
+        // Keep only the remaining decoder extension AARs from app/libs.
+        implementation(
+            fileTree(
+                mapOf(
+                    "dir" to "libs",
+                    "include" to listOf(
+                        "lib-decoder-av1-*.aar",
+                        "lib-decoder-iamf-*.aar",
+                        "lib-decoder-mpegh-*.aar"
+                    )
+                )
+            )
+        )
     } else {
         // AAR mode uses prebuilt core/UI + decoder extensions.
         implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
@@ -299,8 +313,8 @@ dependencies {
 
     // libass-android for ASS/SSA subtitle support (from Maven Central)
     implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
+    // NextLib is only used for media probing (AFR), not for playback decode/rendering.
     implementation("io.github.anilbeesetti:nextlib-mediainfo:1.9.1-0.11.0")
-    implementation("io.github.anilbeesetti:nextlib-media3ext:1.9.1-0.11.0")
     implementation("dev.chrisbanes.haze:haze-android:0.7.3") {
         exclude(group = "org.jetbrains.compose.ui")
         exclude(group = "org.jetbrains.compose.foundation")

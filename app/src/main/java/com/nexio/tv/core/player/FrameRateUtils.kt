@@ -37,6 +37,13 @@ object FrameRateUtils {
     private val NEXTLIB_HTTP_SCHEMES = setOf("http", "https")
     private val LIVE_STREAM_EXTENSIONS = listOf(".m3u8", ".mpd", ".ism/manifest")
     private const val MKV_EXTENSION = ".mkv"
+    private val VC1_SOURCE_HINTS = listOf(
+        "wvc1",
+        "vc-1",
+        "video/wvc1",
+        "codec=vc1",
+        "codec=wvc1"
+    )
     private const val SWITCH_POLL_INTERVAL_MS = 60L
     private const val SWITCH_REQUIRED_STABLE_POLLS = 2
     @Volatile
@@ -579,6 +586,7 @@ object FrameRateUtils {
     private fun shouldUseNextLibProbe(sourceUrl: String, headers: Map<String, String>): Boolean {
         if (sourceUrl.isBlank()) return false
         if (isLiveStreamUrl(sourceUrl)) return false
+        if (isLikelyVc1Source(sourceUrl)) return false
         if (isMkvSource(sourceUrl)) return true
 
         val scheme = Uri.parse(sourceUrl).scheme?.lowercase(Locale.ROOT)
@@ -598,6 +606,11 @@ object FrameRateUtils {
     private fun isMkvSource(sourceUrl: String): Boolean {
         val normalized = sourceUrl.substringBefore('?').lowercase(Locale.ROOT)
         return normalized.endsWith(MKV_EXTENSION)
+    }
+
+    private fun isLikelyVc1Source(sourceUrl: String): Boolean {
+        val normalized = sourceUrl.lowercase(Locale.ROOT)
+        return VC1_SOURCE_HINTS.any { hint -> normalized.contains(hint) }
     }
 
     private fun isResolveProxyUrl(sourceUrl: String): Boolean {

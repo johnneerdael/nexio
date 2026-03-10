@@ -468,6 +468,10 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithVc1TrackSelectionBypa
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
+internal fun PlayerRuntimeController.retryCurrentStreamWithDv5SoftwareToneMap(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
 internal fun PlayerRuntimeController.cancelFirstFrameWatchdog() {
     firstFrameWatchdogJob?.cancel()
     firstFrameWatchdogJob = null
@@ -490,15 +494,23 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
         val currentPosition = livePlayer.currentPosition
         Log.w(
             PlayerRuntimeController.TAG,
-            "VIDEO_TIMEOUT: no first frame after ${PlayerRuntimeController.FIRST_FRAME_TIMEOUT_MS}ms " +
-                "mime=${currentVideoTrackMimeType ?: "unknown"} " +
-                "codecs=${currentVideoTrackCodecs ?: "unknown"} " +
-                "size=${currentVideoTrackWidth}x${currentVideoTrackHeight} " +
-                "vc1=$currentVideoTrackIsLikelyVc1 " +
-                "selected=$currentVideoTrackSelected " +
-                "bestSupport=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
-                "vc1FallbackActive=$isVc1SoftwareFallbackActiveForCurrentPlayback " +
-                "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback " +
+                "VIDEO_TIMEOUT: no first frame after ${PlayerRuntimeController.FIRST_FRAME_TIMEOUT_MS}ms " +
+                    "mime=${currentVideoTrackMimeType ?: "unknown"} " +
+                    "codecs=${currentVideoTrackCodecs ?: "unknown"} " +
+                    "size=${currentVideoTrackWidth}x${currentVideoTrackHeight} " +
+                    "dv5=$currentVideoTrackIsLikelyDv5 " +
+                    "dv5ToneMapSetting=$isDv5SoftwareToneMapSettingEnabledForCurrentPlayback " +
+                    "dv5HwToneMapSetting=$isDv5HardwareToneMapSettingEnabledForCurrentPlayback " +
+                    "dv5ToneMapNativeSupported=$isDv5SoftwareToneMapNativeSupportedForCurrentPlayback " +
+                    "dvDisplayCapable=$isCurrentDisplayDolbyVisionCapable " +
+                    "shieldDevice=$isCurrentDeviceNvidiaShield " +
+                    "dv5HwToneMapActive=$isDv5HardwareToneMapActiveForCurrentPlayback " +
+                    "dv5ToneMapActive=$isDv5SoftwareToneMapActiveForCurrentPlayback " +
+                    "vc1=$currentVideoTrackIsLikelyVc1 " +
+                    "selected=$currentVideoTrackSelected " +
+                    "bestSupport=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
+                    "vc1FallbackActive=$isVc1SoftwareFallbackActiveForCurrentPlayback " +
+                    "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback " +
                 "positionMs=$currentPosition " +
                 "host=${Uri.parse(currentStreamUrl).host ?: "unknown"}"
         )
@@ -526,6 +538,23 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
                     "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
             )
             retryCurrentStreamWithVc1TrackSelectionBypass(currentPosition)
+            return@launch
+        }
+
+        if (currentVideoTrackIsLikelyDv5 &&
+            isDv5SoftwareToneMapSettingEnabledForCurrentPlayback &&
+            isDv5SoftwareToneMapNativeSupportedForCurrentPlayback &&
+            !isCurrentDisplayDolbyVisionCapable &&
+            !isDv5HardwareToneMapActiveForCurrentPlayback &&
+            !isDv5SoftwareToneMapActiveForCurrentPlayback
+        ) {
+            dv5SoftwareToneMapPreferredStreamUrls.add(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TIMEOUT: retrying with DV5 software tone-map path " +
+                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithDv5SoftwareToneMap(currentPosition)
         }
     }
 }

@@ -10,6 +10,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.nexio.tv.core.mpv.NexioMpvRenderState
 import com.nexio.tv.core.mpv.NexioMpvSurfaceView
+import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerPreference
@@ -114,6 +115,7 @@ class PlayerRuntimeController(
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
 
     fun stopAndRelease() {
+        Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
         mediaSourceFactory.clearVodCache()
     }
@@ -272,11 +274,19 @@ class PlayerRuntimeController(
     internal var hasRetriedCurrentStreamAfterMediaPeriodHolderCrash: Boolean = false
     internal var timeoutRecoveryAttempts: Int = 0
     internal val dv7ToHevcForcedStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val dv5SoftwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1SoftwarePreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal val audioDisabledForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false
+    internal var isDv5SoftwareToneMapSettingEnabledForCurrentPlayback: Boolean = false
+    internal var isDv5SoftwareToneMapNativeSupportedForCurrentPlayback: Boolean = false
+    internal var isDv5SoftwareToneMapActiveForCurrentPlayback: Boolean = false
+    internal var isDv5HardwareToneMapSettingEnabledForCurrentPlayback: Boolean = false
+    internal var isDv5HardwareToneMapActiveForCurrentPlayback: Boolean = false
+    internal var isCurrentDeviceNvidiaShield: Boolean = false
+    internal var isCurrentDisplayDolbyVisionCapable: Boolean = false
     internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
     internal var isVc1SoftwareFallbackActiveForCurrentPlayback: Boolean = false
     internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
@@ -303,6 +313,7 @@ class PlayerRuntimeController(
     internal var libassPipelineSwitchInFlight: Boolean = false
     internal var libassPipelineDecisionStreamUrl: String? = null
     internal var currentStreamHasVideoTrack: Boolean = false
+    internal var currentVideoTrackIsLikelyDv5: Boolean = false
     internal var currentVideoTrackIsLikelyVc1: Boolean = false
     internal var currentVideoTrackMimeType: String? = null
     internal var currentVideoTrackCodecs: String? = null
