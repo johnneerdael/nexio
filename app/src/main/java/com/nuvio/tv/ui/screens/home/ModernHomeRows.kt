@@ -244,9 +244,12 @@ internal fun ModernRowSection(
     val loadMoreRequestedTotals = uiCaches.loadMoreRequestedTotals
 
     Column {
+        val rowTitleStyle = remember(MaterialTheme.typography.titleMedium) {
+            MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+        }
         Text(
             text = row.title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            style = rowTitleStyle,
             color = NuvioColors.TextPrimary,
             modifier = Modifier.padding(start = 52.dp, bottom = rowTitleBottom)
         )
@@ -432,6 +435,13 @@ internal fun ModernRowSection(
                             val isWatched = remember(item.metaPreview) {
                                 item.metaPreview?.let(isCatalogItemWatched) == true
                             }
+                            val onLongPress = remember(item.metaPreview, payload.addonBaseUrl) {
+                                {
+                                    item.metaPreview?.let { preview ->
+                                        onCatalogItemLongPress(preview, payload.addonBaseUrl)
+                                    }
+                                }
+                            }
                             ModernCatalogRowItem(
                                 item = item,
                                 payload = payload,
@@ -456,11 +466,7 @@ internal fun ModernRowSection(
                                 },
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
-                                onLongPress = {
-                                    item.metaPreview?.let { preview ->
-                                        onCatalogItemLongPress(preview, payload.addonBaseUrl)
-                                    }
-                                },
+                                onLongPress = onLongPress,
                                 onBackdropInteraction = onBackdropInteraction,
                                 onExpandedCatalogFocusKeyChange = onExpandedCatalogFocusKeyChange
                             )

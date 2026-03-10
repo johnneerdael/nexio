@@ -93,6 +93,7 @@ internal data class HeroCarouselRow(
     val isLoading: Boolean = false
 )
 
+@Immutable
 internal data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
@@ -121,6 +122,7 @@ internal class ModernHomeUiCaches {
     }
 }
 
+@Stable
 internal class ModernCarouselRowBuildCache {
     var continueWatchingItems: List<ContinueWatchingItem> = emptyList()
     var continueWatchingTitle: String = ""
