@@ -518,10 +518,10 @@
     <string name="debrid_title">Debrid</string>
     <string name="debrid_subtitle">Connect Premiumize or Real-Debrid and surface saved streams in Library</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>
-    <string name="debrid_real_debrid_description">Authenticate with device activation to import your Real-Debrid downloads</string>
+    <string name="debrid_real_debrid_description">Use Real-Debrid open-source device auth to mint user-bound credentials and import your downloads</string>
     <string name="debrid_real_debrid_unavailable">Set `REAL_DEBRID_CLIENT_ID` in local properties to enable device auth</string>
     <string name="debrid_real_debrid_connected_as">Connected as %1$s</string>
-    <string name="debrid_real_debrid_waiting">Finish device activation in your browser, then select again to check approval</string>
+    <string name="debrid_real_debrid_waiting">Enter the code at real-debrid.com/device to approve Nexio and mint user-bound credentials</string>
     <string name="debrid_activation_code_title">Activation Code</string>
     <string name="debrid_premiumize_title">Premiumize</string>
     <string name="debrid_premiumize_description">Add your Premiumize API key to import cloud items directly into Library</string>
@@ -758,6 +758,9 @@
     <string name="android_tv_channels_hidden_on_home">Hidden on Home, still available here</string>
     <string name="android_tv_channels_selected">Selected</string>
     <string name="android_tv_channels_not_selected">Not selected</string>
+    <string name="android_tv_feed_browser_title_fallback">Launcher Feed</string>
+    <string name="android_tv_feed_browser_empty_title">No items in this feed right now</string>
+    <string name="android_tv_feed_browser_empty_subtitle">This launcher feed is available, but it currently has no content to browse.</string>
 
 
     <!-- StreamScreen -->

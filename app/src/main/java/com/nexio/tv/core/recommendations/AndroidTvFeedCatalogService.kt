@@ -162,6 +162,63 @@ class AndroidTvFeedCatalogService @Inject constructor(
         }
     }
 
+    suspend fun resolveFeed(feedKey: String): AndroidTvFeedRow? {
+        val normalizedKey = feedKey.trim()
+        if (normalizedKey.isEmpty()) return null
+
+        runCatching { continueWatchingSnapshotService.ensureFresh(force = false) }
+        runCatching { traktDiscoveryService.ensureFresh(force = false) }
+        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
+
+        val addons = addonRepository.getInstalledAddons().first()
+        val disabledKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.first().toSet()
+        val traktSnapshot = traktDiscoveryService.observeSnapshot().first()
+        val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
+        val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
+        val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first()
+
+        val optionByKey = buildFeedOptions(
+            addons = addons,
+            disabledKeys = disabledKeys,
+            traktSnapshot = traktSnapshot,
+            traktPrefs = traktPrefs,
+            mdbListSnapshot = mdbListSnapshot,
+            mdbListPrefs = mdbListPrefs
+        ).associateBy { it.key }
+
+        if (normalizedKey == CONTINUE_WATCHING_FEED_KEY) {
+            val option = optionByKey[normalizedKey] ?: return null
+            return AndroidTvFeedRow(
+                option = option,
+                items = buildContinueWatchingItems(continueWatchingSnapshot)
+            )
+        }
+
+        val syntheticRow = buildSyntheticRows(
+            traktSnapshot = traktSnapshot,
+            traktPrefs = traktPrefs,
+            mdbListSnapshot = mdbListSnapshot,
+            mdbListPrefs = mdbListPrefs,
+            continueWatchingSnapshot = continueWatchingSnapshot
+        ).firstOrNull { row ->
+            catalogGlobalKey(row.addonId, row.apiType, row.catalogId) == normalizedKey
+        }
+        if (syntheticRow != null) {
+            val option = optionByKey[normalizedKey] ?: return null
+            return AndroidTvFeedRow(
+                option = option,
+                items = syntheticRow.items,
+                addonBaseUrl = syntheticRow.addonBaseUrl
+            )
+        }
+
+        return resolveAddonFeedRow(addons, normalizedKey, optionByKey[normalizedKey])
+            ?: optionByKey[normalizedKey]?.let { option ->
+                AndroidTvFeedRow(option = option, items = emptyList())
+            }
+    }
+
     private suspend fun resolveAddonFeedRow(
         addons: List<Addon>,
         selectedKey: String,

@@ -15,6 +15,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.nexio.tv.ui.screens.CatalogSeeAllScreen
 import com.nexio.tv.ui.screens.LayoutSelectionScreen
+import com.nexio.tv.ui.screens.AndroidTvFeedBrowserScreen
 import com.nexio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nexio.tv.ui.screens.home.HomeScreen
 import com.nexio.tv.ui.screens.addon.AddonManagerScreen
@@ -846,6 +847,26 @@ fun NexioNavHost(
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
                 onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.AndroidTvFeed.route,
+            arguments = listOf(
+                navArgument("feedKey") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val args = requireNotNull(backStackEntry.arguments)
+            val feedKey = args.getString("feedKey").orEmpty()
+            AndroidTvFeedBrowserScreen(
+                onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
+                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                },
+                onBackPress = {
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Home.route)
+                    }
+                }
             )
         }
 

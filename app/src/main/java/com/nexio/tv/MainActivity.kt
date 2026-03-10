@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalView
 import androidx.metrics.performance.JankStats
 import androidx.metrics.performance.PerformanceMetricsState
@@ -93,6 +94,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -105,6 +107,7 @@ import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
 import com.nexio.tv.data.local.AppOnboardingDataStore
+import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.repository.TraktProgressService
@@ -126,6 +129,8 @@ import dev.chrisbanes.haze.haze
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import coil.compose.rememberAsyncImagePainter
@@ -150,6 +155,7 @@ private data class MainUiPrefs(
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     companion object {
+        const val EXTRA_RECOMMENDATION_FEED_KEY = "recommendation_feed_key"
         const val EXTRA_RECOMMENDATION_CONTENT_ID = "recommendation_content_id"
         const val EXTRA_RECOMMENDATION_CONTENT_TYPE = "recommendation_content_type"
         const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
@@ -174,10 +180,29 @@ class MainActivity : ComponentActivity() {
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
     @Inject
+    lateinit var androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore
+
+    @Inject
     lateinit var androidTvChannelPublisher: AndroidTvChannelPublisher
 
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
+    private val pendingFeedNavigation = mutableStateOf<RecommendationFeedNavigation?>(null)
+    private var pendingBrowsableChannelId: Long? = null
+    private var channelBrowsableRequestInFlight: Boolean = false
+    private val channelBrowsableLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val channelId = pendingBrowsableChannelId
+        pendingBrowsableChannelId = null
+        channelBrowsableRequestInFlight = false
+        if (channelId != null) {
+            lifecycleScope.launch {
+                androidTvRecommendationsDataStore.markBrowsableChannelRequested(channelId)
+                maybeLaunchPendingBrowsableChannelRequest()
+            }
+        }
+    }
 
     @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
     override fun attachBaseContext(newBase: Context) {
@@ -198,6 +223,16 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         handleRecommendationIntent(intent)
+        lifecycleScope.launch {
+            androidTvRecommendationsDataStore.preferences
+                .map { it.pendingBrowsableChannelIds }
+                .distinctUntilChanged()
+                .collect { pendingIds ->
+                    if (pendingIds.isNotEmpty()) {
+                        maybeLaunchPendingBrowsableChannelRequest()
+                    }
+                }
+        }
         setContent {
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
@@ -297,6 +332,7 @@ class MainActivity : ComponentActivity() {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
                     val pendingRecommendation by pendingRecommendationNavigation
+                    val pendingFeed by pendingFeedNavigation
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -308,6 +344,12 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                         pendingRecommendationNavigation.value = null
+                    }
+
+                    LaunchedEffect(pendingFeed) {
+                        val navigation = pendingFeed ?: return@LaunchedEffect
+                        navController.navigate(Screen.AndroidTvFeed.createRoute(navigation.feedKey))
+                        pendingFeedNavigation.value = null
                     }
 
                     val view = LocalView.current
@@ -449,6 +491,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         startupSyncService.requestSyncNow()
         androidTvChannelPublisher.requestSync("app_start")
+        maybeLaunchPendingBrowsableChannelRequest()
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }
@@ -458,18 +501,50 @@ class MainActivity : ComponentActivity() {
         val actualIntent = intent ?: return
         val itemId = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_CONTENT_ID)?.trim().orEmpty()
         val itemType = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE)?.trim().orEmpty()
-        if (itemId.isEmpty() || itemType.isEmpty()) return
-        val addonBaseUrl = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL)
+        if (itemId.isNotEmpty() && itemType.isNotEmpty()) {
+            val addonBaseUrl = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            pendingRecommendationNavigation.value = RecommendationNavigation(
+                itemId = itemId,
+                itemType = itemType,
+                addonBaseUrl = addonBaseUrl
+            )
+            actualIntent.removeExtra(EXTRA_RECOMMENDATION_CONTENT_ID)
+            actualIntent.removeExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE)
+            actualIntent.removeExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL)
+            actualIntent.removeExtra(EXTRA_RECOMMENDATION_FEED_KEY)
+            return
+        }
+
+        val feedKey = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_FEED_KEY)
             ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-        pendingRecommendationNavigation.value = RecommendationNavigation(
-            itemId = itemId,
-            itemType = itemType,
-            addonBaseUrl = addonBaseUrl
-        )
-        actualIntent.removeExtra(EXTRA_RECOMMENDATION_CONTENT_ID)
-        actualIntent.removeExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE)
-        actualIntent.removeExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL)
+            .orEmpty()
+        if (feedKey.isNotEmpty()) {
+            pendingFeedNavigation.value = RecommendationFeedNavigation(feedKey = feedKey)
+            actualIntent.removeExtra(EXTRA_RECOMMENDATION_FEED_KEY)
+        }
+    }
+
+    private fun maybeLaunchPendingBrowsableChannelRequest() {
+        if (channelBrowsableRequestInFlight) return
+        lifecycleScope.launch {
+            val pendingChannelId = androidTvRecommendationsDataStore.preferences
+                .map { it.pendingBrowsableChannelIds.firstOrNull() }
+                .first() ?: return@launch
+
+            val intent = Intent(TvContractCompat.ACTION_REQUEST_CHANNEL_BROWSABLE)
+                .putExtra(TvContractCompat.EXTRA_CHANNEL_ID, pendingChannelId)
+
+            channelBrowsableRequestInFlight = true
+            pendingBrowsableChannelId = pendingChannelId
+            runCatching {
+                channelBrowsableLauncher.launch(intent)
+            }.onFailure {
+                channelBrowsableRequestInFlight = false
+                pendingBrowsableChannelId = null
+            }
+        }
     }
 }
 
@@ -477,6 +552,10 @@ private data class RecommendationNavigation(
     val itemId: String,
     val itemType: String,
     val addonBaseUrl: String?
+)
+
+private data class RecommendationFeedNavigation(
+    val feedKey: String
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)

@@ -141,6 +141,15 @@ sealed class Screen(val route: String) {
         }
     }
 
+    data object AndroidTvFeed : Screen("android_tv_feed/{feedKey}") {
+        private fun encode(value: String): String =
+            URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+        fun createRoute(feedKey: String): String {
+            return "android_tv_feed/${encode(feedKey)}"
+        }
+    }
+
     data object CastDetail : Screen("cast_detail/{personId}/{personName}?preferCrew={preferCrew}") {
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
