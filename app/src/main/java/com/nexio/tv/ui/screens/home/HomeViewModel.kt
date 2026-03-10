@@ -12,6 +12,7 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -50,6 +51,7 @@ class HomeViewModel @Inject constructor(
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    internal val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
