@@ -166,8 +166,6 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
             showTitle = contentName ?: title,
             showYear = parsedYear,
             showIds = ids,
-            rawContentId = rawContentId,
-            rawVideoId = currentVideoId,
             season = currentSeason ?: return null,
             number = currentEpisode ?: return null,
             episodeTitle = currentEpisodeTitle
@@ -176,9 +174,7 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
         TraktScrobbleItem.Movie(
             title = contentName ?: title,
             year = parsedYear,
-            ids = ids,
-            rawContentId = rawContentId,
-            rawVideoId = currentVideoId
+            ids = ids
         )
     }
     return item

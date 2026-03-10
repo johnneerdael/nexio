@@ -500,45 +500,6 @@ class TraktProgressService @Inject constructor(
         )
     }
 
-    suspend fun resolveExternalTraktIds(
-        primaryId: String?,
-        secondaryId: String?,
-        initialIds: TraktIdsDto = TraktIdsDto()
-    ): TraktIdsDto {
-        if (initialIds.hasAnyId()) return initialIds
-
-        val candidates = listOf(primaryId, secondaryId)
-            .mapNotNull { raw -> raw?.trim()?.takeIf { it.isNotBlank() } }
-            .distinct()
-
-        for (raw in candidates) {
-            val resolved = resolveExternalHistoryIds(raw)
-            if (resolved.hasAnyId()) {
-                return resolved
-            }
-        }
-
-        return initialIds
-    }
-
-    suspend fun resolveEpisodeNumbersForTrakt(
-        contentId: String,
-        videoId: String?,
-        season: Int,
-        episode: Int,
-        episodeTitle: String?
-    ): Pair<Int, Int>? {
-        val mismatch = resolveEpisodeNumberMismatch(
-            contentId = contentId,
-            addonSeason = season,
-            addonEpisode = episode,
-            episodeTitle = episodeTitle,
-            videoId = videoId
-        ) ?: return null
-
-        return mismatch.suggestedSeason to mismatch.suggestedEpisode
-    }
-
     suspend fun isMovieWatched(contentId: String): Boolean {
         val rawKey = contentId.trim()
         if (rawKey.isBlank()) return false
@@ -1428,24 +1389,6 @@ class TraktProgressService @Inject constructor(
         episodeTitle: String?,
         progress: WatchProgress
     ): TraktEpisodeMismatchException? {
-        val mismatch = resolveEpisodeNumberMismatch(
-            contentId = contentId,
-            addonSeason = addonSeason,
-            addonEpisode = addonEpisode,
-            episodeTitle = episodeTitle,
-            videoId = progress.videoId
-        ) ?: return null
-
-        return mismatch.copy(originalProgress = progress)
-    }
-
-    private suspend fun resolveEpisodeNumberMismatch(
-        contentId: String,
-        addonSeason: Int,
-        addonEpisode: Int,
-        episodeTitle: String?,
-        videoId: String?
-    ): TraktEpisodeMismatchException? {
         val seasons = fetchShowSeasons(contentId) ?: return null
         val allEpisodes = seasons
             .filter { (it.number ?: 0) > 0 }
@@ -1472,21 +1415,7 @@ class TraktProgressService @Inject constructor(
                         suggestedEpisode = traktEpisode,
                         suggestedTitle = traktTitle,
                         matchMethod = "title",
-                        originalProgress = WatchProgress(
-                            contentId = contentId,
-                            contentType = "series",
-                            name = contentId,
-                            poster = null,
-                            backdrop = null,
-                            logo = null,
-                            videoId = videoId ?: "$contentId:$addonSeason:$addonEpisode",
-                            season = addonSeason,
-                            episode = addonEpisode,
-                            episodeTitle = episodeTitle,
-                            position = 0L,
-                            duration = 1L,
-                            lastWatched = 0L
-                        )
+                        originalProgress = progress
                     )
                 }
             }
@@ -1495,7 +1424,7 @@ class TraktProgressService @Inject constructor(
         // Strategy 2: Absolute episode number
         // Compute addon's absolute position using the addon's season/episode numbering
         // Then find the matching Trakt episode at the same absolute position
-        val addonAbsolute = computeAbsoluteFromAddonVideoId(videoId, addonSeason, addonEpisode)
+        val addonAbsolute = computeAbsoluteFromAddonVideoId(progress.videoId, addonSeason, addonEpisode)
         if (addonAbsolute != null) {
             var absoluteIndex = 0
             for ((season, ep) in allEpisodes) {
@@ -1511,21 +1440,7 @@ class TraktProgressService @Inject constructor(
                         suggestedEpisode = traktEpisode,
                         suggestedTitle = ep.title,
                         matchMethod = "absolute",
-                        originalProgress = WatchProgress(
-                            contentId = contentId,
-                            contentType = "series",
-                            name = contentId,
-                            poster = null,
-                            backdrop = null,
-                            logo = null,
-                            videoId = videoId ?: "$contentId:$addonSeason:$addonEpisode",
-                            season = addonSeason,
-                            episode = addonEpisode,
-                            episodeTitle = episodeTitle,
-                            position = 0L,
-                            duration = 1L,
-                            lastWatched = 0L
-                        )
+                        originalProgress = progress
                     )
                 }
             }
