@@ -173,6 +173,13 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         currentVideoTrackCodecs = effectiveVideoFormat.codecs
         currentVideoTrackWidth = effectiveVideoFormat.width.coerceAtLeast(0)
         currentVideoTrackHeight = effectiveVideoFormat.height.coerceAtLeast(0)
+        currentVideoTrackIsLikelyDv5 = isLikelyDolbyVisionProfile5VideoFormat(
+            sampleMimeType = effectiveVideoFormat.sampleMimeType,
+            codecs = effectiveVideoFormat.codecs,
+            label = effectiveVideoFormat.label,
+            streamName = _uiState.value.currentStreamName,
+            streamUrl = currentStreamUrl
+        )
         currentVideoTrackSelected = selectedVideoFormat != null
         currentVideoTrackBestSupport = if (selectedVideoFormat != null) {
             selectedVideoTrackSupport
@@ -192,12 +199,28 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             append(currentVideoTrackWidth)
             append('x')
             append(currentVideoTrackHeight)
+            append("|dv5=")
+            append(currentVideoTrackIsLikelyDv5)
             append("|vc1=")
             append(currentVideoTrackIsLikelyVc1)
             append("|selected=")
             append(currentVideoTrackSelected)
             append("|support=")
             append(Util.getFormatSupportString(currentVideoTrackBestSupport))
+            append("|dv5ToneMapSetting=")
+            append(isDv5SoftwareToneMapSettingEnabledForCurrentPlayback)
+            append("|dv5HwToneMapSetting=")
+            append(isDv5HardwareToneMapSettingEnabledForCurrentPlayback)
+            append("|dv5ToneMapNativeSupported=")
+            append(isDv5SoftwareToneMapNativeSupportedForCurrentPlayback)
+            append("|dvDisplayCapable=")
+            append(isCurrentDisplayDolbyVisionCapable)
+            append("|shieldDevice=")
+            append(isCurrentDeviceNvidiaShield)
+            append("|dv5HwToneMapActive=")
+            append(isDv5HardwareToneMapActiveForCurrentPlayback)
+            append("|dv5ToneMapActive=")
+            append(isDv5SoftwareToneMapActiveForCurrentPlayback)
             append("|vc1Fallback=")
             append(isVc1SoftwareFallbackActiveForCurrentPlayback)
             append("|vc1TrackBypass=")
@@ -210,12 +233,37 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                 "VIDEO_TRACK: mime=${currentVideoTrackMimeType ?: "unknown"} " +
                     "codecs=${currentVideoTrackCodecs ?: "unknown"} " +
                     "size=${currentVideoTrackWidth}x${currentVideoTrackHeight} " +
+                    "dv5=$currentVideoTrackIsLikelyDv5 " +
                     "vc1=$currentVideoTrackIsLikelyVc1 " +
                     "selected=$currentVideoTrackSelected " +
                     "support=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
+                    "dv5ToneMapSetting=$isDv5SoftwareToneMapSettingEnabledForCurrentPlayback " +
+                    "dv5HwToneMapSetting=$isDv5HardwareToneMapSettingEnabledForCurrentPlayback " +
+                    "dv5ToneMapNativeSupported=$isDv5SoftwareToneMapNativeSupportedForCurrentPlayback " +
+                    "dvDisplayCapable=$isCurrentDisplayDolbyVisionCapable " +
+                    "shieldDevice=$isCurrentDeviceNvidiaShield " +
+                    "dv5HwToneMapActive=$isDv5HardwareToneMapActiveForCurrentPlayback " +
+                    "dv5ToneMapActive=$isDv5SoftwareToneMapActiveForCurrentPlayback " +
                     "vc1FallbackActive=$isVc1SoftwareFallbackActiveForCurrentPlayback " +
                     "vc1TrackBypassActive=$isVc1TrackSelectionBypassActiveForCurrentPlayback"
             )
+        }
+        if (currentVideoTrackIsLikelyDv5 &&
+            isDv5SoftwareToneMapSettingEnabledForCurrentPlayback &&
+            isDv5SoftwareToneMapNativeSupportedForCurrentPlayback &&
+            !isCurrentDisplayDolbyVisionCapable &&
+            !isDv5HardwareToneMapActiveForCurrentPlayback &&
+            !isDv5SoftwareToneMapActiveForCurrentPlayback
+        ) {
+            val currentPosition = backendCurrentPosition()
+            dv5SoftwareToneMapPreferredStreamUrls.add(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TRACK: likely DV5 on non-DV display, retrying with FFmpeg/software path " +
+                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithDv5SoftwareToneMap(currentPosition)
+            return
         }
         if (currentVideoTrackIsLikelyVc1 &&
             !currentVideoTrackSelected &&
@@ -238,6 +286,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         currentVideoTrackCodecs = null
         currentVideoTrackWidth = 0
         currentVideoTrackHeight = 0
+        currentVideoTrackIsLikelyDv5 = false
         currentVideoTrackSelected = false
         currentVideoTrackBestSupport = C.FORMAT_UNSUPPORTED_TYPE
         currentVideoTrackIsLikelyVc1 = false
@@ -378,6 +427,48 @@ private fun isLikelyVc1VideoFormat(
         haystack.contains("vc-1") ||
         haystack.contains("vc1") ||
         haystack.contains("wmv3")
+}
+
+private val dv5ProfileHintRegex = Regex(
+    pattern = """(?i)\b(?:dv|dovi|dolby[ ._-]?vision)[ ._-]*(?:p(?:rofile)?[ ._-]*)?0?5\b"""
+)
+
+private val dv5CodecProfileHintRegex = Regex(
+    pattern = """(?i)\b(?:dvhe|dvh1)[._-]?0?5\b"""
+)
+
+private fun isLikelyDolbyVisionProfile5VideoFormat(
+    sampleMimeType: String?,
+    codecs: String?,
+    label: String?,
+    streamName: String?,
+    streamUrl: String?
+): Boolean {
+    if (resolveDolbyVisionProfileFromCodecString(codecs) == 5) return true
+    if (sampleMimeType != MimeTypes.VIDEO_DOLBY_VISION) return false
+    val haystack = listOfNotNull(codecs, label, streamName, streamUrl)
+        .joinToString(" ")
+        .lowercase(Locale.ROOT)
+    return dv5ProfileHintRegex.containsMatchIn(haystack) ||
+        dv5CodecProfileHintRegex.containsMatchIn(haystack)
+}
+
+private fun resolveDolbyVisionProfileFromCodecString(codecs: String?): Int? {
+    val entries = codecs
+        ?.split(',')
+        ?.asSequence()
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?: return null
+    for (entry in entries) {
+        val parts = entry.split('.')
+        if (parts.size < 2) continue
+        val prefix = parts[0].lowercase(Locale.ROOT)
+        if (prefix != "dvhe" && prefix != "dvh1") continue
+        val profile = parts[1].toIntOrNull()
+        if (profile != null) return profile
+    }
+    return null
 }
 
 private fun formatSupportRank(@C.FormatSupport formatSupport: Int): Int {

@@ -192,6 +192,12 @@ data class PlayerSettings(
     val fireOsIecVerboseLoggingEnabled: Boolean = false,
     // Experimental: allow DV5 streams to use the compatibility DV8.1 remap path.
     val experimentalDv5ToDv81Enabled: Boolean = false,
+    // Experimental: force DV5 streams to FFmpeg software decode for tone mapping on non-DV displays.
+    val experimentalDv5ToneMapToSdrEnabled: Boolean = false,
+    // Experimental: keep hardware decode and tap DV5 RPU metadata for native tone-map experiments.
+    val experimentalDv5HardwareToneMapToSdrEnabled: Boolean = false,
+    // Experimental: force DV5 hardware tone-map path to CPU-readable YUV input (Shield fallback).
+    val experimentalDv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
     // Experimental: preserve mapping metadata when converting DV7 -> DV8.1.
     val experimentalDv7ToDv81PreserveMappingEnabled: Boolean = false,
     // Display settings
@@ -397,6 +403,12 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("fire_os_iec_verbose_logging_enabled")
     private val experimentalDv5ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv5_to_dv81_enabled")
+    private val experimentalDv5ToneMapToSdrEnabledKey =
+        booleanPreferencesKey("experimental_dv5_tonemap_to_sdr_enabled")
+    private val experimentalDv5HardwareToneMapToSdrEnabledKey =
+        booleanPreferencesKey("experimental_dv5_hardware_tonemap_to_sdr_enabled")
+    private val experimentalDv5HardwareToneMapCpuFallbackEnabledKey =
+        booleanPreferencesKey("experimental_dv5_hardware_tonemap_cpu_fallback_enabled")
     private val experimentalDv7ToDv81PreserveMappingEnabledKey =
         booleanPreferencesKey("experimental_dv7_to_dv81_preserve_mapping_enabled")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
@@ -658,6 +670,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 fireOsIecVerboseLoggingEnabled =
                     prefs[fireOsIecVerboseLoggingEnabledKey] ?: false,
                 experimentalDv5ToDv81Enabled = prefs[experimentalDv5ToDv81EnabledKey] ?: false,
+                experimentalDv5ToneMapToSdrEnabled =
+                    prefs[experimentalDv5ToneMapToSdrEnabledKey] ?: false,
+                experimentalDv5HardwareToneMapToSdrEnabled =
+                    prefs[experimentalDv5HardwareToneMapToSdrEnabledKey] ?: false,
+                experimentalDv5HardwareToneMapCpuFallbackEnabled =
+                    prefs[experimentalDv5HardwareToneMapCpuFallbackEnabledKey] ?: false,
                 experimentalDv7ToDv81PreserveMappingEnabled =
                     prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false,
                 frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
@@ -1136,6 +1154,24 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDv5ToDv81EnabledKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDv5ToneMapToSdrEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv5ToneMapToSdrEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDv5HardwareToneMapToSdrEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv5HardwareToneMapToSdrEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setExperimentalDv5HardwareToneMapCpuFallbackEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv5HardwareToneMapCpuFallbackEnabledKey] = enabled
         }
     }
 
