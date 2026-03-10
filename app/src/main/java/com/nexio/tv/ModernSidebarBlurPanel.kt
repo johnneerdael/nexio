@@ -1,5 +1,6 @@
 package com.nexio.tv
 
+import com.nexio.tv.DrawerItem
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
