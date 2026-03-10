@@ -518,10 +518,10 @@
     <string name="debrid_title">Debrid</string>
     <string name="debrid_subtitle">Connect Premiumize or Real-Debrid and surface saved streams in Library</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>
-    <string name="debrid_real_debrid_description">Use Real-Debrid open-source device auth to mint user-bound credentials and import your downloads</string>
+    <string name="debrid_real_debrid_description">Use Real-Debrid device auth to import your downloads. Nexio prefers the standard client-secret flow and falls back to the open-source credentials flow when needed.</string>
     <string name="debrid_real_debrid_unavailable">Set `REAL_DEBRID_CLIENT_ID` in local properties to enable device auth</string>
     <string name="debrid_real_debrid_connected_as">Connected as %1$s</string>
-    <string name="debrid_real_debrid_waiting">Enter the code at real-debrid.com/device to approve Nexio and mint user-bound credentials</string>
+    <string name="debrid_real_debrid_waiting">Approve the Real-Debrid device flow in your browser to connect Nexio</string>
     <string name="debrid_activation_code_title">Activation Code</string>
     <string name="debrid_premiumize_title">Premiumize</string>
     <string name="debrid_premiumize_description">Add your Premiumize API key to import cloud items directly into Library</string>

@@ -17,6 +17,14 @@
         :last-synced-at="state.lastSyncedAt"
       />
 
+      <section
+        v-if="state.error"
+        class="glass"
+        style="padding:0.9rem 1rem; border-radius: var(--radius-lg); border: 1px solid rgba(190, 40, 40, 0.35); color: #7a1515; background: rgba(255, 244, 244, 0.9);"
+      >
+        {{ state.error }}
+      </section>
+
       <section class="glass portal-sticky-nav" style="padding:1rem; border-radius: var(--radius-xl); display:flex; gap:0.65rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
         <div style="display:flex; gap:0.65rem; flex-wrap:wrap;">
           <button v-for="item in nav" :key="item.id" :class="activeView === item.id ? 'primary-btn' : 'secondary-btn'" @click="setView(item.id)">

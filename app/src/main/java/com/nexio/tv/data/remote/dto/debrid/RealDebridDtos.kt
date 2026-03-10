@@ -7,7 +7,8 @@ data class RealDebridDeviceCodeResponseDto(
     @Json(name = "user_code") val userCode: String,
     @Json(name = "expires_in") val expiresIn: Int,
     @Json(name = "interval") val interval: Int? = null,
-    @Json(name = "verification_url") val verificationUrl: String
+    @Json(name = "verification_url") val verificationUrl: String,
+    @Json(name = "direct_verification_url") val directVerificationUrl: String? = null
 )
 
 data class RealDebridDeviceCredentialsResponseDto(

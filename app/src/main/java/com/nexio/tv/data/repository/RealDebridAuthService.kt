@@ -4,6 +4,7 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.RealDebridAuthState
 import com.nexio.tv.data.remote.api.RealDebridApi
+import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
 import kotlinx.coroutines.flow.first
 import retrofit2.Response
@@ -28,6 +29,7 @@ class RealDebridAuthService @Inject constructor(
     private val refreshLeewayMs = 60_000L
 
     fun hasRequiredCredentials(): Boolean = BuildConfig.REAL_DEBRID_CLIENT_ID.isNotBlank()
+    private fun hasClientSecret(): Boolean = BuildConfig.REAL_DEBRID_CLIENT_SECRET.isNotBlank()
 
     suspend fun getCurrentAuthState(): RealDebridAuthState = realDebridAuthDataStore.state.first()
 
@@ -37,7 +39,10 @@ class RealDebridAuthService @Inject constructor(
         }
 
         val response = runCatching {
-            realDebridApi.requestDeviceCode(clientId = BuildConfig.REAL_DEBRID_CLIENT_ID)
+            realDebridApi.requestDeviceCode(
+                clientId = BuildConfig.REAL_DEBRID_CLIENT_ID,
+                newCredentials = if (hasClientSecret()) null else "yes"
+            )
         }.getOrElse { error ->
             return Result.failure(IllegalStateException(error.message ?: "Failed to start Real-Debrid auth"))
         }
@@ -62,7 +67,14 @@ class RealDebridAuthService @Inject constructor(
             return RealDebridTokenPollResult.Failed("No active Real-Debrid device flow")
         }
 
-        val credentialState = if (state.userClientId.isNullOrBlank() || state.userClientSecret.isNullOrBlank()) {
+        val credentialState = if (hasClientSecret()) {
+            val appCredentials = RealDebridDeviceCredentialsResponseDto(
+                clientId = BuildConfig.REAL_DEBRID_CLIENT_ID,
+                clientSecret = BuildConfig.REAL_DEBRID_CLIENT_SECRET
+            )
+            realDebridAuthDataStore.saveUserCredentials(appCredentials)
+            getCurrentAuthState()
+        } else if (state.userClientId.isNullOrBlank() || state.userClientSecret.isNullOrBlank()) {
             val credentialResponse = runCatching {
                 realDebridApi.requestDeviceCredentials(
                     clientId = BuildConfig.REAL_DEBRID_CLIENT_ID,
@@ -85,6 +97,9 @@ class RealDebridAuthService @Inject constructor(
 
             val credentials = credentialResponse.body()
                 ?: return RealDebridTokenPollResult.Failed("Missing Real-Debrid credentials")
+            if (credentials.clientId.isBlank() || credentials.clientSecret.isBlank()) {
+                return RealDebridTokenPollResult.Pending
+            }
             realDebridAuthDataStore.saveUserCredentials(credentials)
             getCurrentAuthState()
         } else {

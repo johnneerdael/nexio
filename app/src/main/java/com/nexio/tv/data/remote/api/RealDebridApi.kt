@@ -17,7 +17,7 @@ interface RealDebridApi {
     @GET("oauth/v2/device/code")
     suspend fun requestDeviceCode(
         @Query("client_id") clientId: String,
-        @Query("new_credentials") newCredentials: String = "yes"
+        @Query("new_credentials") newCredentials: String? = "yes"
     ): Response<RealDebridDeviceCodeResponseDto>
 
     @GET("oauth/v2/device/credentials")
