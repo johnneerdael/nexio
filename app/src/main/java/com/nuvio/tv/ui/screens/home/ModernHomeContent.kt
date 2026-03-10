@@ -630,8 +630,8 @@ fun ModernHomeContent(
             .coerceAtMost(maxHeight)
         val verticalRowBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
             val topInsetPx = with(localDensity) { MODERN_ROW_HEADER_FOCUS_INSET.toPx() }
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
-                @Suppress("DEPRECATION")
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     defaultBringIntoViewSpec.scrollAnimationSpec
 
@@ -698,18 +698,20 @@ fun ModernHomeContent(
                     .fillMaxWidth()
                     .height(rowsViewportHeight)
                     .padding(bottom = catalogBottomPadding)
-                    .focusRestorer {
-                        val rowKey = activeRowKey
-                        val itemIndex = activeItemIndex
-                        if (rowKey != null) {
-                            val row = carouselRows.firstOrNull { it.key == rowKey }
-                            val safeIndex = itemIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
-                            val itemKey = row?.items?.getOrNull(safeIndex)?.key
-                            if (itemKey != null) {
-                                uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
+                    .focusRestorer(
+                        run {
+                            val rowKey = activeRowKey
+                            val itemIndex = activeItemIndex
+                            if (rowKey != null) {
+                                val row = carouselRows.firstOrNull { it.key == rowKey }
+                                val safeIndex = itemIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
+                                val itemKey = row?.items?.getOrNull(safeIndex)?.key
+                                if (itemKey != null) {
+                                    uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
+                                } else FocusRequester.Default
                             } else FocusRequester.Default
-                        } else FocusRequester.Default
-                    }
+                        }
+                    )
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
