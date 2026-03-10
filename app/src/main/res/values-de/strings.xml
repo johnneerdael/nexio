@@ -233,6 +233,7 @@
   <string name="cast_role_writer">Autor</string>
   <string name="detail_tab_ratings">Bewertungen</string>
   <string name="detail_tab_more_like_this">Ähnliche Titel</string>
+  <string name="detail_tab_reviews">Rezensionen</string>
   <string name="detail_section_network">Netzwerk</string>
   <string name="detail_section_production">Produktion</string>
   <string name="detail_lists_fallback">Listen</string>
@@ -531,6 +532,8 @@
   <string name="tmdb_episodes_subtitle">Episodentitel, Beschreibungen, Miniaturansichten und Laufzeit von TMDB</string>
   <string name="tmdb_more_like_this_title">Ähnliche Titel</string>
   <string name="tmdb_more_like_this_subtitle">TMDB-Empfehlungshintergründe auf der Detailseite</string>
+  <string name="tmdb_reviews_title">Rezensionen</string>
+  <string name="tmdb_reviews_subtitle">TMDB-Rezensionen auf der Detailseite</string>
   <string name="trakt_description">Synchronisiere deine Watchlist, deinen Fortschritt, Weiter ansehen, Scrobbles und persönliche Listen mit Trakt.</string>
   <string name="trakt_connected_as">Verbunden als %1$s</string>
   <string name="trakt_account_login">Konto-Login</string>
@@ -860,6 +863,8 @@
   <string name="ratings_loading">Episodenbewertungen werden geladen...</string>
   <string name="ratings_unavailable">Episodenbewertungen sind nicht verfügbar.</string>
   <string name="ratings_season_summary">Staffel %1$d – %2$d Episoden</string>
+  <string name="reviews_loading">Rezensionen werden geladen...</string>
+  <string name="reviews_unavailable">Rezensionen sind nicht verfügbar.</string>
   <string name="discover_title">Entdecken</string>
   <string name="discover_load_more">Mehr laden</string>
   <string name="discover_loading">Laden...</string>

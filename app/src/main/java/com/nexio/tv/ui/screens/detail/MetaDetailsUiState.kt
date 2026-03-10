@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.detail
 
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -39,6 +40,9 @@ data class MetaDetailsUiState(
     val episodeWatchedPendingKeys: Set<String> = emptySet(),
     val blurUnwatchedEpisodes: Boolean = false,
     val moreLikeThis: List<MetaPreview> = emptyList(),
+    val reviews: List<MetaReview> = emptyList(),
+    val isReviewsLoading: Boolean = false,
+    val reviewsError: String? = null,
     val collection: List<MetaPreview> = emptyList(),
     val collectionName: String? = null,
     val episodeImdbRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
@@ -73,4 +77,5 @@ sealed class MetaDetailsEvent {
     data object OnPickerSave : MetaDetailsEvent()
     data object OnPickerDismiss : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
+    data class OnReviewItemFocused(val index: Int) : MetaDetailsEvent()
 }

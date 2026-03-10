@@ -211,6 +211,20 @@ fun TmdbSettingsContent(
                     )
                 }
 
+                item(key = "tmdb_reviews") {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.tmdb_reviews_title),
+                        subtitle = stringResource(R.string.tmdb_reviews_subtitle),
+                        checked = uiState.useReviews,
+                        enabled = uiState.isActive,
+                        onToggle = {
+                            viewModel.onEvent(
+                                TmdbSettingsEvent.ToggleReviews(!uiState.useReviews)
+                            )
+                        }
+                    )
+                }
+
                 item(key = "tmdb_collections") {
                     SettingsToggleRow(
                         title = stringResource(R.string.tmdb_collections_title),

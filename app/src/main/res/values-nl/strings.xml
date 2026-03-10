@@ -287,6 +287,7 @@
   <string name="cast_role_writer">Schrijver</string>
   <string name="detail_tab_ratings">Beoordelingen</string>
   <string name="detail_tab_more_like_this">Meer zoals dit</string>
+  <string name="detail_tab_reviews">Reviews</string>
   <string name="detail_section_network">Netwerk</string>
   <string name="detail_section_production">Productie</string>
   <string name="detail_lists_fallback">Lijsten</string>
@@ -533,6 +534,8 @@
   <string name="tmdb_episodes_subtitle">Afleveringstitels, overzichten, thumbnails en speelduur van TMDB</string>
   <string name="tmdb_more_like_this_title">Meer zoals dit</string>
   <string name="tmdb_more_like_this_subtitle">TMDB-aanbevelingsachtergronden op de detailpagina</string>
+  <string name="tmdb_reviews_title">Reviews</string>
+  <string name="tmdb_reviews_subtitle">TMDB-reviews op de detailpagina</string>
   <string name="trakt_description">Synchroniseer je volglijst, voortgang, verder kijken, scrobbles en persoonlijke lijsten met Trakt.</string>
   <string name="trakt_connected_as">Verbonden als %1$s</string>
   <string name="trakt_account_login">Account inloggen</string>
@@ -860,6 +863,8 @@
   <string name="ratings_loading">Afleveringsbeoordelingen laden...</string>
   <string name="ratings_unavailable">Afleveringsbeoordelingen zijn niet beschikbaar.</string>
   <string name="ratings_season_summary">Seizoen %1$d - %2$d afleveringen</string>
+  <string name="reviews_loading">Reviews laden...</string>
+  <string name="reviews_unavailable">Reviews zijn niet beschikbaar.</string>
   <string name="discover_title">Ontdekken</string>
   <string name="discover_load_more">Laad meer</string>
   <string name="discover_loading">Laden...</string>

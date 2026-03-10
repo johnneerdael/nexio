@@ -44,6 +44,7 @@
   <string name="detail_tab_cast">Créateur et casting</string>
   <string name="detail_tab_ratings">Notes</string>
   <string name="detail_tab_more_like_this">Similaires</string>
+  <string name="detail_tab_reviews">Avis</string>
   <string name="detail_section_network">Chaîne</string>
   <string name="detail_section_production">Production</string>
   <string name="detail_lists_fallback">Listes</string>
@@ -334,6 +335,8 @@
   <string name="tmdb_episodes_subtitle">Titres, résumés, miniatures et durée des épisodes depuis TMDB</string>
   <string name="tmdb_more_like_this_title">Similaires</string>
   <string name="tmdb_more_like_this_subtitle">Arrière-plans de recommandations TMDB sur la page de détail</string>
+  <string name="tmdb_reviews_title">Avis</string>
+  <string name="tmdb_reviews_subtitle">Avis TMDB sur la page de détails</string>
   <string name="trakt_description">Synchronise ta liste de suivi, ta progression, tes visionnages en cours, tes scrobbles et tes listes personnelles avec Trakt.</string>
   <string name="trakt_connected_as">Connecté en tant que %1$s</string>
   <string name="trakt_account_login">Connexion au compte</string>
@@ -576,6 +579,8 @@
   <string name="ratings_loading">Chargement des notes des épisodes...</string>
   <string name="ratings_unavailable">Les notes des épisodes ne sont pas disponibles.</string>
   <string name="ratings_season_summary">Saison %1$d - %2$d épisodes</string>
+  <string name="reviews_loading">Chargement des avis...</string>
+  <string name="reviews_unavailable">Les avis ne sont pas disponibles.</string>
   <string name="mdblist_catalog_order_title">Ordre des catalogues actifs</string>
   <string name="poster_ratings_rpdb_dialog_placeholder">Entre la clé API RPDB</string>
   <string name="sub_startup_mode_preferred_desc">Précharge les sous-titres addon avant lecture et attache les pistes de langue préférée/secondaire.</string>
