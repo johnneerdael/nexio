@@ -366,12 +366,10 @@ fun NuvioNavHost(
                     val season = streamArgs?.getString("season")?.toIntOrNull()
                     val episode = streamArgs?.getString("episode")?.toIntOrNull()
                     if (streamContentType.equals("series", ignoreCase = true) && streamContentId.isNotBlank()) {
-                        val detailOnStack = navController.backQueue.any {
-                            it.destination.route == Screen.Detail.route
-                        }
-                        if (detailOnStack) {
-                            navController.getBackStackEntry(Screen.Detail.route).savedStateHandle.set("returnFocusSeason", season)
-                            navController.getBackStackEntry(Screen.Detail.route).savedStateHandle.set("returnFocusEpisode", episode)
+                        val detailEntry = runCatching { navController.getBackStackEntry(Screen.Detail.route) }.getOrNull()
+                        if (detailEntry != null) {
+                            detailEntry.savedStateHandle["returnFocusSeason"] = season
+                            detailEntry.savedStateHandle["returnFocusEpisode"] = episode
                             navController.popBackStack(Screen.Detail.route, inclusive = false)
                         } else {
                             navController.navigate(
