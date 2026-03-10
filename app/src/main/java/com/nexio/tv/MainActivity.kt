@@ -1,8 +1,9 @@
 package com.nexio.tv
 
-import android.os.Bundle
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
+import android.os.Bundle
 import android.util.Log
 import androidx.compose.ui.platform.LocalView
 import androidx.metrics.performance.JankStats
@@ -53,8 +54,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -102,6 +103,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
@@ -131,15 +133,10 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.DrawerItem
+import com.nexio.tv.ModernSidebarBlurPanel
 
 val LocalSidebarExpanded = compositionLocalOf { false }
-
-data class DrawerItem(
-    val route: String,
-    val label: String,
-    val iconRes: Int? = null,
-    val icon: ImageVector? = null
-)
 
 private data class MainUiPrefs(
     val theme: AppTheme = AppTheme.WHITE,
@@ -152,6 +149,11 @@ private data class MainUiPrefs(
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_RECOMMENDATION_CONTENT_ID = "recommendation_content_id"
+        const val EXTRA_RECOMMENDATION_CONTENT_TYPE = "recommendation_content_type"
+        const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
+    }
 
     @Inject
     lateinit var themeDataStore: ThemeDataStore
@@ -171,7 +173,11 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
+    @Inject
+    lateinit var androidTvChannelPublisher: AndroidTvChannelPublisher
+
     private lateinit var jankStats: JankStats
+    private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
 
     @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
     override fun attachBaseContext(newBase: Context) {
@@ -191,6 +197,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        handleRecommendationIntent(intent)
         setContent {
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
@@ -289,6 +296,19 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    val pendingRecommendation by pendingRecommendationNavigation
+
+                    LaunchedEffect(pendingRecommendation) {
+                        val navigation = pendingRecommendation ?: return@LaunchedEffect
+                        navController.navigate(
+                            Screen.Detail.createRoute(
+                                itemId = navigation.itemId,
+                                itemType = navigation.itemType,
+                                addonBaseUrl = navigation.addonBaseUrl
+                            )
+                        )
+                        pendingRecommendationNavigation.value = null
+                    }
 
                     val view = LocalView.current
                     LaunchedEffect(currentRoute) {
@@ -415,6 +435,11 @@ class MainActivity : ComponentActivity() {
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = true
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleRecommendationIntent(intent)
+    }
+
     override fun onPause() {
         super.onPause()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = false
@@ -423,11 +448,36 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         startupSyncService.requestSyncNow()
+        androidTvChannelPublisher.requestSync("app_start")
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }
     }
+
+    private fun handleRecommendationIntent(intent: Intent?) {
+        val actualIntent = intent ?: return
+        val itemId = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_CONTENT_ID)?.trim().orEmpty()
+        val itemType = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE)?.trim().orEmpty()
+        if (itemId.isEmpty() || itemType.isEmpty()) return
+        val addonBaseUrl = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        pendingRecommendationNavigation.value = RecommendationNavigation(
+            itemId = itemId,
+            itemType = itemType,
+            addonBaseUrl = addonBaseUrl
+        )
+        actualIntent.removeExtra(EXTRA_RECOMMENDATION_CONTENT_ID)
+        actualIntent.removeExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE)
+        actualIntent.removeExtra(EXTRA_RECOMMENDATION_ADDON_BASE_URL)
+    }
 }
+
+private data class RecommendationNavigation(
+    val itemId: String,
+    val itemType: String,
+    val addonBaseUrl: String?
+)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
