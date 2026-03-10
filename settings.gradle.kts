@@ -47,6 +47,8 @@ if (readUseMedia3SourceFlag()) {
             substitute(module("androidx.media3:media3-container")).using(project(":lib-container"))
             substitute(module("androidx.media3:media3-session")).using(project(":lib-session"))
             substitute(module("androidx.media3:media3-exoplayer")).using(project(":lib-exoplayer"))
+            substitute(module("androidx.media3:media3-exoplayer-kodi-native-sink"))
+                .using(project(":lib-exoplayer-kodi-native-sink"))
             substitute(module("androidx.media3:media3-exoplayer-dash")).using(project(":lib-exoplayer-dash"))
             substitute(module("androidx.media3:media3-exoplayer-hls")).using(project(":lib-exoplayer-hls"))
             substitute(module("androidx.media3:media3-exoplayer-rtsp")).using(project(":lib-exoplayer-rtsp"))

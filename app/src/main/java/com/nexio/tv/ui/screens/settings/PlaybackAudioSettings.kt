@@ -50,6 +50,7 @@ import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -144,10 +145,16 @@ internal fun LazyListScope.audioSettingsItems(
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
+    onShowIecPackerChannelLayoutDialog: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
-    onSetFireOsCompatibilityFallbackEnabled: (Boolean) -> Unit,
+    onSetIecPackerAc3PassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerEac3PassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerDtsPassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerTruehdPassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerDtshdPassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerDtshdCoreFallbackEnabled: (Boolean) -> Unit,
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
@@ -259,15 +266,89 @@ internal fun LazyListScope.audioSettingsItems(
         )
     }
 
-    item(key = "audio_fire_os_compatibility_fallback") {
-        ToggleSettingsItem(
+    item(key = "audio_iec_packer_channel_layout") {
+        NavigationSettingsItem(
             icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_fire_os_compatibility_fallback_title),
-            subtitle = stringResource(R.string.audio_fire_os_compatibility_fallback_sub),
-            isChecked = playerSettings.fireOsCompatibilityFallbackEnabled,
-            onCheckedChange = onSetFireOsCompatibilityFallbackEnabled,
+            title = stringResource(R.string.audio_iec_packer_channel_layout_title),
+            subtitle = iecPackerChannelLayoutLabel(playerSettings.iecPackerMaxPcmChannelLayout),
+            onClick = onShowIecPackerChannelLayoutDialog,
             onFocused = onItemFocused,
-            enabled = enabled
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
+        )
+    }
+
+    item(key = "audio_iec_packer_ac3_passthrough") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_iec_packer_ac3_passthrough_title),
+            subtitle = stringResource(R.string.audio_iec_packer_ac3_passthrough_sub),
+            isChecked = playerSettings.iecPackerAc3PassthroughEnabled,
+            onCheckedChange = onSetIecPackerAc3PassthroughEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
+        )
+    }
+
+    item(key = "audio_iec_packer_eac3_passthrough") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_iec_packer_eac3_passthrough_title),
+            subtitle = stringResource(R.string.audio_iec_packer_eac3_passthrough_sub),
+            isChecked = playerSettings.iecPackerEac3PassthroughEnabled,
+            onCheckedChange = onSetIecPackerEac3PassthroughEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
+        )
+    }
+
+    item(key = "audio_iec_packer_dts_passthrough") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_iec_packer_dts_passthrough_title),
+            subtitle = stringResource(R.string.audio_iec_packer_dts_passthrough_sub),
+            isChecked = playerSettings.iecPackerDtsPassthroughEnabled,
+            onCheckedChange = onSetIecPackerDtsPassthroughEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
+        )
+    }
+
+    item(key = "audio_iec_packer_truehd_passthrough") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_iec_packer_truehd_passthrough_title),
+            subtitle = stringResource(R.string.audio_iec_packer_truehd_passthrough_sub),
+            isChecked = playerSettings.iecPackerTruehdPassthroughEnabled,
+            onCheckedChange = onSetIecPackerTruehdPassthroughEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
+        )
+    }
+
+    item(key = "audio_iec_packer_dtshd_passthrough") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_iec_packer_dtshd_passthrough_title),
+            subtitle = stringResource(R.string.audio_iec_packer_dtshd_passthrough_sub),
+            isChecked = playerSettings.iecPackerDtshdPassthroughEnabled,
+            onCheckedChange = onSetIecPackerDtshdPassthroughEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled && playerSettings.experimentalDtsIecPassthroughEnabled
+        )
+    }
+
+    item(key = "audio_iec_packer_dtshd_core_fallback") {
+        ToggleSettingsItem(
+            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            title = stringResource(R.string.audio_iec_packer_dtshd_core_fallback_title),
+            subtitle = stringResource(R.string.audio_iec_packer_dtshd_core_fallback_sub),
+            isChecked = playerSettings.iecPackerDtshdCoreFallbackEnabled,
+            onCheckedChange = onSetIecPackerDtshdCoreFallbackEnabled,
+            onFocused = onItemFocused,
+            enabled =
+                enabled &&
+                    playerSettings.experimentalDtsIecPassthroughEnabled &&
+                    !playerSettings.iecPackerDtshdPassthroughEnabled
         )
     }
 
@@ -289,15 +370,19 @@ internal fun AudioSettingsDialogs(
     showAudioLanguageDialog: Boolean,
     showSecondaryAudioLanguageDialog: Boolean,
     showDecoderPriorityDialog: Boolean,
+    showIecPackerChannelLayoutDialog: Boolean,
     selectedLanguage: String,
     selectedSecondaryLanguage: String?,
     selectedPriority: Int,
+    selectedIecPackerChannelLayout: IecPackerChannelLayout,
     onSetPreferredAudioLanguage: (String) -> Unit,
     onSetSecondaryPreferredAudioLanguage: (String?) -> Unit,
     onSetDecoderPriority: (Int) -> Unit,
+    onSetIecPackerChannelLayout: (IecPackerChannelLayout) -> Unit,
     onDismissAudioLanguageDialog: () -> Unit,
     onDismissSecondaryAudioLanguageDialog: () -> Unit,
-    onDismissDecoderPriorityDialog: () -> Unit
+    onDismissDecoderPriorityDialog: () -> Unit,
+    onDismissIecPackerChannelLayoutDialog: () -> Unit
 ) {
     if (showAudioLanguageDialog) {
         AudioLanguageSelectionDialog(
@@ -332,6 +417,33 @@ internal fun AudioSettingsDialogs(
             },
             onDismiss = onDismissDecoderPriorityDialog
         )
+    }
+
+    if (showIecPackerChannelLayoutDialog) {
+        IecPackerChannelLayoutDialog(
+            selectedLayout = selectedIecPackerChannelLayout,
+            onLayoutSelected = {
+                onSetIecPackerChannelLayout(it)
+                onDismissIecPackerChannelLayoutDialog()
+            },
+            onDismiss = onDismissIecPackerChannelLayoutDialog
+        )
+    }
+}
+
+@Composable
+private fun iecPackerChannelLayoutLabel(layout: IecPackerChannelLayout): String {
+    return when (layout) {
+        IecPackerChannelLayout.CH_2_0 -> stringResource(R.string.audio_iec_packer_channel_layout_2_0)
+        IecPackerChannelLayout.CH_2_1 -> stringResource(R.string.audio_iec_packer_channel_layout_2_1)
+        IecPackerChannelLayout.CH_3_0 -> stringResource(R.string.audio_iec_packer_channel_layout_3_0)
+        IecPackerChannelLayout.CH_3_1 -> stringResource(R.string.audio_iec_packer_channel_layout_3_1)
+        IecPackerChannelLayout.CH_4_0 -> stringResource(R.string.audio_iec_packer_channel_layout_4_0)
+        IecPackerChannelLayout.CH_4_1 -> stringResource(R.string.audio_iec_packer_channel_layout_4_1)
+        IecPackerChannelLayout.CH_5_0 -> stringResource(R.string.audio_iec_packer_channel_layout_5_0)
+        IecPackerChannelLayout.CH_5_1 -> stringResource(R.string.audio_iec_packer_channel_layout_5_1)
+        IecPackerChannelLayout.CH_7_0 -> stringResource(R.string.audio_iec_packer_channel_layout_7_0)
+        IecPackerChannelLayout.CH_7_1 -> stringResource(R.string.audio_iec_packer_channel_layout_7_1)
     }
 }
 
@@ -489,6 +601,83 @@ private fun DecoderPriorityDialog(
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = stringResource(R.string.cd_selected),
+                                    tint = NexioColors.Primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IecPackerChannelLayoutDialog(
+    selectedLayout: IecPackerChannelLayout,
+    onLayoutSelected: (IecPackerChannelLayout) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = IecPackerChannelLayout.entries
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.audio_iec_packer_channel_layout_title),
+        subtitle = stringResource(R.string.audio_iec_packer_channel_layout_sub),
+        width = 420.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
+            ) {
+                items(
+                    count = options.size,
+                    key = { index -> options[index].storedValue }
+                ) { index ->
+                    val option = options[index]
+                    val isSelected = option == selectedLayout
+
+                    Card(
+                        onClick = { onLayoutSelected(option) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                        colors = CardDefaults.colors(
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        scale = CardDefaults.scale(focusedScale = 1f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = iecPackerChannelLayoutLabel(option),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
                             if (isSelected) {
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Icon(

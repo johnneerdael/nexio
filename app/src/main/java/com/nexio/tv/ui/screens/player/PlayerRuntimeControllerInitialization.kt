@@ -24,9 +24,7 @@ import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.FireOsDefaultAudioSink
-import androidx.media3.exoplayer.audio.FireOsIec61937AudioOutputProvider
-import androidx.media3.exoplayer.audio.FireOsMediaCodecAudioRenderer
+import androidx.media3.exoplayer.audio.kodi.KodiNativeAudioSinkFactory
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
@@ -77,18 +75,31 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val experimentalFireOsIecPassthroughEnabled =
                 playerSettings.experimentalDtsIecPassthroughEnabled
-            val fireOsCompatibilityFallbackEnabled =
-                playerSettings.fireOsCompatibilityFallbackEnabled
-            val strictKodiFireOsIecModeEnabled =
-                isStrictKodiFireOsIecModeEnabled(
-                    experimentalFireOsIecPassthroughEnabled,
-                    fireOsCompatibilityFallbackEnabled
-                )
+            val kodiCustomAudioSinkEnabled = experimentalFireOsIecPassthroughEnabled
             AudioCapabilities.setExperimentalFireOsIecPassthroughEnabled(
                 experimentalFireOsIecPassthroughEnabled
             )
-            AudioCapabilities.setFireOsCompatibilityFallbackEnabled(
-                fireOsCompatibilityFallbackEnabled
+            AudioCapabilities.setFireOsCompatibilityFallbackEnabled(false)
+            AudioCapabilities.setIecPackerAc3PassthroughEnabled(
+                playerSettings.iecPackerAc3PassthroughEnabled
+            )
+            AudioCapabilities.setIecPackerEac3PassthroughEnabled(
+                playerSettings.iecPackerEac3PassthroughEnabled
+            )
+            AudioCapabilities.setIecPackerDtsPassthroughEnabled(
+                playerSettings.iecPackerDtsPassthroughEnabled
+            )
+            AudioCapabilities.setIecPackerTruehdPassthroughEnabled(
+                playerSettings.iecPackerTruehdPassthroughEnabled
+            )
+            AudioCapabilities.setIecPackerDtshdPassthroughEnabled(
+                playerSettings.iecPackerDtshdPassthroughEnabled
+            )
+            AudioCapabilities.setIecPackerDtshdCoreFallbackEnabled(
+                playerSettings.iecPackerDtshdCoreFallbackEnabled
+            )
+            AudioCapabilities.setIecPackerMaxPcmChannelLayout(
+                playerSettings.iecPackerMaxPcmChannelLayout.kodiChannelLayoutValue
             )
             AudioCapabilities.setFireOsIecSuperviseAudioDelayEnabled(
                 playerSettings.fireOsIecSuperviseAudioDelayEnabled
@@ -190,14 +201,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
-            if (strictKodiFireOsIecModeEnabled) {
+            if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
             }
             val safeAudioModeEnabled =
-                !strictKodiFireOsIecModeEnabled && safeAudioForcedStreamUrls.contains(url)
+                !kodiCustomAudioSinkEnabled && safeAudioForcedStreamUrls.contains(url)
             val audioDisabledForStream =
-                !strictKodiFireOsIecModeEnabled && audioDisabledForcedStreamUrls.contains(url)
+                !kodiCustomAudioSinkEnabled && audioDisabledForcedStreamUrls.contains(url)
             val vc1TrackSelectionBypassActive = vc1TrackSelectionBypassStreamUrls.contains(url)
             isSafeAudioModeActiveForCurrentPlayback = safeAudioModeEnabled
             isAudioDisabledForCurrentPlayback = audioDisabledForStream
@@ -643,10 +654,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
 
                         if (error.isAudioTrackInitializationFailure()) {
-                            if (strictKodiFireOsIecModeEnabled) {
+                            if (kodiCustomAudioSinkEnabled) {
                                 Log.w(
                                     PlayerRuntimeController.TAG,
-                                    "AudioTrack init failed in strict Fire OS IEC mode; " +
+                                    "AudioTrack init failed with custom Kodi IEC AudioSink enabled; " +
                                         "not retrying with safe audio fallback " +
                                         "host=${currentStreamUrl.safeHost()} " +
                                         "positionMs=$currentPosition"
@@ -678,10 +689,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
 
                         if (error.isStuckPlayingNoProgress()) {
-                            if (strictKodiFireOsIecModeEnabled) {
+                            if (kodiCustomAudioSinkEnabled) {
                                 Log.w(
                                     PlayerRuntimeController.TAG,
-                                    "Stuck player detected in strict Fire OS IEC mode; " +
+                                    "Stuck player detected with custom Kodi IEC AudioSink enabled; " +
                                         "not retrying with safe audio fallback " +
                                         "host=${currentStreamUrl.safeHost()} " +
                                         "positionMs=$currentPosition"
@@ -966,17 +977,19 @@ private class SubtitleOffsetRenderersFactory(
         enableFloatOutput: Boolean,
         enableAudioOutputPlaybackParams: Boolean
     ): AudioSink {
+        if (experimentalFireOsIecPassthroughEnabled) {
+            return KodiNativeAudioSinkFactory.wrap(
+                context,
+                DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                    .build()
+            )
+        }
         if (!safeAudioModeEnabled) {
             val builder = DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-            if (experimentalFireOsIecPassthroughEnabled) {
-                return FireOsDefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-                    .setAudioOutputProvider(FireOsIec61937AudioOutputProvider(context))
-                    .build()
-            }
             return builder.build()
         }
         val filteredCapabilities = buildStableAudioCapabilities(context)
@@ -1017,21 +1030,6 @@ private class SubtitleOffsetRenderersFactory(
         eventListener: AudioRendererEventListener,
         out: ArrayList<Renderer>
     ) {
-        if (!experimentalFireOsIecPassthroughEnabled || audioSink !is FireOsDefaultAudioSink) {
-            super.buildAudioRenderers(
-                context,
-                extensionRendererMode,
-                mediaCodecSelector,
-                enableDecoderFallback,
-                audioSink,
-                eventHandler,
-                eventListener,
-                out
-            )
-            return
-        }
-
-        val insertionIndex = out.size
         super.buildAudioRenderers(
             context,
             extensionRendererMode,
@@ -1041,15 +1039,6 @@ private class SubtitleOffsetRenderersFactory(
             eventHandler,
             eventListener,
             out
-        )
-        out[insertionIndex] = FireOsMediaCodecAudioRenderer(
-            context,
-            codecAdapterFactory,
-            mediaCodecSelector,
-            enableDecoderFallback,
-            eventHandler,
-            eventListener,
-            audioSink
         )
     }
 }
@@ -1174,13 +1163,6 @@ private fun describeExtensionRendererMode(mode: Int): String {
         DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER -> "prefer"
         else -> mode.toString()
     }
-}
-
-private fun isStrictKodiFireOsIecModeEnabled(
-    experimentalFireOsIecPassthroughEnabled: Boolean,
-    fireOsCompatibilityFallbackEnabled: Boolean
-): Boolean {
-    return experimentalFireOsIecPassthroughEnabled && !fireOsCompatibilityFallbackEnabled
 }
 
 private fun DefaultRenderersFactory.applyMapDv7ToHevcIfSupported(
