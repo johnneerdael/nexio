@@ -1129,30 +1129,68 @@ private fun PlayerControlsOverlay(
                     }
 
                     val hasYear = !uiState.releaseYear.isNullOrBlank()
-                    val showVia = !uiState.isPlaying && !uiState.currentStreamName.isNullOrBlank()
                     val yearText = uiState.releaseYear.orEmpty()
 
-                    if (hasYear || showVia) {
-                        Column {
-                            if (hasYear) {
-                                Text(
-                                    text = yearText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.68f)
+                    if (hasYear) {
+                        Text(
+                            text = yearText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.68f)
+                        )
+                    }
+
+                    val resolutionLabel = resolveResolutionLabel(
+                        height = uiState.videoResolutionHeight,
+                        width = uiState.videoResolutionWidth
+                    )
+                    val hasAnyBadge = resolutionLabel != null ||
+                        uiState.videoHdrType != null ||
+                        uiState.videoCodecName != null ||
+                        uiState.audioCodecName != null ||
+                        uiState.audioChannelLayout != null
+
+                    if (hasAnyBadge) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (resolutionLabel != null) {
+                                QualityBadge(
+                                    text = resolutionLabel,
+                                    backgroundColor = Color.White.copy(alpha = 0.15f),
+                                    textColor = Color.White.copy(alpha = 0.9f)
                                 )
                             }
 
-                            AnimatedVisibility(
-                                visible = showVia,
-                                enter = fadeIn(animationSpec = tween(durationMillis = 220)),
-                                exit = fadeOut(animationSpec = tween(durationMillis = 180))
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.player_via, uiState.currentStreamName ?: ""),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.68f),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
+                            if (uiState.videoHdrType != null) {
+                                QualityBadge(
+                                    text = uiState.videoHdrType,
+                                    backgroundColor = Color(0xCCB8860B),
+                                    textColor = Color.White
+                                )
+                            }
+
+                            if (uiState.videoCodecName != null) {
+                                QualityBadge(
+                                    text = uiState.videoCodecName,
+                                    backgroundColor = Color.White.copy(alpha = 0.15f),
+                                    textColor = Color.White.copy(alpha = 0.9f)
+                                )
+                            }
+
+                            val audioText = buildString {
+                                uiState.audioCodecName?.let { append(it) }
+                                uiState.audioChannelLayout?.let {
+                                    if (isNotEmpty()) append(" ")
+                                    append(it)
+                                }
+                            }
+                            if (audioText.isNotBlank()) {
+                                QualityBadge(
+                                    text = audioText,
+                                    backgroundColor = Color.White.copy(alpha = 0.15f),
+                                    textColor = Color.White.copy(alpha = 0.9f)
                                 )
                             }
                         }
@@ -1975,6 +2013,45 @@ internal fun DialogButton(
             color = if (isPrimary) NexioColors.OnSecondary else NexioColors.TextPrimary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
+    }
+}
+
+@Composable
+private fun QualityBadge(
+    text: String,
+    backgroundColor: Color,
+    textColor: Color
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp
+        ),
+        color = textColor,
+        modifier = Modifier
+            .background(
+                color = backgroundColor,
+                shape = RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
+}
+
+private fun resolveResolutionLabel(height: Int, width: Int): String? {
+    if (height <= 0 && width <= 0) return null
+
+    val maxDim = maxOf(height, width)
+    val minDim = minOf(height, width)
+    return when {
+        minDim >= 2160 || maxDim >= 3840 -> "4K"
+        minDim >= 1440 || maxDim >= 2560 -> "2K"
+        minDim >= 1080 || maxDim >= 1920 -> "1080p"
+        minDim >= 720 || maxDim >= 1280 -> "720p"
+        minDim >= 480 || maxDim >= 854 -> "480p"
+        minDim >= 360 || maxDim >= 640 -> "360p"
+        else -> "${height}p"
     }
 }
 
