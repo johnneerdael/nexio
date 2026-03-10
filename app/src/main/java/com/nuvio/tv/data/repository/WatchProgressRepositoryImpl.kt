@@ -10,7 +10,6 @@ import com.nuvio.tv.data.local.WatchProgressPreferences
 import com.nuvio.tv.data.local.WatchedItemsPreferences
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.WatchedItem
-import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +26,6 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
@@ -264,34 +262,23 @@ class WatchProgressRepositoryImpl @Inject constructor(
             }
     }
 
-    override fun getEpisodeProgress(
-        contentId: String,
-        season: Int,
-        episode: Int,
-        addonVideos: List<Video>
-    ): Flow<WatchProgress?> {
+    override fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
         return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
-                when {
-                    !isAuthenticated -> watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
-                    addonVideos.isEmpty() -> {
-                        traktProgressService.observeAllProgress().map { items ->
-                            items.firstOrNull {
-                                it.contentId == contentId && it.season == season && it.episode == episode
-                            }
+                if (isAuthenticated) {
+                    traktProgressService.observeAllProgress().map { items ->
+                        items.firstOrNull {
+                            it.contentId == contentId && it.season == season && it.episode == episode
                         }
                     }
-                    else -> getAllEpisodeProgress(contentId, addonVideos)
-                        .map { progressMap -> progressMap[season to episode] }
+                } else {
+                    watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
                 }
             }
     }
 
-    override fun getAllEpisodeProgress(
-        contentId: String,
-        addonVideos: List<Video>
-    ): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+    override fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
         return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
@@ -309,19 +296,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             merged[season to episode] = episodeProgress
                         }
                         merged
-                    }
-                        .mapLatest { progressMap ->
-                            if (addonVideos.isEmpty()) {
-                                progressMap
-                            } else {
-                                traktProgressService.remapEpisodeProgressToAddonKeys(
-                                    contentId = contentId,
-                                    addonEpisodes = addonVideos,
-                                    progressMap = progressMap
-                                )
-                            }
-                        }
-                        .distinctUntilChanged()
+                    }.distinctUntilChanged()
                 } else {
                     watchProgressPreferences.getAllEpisodeProgress(contentId)
                 }
