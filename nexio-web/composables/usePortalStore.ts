@@ -72,10 +72,15 @@ const SESSION_KEY = 'nexio.portal.session'
 let remoteSignature = ''
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let remoteBootstrapTimer: ReturnType<typeof setTimeout> | null = null
+let traktPollTimer: ReturnType<typeof setTimeout> | null = null
+let traktPollInFlight = false
+let realDebridPollTimer: ReturnType<typeof setTimeout> | null = null
+let realDebridPollInFlight = false
 let realtimeClient: SupabaseClient | null = null
 let realtimeChannel: RealtimeChannel | null = null
 let realtimeUserId = ''
 let realtimeToken = ''
+const REAL_DEBRID_POLL_INTERVAL_MS = 5000
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -96,6 +101,10 @@ function readLocalState(): Partial<StoreState> {
   } catch {
     return {}
   }
+}
+
+function isDemoModeForSession(session: PortalSession | null) {
+  return !session
 }
 
 function readSession(): PortalSession | null {
@@ -308,21 +317,23 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
 }
 
 function normalizeSnapshot(source: Partial<StoreState>): StoreState {
+  const session = source.session ?? readSession()
+
   return {
     bootstrapped: false,
     loading: false,
     saving: false,
-    demoMode: true,
+    demoMode: isDemoModeForSession(session),
     error: null,
     syncRevision: source.syncRevision ?? 1,
     lastSyncedAt: source.lastSyncedAt ?? new Date().toISOString(),
-    session: source.session ?? readSession(),
+    session,
     settings: sanitizeSettings(clone(source.settings ?? defaultSettings())),
     addons: clone(source.addons ?? defaultAccountAddons()).map((addon, index) => sanitizeAddonRecord(addon, index)),
     secretStatuses: clone(source.secretStatuses ?? []),
     secretDrafts: {},
     linkedDevices: clone(source.linkedDevices ?? []),
-    traktFlow: null,
+    traktFlow: clone(source.traktFlow ?? null),
     addonInspections: clone(source.addonInspections ?? {}),
     mdblistDiscovery: clone(source.mdblistDiscovery ?? {
       validating: false,
@@ -349,6 +360,20 @@ function accessToken(session: PortalSession | null): string | null {
 
 function secretKey(secretType: SecretType, secretRef: string) {
   return `${secretType}:${secretRef}`
+}
+
+function clearRealDebridPollTimer() {
+  if (realDebridPollTimer) {
+    clearTimeout(realDebridPollTimer)
+    realDebridPollTimer = null
+  }
+}
+
+function clearTraktPollTimer() {
+  if (traktPollTimer) {
+    clearTimeout(traktPollTimer)
+    traktPollTimer = null
+  }
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}, token?: string | null): Promise<T> {
@@ -705,7 +730,8 @@ export function usePortalStore() {
         stopRealtimeSubscription()
         state.value = {
           ...normalizeSnapshot(readLocalState()),
-          bootstrapped: true
+          bootstrapped: true,
+          demoMode: true
         }
         remoteSignature = snapshotSignature(state.value.settings, state.value.addons)
         await inspectAddons()
@@ -713,9 +739,10 @@ export function usePortalStore() {
       }
 
       const payload = await apiFetch<BootstrapPayload>('/api/account/bootstrap', {}, accessToken(session))
+      const resolvedSession = payload.session ?? session
       state.value.bootstrapped = true
-      state.value.demoMode = !payload.session
-      state.value.session = payload.session ?? session
+      state.value.session = resolvedSession
+      state.value.demoMode = isDemoModeForSession(resolvedSession)
       state.value.settings = sanitizeSettings(clone(payload.snapshot.settings))
       state.value.addons = clone(payload.snapshot.addons).map((addon, index) => sanitizeAddonRecord(addon, index))
       state.value.secretStatuses = clone(payload.snapshot.secretStatuses)
@@ -753,7 +780,7 @@ export function usePortalStore() {
       }
     } catch (error) {
       state.value.bootstrapped = true
-      state.value.demoMode = true
+      state.value.demoMode = isDemoModeForSession(state.value.session)
       state.value.error = error instanceof Error ? error.message : 'Failed to load portal state.'
     } finally {
       state.value.loading = false
@@ -816,6 +843,8 @@ export function usePortalStore() {
 
     state.value.session = null
     state.value.bootstrapped = false
+    clearTraktPollTimer()
+    clearRealDebridPollTimer()
     state.value.traktFlow = null
     state.value.addonInspections = {}
     state.value.secretDrafts = {}
@@ -1093,12 +1122,12 @@ export function usePortalStore() {
         body: JSON.stringify(payload)
       }, token)
 
-      state.value.demoMode = false
+      state.value.demoMode = isDemoModeForSession(state.value.session)
       state.value.syncRevision = response.syncRevision
       state.value.lastSyncedAt = response.lastSyncedAt
       remoteSignature = snapshotSignature(state.value.settings, state.value.addons)
     } catch (error) {
-      state.value.demoMode = true
+      state.value.demoMode = isDemoModeForSession(state.value.session)
       state.value.error = error instanceof Error ? error.message : 'Failed to sync to Nexio Live.'
       throw error
     } finally {
@@ -1330,6 +1359,36 @@ export function usePortalStore() {
     }, token)
     state.value.traktFlow = flow
     state.value.settings.integrations.traktAuth.pending = true
+    scheduleTraktAutoPoll(flow.interval * 1000)
+  }
+
+  function clearTraktPendingFlow() {
+    state.value.traktFlow = null
+    state.value.settings.integrations.traktAuth.pending = false
+  }
+
+  function scheduleTraktAutoPoll(delayMs?: number) {
+    clearTraktPollTimer()
+    if (!process.client || traktPollInFlight) {
+      return
+    }
+
+    const flow = state.value.traktFlow
+    if (!accessToken(state.value.session) || !state.value.settings.integrations.traktAuth.pending || !flow?.deviceCode) {
+      return
+    }
+
+    const expiresAt = new Date(flow.startedAt).getTime() + (flow.expiresIn * 1000)
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+      clearTraktPendingFlow()
+      return
+    }
+
+    const intervalMs = Math.max(1000, delayMs ?? flow.interval * 1000)
+    traktPollTimer = setTimeout(() => {
+      traktPollTimer = null
+      completeTraktDeviceFlow({ auto: true }).catch(() => undefined)
+    }, intervalMs)
   }
 
   async function startRealDebridDeviceFlow() {
@@ -1361,73 +1420,162 @@ export function usePortalStore() {
       verificationUrl: flow.verificationUrl,
       expiresAt: flow.expiresAt
     }
+    if (process.client && flow.verificationUrl) {
+      window.open(flow.verificationUrl, '_blank', 'noopener,noreferrer')
+    }
+    scheduleRealDebridAutoPoll()
   }
 
-  async function completeRealDebridDeviceFlow() {
+  function clearRealDebridPendingFlow() {
+    state.value.settings.integrations.debrid.realDebrid = {
+      connected: false,
+      username: '',
+      pending: false,
+      deviceCode: '',
+      userCode: '',
+      verificationUrl: '',
+      expiresAt: null
+    }
+  }
+
+  function scheduleRealDebridAutoPoll(delayMs = REAL_DEBRID_POLL_INTERVAL_MS) {
+    clearRealDebridPollTimer()
+    if (!process.client || realDebridPollInFlight) {
+      return
+    }
+
+    const auth = state.value.settings.integrations.debrid.realDebrid
+    if (!accessToken(state.value.session) || !auth.pending || !auth.deviceCode?.trim()) {
+      return
+    }
+
+    if (auth.expiresAt && auth.expiresAt <= Date.now()) {
+      clearRealDebridPendingFlow()
+      return
+    }
+
+    realDebridPollTimer = setTimeout(() => {
+      realDebridPollTimer = null
+      completeRealDebridDeviceFlow({ auto: true }).catch(() => undefined)
+    }, delayMs)
+  }
+
+  async function completeRealDebridDeviceFlow(options: { auto?: boolean } = {}) {
     const token = accessToken(state.value.session)
     if (!token) {
       throw new Error('Sign in before completing Real-Debrid authentication.')
     }
 
+    state.value.error = null
+    clearRealDebridPollTimer()
     const deviceCode = state.value.settings.integrations.debrid.realDebrid.deviceCode?.trim()
     if (!deviceCode) {
       return
     }
 
-    const response = await apiFetch<{
-      pending: boolean
-      approved: boolean
-      expired?: boolean
-      realDebridAuth?: PortalSettings['integrations']['debrid']['realDebrid']
-    }>('/api/integrations/realdebrid/device-token', {
-      method: 'POST',
-      body: JSON.stringify({ deviceCode })
-    }, token)
-
-    if (response.approved && response.realDebridAuth) {
-      state.value.settings.integrations.debrid.realDebrid = response.realDebridAuth
+    if (realDebridPollInFlight) {
       return
     }
 
-    if (response.expired) {
-      state.value.settings.integrations.debrid.realDebrid = {
-        connected: false,
-        username: '',
-        pending: false,
-        deviceCode: '',
-        userCode: '',
-        verificationUrl: '',
-        expiresAt: null
+    realDebridPollInFlight = true
+    let shouldRetry = false
+
+    try {
+      const response = await apiFetch<{
+        pending: boolean
+        approved: boolean
+        expired?: boolean
+        realDebridAuth?: PortalSettings['integrations']['debrid']['realDebrid']
+      }>('/api/integrations/realdebrid/device-token', {
+        method: 'POST',
+        body: JSON.stringify({ deviceCode })
+      }, token)
+
+      if (response.approved && response.realDebridAuth) {
+        clearRealDebridPollTimer()
+        state.value.settings.integrations.debrid.realDebrid = response.realDebridAuth
+        return
       }
-      return
+
+      if (response.expired) {
+        clearRealDebridPollTimer()
+        clearRealDebridPendingFlow()
+        return
+      }
+
+      state.value.settings.integrations.debrid.realDebrid.pending = response.pending
+      if (response.pending) {
+        scheduleRealDebridAutoPoll()
+      } else {
+        clearRealDebridPollTimer()
+      }
+    } catch (error) {
+      if (!options.auto) {
+        throw error
+      }
+      state.value.error = error instanceof Error ? error.message : 'Failed to check Real-Debrid approval.'
+      shouldRetry = true
+    } finally {
+      realDebridPollInFlight = false
     }
 
-    state.value.settings.integrations.debrid.realDebrid.pending = response.pending
+    if (shouldRetry) {
+      scheduleRealDebridAutoPoll()
+    }
   }
 
-  async function completeTraktDeviceFlow() {
+  async function completeTraktDeviceFlow(options: { auto?: boolean } = {}) {
     const deviceCode = state.value.traktFlow?.deviceCode
     if (!deviceCode) {
       return
     }
 
-    const response = await apiFetch<{
-      pending: boolean
-      approved: boolean
-      traktAuth?: PortalSettings['integrations']['traktAuth']
-    }>('/api/integrations/trakt/device-token', {
-      method: 'POST',
-      body: JSON.stringify({ deviceCode })
-    }, accessToken(state.value.session))
-
-    if (response.approved && response.traktAuth) {
-      state.value.settings.integrations.traktAuth = response.traktAuth
-      state.value.traktFlow = null
-      await refreshTraktPopularLists()
+    state.value.error = null
+    clearTraktPollTimer()
+    if (traktPollInFlight) {
       return
     }
 
-    state.value.settings.integrations.traktAuth.pending = response.pending
+    traktPollInFlight = true
+    let shouldRetry = false
+
+    try {
+      const response = await apiFetch<{
+        pending: boolean
+        approved: boolean
+        traktAuth?: PortalSettings['integrations']['traktAuth']
+      }>('/api/integrations/trakt/device-token', {
+        method: 'POST',
+        body: JSON.stringify({ deviceCode })
+      }, accessToken(state.value.session))
+
+      if (response.approved && response.traktAuth) {
+        clearTraktPollTimer()
+        state.value.settings.integrations.traktAuth = response.traktAuth
+        state.value.traktFlow = null
+        await refreshTraktPopularLists()
+        return
+      }
+
+      state.value.settings.integrations.traktAuth.pending = response.pending
+      if (response.pending) {
+        scheduleTraktAutoPoll()
+      } else {
+        clearTraktPendingFlow()
+      }
+    } catch (error) {
+      if (!options.auto) {
+        throw error
+      }
+      state.value.error = error instanceof Error ? error.message : 'Failed to check Trakt approval.'
+      shouldRetry = true
+    } finally {
+      traktPollInFlight = false
+    }
+
+    if (shouldRetry) {
+      scheduleTraktAutoPoll()
+    }
   }
 
   async function refreshTraktPopularLists() {
@@ -1471,6 +1619,7 @@ export function usePortalStore() {
   }
 
   function disconnectTrakt() {
+    clearTraktPollTimer()
     deleteSecret('trakt_access_token', secretRefs.trakt).catch(() => undefined)
     deleteSecret('trakt_refresh_token', secretRefs.trakt).catch(() => undefined)
     state.value.settings.integrations.traktAuth = {
@@ -1489,17 +1638,10 @@ export function usePortalStore() {
   }
 
   function disconnectRealDebrid() {
+    clearRealDebridPollTimer()
     deleteSecret('realdebrid_access_token', secretRefs.realDebrid).catch(() => undefined)
     deleteSecret('realdebrid_refresh_token', secretRefs.realDebrid).catch(() => undefined)
-    state.value.settings.integrations.debrid.realDebrid = {
-      connected: false,
-      username: '',
-      pending: false,
-      deviceCode: '',
-      userCode: '',
-      verificationUrl: '',
-      expiresAt: null
-    }
+    clearRealDebridPendingFlow()
   }
 
   if (process.client) {
@@ -1513,6 +1655,7 @@ export function usePortalStore() {
             addons: state.value.addons,
             secretStatuses: state.value.secretStatuses,
             linkedDevices: state.value.linkedDevices,
+            traktFlow: state.value.traktFlow,
             syncRevision: state.value.syncRevision,
             lastSyncedAt: state.value.lastSyncedAt,
             addonInspections: state.value.addonInspections,
@@ -1523,6 +1666,34 @@ export function usePortalStore() {
         writeSession(state.value.session)
       },
       { deep: true }
+    )
+
+    watch(
+      () => ({
+        signedIn: Boolean(state.value.session),
+        pending: state.value.settings.integrations.traktAuth.pending,
+        deviceCode: state.value.traktFlow?.deviceCode ?? '',
+        startedAt: state.value.traktFlow?.startedAt ?? '',
+        expiresIn: state.value.traktFlow?.expiresIn ?? 0
+      }),
+      ({ signedIn, pending, deviceCode, startedAt, expiresIn }) => {
+        if (!signedIn || !pending || !deviceCode) {
+          clearTraktPollTimer()
+          return
+        }
+
+        const expiresAt = new Date(startedAt).getTime() + (expiresIn * 1000)
+        if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+          clearTraktPollTimer()
+          clearTraktPendingFlow()
+          return
+        }
+
+        if (!traktPollTimer && !traktPollInFlight) {
+          scheduleTraktAutoPoll()
+        }
+      },
+      { immediate: true }
     )
 
     watch(
@@ -1545,6 +1716,32 @@ export function usePortalStore() {
         }, 500)
       },
       { deep: true }
+    )
+
+    watch(
+      () => ({
+        signedIn: Boolean(state.value.session),
+        pending: state.value.settings.integrations.debrid.realDebrid.pending,
+        deviceCode: state.value.settings.integrations.debrid.realDebrid.deviceCode,
+        expiresAt: state.value.settings.integrations.debrid.realDebrid.expiresAt
+      }),
+      ({ signedIn, pending, deviceCode, expiresAt }) => {
+        if (!signedIn || !pending || !deviceCode?.trim()) {
+          clearRealDebridPollTimer()
+          return
+        }
+
+        if (expiresAt && expiresAt <= Date.now()) {
+          clearRealDebridPollTimer()
+          clearRealDebridPendingFlow()
+          return
+        }
+
+        if (!realDebridPollTimer && !realDebridPollInFlight) {
+          scheduleRealDebridAutoPoll()
+        }
+      },
+      { immediate: true }
     )
   }
 

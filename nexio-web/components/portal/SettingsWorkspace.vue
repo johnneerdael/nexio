@@ -17,7 +17,7 @@
         </div>
         <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
           <button v-if="!settings.integrations.traktAuth.connected && !traktFlow" class="secondary-btn" @click="emit('start-trakt')">Start QR flow</button>
-          <button v-if="traktFlow" class="primary-btn" @click="emit('complete-trakt')">Check approval</button>
+          <button v-if="traktFlow" class="primary-btn" @click="emit('complete-trakt')">Check now</button>
           <button v-if="settings.integrations.traktAuth.connected" class="secondary-btn" @click="emit('refresh-trakt-lists')">Refresh lists</button>
           <button v-if="settings.integrations.traktAuth.connected" class="danger-btn" @click="emit('disconnect-trakt')">Disconnect</button>
         </div>
@@ -35,6 +35,7 @@
           <strong>Verification</strong>
           <p>{{ traktFlow.verificationUrl }}</p>
           <p>Code {{ traktFlow.userCode }}</p>
+          <p>Checking approval every {{ traktFlow.interval }} seconds.</p>
         </div>
       </div>
 
@@ -132,7 +133,7 @@
           <div class="integration-header">
             <div>
               <label>Real-Debrid</label>
-              <p>Start device activation here or continue a flow that was started on a synced TV.</p>
+              <p>Uses Real-Debrid device auth. The portal prefers the server-side client secret flow and falls back to the open-source credentials flow when needed.</p>
             </div>
             <span :class="props.settings.integrations.debrid.realDebrid.connected ? 'toggle-chip active' : props.settings.integrations.debrid.realDebrid.pending ? 'toggle-chip active' : 'toggle-chip'">
               {{
@@ -157,7 +158,7 @@
               class="primary-btn"
               @click="emit('complete-realdebrid')"
             >
-              Check approval
+              Check now
             </button>
             <button
               v-if="props.settings.integrations.debrid.realDebrid.connected"
@@ -173,6 +174,7 @@
           <template v-else-if="props.settings.integrations.debrid.realDebrid.pending">
             <p>{{ props.settings.integrations.debrid.realDebrid.verificationUrl || 'https://real-debrid.com/device' }}</p>
             <p>Code {{ props.settings.integrations.debrid.realDebrid.userCode }}</p>
+            <p>Checking approval every 5 seconds.</p>
           </template>
           <p v-else-if="secretStatuses['integration:realdebrid']?.maskedPreview">
             {{ secretStatuses['integration:realdebrid']?.maskedPreview }}

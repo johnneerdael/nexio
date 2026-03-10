@@ -83,7 +83,7 @@ class RealDebridAuthDataStore @Inject constructor(
         context.realDebridAuthDataStore.edit { prefs ->
             prefs[deviceCodeKey] = data.deviceCode
             prefs[userCodeKey] = data.userCode
-            prefs[verificationUrlKey] = data.verificationUrl
+            prefs[verificationUrlKey] = data.directVerificationUrl ?: data.verificationUrl
             prefs[expiresAtKey] = now + (data.expiresIn * 1000L)
         }
     }

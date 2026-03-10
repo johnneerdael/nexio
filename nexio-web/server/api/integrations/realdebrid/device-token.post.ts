@@ -23,6 +23,11 @@ type UserResponse = {
 }
 
 const REAL_DEBRID_DEVICE_GRANT_TYPE = 'http://oauth.net/grant_type/device/1.0'
+const REAL_DEBRID_PENDING_STATUSES = [400, 403, 404]
+
+function compactErrorMessage(input: string) {
+  return input.replace(/\s+/g, ' ').trim().slice(0, 240) || 'No response body.'
+}
 
 export default defineEventHandler(async (event) => {
   bearerToken(event)
@@ -35,26 +40,47 @@ export default defineEventHandler(async (event) => {
 
   const config = useRuntimeConfig()
   const clientId = String(config.realDebridClientId || '').trim()
+  const clientSecret = String(config.realDebridClientSecret || '').trim()
   if (!clientId) {
     throw createError({ statusCode: 503, statusMessage: 'REAL_DEBRID_CLIENT_ID is not configured.' })
   }
 
-  const credentialResponse = await fetch(
-    `https://api.real-debrid.com/oauth/v2/device/credentials?client_id=${encodeURIComponent(clientId)}&code=${encodeURIComponent(deviceCode)}`
-  )
+  let userClientId = clientId
+  let userClientSecret = clientSecret
 
-  if (!credentialResponse.ok) {
-    return okJson({
-      status: credentialResponse.status,
-      pending: [400, 403, 404].includes(credentialResponse.status),
-      approved: false,
-      expired: credentialResponse.status === 410
-    })
-  }
+  if (!clientSecret) {
+    const credentialResponse = await fetch(
+      `https://api.real-debrid.com/oauth/v2/device/credentials?client_id=${encodeURIComponent(clientId)}&code=${encodeURIComponent(deviceCode)}`
+    )
 
-  const credentials = await credentialResponse.json() as DeviceCredentialsResponse
-  if (!credentials.client_id || !credentials.client_secret) {
-    throw createError({ statusCode: 502, statusMessage: 'Real-Debrid approval is missing client credentials.' })
+    if (!credentialResponse.ok) {
+      if (!REAL_DEBRID_PENDING_STATUSES.includes(credentialResponse.status) && credentialResponse.status !== 410) {
+        throw createError({
+          statusCode: 502,
+          statusMessage: `Real-Debrid credential check failed (${credentialResponse.status}): ${compactErrorMessage(await credentialResponse.text())}`
+        })
+      }
+
+      return okJson({
+        status: credentialResponse.status,
+        pending: REAL_DEBRID_PENDING_STATUSES.includes(credentialResponse.status),
+        approved: false,
+        expired: credentialResponse.status === 410
+      })
+    }
+
+    const credentials = await credentialResponse.json() as DeviceCredentialsResponse
+    if (!credentials.client_id?.trim() || !credentials.client_secret?.trim()) {
+      return okJson({
+        status: 200,
+        pending: true,
+        approved: false,
+        expired: false
+      })
+    }
+
+    userClientId = credentials.client_id
+    userClientSecret = credentials.client_secret
   }
 
   const tokenResponse = await fetch('https://api.real-debrid.com/oauth/v2/token', {
@@ -63,17 +89,24 @@ export default defineEventHandler(async (event) => {
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: new URLSearchParams({
-      client_id: credentials.client_id,
-      client_secret: credentials.client_secret,
+      client_id: userClientId,
+      client_secret: userClientSecret,
       code: deviceCode,
       grant_type: REAL_DEBRID_DEVICE_GRANT_TYPE
     })
   })
 
   if (!tokenResponse.ok) {
+    if (!REAL_DEBRID_PENDING_STATUSES.includes(tokenResponse.status) && tokenResponse.status !== 410) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: `Real-Debrid token exchange failed (${tokenResponse.status}): ${compactErrorMessage(await tokenResponse.text())}`
+      })
+    }
+
     return okJson({
       status: tokenResponse.status,
-      pending: [400, 403, 404].includes(tokenResponse.status),
+      pending: REAL_DEBRID_PENDING_STATUSES.includes(tokenResponse.status),
       approved: false,
       expired: tokenResponse.status === 410
     })
@@ -102,8 +135,8 @@ export default defineEventHandler(async (event) => {
         accessToken: tokenPayload.access_token,
         tokenType: tokenPayload.token_type,
         expiresIn: tokenPayload.expires_in,
-        userClientId: credentials.client_id,
-        userClientSecret: credentials.client_secret
+        userClientId,
+        userClientSecret
       },
       p_masked_preview: `Connected ••••${tokenPayload.access_token.slice(-4)}`,
       p_status: 'configured',
