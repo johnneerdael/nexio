@@ -169,7 +169,7 @@
     <string name="settings_account_subtitle">Status da conta e sincronização.</string>
     <string name="settings_profiles">Perfis</string>
     <string name="settings_profiles_subtitle">Gerenciar perfis de usuário.</string>
-    <string name="settings_layout">Aparência</string>
+    <string name="settings_layout">Layout</string>
     <string name="settings_layout_subtitle">Estrutura da home e estilo dos pôsteres.</string>
     <string name="settings_plugins">Plugins</string>
     <string name="settings_plugins_subtitle">Repositórios e provedores.</string>
