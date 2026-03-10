@@ -736,6 +736,8 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 )
             }
 
+            val timeoutSeconds = playerSettings.streamAutoPlayTimeoutSeconds
+
             val innerJob = scope.launch {
                 streamRepository.getStreamsFromAllAddons(
                     type = type,
@@ -755,23 +757,29 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                         NetworkResult.Loading -> Unit
                     }
                 }
-                // All addons finished
                 if (!autoSelectTriggered) {
                     autoSelectTriggered = true
                     lastSuccessData?.let { selectedStream = trySelectStream(it) }
                 }
             }
 
-            val timeoutMs = playerSettings.streamAutoPlayTimeoutSeconds * 1_000L
-            if (timeoutMs > 0L && playerSettings.streamAutoPlayTimeoutSeconds < 11) {
+            val timeoutMs = timeoutSeconds * 1_000L
+            if (timeoutMs > 0L && timeoutSeconds < 11) {
                 delay(timeoutMs)
+                timeoutElapsed = true
+                if (!autoSelectTriggered && lastSuccessData != null) {
+                    autoSelectTriggered = true
+                    selectedStream = trySelectStream(lastSuccessData!!)
+                }
+                if (selectedStream != null) {
+                    innerJob.cancel()
+                } else {
+                    innerJob.join()
+                }
+            } else {
+                timeoutElapsed = true  // instant: select on first Success
+                innerJob.join()
             }
-            timeoutElapsed = true
-            if (!autoSelectTriggered && lastSuccessData != null) {
-                autoSelectTriggered = true
-                selectedStream = trySelectStream(lastSuccessData!!)
-            }
-            innerJob.join()
 
             val streamToPlay = selectedStream
             if (streamToPlay != null) {
