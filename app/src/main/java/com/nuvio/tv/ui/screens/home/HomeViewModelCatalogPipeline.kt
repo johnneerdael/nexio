@@ -111,9 +111,6 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     externalMetaPrefetchInFlightIds.clear()
     externalMetaPrefetchJob?.cancel()
     pendingExternalMetaPrefetchItemId = null
-    prefetchedTmdbIds.clear()
-    tmdbEnrichFocusJob?.cancel()
-    pendingTmdbEnrichItemId = null
     lastHeroEnrichmentSignature = null
     lastHeroEnrichedItems = emptyList()
 

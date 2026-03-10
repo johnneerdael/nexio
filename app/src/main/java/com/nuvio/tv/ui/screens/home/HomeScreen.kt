@@ -385,7 +385,6 @@ private fun ModernHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
-    val enrichingItemId by viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val requestTrailerPreview = remember(viewModel) {
         { itemId: String, title: String, releaseInfo: String?, apiType: String ->
             viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType)
@@ -406,15 +405,9 @@ private fun ModernHomeRoute(
             viewModel.saveFocusState(vi, vo, ri, ii, m)
         }
     }
-    val preloadAdjacentItem = remember(viewModel) {
-        { item: MetaPreview ->
-            viewModel.preloadAdjacentItem(item)
-        }
-    }
     ModernHomeContent(
         uiState = uiState,
         focusState = focusState,
-        enrichingItemId = enrichingItemId,
         trailerPreviewUrls = viewModel.trailerPreviewUrls,
         trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         onNavigateToDetail = onNavigateToDetail,
@@ -430,7 +423,6 @@ private fun ModernHomeRoute(
         onItemFocus = { item ->
             viewModel.onItemFocus(item)
         },
-        onPreloadAdjacentItem = preloadAdjacentItem,
         onSaveFocusState = saveModernFocusState
     )
 }

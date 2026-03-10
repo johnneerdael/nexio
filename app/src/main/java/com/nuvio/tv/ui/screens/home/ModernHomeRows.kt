@@ -128,7 +128,6 @@ private fun ModernCatalogRowItem(
     isWatched: Boolean,
     onFocused: () -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
-    onPreloadAdjacentItem: () -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLongPress: () -> Unit,
@@ -178,7 +177,6 @@ private fun ModernCatalogRowItem(
         onFocused = {
             onFocused()
             item.metaPreview?.let { onItemFocus(it) }
-            onPreloadAdjacentItem()
             onCatalogSelectionFocused(
                 FocusedCatalogSelection(
                     focusKey = focusKey,
@@ -231,7 +229,6 @@ internal fun ModernRowSection(
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
-    onPreloadAdjacentItem: (MetaPreview) -> Unit,
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
@@ -428,7 +425,6 @@ internal fun ModernRowSection(
                         }
 
                         is ModernPayload.Catalog -> {
-                            val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
                             ModernCatalogRowItem(
                                 item = item,
                                 payload = payload,
@@ -448,9 +444,6 @@ internal fun ModernRowSection(
                                 isWatched = item.metaPreview?.let(isCatalogItemWatched) == true,
                                 onFocused = onFocused,
                                 onItemFocus = onItemFocus,
-                                onPreloadAdjacentItem = {
-                                    nextCatalogItem?.let(onPreloadAdjacentItem)
-                                },
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onLongPress = {
@@ -548,7 +541,7 @@ private fun ModernCarouselCard(
         item.heroPreview.logo?.let {
             ImageRequest.Builder(context)
                 .data(it)
-                .crossfade(true)
+                .crossfade(false)
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }

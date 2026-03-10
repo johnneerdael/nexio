@@ -85,10 +85,6 @@ class HomeViewModel @Inject constructor(
     internal val _loadingCatalogs = MutableStateFlow<Set<String>>(emptySet())
     val loadingCatalogs: StateFlow<Set<String>> = _loadingCatalogs.asStateFlow()
 
-    internal val _enrichingItemId = MutableStateFlow<String?>(null)
-    val enrichingItemId: StateFlow<String?> = _enrichingItemId.asStateFlow()
-    internal fun setEnrichingItemId(id: String?) { _enrichingItemId.value = id }
-
     internal val catalogsMap = linkedMapOf<String, CatalogRow>()
     internal val catalogOrder = mutableListOf<String>()
     internal var addonsCache: List<Addon> = emptyList()
@@ -122,11 +118,6 @@ class HomeViewModel @Inject constructor(
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var externalMetaPrefetchJob: Job? = null
     internal var pendingExternalMetaPrefetchItemId: String? = null
-    internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
-    internal var tmdbEnrichFocusJob: Job? = null
-    internal var pendingTmdbEnrichItemId: String? = null
-    internal var adjacentItemPrefetchJob: Job? = null
-    internal var pendingAdjacentPrefetchItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var movieWatchedBatchJob: Job? = null
@@ -178,8 +169,6 @@ class HomeViewModel @Inject constructor(
     )
 
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
-
-    fun preloadAdjacentItem(item: MetaPreview) = preloadAdjacentItemPipeline(item)
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 
