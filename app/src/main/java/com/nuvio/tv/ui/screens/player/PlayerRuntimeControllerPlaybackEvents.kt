@@ -307,18 +307,20 @@ internal fun PlayerRuntimeController.hideSubtitleDelayOverlay() {
 }
 
 internal fun PlayerRuntimeController.adjustSubtitleDelay(deltaMs: Int) {
-    val currentDelayMs = _uiState.value.subtitleDelayMs
+    val currentState = _uiState.value
+    val currentDelayMs = currentState.subtitleDelayMs
     val newDelayMs = (currentDelayMs + deltaMs).coerceIn(
         minimumValue = SUBTITLE_DELAY_MIN_MS,
         maximumValue = SUBTITLE_DELAY_MAX_MS
     )
+    val keepInlineInSubtitleOverlay = currentState.showSubtitleOverlay
 
     subtitleDelayUs.set(newDelayMs.toLong() * 1000L)
     _uiState.update {
         it.copy(
             subtitleDelayMs = newDelayMs,
-            showControls = false,
-            showSubtitleDelayOverlay = true
+            showControls = if (keepInlineInSubtitleOverlay) it.showControls else false,
+            showSubtitleDelayOverlay = if (keepInlineInSubtitleOverlay) false else true
         )
     }
 
@@ -328,7 +330,12 @@ internal fun PlayerRuntimeController.adjustSubtitleDelay(deltaMs: Int) {
             .build()
     }
     
-    scheduleHideSubtitleDelayOverlay()
+    if (keepInlineInSubtitleOverlay) {
+        hideSubtitleDelayOverlayJob?.cancel()
+        hideSubtitleDelayOverlayJob = null
+    } else {
+        scheduleHideSubtitleDelayOverlay()
+    }
 }
 
 internal fun PlayerRuntimeController.scheduleHideSubtitleDelayOverlay() {

@@ -140,8 +140,8 @@ private fun AudioTrackCard(
                 if (it.isFocused) onFocused()
             },
         colors = CardDefaults.colors(
-            containerColor = if (isSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent,
-            focusedContainerColor = if (isSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent
+            containerColor = if (isSelected) NuvioColors.Secondary else Color.Transparent,
+            focusedContainerColor = if (isSelected) NuvioColors.Secondary else Color.Transparent
         ),
         shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
         border = CardDefaults.border(
@@ -156,6 +156,18 @@ private fun AudioTrackCard(
         ),
         scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
     ) {
+        val primaryTextColor = if (isSelected) NuvioColors.OnSecondary else Color.White
+        val secondaryTextColor = if (isSelected) {
+            NuvioColors.OnSecondary.copy(alpha = 0.82f)
+        } else {
+            Color.White.copy(alpha = 0.72f)
+        }
+        val metadataTextColor = if (isSelected) {
+            NuvioColors.OnSecondary.copy(alpha = 0.72f)
+        } else {
+            NuvioColors.TextTertiary
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,20 +182,20 @@ private fun AudioTrackCard(
                 Text(
                     text = track.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
+                    color = primaryTextColor
                 )
                 if (!track.language.isNullOrBlank()) {
                     Text(
                         text = languageCodeToName(track.language),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.72f)
+                        color = secondaryTextColor
                     )
                 }
                 if (metadata.isNotBlank()) {
                     Text(
                         text = metadata,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextTertiary
+                        color = metadataTextColor
                     )
                 }
             }
@@ -192,7 +204,7 @@ private fun AudioTrackCard(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
-                    tint = NuvioColors.Secondary
+                    tint = NuvioColors.OnSecondary
                 )
             }
         }

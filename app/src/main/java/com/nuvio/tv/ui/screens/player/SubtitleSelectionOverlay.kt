@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.res.stringResource
 import androidx.tv.material3.Card
 import androidx.tv.material3.Border
@@ -160,9 +161,7 @@ internal fun SubtitleSelectionOverlay(
     ) {
         LaunchedEffect(visible, initialLanguageKey) {
             if (visible) {
-                if (languageItems.none { it.key == selectedLanguageKey }) {
-                    selectedLanguageKey = initialLanguageKey
-                }
+                selectedLanguageKey = initialLanguageKey
                 languageRailFocusRequester.requestFocusAfterFrames()
             }
         }
@@ -468,6 +467,7 @@ private fun SubtitleStyleRail(
                         value = formatSubtitleDelay(subtitleDelayMs),
                         onDecrease = { onEvent(PlayerEvent.OnAdjustSubtitleDelay(-SUBTITLE_DELAY_STEP_MS)) },
                         onIncrease = { onEvent(PlayerEvent.OnAdjustSubtitleDelay(SUBTITLE_DELAY_STEP_MS)) },
+                        valueWidth = 108.dp,
                         rowLeftFocusRequester = railLeftFocusRequester,
                         decrementFocusRequester = focusRequesters[StyleFocusKey.DelayDecrease],
                         incrementFocusRequester = focusRequesters[StyleFocusKey.DelayIncrease],
@@ -528,6 +528,8 @@ private fun SubtitleLanguageCard(
     rightFocusRequester: FocusRequester,
     onFocused: () -> Unit
 ) {
+    val textColor = if (isSelected) NuvioColors.OnSecondary else Color.White
+
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -552,7 +554,7 @@ private fun SubtitleLanguageCard(
             Text(
                 text = item.label,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White
+                color = textColor
             )
             if (item.count > 0) {
                 CountBadge(count = item.count, selected = isSelected)
@@ -570,6 +572,13 @@ private fun SubtitleOptionCard(
     onFocused: () -> Unit,
     onClick: () -> Unit
 ) {
+    val titleColor = if (item.isSelected) NuvioColors.OnSecondary else Color.White
+    val metaColor = if (item.isSelected) {
+        NuvioColors.OnSecondary.copy(alpha = 0.72f)
+    } else {
+        NuvioColors.TextTertiary
+    }
+
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -598,17 +607,17 @@ private fun SubtitleOptionCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                SourceChip(label = item.sourceLabel)
+                SourceChip(label = item.sourceLabel, selected = item.isSelected)
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White
+                    color = titleColor
                 )
                 if (!item.meta.isNullOrBlank()) {
                     Text(
                         text = item.meta,
                         style = MaterialTheme.typography.bodySmall,
-                        color = NuvioColors.TextTertiary
+                        color = metaColor
                     )
                 }
             }
@@ -616,7 +625,7 @@ private fun SubtitleOptionCard(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
-                    tint = NuvioColors.Secondary
+                    tint = NuvioColors.OnSecondary
                 )
             }
         }
@@ -631,7 +640,11 @@ private fun CountBadge(
     Box(
         modifier = Modifier
             .background(
-                color = if (selected) Color.White.copy(alpha = 0.14f) else NuvioColors.Secondary.copy(alpha = 0.85f),
+                color = if (selected) {
+                    Color.White.copy(alpha = 0.18f)
+                } else {
+                    NuvioColors.Secondary.copy(alpha = 0.85f)
+                },
                 shape = RoundedCornerShape(999.dp)
             )
             .padding(horizontal = 8.dp, vertical = 3.dp)
@@ -639,22 +652,44 @@ private fun CountBadge(
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) Color.White else NuvioColors.OnSecondary
+            color = if (selected) NuvioColors.OnSecondary else NuvioColors.OnSecondary
         )
     }
 }
 
 @Composable
-private fun SourceChip(label: String) {
+private fun SourceChip(label: String, selected: Boolean = false) {
     Box(
         modifier = Modifier
-            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
+            .background(
+                if (selected) {
+                    NuvioColors.OnSecondary.copy(alpha = 0.14f)
+                } else {
+                    Color.White.copy(alpha = 0.08f)
+                },
+                RoundedCornerShape(999.dp)
+            )
+            .then(
+                if (selected) {
+                    Modifier.border(
+                        width = 1.dp,
+                        color = NuvioColors.OnSecondary.copy(alpha = 0.22f),
+                        shape = RoundedCornerShape(999.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.78f)
+            color = if (selected) {
+                NuvioColors.OnSecondary.copy(alpha = 0.9f)
+            } else {
+                Color.White.copy(alpha = 0.78f)
+            }
         )
     }
 }
@@ -716,6 +751,7 @@ private fun StepperRow(
     value: String,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
+    valueWidth: Dp = 84.dp,
     rowLeftFocusRequester: FocusRequester? = null,
     decrementFocusRequester: FocusRequester? = null,
     incrementFocusRequester: FocusRequester? = null,
@@ -737,8 +773,10 @@ private fun StepperRow(
         )
         Box(
             modifier = Modifier
+                .width(valueWidth)
                 .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
         ) {
             Text(
                 text = value,
@@ -765,6 +803,8 @@ private fun StepperButton(
     focusKey: String? = null,
     onFocused: ((String) -> Unit)? = null
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+
     IconButton(
         onClick = onClick,
         modifier = Modifier
@@ -777,7 +817,15 @@ private fun StepperButton(
                     Modifier
                 }
             )
+            .then(
+                if (isFocused) {
+                    Modifier.border(2.dp, NuvioColors.FocusRing, RoundedCornerShape(12.dp))
+                } else {
+                    Modifier
+                }
+            )
             .onFocusChanged {
+                isFocused = it.isFocused
                 if (it.isFocused && focusKey != null) {
                     onFocused?.invoke(focusKey)
                 }
@@ -924,8 +972,8 @@ private fun ColorChip(
 
 @Composable
 private fun overlayCardColors(selected: Boolean) = CardDefaults.colors(
-    containerColor = if (selected) Color.White.copy(alpha = 0.11f) else Color.Transparent,
-    focusedContainerColor = if (selected) Color.White.copy(alpha = 0.11f) else Color.Transparent
+    containerColor = if (selected) NuvioColors.Secondary else Color.Transparent,
+    focusedContainerColor = if (selected) NuvioColors.Secondary else Color.Transparent
 )
 
 @Composable
@@ -1098,7 +1146,12 @@ private fun selectedSubtitleLanguageKey(
     val selectedAddonKey = selectedAddonSubtitle?.let { normalizeOverlayLanguageKey(it.lang) }
     if (selectedAddonKey != null) return selectedAddonKey
 
-    val selectedInternalKey = internalTracks.getOrNull(selectedInternalIndex)?.language
+    val selectedInternalKey = internalTracks
+        .firstOrNull { it.index == selectedInternalIndex }
+        ?.language
+        ?.let(::normalizeOverlayLanguageKey)
+        ?: internalTracks.firstOrNull { it.isSelected }
+            ?.language
         ?.let(::normalizeOverlayLanguageKey)
     if (selectedInternalKey != null) return selectedInternalKey
 
