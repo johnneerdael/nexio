@@ -146,8 +146,21 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
 }
 
 internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueWatchingItem) {
+    if (item is ContinueWatchingItem.NextUp) {
+        val targetId = nextUpDismissKey(item.info.contentId)
+        _uiState.update { state ->
+            state.copy(
+                continueWatchingItems = state.continueWatchingItems.filterNot { current ->
+                    current is ContinueWatchingItem.NextUp &&
+                        nextUpDismissKey(current.info.contentId) == targetId
+                }
+            )
+        }
+        continueWatchingSnapshotService.removeShowOptimistically(targetId)
+    }
+
     viewModelScope.launch {
-        runCatching {
+        try {
             val now = System.currentTimeMillis()
             val progress = when (item) {
                 is ContinueWatchingItem.InProgress -> item.progress
@@ -169,8 +182,14 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
                 )
             }
             watchProgressRepository.markAsCompleted(progress)
-        }.onFailure { error ->
+        } catch (error: Throwable) {
             Log.w(HomeViewModel.TAG, "Failed to mark continue-watching item as watched", error)
+        } finally {
+            runCatching {
+                continueWatchingSnapshotService.ensureFresh(force = true)
+            }.onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed to refresh continue-watching snapshot after mark watched", error)
+            }
         }
     }
 }
