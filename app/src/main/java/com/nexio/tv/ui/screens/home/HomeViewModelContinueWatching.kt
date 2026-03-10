@@ -108,20 +108,26 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
     isNextUp: Boolean = false
 ) {
     if (isNextUp) {
-        val dismissKey = nextUpDismissKey(contentId)
+        val targetId = nextUpDismissKey(contentId)
         _uiState.update { state ->
             state.copy(
                 continueWatchingItems = state.continueWatchingItems.filterNot { item ->
                     when (item) {
                         is ContinueWatchingItem.NextUp ->
-                            nextUpDismissKey(item.info.contentId) == dismissKey
+                            nextUpDismissKey(item.info.contentId) == targetId
                         is ContinueWatchingItem.InProgress -> false
                     }
                 }
             )
         }
+        continueWatchingSnapshotService.removeShowOptimistically(targetId)
         viewModelScope.launch {
-            traktSettingsDataStore.addDismissedNextUpKey(dismissKey)
+            runCatching {
+                watchProgressRepository.clearShowProgress(targetId)
+                continueWatchingSnapshotService.ensureFresh(force = true)
+            }.onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed to clear show progress for $targetId", error)
+            }
         }
         return
     }
@@ -135,6 +141,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
             season = null,
             episode = null
         )
+        continueWatchingSnapshotService.ensureFresh(force = true)
     }
 }
 
