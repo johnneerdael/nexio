@@ -298,6 +298,14 @@ class WatchProgressRepositoryImpl @Inject constructor(
         watchProgressPreferences.removeProgress(contentId, season, episode)
     }
 
+    override suspend fun clearShowProgress(contentId: String) {
+        if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
+            return
+        }
+        traktProgressService.clearShowProgress(contentId)
+        watchProgressPreferences.removeProgress(contentId, null, null)
+    }
+
     override suspend fun markAsCompleted(progress: WatchProgress) {
         if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             return

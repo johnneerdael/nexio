@@ -342,6 +342,10 @@ class TraktProgressService @Inject constructor(
             .distinctUntilChanged()
     }
 
+    fun observeRemoteSnapshotLoaded(): Flow<Boolean> {
+        return hasLoadedRemoteProgress
+    }
+
     fun observeMyShowsCalendar(): Flow<List<CalendarShowEntry>> {
         return combine(
             myShowsCalendar,
@@ -476,6 +480,51 @@ class TraktProgressService @Inject constructor(
             }
 
         Log.d(TAG, "removeProgress refreshNow contentId=$contentId")
+        refreshNow()
+    }
+
+    suspend fun clearShowProgress(contentId: String) {
+        val parsed = parseContentIds(contentId)
+        val ids = toTraktIds(parsed)
+        val canonicalId = normalizeContentId(ids = ids, fallback = contentId.trim())
+        if (canonicalId.isBlank()) return
+
+        applyOptimisticRemoval(contentId = canonicalId, season = null, episode = null)
+
+        val playbackEpisodes = getPlayback("episodes", force = true)
+        playbackEpisodes
+            .filter { normalizeContentId(it.show?.ids) == canonicalId }
+            .forEach { item ->
+                item.id?.let { playbackId ->
+                    traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+                        traktApi.deletePlayback(authHeader, playbackId)
+                    }
+                }
+            }
+
+        if (ids.hasAnyId()) {
+            val removeBody = TraktHistoryRemoveRequestDto(
+                shows = listOf(
+                    TraktHistoryShowRemoveDto(ids = ids)
+                )
+            )
+            traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+                traktApi.removeHistory(authHeader, removeBody)
+            }
+        }
+
+        remoteProgress.update { items ->
+            items.filterNot {
+                it.contentId == canonicalId && (
+                    it.contentType.equals("series", ignoreCase = true) ||
+                        it.contentType.equals("tv", ignoreCase = true)
+                    )
+            }
+        }
+        myShowsCalendar.update { items ->
+            items.filterNot { it.contentId == canonicalId }
+        }
+        invalidateEpisodeProgressCache(canonicalId)
         refreshNow()
     }
 

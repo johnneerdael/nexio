@@ -55,6 +55,11 @@ interface WatchProgressRepository {
     suspend fun removeFromHistory(contentId: String, season: Int? = null, episode: Int? = null)
 
     /**
+     * Clear all watched/progress data for a full show.
+     */
+    suspend fun clearShowProgress(contentId: String)
+
+    /**
      * Mark content as completed
      */
     suspend fun markAsCompleted(progress: WatchProgress)

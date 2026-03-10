@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,11 +45,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val refreshMutex = Mutex()
     private var lastRefreshRequestMs = 0L
     private val minRefreshIntervalMs = 30_000L
+    @Volatile
+    private var hasSeenAuthenticatedSession = false
 
     init {
         snapshotStore.read()?.let { persisted ->
-            rawSnapshotState.value = persisted
-            snapshotState.value = persisted
+            val normalized = sanitizeSnapshot(persisted)
+            rawSnapshotState.value = normalized
+            snapshotState.value = normalized
+            lastRefreshRequestMs = normalized.updatedAtMs
         }
 
         scope.launch {
@@ -79,18 +82,28 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 .distinctUntilChanged()
                 .flatMapLatest { isAuthenticated ->
                     if (!isAuthenticated) {
-                        rawSnapshotState.value = ContinueWatchingSnapshot()
-                        snapshotStore.clear()
+                        if (hasSeenAuthenticatedSession) {
+                            rawSnapshotState.value = ContinueWatchingSnapshot()
+                            snapshotStore.clear()
+                            lastRefreshRequestMs = 0L
+                        }
+                        hasSeenAuthenticatedSession = false
                         flowOf<ContinueWatchingSnapshot?>(null)
                     } else {
+                        hasSeenAuthenticatedSession = true
                         combine(
+                            traktProgressService.observeRemoteSnapshotLoaded(),
                             watchProgressRepository.allProgress,
                             traktProgressService.observeMyShowsCalendar()
-                        ) { allProgress, calendarEntries ->
-                            buildRawSnapshot(
-                                allProgress = allProgress,
-                                calendarEntries = calendarEntries
-                            )
+                        ) { hasLoadedRemoteSnapshot, allProgress, calendarEntries ->
+                            if (!hasLoadedRemoteSnapshot) {
+                                null
+                            } else {
+                                buildRawSnapshot(
+                                    allProgress = allProgress,
+                                    calendarEntries = calendarEntries
+                                )
+                            }
                         }
                     }
                 }
@@ -131,6 +144,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
+    fun removeShowOptimistically(contentId: String) {
+        val target = contentId.trim()
+        if (target.isBlank()) return
+        val updated = rawSnapshotState.value.copy(
+            nextUpItems = rawSnapshotState.value.nextUpItems.filterNot { it.contentId == target },
+            updatedAtMs = System.currentTimeMillis()
+        )
+        persistRawSnapshot(updated)
+    }
+
     private fun buildRawSnapshot(
         allProgress: List<WatchProgress>,
         calendarEntries: List<TraktProgressService.CalendarShowEntry>
@@ -139,12 +162,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .asSequence()
             .filter { it.contentType.equals("movie", ignoreCase = true) }
             .filter { shouldTreatAsMovieResumeForContinueWatching(it) }
+            .filter { it.contentId.isNotBlank() && it.videoId.isNotBlank() }
             .sortedByDescending { it.lastWatched }
+            .toList()
+        val nextUpItems = calendarEntries
+            .asSequence()
+            .mapNotNull(::normalizeNextUpEntry)
+            .sortedByDescending { it.firstAiredMs }
+            .distinctBy { it.contentId }
             .toList()
 
         return ContinueWatchingSnapshot(
             movieProgressItems = movieItems,
-            nextUpItems = calendarEntries.sortedByDescending { it.firstAiredMs },
+            nextUpItems = nextUpItems,
             updatedAtMs = System.currentTimeMillis()
         )
     }
@@ -156,8 +186,53 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return progress.position > 0L || progress.progressPercent?.let { it > 0f } == true
     }
 
+    private fun sanitizeSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
+        val movieItems = snapshot.movieProgressItems.filter { progress ->
+            runCatching {
+                progress.contentId.isNotBlank() &&
+                    progress.videoId.isNotBlank() &&
+                    shouldTreatAsMovieResumeForContinueWatching(progress)
+            }.getOrDefault(false)
+        }
+        val nextUpItems = snapshot.nextUpItems
+            .mapNotNull(::normalizeNextUpEntry)
+            .sortedByDescending { it.firstAiredMs }
+            .distinctBy { it.contentId }
+        val updatedAtMs = if (snapshot.updatedAtMs > 0L) snapshot.updatedAtMs else System.currentTimeMillis()
+        return ContinueWatchingSnapshot(
+            movieProgressItems = movieItems,
+            nextUpItems = nextUpItems,
+            updatedAtMs = updatedAtMs
+        )
+    }
+
+    private fun normalizeNextUpEntry(
+        entry: TraktProgressService.CalendarShowEntry
+    ): TraktProgressService.CalendarShowEntry? {
+        return try {
+            val contentId = entry.contentId.trim()
+            if (contentId.isBlank()) return null
+            val season = entry.season.takeIf { it > 0 } ?: return null
+            val episode = entry.episode.takeIf { it > 0 } ?: return null
+            entry.copy(
+                contentId = contentId,
+                contentType = entry.contentType.takeIf { it.isNotBlank() } ?: "series",
+                name = entry.name.takeIf { it.isNotBlank() } ?: contentId,
+                videoId = entry.videoId.takeIf { it.isNotBlank() } ?: "$contentId:$season:$episode"
+            )
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun persistRawSnapshot(snapshot: ContinueWatchingSnapshot) {
+        val normalized = sanitizeSnapshot(snapshot)
+        rawSnapshotState.value = normalized
+        snapshotStore.write(normalized)
+        lastRefreshRequestMs = normalized.updatedAtMs
+    }
+
     private fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
-        rawSnapshotState.update { snapshot }
-        snapshotStore.write(snapshot)
+        persistRawSnapshot(snapshot)
     }
 }
