@@ -25,6 +25,12 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     val subtitleTracks = mutableListOf<TrackInfo>()
     var selectedAudioIndex = -1
     var selectedSubtitleIndex = -1
+    var videoWidth = 0
+    var videoHeight = 0
+    var videoCodec: String? = null
+    var hdrType: String? = null
+    var selectedAudioCodec: String? = null
+    var selectedAudioChannelLayout: String? = null
     var hasVideoTrack = false
     var firstVideoFormat: Format? = null
     var selectedVideoFormat: Format? = null
@@ -52,6 +58,32 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                         val format = trackGroup.getTrackFormat(i)
                         selectedVideoFormat = format
                         selectedVideoTrackSupport = support
+                        val vWidth = format.width.takeIf { it > 0 } ?: 0
+                        val vHeight = format.height.takeIf { it > 0 } ?: 0
+                        if (vWidth > 0 && vHeight > 0) {
+                            videoWidth = vWidth
+                            videoHeight = vHeight
+                        }
+                        videoCodec = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
+                            ?: CustomDefaultTrackNameProvider.formatNameFromMime(format.codecs)
+                        val colorInfo = format.colorInfo
+                        if (colorInfo != null) {
+                            val isDolbyVision = format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION ||
+                                format.codecs?.startsWith("dvh", ignoreCase = true) == true ||
+                                format.codecs?.startsWith("dvhe", ignoreCase = true) == true
+                            hdrType = when {
+                                isDolbyVision -> "Dolby Vision"
+                                colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084 -> {
+                                    if (format.codecs?.contains("hev1.2.4", ignoreCase = true) == true) {
+                                        "HDR10+"
+                                    } else {
+                                        "HDR10"
+                                    }
+                                }
+                                colorInfo.colorTransfer == C.COLOR_TRANSFER_HLG -> "HLG"
+                                else -> null
+                            }
+                        }
                         if (format.frameRate > 0f) {
                             val raw = format.frameRate
                             val snapped = FrameRateUtils.snapToStandardRate(raw)
@@ -75,7 +107,13 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                 for (i in 0 until trackGroup.length) {
                     val format = trackGroup.getTrackFormat(i)
                     val isSelected = trackGroup.isTrackSelected(i)
-                    if (isSelected) selectedAudioIndex = audioTracks.size
+                    if (isSelected) {
+                        selectedAudioIndex = audioTracks.size
+                        selectedAudioCodec = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
+                        selectedAudioChannelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
+                            format.channelCount
+                        )
+                    }
 
                     
                     val codecName = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
@@ -250,13 +288,26 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     maybeRestorePendingAudioSelectionAfterSubtitleRefresh(audioTracks)?.let { restoredIndex ->
         selectedAudioIndex = restoredIndex
     }
+    if (selectedAudioIndex in audioTracks.indices) {
+        val selectedAudioTrack = audioTracks[selectedAudioIndex]
+        selectedAudioCodec = selectedAudioTrack.codec
+        selectedAudioChannelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
+            selectedAudioTrack.channelCount ?: 0
+        )
+    }
 
     _uiState.update {
         it.copy(
             audioTracks = audioTracks,
             subtitleTracks = subtitleTracks,
             selectedAudioTrackIndex = selectedAudioIndex,
-            selectedSubtitleTrackIndex = selectedSubtitleIndex
+            selectedSubtitleTrackIndex = selectedSubtitleIndex,
+            videoResolutionWidth = videoWidth,
+            videoResolutionHeight = videoHeight,
+            videoCodecName = videoCodec,
+            videoHdrType = hdrType,
+            audioCodecName = selectedAudioCodec,
+            audioChannelLayout = selectedAudioChannelLayout
         )
     }
     if (currentStreamHasVideoTrack) {
