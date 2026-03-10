@@ -35,6 +35,7 @@ class TmdbSettingsDataStore @Inject constructor(
     private val useNetworksKey = booleanPreferencesKey("tmdb_use_networks")
     private val useEpisodesKey = booleanPreferencesKey("tmdb_use_episodes")
     private val useMoreLikeThisKey = booleanPreferencesKey("tmdb_use_more_like_this")
+    private val useReviewsKey = booleanPreferencesKey("tmdb_use_reviews")
     private val useCollectionsKey = booleanPreferencesKey("tmdb_use_collections")
 
     val settings: Flow<TmdbSettings> = dataStore.data.map { prefs ->
@@ -49,6 +50,7 @@ class TmdbSettingsDataStore @Inject constructor(
             useNetworks = prefs[useNetworksKey] ?: true,
             useEpisodes = prefs[useEpisodesKey] ?: true,
             useMoreLikeThis = prefs[useMoreLikeThisKey] ?: true,
+            useReviews = prefs[useReviewsKey] ?: true,
             useCollections = prefs[useCollectionsKey] ?: true
         )
     }
@@ -91,6 +93,10 @@ class TmdbSettingsDataStore @Inject constructor(
 
     suspend fun setUseMoreLikeThis(enabled: Boolean) {
         store().edit { it[useMoreLikeThisKey] = enabled }
+    }
+
+    suspend fun setUseReviews(enabled: Boolean) {
+        store().edit { it[useReviewsKey] = enabled }
     }
 
     suspend fun setUseCollections(enabled: Boolean) {

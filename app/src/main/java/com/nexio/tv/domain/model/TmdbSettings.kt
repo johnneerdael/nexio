@@ -19,6 +19,8 @@ data class TmdbSettings(
     val useEpisodes: Boolean = true,
     // Group: Recommendations (more like this)
     val useMoreLikeThis: Boolean = true,
+    // Group: Reviews
+    val useReviews: Boolean = true,
     // Group: Collections
     val useCollections: Boolean = true
 ) {

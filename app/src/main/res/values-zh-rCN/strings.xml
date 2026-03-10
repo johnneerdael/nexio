@@ -233,6 +233,7 @@
   <string name="cast_role_writer">编剧</string>
   <string name="detail_tab_ratings">评分</string>
   <string name="detail_tab_more_like_this">相似推荐</string>
+  <string name="detail_tab_reviews">评论</string>
   <string name="detail_section_network">播出平台</string>
   <string name="detail_section_production">制作公司</string>
   <string name="detail_lists_fallback">列表</string>
@@ -531,6 +532,8 @@
   <string name="tmdb_episodes_subtitle">使用来自 TMDB 的单集标题、简介、缩略图和时长</string>
   <string name="tmdb_more_like_this_title">相似推荐</string>
   <string name="tmdb_more_like_this_subtitle">在详情页使用来自 TMDB 推荐的背景图</string>
+  <string name="tmdb_reviews_title">评论</string>
+  <string name="tmdb_reviews_subtitle">详情页显示 TMDB 评论</string>
   <string name="trakt_description">使用 Trakt 同步您的观看列表、播放进度、继续观看、历史记录 (Scrobbles) 以及个人列表。</string>
   <string name="trakt_connected_as">已连接：%1$s</string>
   <string name="trakt_account_login">登录帐户</string>
@@ -858,6 +861,8 @@
   <string name="ratings_loading">正在加载剧集评分...</string>
   <string name="ratings_unavailable">暂时无法获取剧集评分。</string>
   <string name="ratings_season_summary">第 %1$d 季 - 共 %2$d 集</string>
+  <string name="reviews_loading">正在加载评论...</string>
+  <string name="reviews_unavailable">评论暂不可用。</string>
   <string name="discover_title">发现</string>
   <string name="discover_load_more">加载更多</string>
   <string name="discover_loading">加载中...</string>
