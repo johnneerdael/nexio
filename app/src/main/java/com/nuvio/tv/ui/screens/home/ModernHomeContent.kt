@@ -666,12 +666,15 @@ fun ModernHomeContent(
             heroTrailerAudioUrl = heroTrailerAudioUrl,
             heroTrailerAlpha = heroTrailerAlpha,
             muted = uiState.focusedPosterBackdropTrailerMuted,
-            bgColor = bgColor,
             onTrailerEnded = { expandedCatalogFocusKey = null },
             onFirstFrameRendered = { heroTrailerFirstFrameRendered = true },
             modifier = heroMediaModifier,
             requestWidthPx = heroMediaWidthPx,
             requestHeightPx = heroMediaHeightPx
+        )
+        ModernHeroGradientLayer(
+            bgColor = bgColor,
+            modifier = heroMediaModifier
         )
         HeroTitleBlock(
             preview = resolvedHero,
