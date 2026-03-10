@@ -116,6 +116,13 @@ class PlayerRuntimeController(
     internal var currentFilename: String? = navigationArgs.filename
         ?: initialStreamUrl.substringBefore('?').substringAfterLast('/', "")
             .takeIf { it.isNotBlank() && it.contains('.') }
+    internal var currentAddonName: String? = navigationArgs.addonName
+    internal var currentAddonLogo: String? = navigationArgs.addonLogo
+    internal var currentStreamDescription: String? = navigationArgs.streamDescription
+    internal var currentVideoCodec: String? = null
+    internal var currentVideoWidth: Int? = null
+    internal var currentVideoHeight: Int? = null
+    internal var currentVideoBitrate: Int? = null
     internal var currentStreamUrl: String = initialStreamUrl
     internal var currentHeaders: Map<String, String> =
         PlayerMediaSourceFactory.sanitizeHeaders(PlayerMediaSourceFactory.parseHeaders(headersJson))

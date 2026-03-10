@@ -124,7 +124,10 @@ data class PlayerUiState(
     // Aspect ratio / resize mode
     val resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
     val showAspectRatioIndicator: Boolean = false,
-    val aspectRatioIndicatorText: String = ""
+    val aspectRatioIndicatorText: String = "",
+    // Stream info overlay
+    val showStreamInfoOverlay: Boolean = false,
+    val streamInfoData: StreamInfoData? = null
 )
 
 data class TrackInfo(
@@ -135,7 +138,8 @@ data class TrackInfo(
     val codec: String? = null,
     val channelCount: Int? = null,
     val isForced: Boolean = false,
-    val isSelected: Boolean = false
+    val isSelected: Boolean = false,
+    val sampleRate: Int? = null
 )
 
 data class NextEpisodeInfo(
@@ -206,6 +210,8 @@ sealed class PlayerEvent {
     data class OnSetSubtitleVerticalOffset(val offset: Int) : PlayerEvent()
     data object OnResetSubtitleDefaults : PlayerEvent()
     data object OnToggleAspectRatio : PlayerEvent()
+    data object OnShowStreamInfo : PlayerEvent()
+    data object OnDismissStreamInfo : PlayerEvent()
 }
 
 data class ParentalWarning(
@@ -226,3 +232,30 @@ enum class FrameRateSource {
 }
 
 val PLAYBACK_SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+
+data class StreamInfoData(
+    // Stream source
+    val addonName: String? = null,
+    val addonLogo: String? = null,
+    val streamName: String? = null,
+    val streamDescription: String? = null,
+    // File info
+    val filename: String? = null,
+    val fileSize: Long? = null,
+    // Video
+    val videoCodec: String? = null,
+    val videoWidth: Int? = null,
+    val videoHeight: Int? = null,
+    val videoFrameRate: Float? = null,
+    val videoBitrate: Int? = null,
+    // Audio
+    val audioCodec: String? = null,
+    val audioChannels: String? = null,
+    val audioSampleRate: Int? = null,
+    val audioLanguage: String? = null,
+    // Subtitle
+    val subtitleName: String? = null,
+    val subtitleCodec: String? = null,
+    val subtitleLanguage: String? = null,
+    val subtitleSource: String? = null
+)

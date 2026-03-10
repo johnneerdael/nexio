@@ -278,7 +278,8 @@ fun PlayerRuntimeController.scheduleHideControls() {
             !_uiState.value.showSubtitleDialog && !_uiState.value.showSubtitleStylePanel &&
             !_uiState.value.showSpeedDialog && !_uiState.value.showMoreDialog &&
             !_uiState.value.showSubtitleDelayOverlay &&
-            !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel) {
+            !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel &&
+            !_uiState.value.showStreamInfoOverlay) {
             _uiState.update { it.copy(showControls = false) }
         }
     }
@@ -352,7 +353,7 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
         val s = _uiState.value
         val anyPanelOpen = s.showSubtitleDialog || s.showSubtitleStylePanel ||
             s.showSpeedDialog || s.showMoreDialog || s.showEpisodesPanel ||
-            s.showSourcesPanel || s.showAudioDialog
+            s.showSourcesPanel || s.showAudioDialog || s.showStreamInfoOverlay
         if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
         }
@@ -770,5 +771,54 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 _uiState.update { it.copy(showAspectRatioIndicator = false) }
             }
         }
+        PlayerEvent.OnShowStreamInfo -> {
+            val info = buildStreamInfoData()
+            _uiState.update {
+                it.copy(
+                    showStreamInfoOverlay = true,
+                    streamInfoData = info,
+                    showMoreDialog = false,
+                    showControls = false
+                )
+            }
+        }
+        PlayerEvent.OnDismissStreamInfo -> {
+            _uiState.update { it.copy(showStreamInfoOverlay = false) }
+        }
     }
+}
+
+internal fun PlayerRuntimeController.buildStreamInfoData(): StreamInfoData {
+    val state = _uiState.value
+    val selectedAudio = state.audioTracks.firstOrNull { it.isSelected }
+    val selectedSubtitle = state.subtitleTracks.firstOrNull { it.isSelected }
+    val addonSub = state.selectedAddonSubtitle
+
+    return StreamInfoData(
+        addonName = currentAddonName,
+        addonLogo = currentAddonLogo,
+        streamName = state.currentStreamName,
+        streamDescription = currentStreamDescription,
+        filename = currentFilename,
+        fileSize = currentVideoSize,
+        videoCodec = currentVideoCodec,
+        videoWidth = currentVideoWidth,
+        videoHeight = currentVideoHeight,
+        videoFrameRate = state.detectedFrameRate.takeIf { it > 0f },
+        videoBitrate = currentVideoBitrate,
+        audioCodec = selectedAudio?.codec,
+        audioChannels = selectedAudio?.channelCount?.let {
+            CustomDefaultTrackNameProvider.getChannelLayoutName(it)
+        },
+        audioSampleRate = selectedAudio?.sampleRate,
+        audioLanguage = selectedAudio?.language,
+        subtitleName = selectedSubtitle?.name ?: addonSub?.lang,
+        subtitleCodec = selectedSubtitle?.codec,
+        subtitleLanguage = selectedSubtitle?.language ?: addonSub?.lang,
+        subtitleSource = when {
+            addonSub != null -> "Addon"
+            selectedSubtitle != null -> "Embedded"
+            else -> null
+        }
+    )
 }
