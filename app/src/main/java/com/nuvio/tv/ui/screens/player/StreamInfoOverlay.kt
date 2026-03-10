@@ -1,34 +1,20 @@
 package com.nuvio.tv.ui.screens.player
 
-import android.view.KeyEvent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -48,76 +34,19 @@ fun StreamInfoOverlay(
     data: StreamInfoData?,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
+    PlayerOverlayScaffold(
         visible = visible,
-        enter = fadeIn(animationSpec = tween(250)),
-        exit = fadeOut(animationSpec = tween(200)),
-        modifier = modifier
+        onDismiss = onClose,
+        modifier = modifier,
+        dismissOnCenter = true,
+        contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 36.dp, bottom = 36.dp)
     ) {
-        val focusRequester = remember { FocusRequester() }
-
-        LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(focusRequester)
-                .onKeyEvent { event ->
-                    if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                        when (event.nativeKeyEvent.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_CENTER,
-                            KeyEvent.KEYCODE_ENTER,
-                            KeyEvent.KEYCODE_BACK -> {
-                                onClose()
-                                true
-                            }
-                            else -> false
-                        }
-                    } else false
-                }
-                .focusable()
-        ) {
-            // Horizontal gradient
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.88f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-
-            // Vertical gradient
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0f to Color.Black.copy(alpha = 0.6f),
-                                0.3f to Color.Black.copy(alpha = 0.4f),
-                                0.6f to Color.Black.copy(alpha = 0.2f),
-                                1f to Color.Transparent
-                            )
-                        )
-                    )
-            )
-
-            if (data != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 48.dp, end = 48.dp, top = 36.dp, bottom = 36.dp),
-                    verticalArrangement = Arrangement.Bottom
-                ) {
-                    StreamInfoContent(data = data)
-                }
+        if (data != null) {
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart),
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                StreamInfoContent(data = data)
             }
         }
     }
