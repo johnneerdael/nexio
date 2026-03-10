@@ -144,7 +144,8 @@ internal fun buildContinueWatchingItem(
             val progress = item.progress
             formatContinueWatchingProgressLabel(
                 progress = progress,
-                resumeLabel = context.getString(R.string.cw_resume)
+                resumeLabel = context.getString(R.string.cw_resume),
+                percentWatchedLabel = context.getString(R.string.cw_percent_watched)
             )
         }
         is ContinueWatchingItem.NextUp -> {
