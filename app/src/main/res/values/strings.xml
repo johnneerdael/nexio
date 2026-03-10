@@ -514,6 +514,28 @@
     <string name="mdblist_top_list_badge">Top list</string>
     <string name="mdblist_list_item_count_subtitle">%1$d items</string>
 
+    <!-- DebridSettingsContent -->
+    <string name="debrid_title">Debrid</string>
+    <string name="debrid_subtitle">Connect Premiumize or Real-Debrid and surface saved streams in Library</string>
+    <string name="debrid_real_debrid_title">Real-Debrid</string>
+    <string name="debrid_real_debrid_description">Authenticate with device activation to import your Real-Debrid downloads</string>
+    <string name="debrid_real_debrid_unavailable">Set `REAL_DEBRID_CLIENT_ID` in local properties to enable device auth</string>
+    <string name="debrid_real_debrid_connected_as">Connected as %1$s</string>
+    <string name="debrid_real_debrid_waiting">Finish device activation in your browser, then select again to check approval</string>
+    <string name="debrid_activation_code_title">Activation Code</string>
+    <string name="debrid_premiumize_title">Premiumize</string>
+    <string name="debrid_premiumize_description">Add your Premiumize API key to import cloud items directly into Library</string>
+    <string name="debrid_premiumize_connected_customer">Customer %1$d</string>
+    <string name="debrid_premiumize_key_title">Premiumize API Key</string>
+    <string name="debrid_premiumize_key_subtitle">Enter your Premiumize API key</string>
+    <string name="debrid_api_key_placeholder">Enter API key</string>
+    <string name="debrid_unavailable">Unavailable</string>
+    <string name="debrid_connected">Connected</string>
+    <string name="debrid_disconnected">Disconnected</string>
+    <string name="debrid_pending">Pending</string>
+    <string name="debrid_connect_action">Connect</string>
+    <string name="debrid_disconnect_action">Disconnect</string>
+
     <!-- Anime-Skip -->
     <string name="animeskip_title">Anime Skip</string>
     <string name="animeskip_subtitle">Configure your Anime Skip Client ID for anime intro/outro skipping</string>
@@ -918,8 +940,10 @@
     <string name="library_type_items">items</string>
     <string name="library_empty_local_title">No %1$s yet</string>
     <string name="library_empty_trakt_title">No %1$s in this list</string>
+    <string name="library_empty_debrid_title">No %1$s from connected debrid services</string>
     <string name="library_empty_local_subtitle">Start saving your favorites to see them here</string>
     <string name="library_empty_trakt_subtitle">Use + in details to add items to watchlist or lists</string>
+    <string name="library_empty_debrid_subtitle">Connect Premiumize or Real-Debrid in Settings and refresh to load direct-play items</string>
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Loading\u2026</string>

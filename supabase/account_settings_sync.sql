@@ -101,11 +101,14 @@ create table if not exists public.account_secrets (
       'addon_credential',
       'tmdb_api_key',
       'mdblist_api_key',
+      'premiumize_api_key',
       'gemini_api_key',
       'rpdb_api_key',
       'top_posters_api_key',
-    'trakt_access_token',
-    'trakt_refresh_token'
+      'realdebrid_access_token',
+      'realdebrid_refresh_token',
+      'trakt_access_token',
+      'trakt_refresh_token'
   )),
   secret_ref text not null,
   vault_secret_id uuid not null unique,

@@ -81,7 +81,7 @@
       <SettingsWorkspace
         v-else-if="activeView === 'integrations'"
         title="Integrations sync"
-        subtitle="TMDB, MDBList, Anime Skip, poster providers, and Trakt account state belong to the account, not a single TV."
+        subtitle="Debrid services, TMDB, MDBList, Anime Skip, poster providers, and Trakt account state belong to the account, not a single TV."
         :groups="integrationGroups"
         :settings="state.settings"
         :secret-statuses="secretStatusMap"
@@ -99,8 +99,14 @@
         @update="updateSetting"
         @save-tmdb-key="saveTmdbApiKey"
         @clear-tmdb-key="clearTmdbApiKey"
+        @save-premiumize-key="savePremiumizeApiKey"
+        @clear-premiumize-key="clearPremiumizeApiKey"
+        @refresh-premiumize="refreshPremiumizeStatus"
         @start-trakt="startTraktDeviceFlow"
         @complete-trakt="completeTraktDeviceFlow"
+        @start-realdebrid="startRealDebridDeviceFlow"
+        @complete-realdebrid="completeRealDebridDeviceFlow"
+        @disconnect-realdebrid="disconnectRealDebrid"
         @refresh-trakt-lists="refreshTraktPopularLists"
         @disconnect-trakt="disconnectTrakt"
         @toggle-trakt-list="toggleTraktPopularList"
@@ -187,6 +193,9 @@ const {
   persistSnapshot,
   saveTmdbApiKey,
   clearTmdbApiKey,
+  savePremiumizeApiKey,
+  clearPremiumizeApiKey,
+  refreshPremiumizeStatus,
   setSecretDraft,
   saveDraftSecret,
   deleteSecret,
@@ -195,9 +204,12 @@ const {
   setMDBListTopListSelected,
   startTraktDeviceFlow,
   completeTraktDeviceFlow,
+  startRealDebridDeviceFlow,
+  completeRealDebridDeviceFlow,
   refreshTraktPopularLists,
   toggleTraktPopularList,
-  disconnectTrakt
+  disconnectTrakt,
+  disconnectRealDebrid
 } = usePortalStore()
 
 const integrationGroups = computed(() => [] as typeof accountGroups.integrations)

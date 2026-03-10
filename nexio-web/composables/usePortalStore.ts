@@ -173,6 +173,16 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
       ...(input?.layout ?? {})
     },
     integrations: {
+      debrid: {
+        premiumize: {
+          ...defaults.integrations.debrid.premiumize,
+          ...(input?.integrations?.debrid?.premiumize ?? {})
+        },
+        realDebrid: {
+          ...defaults.integrations.debrid.realDebrid,
+          ...(input?.integrations?.debrid?.realDebrid ?? {})
+        }
+      },
       tmdb: {
         ...defaults.integrations.tmdb,
         ...(input?.integrations?.tmdb ?? {})
@@ -721,6 +731,13 @@ export function usePortalStore() {
       await inspectAddons()
 
       if (
+        secretStatus(secretRefs.premiumize)?.status === 'configured' &&
+        !state.value.settings.integrations.debrid.premiumize.customerId
+      ) {
+        await refreshPremiumizeStatus().catch(() => undefined)
+      }
+
+      if (
         secretStatus(secretRefs.mdblist)?.status === 'configured' &&
         state.value.mdblistDiscovery.personalLists.length === 0 &&
         state.value.mdblistDiscovery.topLists.length === 0
@@ -1120,6 +1137,63 @@ export function usePortalStore() {
     await deleteSecret('tmdb_api_key', secretRefs.tmdb)
   }
 
+  async function savePremiumizeApiKey(apiKey: string) {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before saving Premiumize.')
+    }
+
+    const trimmed = apiKey.trim()
+    const validation = await apiFetch<{
+      valid: boolean
+      customerId: number | null
+      premiumUntil: number | null
+    }>('/api/integrations/premiumize/validate', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey: trimmed })
+    }, token)
+
+    await saveSecret({
+      secretType: 'premiumize_api_key',
+      secretRef: secretRefs.premiumize,
+      secretPayload: { apiKey: trimmed }
+    })
+
+    state.value.settings.integrations.debrid.premiumize = {
+      configured: validation.valid,
+      customerId: validation.customerId
+    }
+  }
+
+  async function clearPremiumizeApiKey() {
+    await deleteSecret('premiumize_api_key', secretRefs.premiumize)
+    state.value.settings.integrations.debrid.premiumize = {
+      configured: false,
+      customerId: null
+    }
+  }
+
+  async function refreshPremiumizeStatus() {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before refreshing Premiumize.')
+    }
+
+    const validation = await apiFetch<{
+      valid: boolean
+      customerId: number | null
+      premiumUntil: number | null
+    }>('/api/integrations/premiumize/validate', {
+      method: 'POST',
+      body: JSON.stringify({})
+    }, token)
+
+    state.value.settings.integrations.debrid.premiumize = {
+      configured: validation.valid,
+      customerId: validation.customerId
+    }
+  }
+
   async function saveSecret(payload: SecretSetPayload) {
     const token = accessToken(state.value.session)
     if (!token) {
@@ -1258,6 +1332,79 @@ export function usePortalStore() {
     state.value.settings.integrations.traktAuth.pending = true
   }
 
+  async function startRealDebridDeviceFlow() {
+    state.value.error = null
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before starting Real-Debrid authentication.')
+    }
+
+    const flow = await apiFetch<{
+      deviceCode: string
+      userCode: string
+      verificationUrl: string
+      expiresIn: number
+      interval?: number
+      startedAt: string
+      expiresAt: number
+    }>('/api/integrations/realdebrid/device-code', {
+      method: 'POST',
+      body: JSON.stringify({})
+    }, token)
+
+    state.value.settings.integrations.debrid.realDebrid = {
+      connected: false,
+      username: '',
+      pending: true,
+      deviceCode: flow.deviceCode,
+      userCode: flow.userCode,
+      verificationUrl: flow.verificationUrl,
+      expiresAt: flow.expiresAt
+    }
+  }
+
+  async function completeRealDebridDeviceFlow() {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before completing Real-Debrid authentication.')
+    }
+
+    const deviceCode = state.value.settings.integrations.debrid.realDebrid.deviceCode?.trim()
+    if (!deviceCode) {
+      return
+    }
+
+    const response = await apiFetch<{
+      pending: boolean
+      approved: boolean
+      expired?: boolean
+      realDebridAuth?: PortalSettings['integrations']['debrid']['realDebrid']
+    }>('/api/integrations/realdebrid/device-token', {
+      method: 'POST',
+      body: JSON.stringify({ deviceCode })
+    }, token)
+
+    if (response.approved && response.realDebridAuth) {
+      state.value.settings.integrations.debrid.realDebrid = response.realDebridAuth
+      return
+    }
+
+    if (response.expired) {
+      state.value.settings.integrations.debrid.realDebrid = {
+        connected: false,
+        username: '',
+        pending: false,
+        deviceCode: '',
+        userCode: '',
+        verificationUrl: '',
+        expiresAt: null
+      }
+      return
+    }
+
+    state.value.settings.integrations.debrid.realDebrid.pending = response.pending
+  }
+
   async function completeTraktDeviceFlow() {
     const deviceCode = state.value.traktFlow?.deviceCode
     if (!deviceCode) {
@@ -1338,6 +1485,20 @@ export function usePortalStore() {
       loading: false,
       error: null,
       popularLists: []
+    }
+  }
+
+  function disconnectRealDebrid() {
+    deleteSecret('realdebrid_access_token', secretRefs.realDebrid).catch(() => undefined)
+    deleteSecret('realdebrid_refresh_token', secretRefs.realDebrid).catch(() => undefined)
+    state.value.settings.integrations.debrid.realDebrid = {
+      connected: false,
+      username: '',
+      pending: false,
+      deviceCode: '',
+      userCode: '',
+      verificationUrl: '',
+      expiresAt: null
     }
   }
 
@@ -1429,6 +1590,9 @@ export function usePortalStore() {
     persistSnapshot,
     saveTmdbApiKey,
     clearTmdbApiKey,
+    savePremiumizeApiKey,
+    clearPremiumizeApiKey,
+    refreshPremiumizeStatus,
     secretStatus,
     setSecretDraft,
     saveDraftSecret,
@@ -1439,8 +1603,11 @@ export function usePortalStore() {
     setMDBListTopListSelected,
     startTraktDeviceFlow,
     completeTraktDeviceFlow,
+    startRealDebridDeviceFlow,
+    completeRealDebridDeviceFlow,
     refreshTraktPopularLists,
     toggleTraktPopularList,
-    disconnectTrakt
+    disconnectTrakt,
+    disconnectRealDebrid
   }
 }

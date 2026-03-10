@@ -53,6 +53,21 @@ export const defaultSettings = (): PortalSettings => ({
     posterCardCornerRadiusDp: 12
   },
   integrations: {
+    debrid: {
+      premiumize: {
+        configured: false,
+        customerId: null
+      },
+      realDebrid: {
+        connected: false,
+        username: '',
+        pending: false,
+        deviceCode: '',
+        userCode: '',
+        verificationUrl: '',
+        expiresAt: null
+      }
+    },
     tmdb: {
       enabled: false,
       useArtwork: true,

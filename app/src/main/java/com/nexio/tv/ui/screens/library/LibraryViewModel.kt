@@ -144,7 +144,7 @@ class LibraryViewModel @Inject constructor(
 
     fun onOpenManageLists() {
         _uiState.update { current ->
-            if (current.sourceMode != LibrarySourceMode.TRAKT) {
+            if (current.listTabs.none { it.type == LibraryListTab.Type.PERSONAL }) {
                 return@update current
             }
             current.copy(
@@ -308,8 +308,9 @@ class LibraryViewModel @Inject constructor(
                 )
             }.collectLatest { (sourceMode, isSyncing, items, listTabs) ->
                 _uiState.update { current ->
+                    val supportsListTabs = listTabs.isNotEmpty()
                     val nextSelectedList = when {
-                        sourceMode == LibrarySourceMode.TRAKT -> {
+                        supportsListTabs -> {
                             current.selectedListKey
                                 ?.takeIf { key -> listTabs.any { it.key == key } }
                                 ?: listTabs.firstOrNull()?.key
@@ -325,9 +326,9 @@ class LibraryViewModel @Inject constructor(
                         }
                         ?: listTabs.firstOrNull { it.type == LibraryListTab.Type.PERSONAL }?.key
 
-                    val itemsForTypeTabs = if (sourceMode == LibrarySourceMode.TRAKT) {
-                        val listKey = nextSelectedList
-                        if (listKey.isNullOrBlank()) items else items.filter { it.listKeys.contains(listKey) }
+                    val selectedListTab = listTabs.firstOrNull { it.key == nextSelectedList }
+                    val itemsForTypeTabs = if (supportsListTabs && !nextSelectedList.isNullOrBlank()) {
+                        items.filter { it.listKeys.contains(nextSelectedList) }
                     } else {
                         items
                     }
@@ -335,14 +336,24 @@ class LibraryViewModel @Inject constructor(
                     val nextSelectedType = current.selectedTypeTab
                         ?.takeIf { selected -> typeTabs.any { it.key == selected.key } }
                         ?: LibraryTypeTab.All
-                    val sortOptions = if (sourceMode == LibrarySourceMode.TRAKT) {
+                    val sortOptions = if (
+                        selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
+                        selectedListTab?.type == LibraryListTab.Type.PERSONAL
+                    ) {
                         LibrarySortOption.TraktOptions
                     } else {
                         LibrarySortOption.LocalOptions
                     }
                     val nextSelectedSort = current.selectedSortOption
                         .takeIf { it in sortOptions }
-                        ?: if (sourceMode == LibrarySourceMode.TRAKT) LibrarySortOption.DEFAULT else LibrarySortOption.ADDED_DESC
+                        ?: if (
+                            selectedListTab?.type == LibraryListTab.Type.WATCHLIST ||
+                            selectedListTab?.type == LibraryListTab.Type.PERSONAL
+                        ) {
+                            LibrarySortOption.DEFAULT
+                        } else {
+                            LibrarySortOption.ADDED_DESC
+                        }
 
                     val updated = current.copy(
                         sourceMode = sourceMode,
@@ -354,8 +365,8 @@ class LibraryViewModel @Inject constructor(
                         selectedListKey = nextSelectedList,
                         selectedSortOption = nextSelectedSort,
                         manageSelectedListKey = nextManageSelected,
-                        isSyncing = sourceMode == LibrarySourceMode.TRAKT && isSyncing,
-                        isLoading = sourceMode == LibrarySourceMode.TRAKT &&
+                        isSyncing = sourceMode != LibrarySourceMode.LOCAL && isSyncing,
+                        isLoading = sourceMode != LibrarySourceMode.LOCAL &&
                             isSyncing &&
                             items.isEmpty() &&
                             listTabs.isEmpty()
@@ -489,15 +500,17 @@ class LibraryViewModel @Inject constructor(
                 entry.type.trim().lowercase(Locale.ROOT) == selectedTypeKey
         }
 
-        val listFiltered = if (sourceMode == LibrarySourceMode.TRAKT) {
-            val listKey = selectedListKey ?: ""
-            typeFiltered.filter { entry -> entry.listKeys.contains(listKey) }
+        val listFiltered = if (!selectedListKey.isNullOrBlank()) {
+            typeFiltered.filter { entry -> entry.listKeys.contains(selectedListKey) }
         } else {
             typeFiltered
         }
 
         val sorted = when (selectedSortOption) {
-            LibrarySortOption.DEFAULT -> if (sourceMode == LibrarySourceMode.TRAKT) {
+            LibrarySortOption.DEFAULT -> if (
+                listTabs.firstOrNull { it.key == selectedListKey }?.type == LibraryListTab.Type.WATCHLIST ||
+                listTabs.firstOrNull { it.key == selectedListKey }?.type == LibraryListTab.Type.PERSONAL
+            ) {
                 listFiltered.sortedWith(
                     compareBy<LibraryEntry> { it.traktRank ?: Int.MAX_VALUE }
                         .thenByDescending { it.listedAt }

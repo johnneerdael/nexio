@@ -100,7 +100,7 @@ private fun localizedTypeLabel(key: String): String = when (key.lowercase()) {
 fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     showBuiltInHeader: Boolean = true,
-    onNavigateToDetail: (String, String, String?) -> Unit
+    onOpenEntry: (com.nexio.tv.domain.model.LibraryEntry) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -238,7 +238,11 @@ fun LibraryScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = if (uiState.sourceMode == LibrarySourceMode.TRAKT) "TRAKT" else stringResource(R.string.library_source_local),
+                    text = when (uiState.sourceMode) {
+                        LibrarySourceMode.TRAKT -> "TRAKT"
+                        LibrarySourceMode.DEBRID -> "DEBRID"
+                        LibrarySourceMode.LOCAL -> stringResource(R.string.library_source_local)
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = if (showBuiltInHeader) NexioColors.TextTertiary else Color.Transparent,
                     fontWeight = FontWeight.Medium,
@@ -276,7 +280,7 @@ fun LibraryScreen(
             )
         }
 
-        if (uiState.sourceMode == LibrarySourceMode.TRAKT) {
+        if (uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL }) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LibraryActionsRow(
                     pending = uiState.pendingOperation,
@@ -293,10 +297,12 @@ fun LibraryScreen(
                 val title = when (uiState.sourceMode) {
                     LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_title, selectedTypeLabel)
                     LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_title, selectedTypeLabel)
+                    LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_title, selectedTypeLabel)
                 }
                 val subtitle = when (uiState.sourceMode) {
                     LibrarySourceMode.LOCAL -> stringResource(R.string.library_empty_local_subtitle)
                     LibrarySourceMode.TRAKT -> stringResource(R.string.library_empty_trakt_subtitle)
+                    LibrarySourceMode.DEBRID -> stringResource(R.string.library_empty_debrid_subtitle)
                 }
                 EmptyScreenState(
                     title = title,
@@ -318,7 +324,7 @@ fun LibraryScreen(
                 },
                 onClick = {
                     lastFocusedPosterKey = focusKey
-                    onNavigateToDetail(item.id, item.type, item.addonBaseUrl)
+                    onOpenEntry(item)
                 }
             )
         }
@@ -326,7 +332,7 @@ fun LibraryScreen(
         item(span = { GridItemSpan(maxLineSpan) }) { Spacer(modifier = Modifier.height(8.dp)) }
     }
 
-    if (uiState.showManageDialog && uiState.sourceMode == LibrarySourceMode.TRAKT) {
+    if (uiState.showManageDialog && uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL }) {
         ManageListsDialog(
             tabs = uiState.listTabs,
             selectedKey = uiState.manageSelectedListKey,
@@ -420,7 +426,7 @@ private fun LibrarySelectorsRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (sourceMode == LibrarySourceMode.TRAKT) {
+        if (listTabs.isNotEmpty()) {
             LibraryDropdownPicker(
                 modifier = Modifier
                     .weight(1f)
@@ -436,7 +442,7 @@ private fun LibrarySelectorsRow(
         }
 
         LibraryDropdownPicker(
-            modifier = if (sourceMode == LibrarySourceMode.TRAKT) {
+            modifier = if (listTabs.isNotEmpty()) {
                 Modifier.weight(1f)
             } else {
                 Modifier

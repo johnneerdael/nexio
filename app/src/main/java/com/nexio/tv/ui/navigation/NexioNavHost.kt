@@ -715,8 +715,30 @@ fun NexioNavHost(
         composable(Screen.Library.route) {
             LibraryScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
-                onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
-                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                onOpenEntry = { entry ->
+                    val directPlaybackUrl = entry.directPlaybackUrl
+                    if (!directPlaybackUrl.isNullOrBlank()) {
+                        navController.navigate(
+                            Screen.Player.createRoute(
+                                streamUrl = directPlaybackUrl,
+                                title = entry.name,
+                                streamName = entry.playbackStreamName ?: entry.name,
+                                contentId = entry.id,
+                                contentType = entry.type,
+                                contentName = entry.name,
+                                poster = entry.poster,
+                                backdrop = entry.background,
+                                logo = entry.logo,
+                                videoId = entry.id,
+                                filename = entry.playbackFilename,
+                                headers = entry.playbackHeaders
+                            )
+                        )
+                    } else {
+                        navController.navigate(
+                            Screen.Detail.createRoute(entry.id, entry.type, entry.addonBaseUrl)
+                        )
+                    }
                 }
             )
         }
