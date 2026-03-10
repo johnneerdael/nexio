@@ -55,6 +55,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
@@ -97,6 +98,7 @@ internal fun PlaybackSettingsSections(
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
+    onShowIecPackerChannelLayoutDialog: () -> Unit,
     onShowLanguageDialog: () -> Unit,
     onShowSecondaryLanguageDialog: () -> Unit,
     onShowSubtitleStartupModeDialog: () -> Unit,
@@ -132,8 +134,14 @@ internal fun PlaybackSettingsSections(
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
-    onSetFireOsCompatibilityFallbackEnabled: (Boolean) -> Unit,
+    onSetIecPackerAc3PassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerEac3PassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerDtsPassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerTruehdPassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerDtshdPassthroughEnabled: (Boolean) -> Unit,
+    onSetIecPackerDtshdCoreFallbackEnabled: (Boolean) -> Unit,
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
+    onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
     onSetSubtitleVerticalOffset: (Int) -> Unit,
@@ -397,10 +405,16 @@ internal fun PlaybackSettingsSections(
                 onShowAudioLanguageDialog = onShowAudioLanguageDialog,
                 onShowSecondaryAudioLanguageDialog = onShowSecondaryAudioLanguageDialog,
                 onShowDecoderPriorityDialog = onShowDecoderPriorityDialog,
+                onShowIecPackerChannelLayoutDialog = onShowIecPackerChannelLayoutDialog,
                 onSetSkipSilence = onSetSkipSilence,
                 onSetLibmpvAudioPassthroughEnabled = onSetLibmpvAudioPassthroughEnabled,
                 onSetExperimentalDtsIecPassthroughEnabled = onSetExperimentalDtsIecPassthroughEnabled,
-                onSetFireOsCompatibilityFallbackEnabled = onSetFireOsCompatibilityFallbackEnabled,
+                onSetIecPackerAc3PassthroughEnabled = onSetIecPackerAc3PassthroughEnabled,
+                onSetIecPackerEac3PassthroughEnabled = onSetIecPackerEac3PassthroughEnabled,
+                onSetIecPackerDtsPassthroughEnabled = onSetIecPackerDtsPassthroughEnabled,
+                onSetIecPackerTruehdPassthroughEnabled = onSetIecPackerTruehdPassthroughEnabled,
+                onSetIecPackerDtshdPassthroughEnabled = onSetIecPackerDtshdPassthroughEnabled,
+                onSetIecPackerDtshdCoreFallbackEnabled = onSetIecPackerDtshdCoreFallbackEnabled,
                 onSetFireOsIecSuperviseAudioDelayEnabled = onSetFireOsIecSuperviseAudioDelayEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
                 enabled = !generalUi.isExternalPlayer
@@ -586,6 +600,7 @@ internal fun PlaybackSettingsDialogsHost(
     showAudioLanguageDialog: Boolean,
     showSecondaryAudioLanguageDialog: Boolean,
     showDecoderPriorityDialog: Boolean,
+    showIecPackerChannelLayoutDialog: Boolean,
     showStreamAutoPlayModeDialog: Boolean,
     showStreamAutoPlaySourceDialog: Boolean,
     showStreamAutoPlayAddonSelectionDialog: Boolean,
@@ -605,6 +620,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetPreferredAudioLanguage: (String) -> Unit,
     onSetSecondaryPreferredAudioLanguage: (String?) -> Unit,
     onSetDecoderPriority: (Int) -> Unit,
+    onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetStreamAutoPlayMode: (com.nexio.tv.data.local.StreamAutoPlayMode) -> Unit,
     onSetStreamAutoPlaySource: (com.nexio.tv.data.local.StreamAutoPlaySource) -> Unit,
     onSetNextEpisodeThresholdMode: (com.nexio.tv.data.local.NextEpisodeThresholdMode) -> Unit,
@@ -620,6 +636,7 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissAudioLanguageDialog: () -> Unit,
     onDismissSecondaryAudioLanguageDialog: () -> Unit,
     onDismissDecoderPriorityDialog: () -> Unit,
+    onDismissIecPackerChannelLayoutDialog: () -> Unit,
     onDismissStreamAutoPlayModeDialog: () -> Unit,
     onDismissStreamAutoPlaySourceDialog: () -> Unit,
     onDismissStreamRegexDialog: () -> Unit,
@@ -679,15 +696,19 @@ internal fun PlaybackSettingsDialogsHost(
         showAudioLanguageDialog = showAudioLanguageDialog,
         showSecondaryAudioLanguageDialog = showSecondaryAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
+        showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
         selectedLanguage = playerSettings.preferredAudioLanguage,
         selectedSecondaryLanguage = playerSettings.secondaryPreferredAudioLanguage,
         selectedPriority = playerSettings.decoderPriority,
+        selectedIecPackerChannelLayout = playerSettings.iecPackerMaxPcmChannelLayout,
         onSetPreferredAudioLanguage = onSetPreferredAudioLanguage,
         onSetSecondaryPreferredAudioLanguage = onSetSecondaryPreferredAudioLanguage,
         onSetDecoderPriority = onSetDecoderPriority,
+        onSetIecPackerChannelLayout = onSetIecPackerMaxPcmChannelLayout,
         onDismissAudioLanguageDialog = onDismissAudioLanguageDialog,
         onDismissSecondaryAudioLanguageDialog = onDismissSecondaryAudioLanguageDialog,
-        onDismissDecoderPriorityDialog = onDismissDecoderPriorityDialog
+        onDismissDecoderPriorityDialog = onDismissDecoderPriorityDialog,
+        onDismissIecPackerChannelLayoutDialog = onDismissIecPackerChannelLayoutDialog
     )
 
     AutoPlaySettingsDialogs(

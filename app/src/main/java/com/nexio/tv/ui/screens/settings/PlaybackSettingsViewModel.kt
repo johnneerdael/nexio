@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.StreamAutoPlayMode
@@ -111,6 +112,34 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setExperimentalDtsIecPassthroughEnabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDtsIecPassthroughEnabled(enabled)
+    }
+
+    suspend fun setIecPackerAc3PassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setIecPackerAc3PassthroughEnabled(enabled)
+    }
+
+    suspend fun setIecPackerEac3PassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setIecPackerEac3PassthroughEnabled(enabled)
+    }
+
+    suspend fun setIecPackerDtsPassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setIecPackerDtsPassthroughEnabled(enabled)
+    }
+
+    suspend fun setIecPackerTruehdPassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setIecPackerTruehdPassthroughEnabled(enabled)
+    }
+
+    suspend fun setIecPackerDtshdPassthroughEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setIecPackerDtshdPassthroughEnabled(enabled)
+    }
+
+    suspend fun setIecPackerDtshdCoreFallbackEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setIecPackerDtshdCoreFallbackEnabled(enabled)
+    }
+
+    suspend fun setIecPackerMaxPcmChannelLayout(layout: IecPackerChannelLayout) {
+        playerSettingsDataStore.setIecPackerMaxPcmChannelLayout(layout)
     }
 
     suspend fun setFireOsCompatibilityFallbackEnabled(enabled: Boolean) {
