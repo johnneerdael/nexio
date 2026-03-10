@@ -21,7 +21,6 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktScrobbleResponseDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktSeasonSummaryDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowProgressResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
@@ -125,13 +124,6 @@ interface TraktApi {
         @Path("type") type: String,
         @Path("id") id: String
     ): Response<List<TraktHistoryItemDto>>
-
-    @GET("shows/{id}/seasons")
-    suspend fun getShowSeasons(
-        @Header("Authorization") authorization: String,
-        @Path("id") id: String,
-        @Query("extended") extended: String? = null
-    ): Response<List<TraktSeasonSummaryDto>>
 
     @GET("shows/{id}/progress/watched")
     suspend fun getShowProgressWatched(

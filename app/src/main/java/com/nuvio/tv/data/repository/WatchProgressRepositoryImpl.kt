@@ -514,38 +514,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
         triggerWatchedItemsSync()
     }
 
-    override suspend fun markAsCompletedWithCorrectedEpisode(
-        progress: WatchProgress,
-        correctedSeason: Int,
-        correctedEpisode: Int
-    ) {
-        val now = System.currentTimeMillis()
-        val duration = progress.duration.takeIf { it > 0L } ?: 1L
-        val completed = progress.copy(
-            position = duration,
-            duration = duration,
-            progressPercent = 100f,
-            lastWatched = now
-        )
-        traktProgressService.applyOptimisticProgress(completed)
-        runCatching {
-            traktProgressService.markAsWatchedWithCorrectedEpisode(
-                originalProgress = completed,
-                correctedSeason = correctedSeason,
-                correctedEpisode = correctedEpisode,
-                title = completed.name.takeIf { it.isNotBlank() },
-                year = null
-            )
-        }.onFailure {
-            traktProgressService.applyOptimisticRemoval(
-                contentId = completed.contentId,
-                season = completed.season,
-                episode = completed.episode
-            )
-            throw it
-        }
-    }
-
     override suspend fun clearAll() {
         if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             traktProgressService.clearOptimistic()

@@ -19,8 +19,6 @@ import com.nuvio.tv.data.remote.dto.trakt.TraktHistoryShowRemoveDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktSeasonSummaryDto
-import com.nuvio.tv.data.remote.dto.trakt.TraktSeasonEpisodeDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nuvio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nuvio.tv.domain.model.WatchProgress
@@ -155,9 +153,6 @@ class TraktProgressService @Inject constructor(
     private var lastKnownMoviesWatchedAt: String? = null
     @Volatile
     private var lastKnownEpisodeActivityFingerprint: String? = null
-
-    private val showSeasonsCache = mutableMapOf<String, TimedCache<List<TraktSeasonSummaryDto>>>()
-    private val showSeasonsCacheTtlMs = 30 * 60_000L
     @Volatile
     private var lastManualRefreshSignalMs: Long = 0L
     private val episodeProgressActivityVersion = AtomicLong(0L)
@@ -405,28 +400,11 @@ class TraktProgressService @Inject constructor(
             "shows=${responseBody?.notFound?.shows?.map { it.ids }} " +
             "episodes=${responseBody?.notFound?.episodes?.map { "s=${it.season} e=${it.number} ids=${it.ids}" }}]")
 
-        if (!response.isSuccessful) {
+        if (!response.isSuccessful || hasHistoryAddNotFound(responseBody)) {
             throw IllegalStateException("Failed to mark watched on Trakt (${response.code()})")
         }
-
-        val isEpisode = progress.season != null && progress.episode != null
-        val episodesAdded = responseBody?.added?.episodes ?: 0
-
-        if (isEpisode && episodesAdded == 0) {
-            Log.d(TAG, "markAsWatched: zero episodes added, attempting mismatch resolution")
-            val mismatch = resolveEpisodeMismatch(
-                contentId = progress.contentId,
-                addonSeason = progress.season!!,
-                addonEpisode = progress.episode!!,
-                episodeTitle = progress.episodeTitle,
-                progress = progress
-            )
-            if (mismatch != null) throw mismatch
-            throw IllegalStateException("Failed to mark watched on Trakt: episode S${progress.season}E${progress.episode} not found")
-        }
-
-        if (!hasSuccessfulHistoryAdd(responseBody) && hasHistoryAddNotFound(responseBody)) {
-            throw IllegalStateException("Failed to mark watched on Trakt (${response.code()})")
+        if (!hasSuccessfulHistoryAdd(responseBody)) {
+            trace("markAsWatched: Trakt accepted request with no new history rows (code=${response.code()})")
         }
 
         if (progress.contentType.equals("movie", ignoreCase = true)) {
@@ -437,39 +415,6 @@ class TraktProgressService @Inject constructor(
         ) {
             invalidateEpisodeProgressCache(progress.contentId)
         }
-        refreshNow()
-    }
-
-    suspend fun markAsWatchedWithCorrectedEpisode(
-        originalProgress: WatchProgress,
-        correctedSeason: Int,
-        correctedEpisode: Int,
-        title: String?,
-        year: Int?
-    ) {
-        val corrected = originalProgress.copy(
-            season = correctedSeason,
-            episode = correctedEpisode
-        )
-        Log.d(TAG, "markAsWatchedWithCorrectedEpisode: S${correctedSeason}E${correctedEpisode} " +
-            "contentId=${corrected.contentId}")
-
-        val body = buildHistoryAddRequest(corrected, title, year)
-            ?: throw IllegalStateException("Insufficient Trakt IDs to mark watched")
-
-        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.addHistory(authHeader, body)
-        } ?: throw IllegalStateException("Trakt request failed")
-
-        val responseBody = response.body()
-        Log.d(TAG, "markAsWatchedWithCorrectedEpisode RESPONSE: code=${response.code()} " +
-            "episodes=${responseBody?.added?.episodes}")
-
-        if (!response.isSuccessful || !hasSuccessfulHistoryAdd(responseBody)) {
-            throw IllegalStateException("Failed to mark corrected episode on Trakt (${response.code()})")
-        }
-
-        invalidateEpisodeProgressCache(corrected.contentId)
         refreshNow()
     }
 
@@ -1253,116 +1198,6 @@ class TraktProgressService @Inject constructor(
         if (videoIds.hasAnyId()) return videoIds
 
         return contentIds
-    }
-
-    private suspend fun fetchShowSeasons(contentId: String): List<TraktSeasonSummaryDto>? {
-        val pathId = toTraktPathId(contentId)
-        val now = System.currentTimeMillis()
-        val cached = showSeasonsCache[pathId]
-        if (cached != null && now - cached.updatedAtMs < showSeasonsCacheTtlMs) {
-            return cached.value
-        }
-        return try {
-            val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-                traktApi.getShowSeasons(authHeader, pathId, extended = "episodes")
-            }
-            val seasons = response?.body()
-            if (seasons != null) {
-                showSeasonsCache[pathId] = TimedCache(seasons, now)
-            }
-            Log.d(TAG, "fetchShowSeasons: $pathId → ${seasons?.map { "S${it.number}(${it.episodes?.size ?: 0} eps)" }}")
-            seasons
-        } catch (e: Exception) {
-            Log.w(TAG, "fetchShowSeasons failed for $pathId", e)
-            null
-        }
-    }
-
-    private suspend fun resolveEpisodeMismatch(
-        contentId: String,
-        addonSeason: Int,
-        addonEpisode: Int,
-        episodeTitle: String?,
-        progress: WatchProgress
-    ): TraktEpisodeMismatchException? {
-        val seasons = fetchShowSeasons(contentId) ?: return null
-        val allEpisodes = seasons
-            .filter { (it.number ?: 0) > 0 }
-            .flatMap { season ->
-                season.episodes?.map { ep -> season to ep } ?: emptyList()
-            }
-
-        if (allEpisodes.isEmpty()) return null
-
-        // Strategy 1: Title match
-        if (!episodeTitle.isNullOrBlank()) {
-            val normalizedAddonTitle = normalizeTitle(episodeTitle)
-            for ((season, ep) in allEpisodes) {
-                val traktTitle = ep.title ?: continue
-                if (normalizeTitle(traktTitle) == normalizedAddonTitle) {
-                    val traktSeason = season.number ?: continue
-                    val traktEpisode = ep.number ?: continue
-                    if (traktSeason == addonSeason && traktEpisode == addonEpisode) continue
-                    Log.d(TAG, "resolveEpisodeMismatch: title match '$episodeTitle' → S${traktSeason}E${traktEpisode}")
-                    return TraktEpisodeMismatchException(
-                        originalSeason = addonSeason,
-                        originalEpisode = addonEpisode,
-                        suggestedSeason = traktSeason,
-                        suggestedEpisode = traktEpisode,
-                        suggestedTitle = traktTitle,
-                        matchMethod = "title",
-                        originalProgress = progress
-                    )
-                }
-            }
-        }
-
-        // Strategy 2: Absolute episode number
-        // Compute addon's absolute position using the addon's season/episode numbering
-        // Then find the matching Trakt episode at the same absolute position
-        val addonAbsolute = computeAbsoluteFromAddonVideoId(progress.videoId, addonSeason, addonEpisode)
-        if (addonAbsolute != null) {
-            var absoluteIndex = 0
-            for ((season, ep) in allEpisodes) {
-                absoluteIndex++
-                val traktSeason = season.number ?: continue
-                val traktEpisode = ep.number ?: continue
-                if (absoluteIndex == addonAbsolute && (traktSeason != addonSeason || traktEpisode != addonEpisode)) {
-                    Log.d(TAG, "resolveEpisodeMismatch: absolute #$addonAbsolute → S${traktSeason}E${traktEpisode}")
-                    return TraktEpisodeMismatchException(
-                        originalSeason = addonSeason,
-                        originalEpisode = addonEpisode,
-                        suggestedSeason = traktSeason,
-                        suggestedEpisode = traktEpisode,
-                        suggestedTitle = ep.title,
-                        matchMethod = "absolute",
-                        originalProgress = progress
-                    )
-                }
-            }
-        }
-
-        Log.d(TAG, "resolveEpisodeMismatch: no match found for S${addonSeason}E${addonEpisode}")
-        return null
-    }
-
-    private fun normalizeTitle(title: String): String {
-        return title.trim()
-            .lowercase(Locale.US)
-            .replace(Regex("^(episode\\s*\\d+\\s*[:\\-–]?\\s*)"), "")
-            .replace(Regex("[^a-z0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-
-    private fun computeAbsoluteFromAddonVideoId(videoId: String?, addonSeason: Int, addonEpisode: Int): Int? {
-        // videoId format: "tt12343534:3:2" → season 3, episode 2
-        // For anime, we try to compute absolute by assuming earlier seasons had contiguous episodes
-        // This is a heuristic - absolute = cumulative episodes from prior seasons + current episode
-        // Without knowing the addon's season sizes, we just use the raw episode number as a fallback
-        if (addonSeason == 1) return addonEpisode
-        // Can't reliably compute absolute without knowing addon season sizes
-        return null
     }
 
     private fun toTraktUtcDateTime(lastWatchedMs: Long): String {

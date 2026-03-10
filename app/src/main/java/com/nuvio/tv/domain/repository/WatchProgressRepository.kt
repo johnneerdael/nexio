@@ -66,16 +66,6 @@ interface WatchProgressRepository {
      * Mark content as completed
      */
     suspend fun markAsCompleted(progress: WatchProgress)
-
-    /**
-     * Mark an episode as completed using corrected Trakt season/episode numbers
-     * (for when addon numbering doesn't match Trakt's structure)
-     */
-    suspend fun markAsCompletedWithCorrectedEpisode(
-        progress: WatchProgress,
-        correctedSeason: Int,
-        correctedEpisode: Int
-    )
     
     /**
      * Clear all watch progress

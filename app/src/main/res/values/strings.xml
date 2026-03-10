@@ -88,8 +88,6 @@
     <string name="episodes_play">Play</string>
     <string name="play_manually">Play manually</string>
     <string name="episodes_season_actions">Season actions</string>
-    <string name="episodes_mismatch_title">Episode Numbering Mismatch</string>
-    <string name="episodes_mismatch_cancel">Cancel</string>
 
     <!-- MetaDetailsViewModel -->
     <string name="detail_added_to_library">Added to library</string>
