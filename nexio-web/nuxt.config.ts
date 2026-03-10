@@ -19,6 +19,7 @@ export default defineNuxtConfig({
     supabaseServiceRoleKey: '',
     traktClientId: '',
     traktClientSecret: '',
+    realDebridClientId: '',
     public: {
       supabaseUrl: '',
       supabaseAnonKey: '',

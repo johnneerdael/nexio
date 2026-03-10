@@ -23,9 +23,12 @@ export type SecretType =
   | 'addon_credential'
   | 'tmdb_api_key'
   | 'mdblist_api_key'
+  | 'premiumize_api_key'
   | 'gemini_api_key'
   | 'rpdb_api_key'
   | 'top_posters_api_key'
+  | 'realdebrid_access_token'
+  | 'realdebrid_refresh_token'
   | 'trakt_access_token'
   | 'trakt_refresh_token'
 
@@ -161,6 +164,21 @@ export type PortalSettings = {
     posterCardCornerRadiusDp: number
   }
   integrations: {
+    debrid: {
+      premiumize: {
+        configured: boolean
+        customerId: number | null
+      }
+      realDebrid: {
+        connected: boolean
+        username: string
+        pending: boolean
+        deviceCode: string
+        userCode: string
+        verificationUrl: string
+        expiresAt: number | null
+      }
+    }
     tmdb: {
       enabled: boolean
       useArtwork: boolean

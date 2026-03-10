@@ -12,6 +12,8 @@ import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.MDBListApi
+import com.nexio.tv.data.remote.api.PremiumizeApi
+import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.RpdbApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
@@ -338,6 +340,38 @@ object NetworkModule {
     @Singleton
     fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
         retrofit.create(MDBListApi::class.java)
+
+    // --- Debrid APIs ---
+
+    @Provides
+    @Singleton
+    @Named("realDebrid")
+    fun provideRealDebridRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.real-debrid.com/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideRealDebridApi(@Named("realDebrid") retrofit: Retrofit): RealDebridApi =
+        retrofit.create(RealDebridApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("premiumize")
+    fun providePremiumizeRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://www.premiumize.me/api/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun providePremiumizeApi(@Named("premiumize") retrofit: Retrofit): PremiumizeApi =
+        retrofit.create(PremiumizeApi::class.java)
 
     // --- Poster ratings APIs ---
 

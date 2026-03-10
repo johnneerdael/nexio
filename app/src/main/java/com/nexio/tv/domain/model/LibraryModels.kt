@@ -21,7 +21,11 @@ data class LibraryEntry(
     val traktRank: Int? = null,
     val imdbId: String? = null,
     val tmdbId: Int? = null,
-    val traktId: Int? = null
+    val traktId: Int? = null,
+    val directPlaybackUrl: String? = null,
+    val playbackHeaders: Map<String, String>? = null,
+    val playbackStreamName: String? = null,
+    val playbackFilename: String? = null
 ) {
     fun toMetaPreview(): MetaPreview {
         return MetaPreview(
@@ -43,7 +47,8 @@ data class LibraryEntry(
 
 enum class LibrarySourceMode {
     LOCAL,
-    TRAKT
+    TRAKT,
+    DEBRID
 }
 
 enum class TraktListPrivacy(val apiValue: String) {
@@ -73,7 +78,8 @@ data class LibraryListTab(
 ) {
     enum class Type {
         WATCHLIST,
-        PERSONAL
+        PERSONAL,
+        SERVICE
     }
 }
 

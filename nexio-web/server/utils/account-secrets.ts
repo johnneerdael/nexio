@@ -4,10 +4,12 @@ import type { AddonRecord, SecretMetadata, SecretType } from '~/types/portal'
 export const secretRefs = {
   tmdb: 'integration:tmdb',
   mdblist: 'integration:mdblist',
+  premiumize: 'integration:premiumize',
   gemini: 'integration:gemini',
   rpdb: 'integration:rpdb',
   topPosters: 'integration:topposters',
-  trakt: 'integration:trakt'
+  trakt: 'integration:trakt',
+  realDebrid: 'integration:realdebrid'
 } as const
 
 export type AddonSecretPayload = {
@@ -92,7 +94,12 @@ export function maskSecretPreview(secretType: SecretType, payload: unknown): str
     return firstValue ? `Configured ••••${last4(String(firstValue))}` : 'Configured'
   }
 
-  if (secretType === 'trakt_access_token' || secretType === 'trakt_refresh_token') {
+  if (
+    secretType === 'trakt_access_token' ||
+    secretType === 'trakt_refresh_token' ||
+    secretType === 'realdebrid_access_token' ||
+    secretType === 'realdebrid_refresh_token'
+  ) {
     const token = String(data?.token ?? data?.accessToken ?? data?.refreshToken ?? '').trim()
     return token ? `Connected ••••${last4(token)}` : 'Connected'
   }

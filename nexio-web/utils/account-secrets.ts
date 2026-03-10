@@ -3,10 +3,12 @@ import type { AddonRecord, SecretType } from '~/types/portal'
 export const secretRefs = {
   tmdb: 'integration:tmdb',
   mdblist: 'integration:mdblist',
+  premiumize: 'integration:premiumize',
   gemini: 'integration:gemini',
   rpdb: 'integration:rpdb',
   topPosters: 'integration:topposters',
-  trakt: 'integration:trakt'
+  trakt: 'integration:trakt',
+  realDebrid: 'integration:realdebrid'
 } as const
 
 const sensitiveQueryKeys = new Set([

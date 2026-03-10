@@ -68,6 +68,7 @@ internal enum class SettingsCategory {
 
 private enum class IntegrationSettingsSection {
     Hub,
+    Debrid,
     Trakt,
     Tmdb,
     MdbList,
@@ -191,6 +192,7 @@ fun SettingsScreen(
     }
     val railContainerFocusRequester = remember { FocusRequester() }
     val integrationHubFocusRequester = remember { FocusRequester() }
+    val integrationDebridFocusRequester = remember { FocusRequester() }
     val integrationTraktFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
@@ -371,6 +373,7 @@ fun SettingsScreen(
                                 null
                             },
                             hubFocusRequester = integrationHubFocusRequester,
+                            debridFocusRequester = integrationDebridFocusRequester,
                             traktFocusRequester = integrationTraktFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
@@ -429,6 +432,7 @@ private fun IntegrationSettingsContent(
     onSelectSection: (IntegrationSettingsSection) -> Unit,
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
+    debridFocusRequester: FocusRequester,
     traktFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
@@ -446,6 +450,7 @@ private fun IntegrationSettingsContent(
         if (!autoFocusEnabled) return@LaunchedEffect
         val requester = when (selectedSection) {
             IntegrationSettingsSection.Hub -> hubEntryFocusRequester
+            IntegrationSettingsSection.Debrid -> debridFocusRequester
             IntegrationSettingsSection.Trakt -> traktFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
@@ -475,12 +480,19 @@ private fun IntegrationSettingsContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        item(key = "integration_hub_debrid") {
+                            SettingsActionRow(
+                                title = stringResource(R.string.debrid_title),
+                                subtitle = stringResource(R.string.debrid_subtitle),
+                                onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
+                                modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                            )
+                        }
                         item(key = "integration_hub_trakt") {
                             SettingsActionRow(
                                 title = "Trakt",
                                 subtitle = stringResource(R.string.settings_trakt_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Trakt) },
-                                modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                                onClick = { onSelectSection(IntegrationSettingsSection.Trakt) }
                             )
                         }
                         item(key = "integration_hub_tmdb") {
@@ -521,6 +533,12 @@ private fun IntegrationSettingsContent(
                     }
                 }
             }
+        }
+
+        IntegrationSettingsSection.Debrid -> {
+            DebridSettingsContent(
+                initialFocusRequester = debridFocusRequester
+            )
         }
 
         IntegrationSettingsSection.Trakt -> {

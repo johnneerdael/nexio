@@ -83,12 +83,36 @@ data class LayoutSettings(
 
 @Serializable
 data class IntegrationSettings(
+    val debrid: DebridSyncSettings = DebridSyncSettings(),
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
     val mdblist: MDBListSyncSettings = MDBListSyncSettings(),
     val animeSkip: AnimeSkipSyncSettings = AnimeSkipSyncSettings(),
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
     val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings()
+)
+
+@Serializable
+data class DebridSyncSettings(
+    val premiumize: PremiumizeSyncSettings = PremiumizeSyncSettings(),
+    val realDebrid: RealDebridSyncSettings = RealDebridSyncSettings()
+)
+
+@Serializable
+data class PremiumizeSyncSettings(
+    val configured: Boolean = false,
+    val customerId: Int? = null
+)
+
+@Serializable
+data class RealDebridSyncSettings(
+    val connected: Boolean = false,
+    val username: String = "",
+    val pending: Boolean = false,
+    val deviceCode: String = "",
+    val userCode: String = "",
+    val verificationUrl: String = "",
+    val expiresAt: Long? = null
 )
 
 @Serializable
@@ -252,5 +276,19 @@ data class AccountTraktAccessSecretPayload(
 
 @Serializable
 data class AccountTraktRefreshSecretPayload(
+    val refreshToken: String = ""
+)
+
+@Serializable
+data class AccountRealDebridAccessSecretPayload(
+    val accessToken: String = "",
+    val tokenType: String = "Bearer",
+    val expiresIn: Int = 0,
+    val userClientId: String = "",
+    val userClientSecret: String = ""
+)
+
+@Serializable
+data class AccountRealDebridRefreshSecretPayload(
     val refreshToken: String = ""
 )

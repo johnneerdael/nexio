@@ -15,6 +15,8 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.data.local.PremiumizeSettingsDataStore
+import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
@@ -22,9 +24,14 @@ import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
+import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
+import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
 import com.nexio.tv.data.remote.supabase.AccountSecretApiKeyPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
@@ -35,6 +42,7 @@ import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.AppearanceSettings
 import com.nexio.tv.data.remote.supabase.AudioSettings
 import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
+import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
@@ -43,11 +51,14 @@ import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackGeneralSettings
 import com.nexio.tv.data.remote.supabase.PlaybackSettings
 import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
+import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
+import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionSettings
 import com.nexio.tv.data.remote.supabase.SubtitleSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
+import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
@@ -82,6 +93,11 @@ private const val RPDB_SECRET_TYPE = "rpdb_api_key"
 private const val RPDB_SECRET_REF = "integration:rpdb"
 private const val TOP_POSTERS_SECRET_TYPE = "top_posters_api_key"
 private const val TOP_POSTERS_SECRET_REF = "integration:topposters"
+private const val PREMIUMIZE_SECRET_TYPE = "premiumize_api_key"
+private const val PREMIUMIZE_SECRET_REF = "integration:premiumize"
+private const val REAL_DEBRID_ACCESS_SECRET_TYPE = "realdebrid_access_token"
+private const val REAL_DEBRID_REFRESH_SECRET_TYPE = "realdebrid_refresh_token"
+private const val REAL_DEBRID_SECRET_REF = "integration:realdebrid"
 private const val TRAKT_ACCESS_SECRET_TYPE = "trakt_access_token"
 private const val TRAKT_REFRESH_SECRET_TYPE = "trakt_refresh_token"
 private const val TRAKT_SECRET_REF = "integration:trakt"
@@ -97,6 +113,9 @@ class AccountSettingsSyncService @Inject constructor(
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val geminiSettingsDataStore: GeminiSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
+    private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
+    private val premiumizeService: PremiumizeService,
+    private val realDebridAuthDataStore: RealDebridAuthDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
@@ -146,6 +165,8 @@ class AccountSettingsSyncService @Inject constructor(
                 animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
                 geminiSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
+                premiumizeSettingsDataStore.settings.drop(1).map { Unit },
+                realDebridAuthDataStore.state.drop(1).map { Unit },
                 traktAuthDataStore.state.drop(1).map { Unit },
                 traktSettingsDataStore.continueWatchingDaysCap.drop(1).map { Unit },
                 traktSettingsDataStore.showUnairedNextUp.drop(1).map { Unit },
@@ -200,6 +221,8 @@ class AccountSettingsSyncService @Inject constructor(
             syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, geminiSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
             syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
+            syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, premiumizeSettingsDataStore.settings.first().apiKey)
+            syncRealDebridSecretsToRemote()
             syncTraktSecretsToRemote()
 
             Result.success(Unit)
@@ -256,6 +279,9 @@ class AccountSettingsSyncService @Inject constructor(
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
         val gemini = geminiSettingsDataStore.settings.first()
         val posterRatings = posterRatingsSettingsDataStore.settings.first()
+        val premiumize = premiumizeSettingsDataStore.settings.first()
+        val premiumizeAccount = premiumizeService.observeAccountState().first()
+        val realDebrid = realDebridAuthDataStore.state.first()
         val traktAuth = traktAuthDataStore.state.first()
         val player = playerSettingsDataStore.playerSettings.first()
         val traktCatalogPrefs = traktSettingsDataStore.catalogPreferences.first()
@@ -289,6 +315,21 @@ class AccountSettingsSyncService @Inject constructor(
                 posterCardCornerRadiusDp = layoutPreferenceDataStore.posterCardCornerRadiusDp.first()
             ),
             integrations = IntegrationSettings(
+                debrid = DebridSyncSettings(
+                    premiumize = PremiumizeSyncSettings(
+                        configured = premiumize.isConfigured,
+                        customerId = premiumizeAccount.customerId
+                    ),
+                    realDebrid = RealDebridSyncSettings(
+                        connected = realDebrid.isAuthenticated,
+                        username = realDebrid.username.orEmpty(),
+                        pending = !realDebrid.isAuthenticated && !realDebrid.deviceCode.isNullOrBlank(),
+                        deviceCode = realDebrid.deviceCode.orEmpty(),
+                        userCode = realDebrid.userCode.orEmpty(),
+                        verificationUrl = realDebrid.verificationUrl.orEmpty(),
+                        expiresAt = realDebrid.expiresAt
+                    )
+                ),
                 tmdb = TmdbSyncSettings(
                     enabled = tmdb.enabled,
                     useArtwork = tmdb.useArtwork,
@@ -568,6 +609,84 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
+    private suspend fun syncRealDebridSecretsToRemote() {
+        val state = realDebridAuthDataStore.state.first()
+        val accessToken = state.accessToken?.trim().orEmpty()
+        val refreshToken = state.refreshToken?.trim().orEmpty()
+        val userClientId = state.userClientId?.trim().orEmpty()
+        val userClientSecret = state.userClientSecret?.trim().orEmpty()
+
+        if (
+            accessToken.isBlank() ||
+            refreshToken.isBlank() ||
+            userClientId.isBlank() ||
+            userClientSecret.isBlank()
+        ) {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
+                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+            }
+            return
+        }
+
+        withJwtRefreshRetry {
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
+                    put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                    put(
+                        "p_secret_payload",
+                        Json.encodeToJsonElement(
+                            AccountRealDebridAccessSecretPayload.serializer(),
+                            AccountRealDebridAccessSecretPayload(
+                                accessToken = accessToken,
+                                tokenType = state.tokenType ?: "Bearer",
+                                expiresIn = state.expiresIn ?: 0,
+                                userClientId = userClientId,
+                                userClientSecret = userClientSecret
+                            )
+                        )
+                    )
+                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
+                    put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                    put(
+                        "p_secret_payload",
+                        Json.encodeToJsonElement(
+                            AccountRealDebridRefreshSecretPayload.serializer(),
+                            AccountRealDebridRefreshSecretPayload(refreshToken = refreshToken)
+                        )
+                    )
+                    put("p_masked_preview", "Connected ••••${refreshToken.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+        }
+    }
+
     private suspend fun syncTraktSecretsToRemote() {
         val traktState = traktAuthDataStore.state.first()
         val accessToken = traktState.accessToken?.trim().orEmpty()
@@ -644,6 +763,9 @@ class AccountSettingsSyncService @Inject constructor(
         geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
         posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
         posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))
+        premiumizeSettingsDataStore.setApiKey(resolveApiKeySecret(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF))
+        premiumizeService.refreshAccountState()
+        applyRemoteRealDebridSecrets(settings)
         applyRemoteTraktSecrets(settings)
     }
 
@@ -713,6 +835,86 @@ class AccountSettingsSyncService @Inject constructor(
         if (!settings.integrations.traktAuth.pending) {
             traktAuthDataStore.clearDeviceFlow()
         }
+    }
+
+    private suspend fun applyRemoteRealDebridSecrets(settings: AccountSettingsPayload) {
+        val accessPayload = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", REAL_DEBRID_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountRealDebridAccessSecretPayload>()
+            }
+        }.getOrNull()
+
+        val refreshPayload = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", REAL_DEBRID_REFRESH_SECRET_TYPE)
+                        put("p_secret_ref", REAL_DEBRID_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountRealDebridRefreshSecretPayload>()
+            }
+        }.getOrNull()
+
+        val accessToken = accessPayload?.accessToken?.trim().orEmpty()
+        val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
+        val userClientId = accessPayload?.userClientId?.trim().orEmpty()
+        val userClientSecret = accessPayload?.userClientSecret?.trim().orEmpty()
+
+        if (
+            accessToken.isNotBlank() &&
+            refreshToken.isNotBlank() &&
+            userClientId.isNotBlank() &&
+            userClientSecret.isNotBlank()
+        ) {
+            realDebridAuthDataStore.saveUserCredentials(
+                RealDebridDeviceCredentialsResponseDto(
+                    clientId = userClientId,
+                    clientSecret = userClientSecret
+                )
+            )
+            realDebridAuthDataStore.saveToken(
+                RealDebridTokenResponseDto(
+                    accessToken = accessToken,
+                    expiresIn = accessPayload?.expiresIn ?: 0,
+                    tokenType = accessPayload?.tokenType ?: "Bearer",
+                    refreshToken = refreshToken
+                )
+            )
+            realDebridAuthDataStore.saveUsername(
+                settings.integrations.debrid.realDebrid.username.takeIf { it.isNotBlank() }
+            )
+            realDebridAuthDataStore.clearDeviceFlow()
+            return
+        }
+
+        val remoteFlow = settings.integrations.debrid.realDebrid
+        if (remoteFlow.pending && remoteFlow.deviceCode.isNotBlank()) {
+            realDebridAuthDataStore.clearAuth()
+            val expiresInSeconds = remoteFlow.expiresAt
+                ?.let { expiresAt -> ((expiresAt - System.currentTimeMillis()).coerceAtLeast(1_000L) / 1_000L).toInt() }
+                ?: 600
+            realDebridAuthDataStore.saveDeviceFlow(
+                RealDebridDeviceCodeResponseDto(
+                    deviceCode = remoteFlow.deviceCode,
+                    userCode = remoteFlow.userCode.ifBlank { "PENDING" },
+                    expiresIn = expiresInSeconds,
+                    verificationUrl = remoteFlow.verificationUrl.ifBlank { "https://real-debrid.com/device" }
+                )
+            )
+            realDebridAuthDataStore.saveUsername(remoteFlow.username.takeIf { it.isNotBlank() })
+            return
+        }
+
+        realDebridAuthDataStore.clearAuth()
     }
 
     private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {

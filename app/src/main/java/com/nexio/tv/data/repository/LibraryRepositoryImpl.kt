@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -23,39 +24,49 @@ import javax.inject.Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryRepositoryImpl @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val traktLibraryService: TraktLibraryService
+    private val traktLibraryService: TraktLibraryService,
+    private val debridLibraryService: DebridLibraryService
 ) : LibraryRepository {
 
-    override val sourceMode: Flow<LibrarySourceMode> = flowOf(LibrarySourceMode.TRAKT)
-
-    override val isSyncing: Flow<Boolean> = traktAuthDataStore.isEffectivelyAuthenticated
-        .flatMapLatest { isAuthenticated ->
-            if (isAuthenticated) {
-                traktLibraryService.observeIsRefreshing()
-            } else {
-                flowOf(false)
-            }
+    override val sourceMode: Flow<LibrarySourceMode> = combine(
+        traktAuthDataStore.isEffectivelyAuthenticated,
+        debridLibraryService.observeIsConnected()
+    ) { isTraktAuthenticated, isDebridConnected ->
+        when {
+            isTraktAuthenticated -> LibrarySourceMode.TRAKT
+            isDebridConnected -> LibrarySourceMode.DEBRID
+            else -> LibrarySourceMode.LOCAL
         }
+    }.distinctUntilChanged()
+
+    override val isSyncing: Flow<Boolean> = combine(
+        traktAuthDataStore.isEffectivelyAuthenticated.flatMapLatest { isAuthenticated ->
+            if (isAuthenticated) traktLibraryService.observeIsRefreshing() else flowOf(false)
+        },
+        debridLibraryService.observeIsRefreshing()
+    ) { traktRefreshing, debridRefreshing ->
+        traktRefreshing || debridRefreshing
+    }
         .distinctUntilChanged()
 
-    override val libraryItems: Flow<List<LibraryEntry>> = traktAuthDataStore.isEffectivelyAuthenticated
-        .flatMapLatest { isAuthenticated ->
-            if (isAuthenticated) {
-                traktLibraryService.observeAllItems()
-            } else {
-                flowOf(emptyList())
-            }
-        }
+    override val libraryItems: Flow<List<LibraryEntry>> = combine(
+        traktAuthDataStore.isEffectivelyAuthenticated.flatMapLatest { isAuthenticated ->
+            if (isAuthenticated) traktLibraryService.observeAllItems() else flowOf(emptyList())
+        },
+        debridLibraryService.observeItems()
+    ) { traktItems, debridItems ->
+        traktItems + debridItems
+    }
         .distinctUntilChanged()
 
-    override val listTabs: Flow<List<LibraryListTab>> = traktAuthDataStore.isEffectivelyAuthenticated
-        .flatMapLatest { isAuthenticated ->
-            if (isAuthenticated) {
-                traktLibraryService.observeListTabs()
-            } else {
-                flowOf(emptyList())
-            }
-        }
+    override val listTabs: Flow<List<LibraryListTab>> = combine(
+        traktAuthDataStore.isEffectivelyAuthenticated.flatMapLatest { isAuthenticated ->
+            if (isAuthenticated) traktLibraryService.observeListTabs() else flowOf(emptyList())
+        },
+        debridLibraryService.observeListTabs()
+    ) { traktTabs, debridTabs ->
+        traktTabs + debridTabs
+    }
         .distinctUntilChanged()
 
     override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> {
@@ -131,6 +142,7 @@ class LibraryRepositoryImpl @Inject constructor(
         if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             traktLibraryService.refreshNow()
         }
+        debridLibraryService.refreshNow()
     }
 
     private suspend fun requireTraktAuth() {

@@ -85,6 +85,105 @@
         <div class="field-shell" style="padding:0.95rem;">
           <div class="integration-header">
             <div>
+              <label>Premiumize</label>
+              <p>Store the Premiumize API key in the secret channel and sync the validated account state.</p>
+            </div>
+            <span :class="props.settings.integrations.debrid.premiumize.customerId ? 'toggle-chip active' : 'toggle-chip'">
+              {{ props.settings.integrations.debrid.premiumize.customerId ? 'Configured' : 'Not linked' }}
+            </span>
+          </div>
+          <input
+            :value="secretDrafts['integration:premiumize'] || ''"
+            placeholder="Paste Premiumize API key"
+            @input="emit('update-secret-draft', 'integration:premiumize', ($event.target as HTMLInputElement).value)"
+          >
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.1rem;">
+            <button
+              class="secondary-btn"
+              :disabled="!(secretDrafts['integration:premiumize'] || '').trim()"
+              @click="emit('save-premiumize-key', secretDrafts['integration:premiumize'] || '')"
+            >
+              Save key
+            </button>
+            <button
+              v-if="secretStatuses['integration:premiumize']"
+              class="secondary-btn"
+              @click="emit('refresh-premiumize')"
+            >
+              Refresh account
+            </button>
+            <button
+              v-if="secretStatuses['integration:premiumize']"
+              class="danger-btn"
+              @click="emit('clear-premiumize-key')"
+            >
+              Clear key
+            </button>
+          </div>
+          <p v-if="props.settings.integrations.debrid.premiumize.customerId">
+            Customer {{ props.settings.integrations.debrid.premiumize.customerId }}
+          </p>
+          <p v-else-if="secretStatuses['integration:premiumize']?.maskedPreview">
+            {{ secretStatuses['integration:premiumize']?.maskedPreview }}
+          </p>
+        </div>
+
+        <div class="field-shell" style="padding:0.95rem;">
+          <div class="integration-header">
+            <div>
+              <label>Real-Debrid</label>
+              <p>Start device activation here or continue a flow that was started on a synced TV.</p>
+            </div>
+            <span :class="props.settings.integrations.debrid.realDebrid.connected ? 'toggle-chip active' : props.settings.integrations.debrid.realDebrid.pending ? 'toggle-chip active' : 'toggle-chip'">
+              {{
+                props.settings.integrations.debrid.realDebrid.connected
+                  ? 'Connected'
+                  : props.settings.integrations.debrid.realDebrid.pending
+                    ? 'Pending'
+                    : 'Not linked'
+              }}
+            </span>
+          </div>
+          <div style="display:flex; gap:0.55rem; flex-wrap:wrap; margin-top:0.1rem;">
+            <button
+              v-if="!props.settings.integrations.debrid.realDebrid.connected && !props.settings.integrations.debrid.realDebrid.pending"
+              class="secondary-btn"
+              @click="emit('start-realdebrid')"
+            >
+              Start device flow
+            </button>
+            <button
+              v-if="props.settings.integrations.debrid.realDebrid.pending"
+              class="primary-btn"
+              @click="emit('complete-realdebrid')"
+            >
+              Check approval
+            </button>
+            <button
+              v-if="props.settings.integrations.debrid.realDebrid.connected"
+              class="danger-btn"
+              @click="emit('disconnect-realdebrid')"
+            >
+              Disconnect
+            </button>
+          </div>
+          <p v-if="props.settings.integrations.debrid.realDebrid.connected">
+            Connected as {{ props.settings.integrations.debrid.realDebrid.username || 'Real-Debrid user' }}
+          </p>
+          <template v-else-if="props.settings.integrations.debrid.realDebrid.pending">
+            <p>{{ props.settings.integrations.debrid.realDebrid.verificationUrl || 'https://real-debrid.com/device' }}</p>
+            <p>Code {{ props.settings.integrations.debrid.realDebrid.userCode }}</p>
+          </template>
+          <p v-else-if="secretStatuses['integration:realdebrid']?.maskedPreview">
+            {{ secretStatuses['integration:realdebrid']?.maskedPreview }}
+          </p>
+        </div>
+      </div>
+
+      <div class="grid-2 integrations-grid">
+        <div class="field-shell" style="padding:0.95rem;">
+          <div class="integration-header">
+            <div>
               <label>TMDB</label>
               <p>Enable TMDB metadata and store the API key from one compact panel.</p>
             </div>
@@ -348,6 +447,12 @@ const emit = defineEmits<{
   update: [path: string, value: unknown]
   'start-trakt': []
   'complete-trakt': []
+  'start-realdebrid': []
+  'complete-realdebrid': []
+  'disconnect-realdebrid': []
+  'save-premiumize-key': [apiKey: string]
+  'clear-premiumize-key': []
+  'refresh-premiumize': []
   'refresh-trakt-lists': []
   'disconnect-trakt': []
   'toggle-trakt-list': [key: string]
