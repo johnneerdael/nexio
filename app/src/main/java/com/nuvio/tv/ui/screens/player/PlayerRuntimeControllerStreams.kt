@@ -21,8 +21,8 @@ internal fun PlayerRuntimeController.showEpisodesPanel() {
         it.copy(
             showEpisodesPanel = true,
             showControls = true,
-            showAudioDialog = false,
-            showSubtitleDialog = false,
+            showAudioOverlay = false,
+            showSubtitleOverlay = false,
             showSubtitleStylePanel = false,
             showSpeedDialog = false,
             showMoreDialog = false
@@ -43,8 +43,8 @@ internal fun PlayerRuntimeController.showSourcesPanel() {
         it.copy(
             showSourcesPanel = true,
             showControls = true,
-            showAudioDialog = false,
-            showSubtitleDialog = false,
+            showAudioOverlay = false,
+            showSubtitleOverlay = false,
             showSubtitleStylePanel = false,
             showSpeedDialog = false,
             showMoreDialog = false,
@@ -290,6 +290,13 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
+    currentAddonName = stream.addonName
+    currentAddonLogo = stream.addonLogo
+    currentStreamDescription = stream.description
+    currentVideoCodec = null
+    currentVideoWidth = null
+    currentVideoHeight = null
+    currentVideoBitrate = null
     hasRetriedCurrentStreamAfter416 = false
     lastSavedPosition = 0L
 
@@ -558,6 +565,13 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
+    currentAddonName = stream.addonName
+    currentAddonLogo = stream.addonLogo
+    currentStreamDescription = stream.description
+    currentVideoCodec = null
+    currentVideoWidth = null
+    currentVideoHeight = null
+    currentVideoBitrate = null
     pendingSameSeriesTrackSelectionRestore =
         sameSeriesTrackSelectionPreference?.takeIf { contentType?.lowercase() in listOf("series", "tv") }
     hasRetriedCurrentStreamAfter416 = false
@@ -625,8 +639,8 @@ internal fun PlayerRuntimeController.showEpisodeStreamPicker(video: Video, force
             showEpisodeStreams = true,
             showSourcesPanel = false,
             showControls = true,
-            showAudioDialog = false,
-            showSubtitleDialog = false,
+            showAudioOverlay = false,
+            showSubtitleOverlay = false,
             showSubtitleStylePanel = false,
             showSpeedDialog = false,
             showMoreDialog = false,
