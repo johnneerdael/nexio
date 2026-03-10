@@ -2,7 +2,10 @@ package com.nexio.tv.ui.screens.addon
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.recommendations.AndroidTvFeedCatalogService
+import com.nexio.tv.core.recommendations.AndroidTvFeedOption
 import com.nexio.tv.core.sync.addonCatalogDisableKey
+import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -33,7 +36,9 @@ class CatalogOrderViewModel @Inject constructor(
     private val traktDiscoveryService: TraktDiscoveryService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
-    private val mdbListSettingsDataStore: MDBListSettingsDataStore
+    private val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    private val androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore,
+    private val androidTvFeedCatalogService: AndroidTvFeedCatalogService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CatalogOrderUiState())
@@ -43,6 +48,7 @@ class CatalogOrderViewModel @Inject constructor(
 
     init {
         observeCatalogs()
+        observeAndroidTvRecommendations()
     }
 
     fun moveUp(key: String) {
@@ -134,6 +140,37 @@ class CatalogOrderViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    private fun observeAndroidTvRecommendations() {
+        viewModelScope.launch {
+            combine(
+                androidTvRecommendationsDataStore.preferences,
+                androidTvFeedCatalogService.observeFeedOptions()
+            ) { prefs, options ->
+                prefs to options
+            }.collectLatest { (prefs, options) ->
+                _uiState.update {
+                    it.copy(
+                        androidTvChannelsEnabled = prefs.enabled,
+                        androidTvSelectedFeedKeys = prefs.selectedFeedKeys,
+                        androidTvFeedOptions = options
+                    )
+                }
+            }
+        }
+    }
+
+    fun setAndroidTvChannelsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            androidTvRecommendationsDataStore.setEnabled(enabled)
+        }
+    }
+
+    fun toggleAndroidTvFeed(key: String) {
+        viewModelScope.launch {
+            androidTvRecommendationsDataStore.toggleSelectedFeedKey(key)
         }
     }
 
@@ -355,7 +392,10 @@ class CatalogOrderViewModel @Inject constructor(
 
 data class CatalogOrderUiState(
     val isLoading: Boolean = true,
-    val items: List<CatalogOrderItem> = emptyList()
+    val items: List<CatalogOrderItem> = emptyList(),
+    val androidTvChannelsEnabled: Boolean = false,
+    val androidTvSelectedFeedKeys: List<String> = emptyList(),
+    val androidTvFeedOptions: List<AndroidTvFeedOption> = emptyList()
 )
 
 data class CatalogOrderItem(

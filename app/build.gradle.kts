@@ -238,6 +238,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.activity:activity-compose:1.11.0")
+    implementation(libs.androidx.tvprovider)
 
     // Hilt
     implementation(libs.hilt.android)
