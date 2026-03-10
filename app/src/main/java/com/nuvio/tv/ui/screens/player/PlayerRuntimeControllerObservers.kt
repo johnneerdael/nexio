@@ -165,7 +165,6 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
 
                 state.copy(
                     subtitleStyle = settings.subtitleStyle,
-                    subtitleOrganizationMode = settings.subtitleOrganizationMode,
                     loadingOverlayEnabled = settings.loadingOverlayEnabled,
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,

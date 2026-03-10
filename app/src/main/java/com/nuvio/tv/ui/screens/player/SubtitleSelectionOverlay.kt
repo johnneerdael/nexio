@@ -52,6 +52,7 @@ import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
+import com.nuvio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nuvio.tv.data.local.SubtitleStyleSettings
 import com.nuvio.tv.domain.model.Subtitle
 import com.nuvio.tv.ui.components.LoadingIndicator
@@ -95,10 +96,17 @@ internal fun SubtitleSelectionOverlay(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val languageItems = remember(internalTracks, addonSubtitles) {
+    val languageItems = remember(
+        internalTracks,
+        addonSubtitles,
+        subtitleStyle.preferredLanguage,
+        subtitleStyle.secondaryPreferredLanguage
+    ) {
         buildSubtitleLanguageRailItems(
             internalTracks = internalTracks,
-            addonSubtitles = addonSubtitles
+            addonSubtitles = addonSubtitles,
+            preferredLanguage = subtitleStyle.preferredLanguage,
+            secondaryPreferredLanguage = subtitleStyle.secondaryPreferredLanguage
         )
     }
     val initialLanguageKey = remember(languageItems, selectedInternalIndex, selectedAddonSubtitle, internalTracks) {
@@ -1054,7 +1062,9 @@ private data class SubtitleOptionRailItem(
 
 private fun buildSubtitleLanguageRailItems(
     internalTracks: List<TrackInfo>,
-    addonSubtitles: List<Subtitle>
+    addonSubtitles: List<Subtitle>,
+    preferredLanguage: String,
+    secondaryPreferredLanguage: String?
 ): List<SubtitleLanguageRailItem> {
     val counts = linkedMapOf<String, Int>()
     internalTracks.forEach { track ->
@@ -1066,8 +1076,21 @@ private fun buildSubtitleLanguageRailItems(
         counts[key] = (counts[key] ?: 0) + 1
     }
 
+    val preferredOrder = preferredOverlayLanguageOrder(
+        preferredLanguage = preferredLanguage,
+        secondaryPreferredLanguage = secondaryPreferredLanguage
+    )
+
     val sortedItems = counts.entries
-        .sortedBy { subtitleLanguageSortLabel(it.key) }
+        .sortedWith(
+            compareBy<Map.Entry<String, Int>>(
+                { entry ->
+                    val preferredIndex = preferredOrder.indexOf(entry.key)
+                    if (preferredIndex >= 0) preferredIndex else Int.MAX_VALUE
+                },
+                { entry -> subtitleLanguageSortLabel(entry.key) }
+            )
+        )
         .map { (key, count) ->
             SubtitleLanguageRailItem(
                 key = key,
@@ -1083,6 +1106,24 @@ private fun buildSubtitleLanguageRailItems(
             count = 0
         )
     ) + sortedItems
+}
+
+private fun preferredOverlayLanguageOrder(
+    preferredLanguage: String,
+    secondaryPreferredLanguage: String?
+): List<String> {
+    fun toOverlayLanguageKey(language: String?): String? {
+        if (language.isNullOrBlank()) return null
+        val normalized = PlayerSubtitleUtils.normalizeLanguageCode(language)
+        if (normalized == "none" || normalized == SUBTITLE_LANGUAGE_FORCED) return null
+        return normalizeOverlayLanguageKey(language)
+            .takeUnless { it == SubtitleUnknownLanguageKey }
+    }
+
+    return listOfNotNull(
+        toOverlayLanguageKey(preferredLanguage),
+        toOverlayLanguageKey(secondaryPreferredLanguage)
+    ).distinct()
 }
 
 private fun buildSubtitleOptionRailItems(
