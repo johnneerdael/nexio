@@ -6,6 +6,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
+import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
@@ -48,6 +49,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import java.time.LocalDate
+import java.time.ZoneId
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,6 +69,23 @@ class TraktProgressService @Inject constructor(
     private val metaRepository: MetaRepository,
     private val traktSettingsDataStore: TraktSettingsDataStore
 ) {
+    data class CalendarShowEntry(
+        val contentId: String,
+        val contentType: String = "series",
+        val name: String,
+        val season: Int,
+        val episode: Int,
+        val episodeTitle: String?,
+        val videoId: String,
+        val firstAired: String?,
+        val firstAiredMs: Long,
+        val poster: String? = null,
+        val backdrop: String? = null,
+        val logo: String? = null,
+        val traktShowId: Int? = null,
+        val traktEpisodeId: Int? = null
+    )
+
     companion object {
         private const val TAG = "TraktProgressSvc"
     }
@@ -125,6 +145,7 @@ class TraktProgressService @Inject constructor(
     private val refreshSignals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val episodeVideoIdCache = mutableMapOf<String, String>()
     private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
+    private val myShowsCalendar = MutableStateFlow<List<CalendarShowEntry>>(emptyList())
     private val optimisticProgress = MutableStateFlow<Map<String, OptimisticProgressEntry>>(emptyMap())
     private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
     private val watchedMoviesState = MutableStateFlow<Set<String>>(emptySet())
@@ -165,6 +186,7 @@ class TraktProgressService @Inject constructor(
     private val episodeProgressFetchThrottleMs = 15_000L
     private val optimisticTtlMs = 3 * 60_000L
     private val maxRecentEpisodeHistoryEntries = 300
+    private val myShowsCalendarWindowDays = 14
     private val metadataHydrationLimit = 110
     private val metadataFetchSemaphore = Semaphore(5)
     private val fastSyncThrottleMs = 3_000L
@@ -318,6 +340,25 @@ class TraktProgressService @Inject constructor(
         }
             .filterNotNull()
             .distinctUntilChanged()
+    }
+
+    fun observeMyShowsCalendar(): Flow<List<CalendarShowEntry>> {
+        return combine(
+            myShowsCalendar,
+            metadataState
+        ) { calendar, metadata ->
+            calendar.map { entry ->
+                val contentMetadata = metadata[entry.contentId]
+                entry.copy(
+                    name = contentMetadata?.name?.takeIf { it.isNotBlank() } ?: entry.name,
+                    poster = entry.poster ?: contentMetadata?.poster,
+                    backdrop = entry.backdrop ?: contentMetadata?.backdrop,
+                    logo = entry.logo ?: contentMetadata?.logo,
+                    episodeTitle = entry.episodeTitle
+                        ?: contentMetadata?.episodes?.get(entry.season to entry.episode)?.title
+                )
+            }
+        }.distinctUntilChanged()
     }
 
     fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
@@ -533,10 +574,33 @@ class TraktProgressService @Inject constructor(
         }
 
         val snapshot = fetchAllProgressSnapshot(force = force)
+        val calendarSnapshot = fetchMyShowsCalendarSnapshot()
         remoteProgress.value = snapshot
+        myShowsCalendar.value = calendarSnapshot
         hasLoadedRemoteProgress.value = true
         reconcileOptimistic(snapshot)
-        hydrateMetadata(snapshot)
+        hydrateMetadata(
+            progressList = snapshot + calendarSnapshot.map { entry ->
+                WatchProgress(
+                    contentId = entry.contentId,
+                    contentType = entry.contentType,
+                    name = entry.name,
+                    poster = entry.poster,
+                    backdrop = entry.backdrop,
+                    logo = entry.logo,
+                    videoId = entry.videoId,
+                    season = entry.season,
+                    episode = entry.episode,
+                    episodeTitle = entry.episodeTitle,
+                    position = 0L,
+                    duration = 0L,
+                    lastWatched = entry.firstAiredMs,
+                    source = WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS,
+                    traktShowId = entry.traktShowId,
+                    traktEpisodeId = entry.traktEpisodeId
+                )
+            }
+        )
     }
 
     private suspend fun hasActivityChanged(): Boolean {
@@ -826,6 +890,31 @@ class TraktProgressService @Inject constructor(
         return results.values.toList()
     }
 
+    private suspend fun fetchMyShowsCalendarSnapshot(): List<CalendarShowEntry> {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val startDate = today.minusDays((myShowsCalendarWindowDays - 1).toLong()).toString()
+
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getMyShowsCalendar(
+                authorization = authHeader,
+                startDate = startDate,
+                days = myShowsCalendarWindowDays
+            )
+        } ?: return emptyList()
+
+        if (!response.isSuccessful) return emptyList()
+
+        return response.body().orEmpty()
+            .mapNotNull { mapCalendarEpisodeItem(it) }
+            .groupBy { it.contentId }
+            .mapNotNull { (_, items) ->
+                items.minWithOrNull(
+                    compareBy<CalendarShowEntry>({ it.firstAiredMs }, { it.season }, { it.episode })
+                )
+            }
+            .sortedByDescending { it.firstAiredMs }
+    }
+
     private fun mapEpisodeHistoryItem(item: TraktUserEpisodeHistoryItemDto): WatchProgress? {
         val show = item.show ?: return null
         val episode = item.episode ?: return null
@@ -855,6 +944,28 @@ class TraktProgressService @Inject constructor(
             lastWatched = lastWatched,
             progressPercent = 100f,
             source = WatchProgress.SOURCE_TRAKT_HISTORY,
+            traktShowId = show.ids?.trakt,
+            traktEpisodeId = episode.ids?.trakt
+        )
+    }
+
+    private suspend fun mapCalendarEpisodeItem(item: TraktCalendarEpisodeItemDto): CalendarShowEntry? {
+        val show = item.show ?: return null
+        val episode = item.episode ?: return null
+        val season = episode.season ?: return null
+        val number = episode.number ?: return null
+        val contentId = normalizeContentId(show.ids)
+        if (contentId.isBlank()) return null
+
+        return CalendarShowEntry(
+            contentId = contentId,
+            name = show.title ?: contentId,
+            season = season,
+            episode = number,
+            episodeTitle = episode.title,
+            videoId = resolveEpisodeVideoId(contentId, season, number),
+            firstAired = item.firstAired,
+            firstAiredMs = parseIsoToMillis(item.firstAired),
             traktShowId = show.ids?.trakt,
             traktEpisodeId = episode.ids?.trakt
         )
