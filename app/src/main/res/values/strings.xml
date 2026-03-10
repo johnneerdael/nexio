@@ -297,6 +297,8 @@
     <string name="audio_iec_packer_dtshd_core_fallback_sub">When DTS-HD passthrough is disabled, allow fallback to DTS core passthrough if supported.</string>
     <string name="audio_dv5_compatibility_title">DV5 - Compatibility Remap</string>
     <string name="audio_dv5_compatibility_sub">Allows DV5 streams to use the DV8.1 compatibility path. May fix color/signaling issues on some devices, but can regress others.</string>
+    <string name="audio_dv5_tonemap_title">DV5 - Tone map to SDR</string>
+    <string name="audio_dv5_tonemap_sub">Forces likely DV5 playback through the software Dolby Vision path and tone maps the output to SDR when device playback is unstable.</string>
     <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Preserve Mapping</string>
     <string name="audio_dv_experimental_preserve_mapping_sub">Experimental higher-fidelity DV8.1 conversion that preserves mapping metadata. May be less compatible than the default DV7 conversion path.</string>
     <string name="audio_decoder_device_only_desc">Only use built-in hardware decoders. Most compatible but may not support all formats.</string>
