@@ -225,6 +225,7 @@ fun ModernHomeContent(
                     }
                 } else {
                     val rowItemOccurrenceCounts = mutableMapOf<String, Int>()
+                    val rowItemCache = rowBuildCache.catalogItemCache.getOrPut(rowKey) { mutableMapOf() }
                     HeroCarouselRow(
                         key = rowKey,
                         title = catalogRowTitle(
@@ -243,14 +244,29 @@ fun ModernHomeContent(
                         items = row.items.map { item ->
                             val occurrence = rowItemOccurrenceCounts.getOrDefault(item.id, 0)
                             rowItemOccurrenceCounts[item.id] = occurrence + 1
-                            buildCatalogItem(
-                                item = item,
-                                row = row,
-                                useLandscapePosters = useLandscapePosters,
-                                occurrence = occurrence,
-                                strTypeMovie = strTypeMovie,
-                                strTypeSeries = strTypeSeries
-                            )
+                            val cacheKey = "${item.id}_$occurrence"
+                            val cachedItem = rowItemCache[cacheKey]
+                            if (cachedItem != null &&
+                                cachedItem.source == item &&
+                                cachedItem.useLandscapePosters == useLandscapePosters
+                            ) {
+                                cachedItem.carouselItem
+                            } else {
+                                val built = buildCatalogItem(
+                                    item = item,
+                                    row = row,
+                                    useLandscapePosters = useLandscapePosters,
+                                    occurrence = occurrence,
+                                    strTypeMovie = strTypeMovie,
+                                    strTypeSeries = strTypeSeries
+                                )
+                                rowItemCache[cacheKey] = CachedCarouselItem(
+                                    source = item,
+                                    useLandscapePosters = useLandscapePosters,
+                                    carouselItem = built
+                                )
+                                built
+                            }
                         }
                     )
                 }
@@ -264,6 +280,7 @@ fun ModernHomeContent(
                 add(mappedRow)
             }
             rowBuildCache.catalogRows.keys.retainAll(activeCatalogKeys)
+            rowBuildCache.catalogItemCache.keys.retainAll(activeCatalogKeys)
         }
     }
 

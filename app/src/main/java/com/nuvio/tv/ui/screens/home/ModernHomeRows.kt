@@ -352,8 +352,8 @@ internal fun ModernRowSection(
         val rowStartPadding = 52.dp
         val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec) {
             val parentStartOffsetPx = with(density) { rowStartPadding.roundToPx() }
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
-                @Suppress("DEPRECATION")
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     defaultBringIntoViewSpec.scrollAnimationSpec
 
@@ -383,22 +383,24 @@ internal fun ModernRowSection(
             LazyRow(
                 state = rowListState,
                 modifier = Modifier
-                    .focusRestorer {
-                    val rememberedIndex = (focusedItemByRow[row.key] ?: 0)
-                        .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                    val fallbackIndex = rowListState.firstVisibleItemIndex
-                        .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                    val restoreIndex = if (rememberedIndex in row.items.indices) {
-                        rememberedIndex
-                    } else {
-                        fallbackIndex
-                    }
-                    val visibleIndices = rowListState.layoutInfo.visibleItemsInfo.map { it.index }.toSet()
-                    val safeIndex = if (restoreIndex in visibleIndices) restoreIndex else
-                        visibleIndices.minByOrNull { kotlin.math.abs(it - restoreIndex) } ?: fallbackIndex
-                    val itemKey = row.items.getOrNull(safeIndex)?.key ?: row.items.first().key
-                    itemFocusRequesters[row.key]?.get(itemKey) ?: FocusRequester.Default
-                },
+                    .focusRestorer(
+                        run {
+                            val rememberedIndex = (focusedItemByRow[row.key] ?: 0)
+                                .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
+                            val fallbackIndex = rowListState.firstVisibleItemIndex
+                                .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
+                            val restoreIndex = if (rememberedIndex in row.items.indices) {
+                                rememberedIndex
+                            } else {
+                                fallbackIndex
+                            }
+                            val visibleIndices = rowListState.layoutInfo.visibleItemsInfo.map { it.index }.toSet()
+                            val safeIndex = if (restoreIndex in visibleIndices) restoreIndex else
+                                visibleIndices.minByOrNull { kotlin.math.abs(it - restoreIndex) } ?: fallbackIndex
+                            val itemKey = row.items.getOrNull(safeIndex)?.key ?: row.items.first().key
+                            itemFocusRequesters[row.key]?.get(itemKey) ?: FocusRequester.Default
+                        }
+                    ),
                 contentPadding = PaddingValues(horizontal = rowStartPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -433,7 +435,7 @@ internal fun ModernRowSection(
 
                         is ModernPayload.Catalog -> {
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
-                            val isWatched = remember(item.metaPreview) {
+                            val isWatched = remember(item.metaPreview?.id) {
                                 item.metaPreview?.let(isCatalogItemWatched) == true
                             }
                             val onLongPress: () -> Unit = remember(item.metaPreview, payload.addonBaseUrl) {
