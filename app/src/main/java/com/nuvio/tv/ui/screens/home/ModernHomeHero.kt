@@ -1,7 +1,8 @@
 package com.nuvio.tv.ui.screens.home
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -175,11 +176,16 @@ internal fun ModernHeroMediaLayer(
 @Composable
 internal fun HeroTitleBlock(
     preview: HeroPreview?,
+    enriching: Boolean = false,
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (preview == null) return
-
+    val alpha by animateFloatAsState(
+        targetValue = if (enriching) 0f else 1f,
+        animationSpec = tween(if (enriching) 120 else 220),
+        label = "heroTitleAlpha"
+    )
     val descriptionMaxLines = if (portraitMode) 4 else 5
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
@@ -223,7 +229,7 @@ internal fun HeroTitleBlock(
     }
 
     Column(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer { this.alpha = alpha },
         verticalArrangement = Arrangement.spacedBy(titleSpacing)
     ) {
         var logoLoadFailed by remember(preview.logo) { mutableStateOf(false) }
