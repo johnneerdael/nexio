@@ -556,8 +556,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     val targetVideo = forcedTargetVideo
         ?: _uiState.value.episodes.firstOrNull { it.id == _uiState.value.episodeStreamsForVideoId }
 
-    // Reset transient playback flags before stopping, so stop callbacks never
-    // persist stale positions into the newly selected episode.
     resetLoadingOverlayForNewStream()
     releasePlayer(flushPlaybackState = false)
 
@@ -796,7 +794,7 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                     innerJob.join()
                 }
             } else {
-                timeoutElapsed = true  // instant: select on first Success
+                timeoutElapsed = true
                 innerJob.join()
             }
 
