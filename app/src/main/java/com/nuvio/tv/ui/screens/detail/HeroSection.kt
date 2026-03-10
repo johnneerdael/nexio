@@ -589,11 +589,23 @@ private fun MetaInfoRow(
     val strStatusEnded = stringResource(R.string.series_status_ended)
     val strStatusContinuing = stringResource(R.string.series_status_continuing)
     val strStatusCurrent = stringResource(R.string.series_status_current)
+    val strStatusCancelled = stringResource(R.string.series_status_cancelled)
+    val strStatusReleased = stringResource(R.string.series_status_released)
+    val strStatusPlanned = stringResource(R.string.series_status_planned)
+    val strStatusRumored = stringResource(R.string.series_status_rumored)
+    val strStatusInProduction = stringResource(R.string.series_status_in_production)
+    val strStatusPostProduction = stringResource(R.string.series_status_post_production)
     val statusBadge = remember(meta.status) {
         when (meta.status?.trim()?.lowercase()) {
             "ended" -> strStatusEnded.uppercase()
-            "continuing" -> strStatusContinuing.uppercase()
+            "continuing", "returning series" -> strStatusContinuing.uppercase()
             "current" -> strStatusCurrent.uppercase()
+            "cancelled", "canceled" -> strStatusCancelled.uppercase()
+            "released" -> strStatusReleased.uppercase()
+            "planned" -> strStatusPlanned.uppercase()
+            "rumored" -> strStatusRumored.uppercase()
+            "in production" -> strStatusInProduction.uppercase()
+            "post production" -> strStatusPostProduction.uppercase()
             else -> meta.status?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
         }
     }
