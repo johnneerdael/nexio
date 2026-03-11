@@ -8,8 +8,6 @@ import androidx.media3.common.C
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import com.nexio.tv.core.mpv.NexioMpvRenderState
-import com.nexio.tv.core.mpv.NexioMpvSurfaceView
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
@@ -177,9 +175,6 @@ class PlayerRuntimeController(
     internal var _exoPlayer: ExoPlayer? = null
     val exoPlayer: ExoPlayer?
         get() = _exoPlayer
-    internal var mpvView: NexioMpvSurfaceView? = null
-    internal val mpvRenderState = MutableStateFlow(NexioMpvRenderState())
-    internal var mpvInitializationInProgress: Boolean = false
 
     internal var progressJob: Job? = null
     internal var vodTelemetryJob: Job? = null
@@ -198,10 +193,6 @@ class PlayerRuntimeController(
     internal var sourceStreamsJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
-    internal var mpvStateCollectionJob: Job? = null
-    internal var mpvSubtitleCueCollectionJob: Job? = null
-    internal var mpvRenderCollectionJob: Job? = null
-    internal var observedMpvView: NexioMpvSurfaceView? = null
     internal var builtInAiSubtitleTranslationJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
     internal var hostActivityRef: WeakReference<Activity>? = null
@@ -246,8 +237,6 @@ class PlayerRuntimeController(
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
-    internal var lastMpvSubtitleVisibility: Boolean? = null
-    internal var lastLibmpvPlayerSettings: com.nexio.tv.data.local.PlayerSettings? = null
 
     internal var lastBufferLogTimeMs: Long = 0L
     internal var lastVodTelemetryRefreshTimeMs: Long = 0L
@@ -273,15 +262,15 @@ class PlayerRuntimeController(
     internal var hasRetriedCurrentStreamAfterUnexpectedNpe: Boolean = false
     internal var hasRetriedCurrentStreamAfterMediaPeriodHolderCrash: Boolean = false
     internal var timeoutRecoveryAttempts: Int = 0
-    internal val dv7ToHevcForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal val dv5SoftwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val dv5HardwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1SoftwarePreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
     internal val audioDisabledForcedStreamUrls: MutableSet<String> = mutableSetOf()
-    internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false
     internal var isDv5SoftwareToneMapSettingEnabledForCurrentPlayback: Boolean = false
     internal var isDv5SoftwareToneMapNativeSupportedForCurrentPlayback: Boolean = false
+    internal var isDv5HardwareToneMapNativeSupportedForCurrentPlayback: Boolean = false
     internal var isDv5SoftwareToneMapActiveForCurrentPlayback: Boolean = false
     internal var isDv5HardwareToneMapSettingEnabledForCurrentPlayback: Boolean = false
     internal var isDv5HardwareToneMapActiveForCurrentPlayback: Boolean = false
@@ -292,7 +281,6 @@ class PlayerRuntimeController(
     internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
     internal var isSafeAudioModeActiveForCurrentPlayback: Boolean = false
     internal var isAudioDisabledForCurrentPlayback: Boolean = false
-    internal var hasAttemptedDv7ToDv81ForCurrentPlayback: Boolean = false
     internal var dv7ToDv81BridgeVersionForCurrentPlayback: String? = null
     internal var dv7ToDv81LastProbeReasonForCurrentPlayback: String? = null
     internal var playerInitializationStartedAtMs: Long = 0L

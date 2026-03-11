@@ -130,10 +130,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                             MatroskaDolbyVisionHookInstaller.getLastSelectedConversionMode()
                         val conversionCalls = DoviBridge.getConversionCallCount()
                         val conversionSuccess = DoviBridge.getConversionSuccessCount()
-                        val conversionAttempted =
-                            hasAttemptedDv7ToDv81ForCurrentPlayback ||
-                                conversionCalls > 0 ||
-                                signalingRewrites > 0
+                        val conversionAttempted = conversionCalls > 0 || signalingRewrites > 0
                         val experimentalDvEnabled = isExperimentalDv7ToDv81ActiveForCurrentPlayback
                         val dv7ProbeReason = dv7ToDv81LastProbeReasonForCurrentPlayback ?: "n/a"
                         bufferLogJob = scope.launch(Dispatchers.Default) {

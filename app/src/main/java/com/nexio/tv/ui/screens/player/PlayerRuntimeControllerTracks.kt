@@ -173,13 +173,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         currentVideoTrackCodecs = effectiveVideoFormat.codecs
         currentVideoTrackWidth = effectiveVideoFormat.width.coerceAtLeast(0)
         currentVideoTrackHeight = effectiveVideoFormat.height.coerceAtLeast(0)
-        currentVideoTrackIsLikelyDv5 = isLikelyDolbyVisionProfile5VideoFormat(
-            sampleMimeType = effectiveVideoFormat.sampleMimeType,
-            codecs = effectiveVideoFormat.codecs,
-            label = effectiveVideoFormat.label,
-            streamName = _uiState.value.currentStreamName,
-            streamUrl = currentStreamUrl
-        )
+        currentVideoTrackIsLikelyDv5 = isDolbyVisionProfile5VideoFormat(effectiveVideoFormat.codecs)
         currentVideoTrackSelected = selectedVideoFormat != null
         currentVideoTrackBestSupport = if (selectedVideoFormat != null) {
             selectedVideoTrackSupport
@@ -211,6 +205,8 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             append(isDv5SoftwareToneMapSettingEnabledForCurrentPlayback)
             append("|dv5HwToneMapSetting=")
             append(isDv5HardwareToneMapSettingEnabledForCurrentPlayback)
+            append("|dv5HwToneMapNativeSupported=")
+            append(isDv5HardwareToneMapNativeSupportedForCurrentPlayback)
             append("|dv5ToneMapNativeSupported=")
             append(isDv5SoftwareToneMapNativeSupportedForCurrentPlayback)
             append("|dvDisplayCapable=")
@@ -239,6 +235,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                     "support=${Util.getFormatSupportString(currentVideoTrackBestSupport)} " +
                     "dv5ToneMapSetting=$isDv5SoftwareToneMapSettingEnabledForCurrentPlayback " +
                     "dv5HwToneMapSetting=$isDv5HardwareToneMapSettingEnabledForCurrentPlayback " +
+                    "dv5HwToneMapNativeSupported=$isDv5HardwareToneMapNativeSupportedForCurrentPlayback " +
                     "dv5ToneMapNativeSupported=$isDv5SoftwareToneMapNativeSupportedForCurrentPlayback " +
                     "dvDisplayCapable=$isCurrentDisplayDolbyVisionCapable " +
                     "shieldDevice=$isCurrentDeviceNvidiaShield " +
@@ -249,7 +246,26 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             )
         }
         if (currentVideoTrackIsLikelyDv5 &&
+            isDv5HardwareToneMapSettingEnabledForCurrentPlayback &&
+            isDv5HardwareToneMapNativeSupportedForCurrentPlayback &&
+            isCurrentDeviceNvidiaShield &&
+            !isCurrentDisplayDolbyVisionCapable &&
+            !isDv5HardwareToneMapActiveForCurrentPlayback
+        ) {
+            val currentPosition = backendCurrentPosition()
+            dv5HardwareToneMapPreferredStreamUrls.add(currentStreamUrl)
+            dv5SoftwareToneMapPreferredStreamUrls.remove(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TRACK: likely DV5 on Shield non-DV display, retrying with hardware tone-map path " +
+                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithDv5HardwareToneMap(currentPosition)
+            return
+        }
+        if (currentVideoTrackIsLikelyDv5 &&
             isDv5SoftwareToneMapSettingEnabledForCurrentPlayback &&
+            !isDv5HardwareToneMapSettingEnabledForCurrentPlayback &&
             isDv5SoftwareToneMapNativeSupportedForCurrentPlayback &&
             !isCurrentDisplayDolbyVisionCapable &&
             !isDv5HardwareToneMapActiveForCurrentPlayback &&
@@ -429,28 +445,8 @@ private fun isLikelyVc1VideoFormat(
         haystack.contains("wmv3")
 }
 
-private val dv5ProfileHintRegex = Regex(
-    pattern = """(?i)\b(?:dv|dovi|dolby[ ._-]?vision)[ ._-]*(?:p(?:rofile)?[ ._-]*)?0?5\b"""
-)
-
-private val dv5CodecProfileHintRegex = Regex(
-    pattern = """(?i)\b(?:dvhe|dvh1)[._-]?0?5\b"""
-)
-
-private fun isLikelyDolbyVisionProfile5VideoFormat(
-    sampleMimeType: String?,
-    codecs: String?,
-    label: String?,
-    streamName: String?,
-    streamUrl: String?
-): Boolean {
-    if (resolveDolbyVisionProfileFromCodecString(codecs) == 5) return true
-    if (sampleMimeType != MimeTypes.VIDEO_DOLBY_VISION) return false
-    val haystack = listOfNotNull(codecs, label, streamName, streamUrl)
-        .joinToString(" ")
-        .lowercase(Locale.ROOT)
-    return dv5ProfileHintRegex.containsMatchIn(haystack) ||
-        dv5CodecProfileHintRegex.containsMatchIn(haystack)
+private fun isDolbyVisionProfile5VideoFormat(codecs: String?): Boolean {
+    return resolveDolbyVisionProfileFromCodecString(codecs) == 5
 }
 
 private fun resolveDolbyVisionProfileFromCodecString(codecs: String?): Int? {

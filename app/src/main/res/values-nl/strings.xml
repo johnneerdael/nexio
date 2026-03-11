@@ -9,7 +9,7 @@
   <string name="poster_ratings_subtitle">Gebruik posters met beoordelingen van RPDB of TOPPosters</string>
   <string name="trakt_watching_now_label">Nu aan het kijken</string>
   <string name="sub_startup_mode_fast">Snelle start</string>
-  <string name="audio_dv_experimental_title">DV7 - Experimenteel DV8.1</string>
+  <string name="audio_dv_experimental_title">DV7 - DV8.1-conversie</string>
   <string name="tmdb_api_key_title">API-sleutel</string>
   <string name="appearance_language_dialog_title">Taal kiezen</string>
   <string name="appearance_title">Weergave</string>
@@ -50,7 +50,7 @@
   <string name="audio_dts_iec_experimental_sub">Experimenteel Fire OS audio quirk-pad. Schakelt de Fire TV-compatibiliteitslaag in de Media3-audiostack in, inclusief DTS core fallback en capability-routing quirks. Standaard uitgeschakeld omdat dit problemen kan veroorzaken op niet-Fire-apparaten.</string>
   <string name="trakt_catalog_popular_movies_subtitle">Films met de hoogste populariteit op lange termijn.</string>
   <string name="tmdb_dialog_subtitle">Voer je persoonlijke TMDB API-sleutel in</string>
-  <string name="audio_dv_experimental_sub">Experimenteel native conversiepad. Als de conversie niet beschikbaar is of mislukt, valt het afspelen terug op HEVC-mapping.</string>
+  <string name="audio_dv_experimental_sub">Native conversiepad van DV7 naar DV8.1. Als de conversie niet beschikbaar is of mislukt, valt het afspelen terug op HEVC-mapping.</string>
   <string name="sub_startup_mode_fast_desc">Begin direct met afspelen. Als je add-on-ondertitels selecteert, wordt de speler mogelijk één keer opnieuw geladen.</string>
   <string name="trakt_catalog_calendar_subtitle">Aankomende afleveringen uit je Trakt-kalender.</string>
   <string name="poster_ratings_top_dialog_subtitle">Voer je TOPPosters API-sleutel in om posters met beoordelingen te valideren en in te schakelen</string>
@@ -346,7 +346,6 @@
   <string name="audio_decoder_priority">Decoderprioriteit</string>
   <string name="audio_tunneled">Tunneled weergave</string>
   <string name="audio_tunneled_sub">Audio-/videosynchronisatie op hardwareniveau. Kan het afspelen op sommige Android TV-apparaten verbeteren</string>
-  <string name="audio_dv_sub">Wijs Dolby Vision Profile 7 toe aan standaard HEVC voor apparaten zonder DV-hardwareondersteuning</string>
   <string name="audio_fire_os_compatibility_fallback_title">Fire OS - Compatibiliteits-fallback</string>
   <string name="audio_fire_os_compatibility_fallback_sub">Maakt fallbacks voor Fire TV-compatibiliteit mogelijk, inclusief downgrade van oudere DTS-cores en runtime passthrough-herstel. Schakel dit uit met de IEC-packer voor strikte pariteit in Kodi-stijl.</string>
   <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - Audiodelay bewaken</string>
@@ -882,7 +881,6 @@
   <string name="addon_catalogs_types">Catalogi: %1$d - Types: %2$s</string>
   <string name="profile_edit_title_id">Profiel bewerken: %1$d</string>
   <string name="audio_passthrough_info">Audio-passthrough (TrueHD, DTS, AC-3, enz.) gebeurt automatisch. Bij aansluiting op een compatibele AV-receiver of soundbar via HDMI wordt verliesvrije audio verzonden zoals ze is, zonder decodering.</string>
-  <string name="audio_dv_title">DV7 - HEVC-fallback</string>
   <string name="nav_home">Home</string>
   <string name="nav_discover">Ontdekken</string>
   <string name="nav_search">Zoeken</string>

@@ -293,8 +293,14 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
           input?.playback?.audio?.decoderPriority ?? defaults.playback.audio.decoderPriority,
         tunnelingEnabled:
           input?.playback?.audio?.tunnelingEnabled ?? defaults.playback.audio.tunnelingEnabled,
-        mapDV7ToHevc:
-          input?.playback?.audio?.mapDV7ToHevc ?? defaults.playback.audio.mapDV7ToHevc
+        experimentalDv7ToDv81Enabled:
+          input?.playback?.audio?.experimentalDv7ToDv81Enabled ?? defaults.playback.audio.experimentalDv7ToDv81Enabled,
+        experimentalDtsIecPassthroughEnabled:
+          input?.playback?.audio?.experimentalDtsIecPassthroughEnabled ?? defaults.playback.audio.experimentalDtsIecPassthroughEnabled,
+        experimentalDv7ToDv81PreserveMappingEnabled:
+          input?.playback?.audio?.experimentalDv7ToDv81PreserveMappingEnabled ?? defaults.playback.audio.experimentalDv7ToDv81PreserveMappingEnabled,
+        experimentalDv5ToDv81Enabled:
+          input?.playback?.audio?.experimentalDv5ToDv81Enabled ?? defaults.playback.audio.experimentalDv5ToDv81Enabled
       },
       subtitles: {
         ...defaults.playback.subtitles,

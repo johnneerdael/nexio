@@ -145,15 +145,14 @@
         "audio": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["preferredAudioLanguage", "secondaryPreferredAudioLanguage", "skipSilence", "decoderPriority", "tunnelingEnabled", "mapDV7ToHevc", "experimentalDv7ToDv81Enabled", "experimentalDtsIecPassthroughEnabled", "experimentalDv7ToDv81PreserveMappingEnabled", "experimentalDv5ToDv81Enabled"],
+          "required": ["preferredAudioLanguage", "secondaryPreferredAudioLanguage", "skipSilence", "decoderPriority", "tunnelingEnabled", "experimentalDv7ToDv81Enabled", "experimentalDtsIecPassthroughEnabled", "experimentalDv7ToDv81PreserveMappingEnabled", "experimentalDv5ToDv81Enabled"],
           "properties": {
             "preferredAudioLanguage": {"type": "string", "default": "device"},
             "secondaryPreferredAudioLanguage": {"type": ["string", "null"], "default": null},
             "skipSilence": {"type": "boolean", "default": false},
             "decoderPriority": {"type": "integer", "minimum": 0, "maximum": 2, "default": 1},
             "tunnelingEnabled": {"type": "boolean", "default": false},
-            "mapDV7ToHevc": {"type": "boolean", "default": false},
-            "experimentalDv7ToDv81Enabled": {"type": "boolean", "default": false},
+            "experimentalDv7ToDv81Enabled": {"type": "boolean", "default": true},
             "experimentalDtsIecPassthroughEnabled": {"type": "boolean", "default": false},
             "experimentalDv7ToDv81PreserveMappingEnabled": {"type": "boolean", "default": false},
             "experimentalDv5ToDv81Enabled": {"type": "boolean", "default": false}

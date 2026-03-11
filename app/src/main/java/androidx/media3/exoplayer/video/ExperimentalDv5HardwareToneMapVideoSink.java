@@ -62,6 +62,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
   private final VideoFrameReleaseEarlyTimeForecaster videoFrameReleaseEarlyTimeForecaster;
   private final VideoFrameRenderControl videoFrameRenderControl;
   private final Queue<VideoFrameHandler> videoFrameHandlers;
+  private final Object imageDrainLock;
   private final Context applicationContext;
   private final long allowedJoiningTimeMs;
   private final boolean forceCpuReadableFallback;
@@ -81,6 +82,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
   private boolean firstFrameRendered;
   private boolean loggedPurePathFallback;
   private boolean loggedRuntimePathMarker;
+  private boolean isDrainingDecodedImages;
   private InputReaderMode inputReaderMode;
 
   public ExperimentalDv5HardwareToneMapVideoSink(
@@ -100,6 +102,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
         new VideoFrameRenderControl(
             new FrameRendererImpl(), videoFrameReleaseControl, videoFrameReleaseEarlyTimeForecaster);
     this.videoFrameHandlers = new ArrayDeque<>();
+    this.imageDrainLock = new Object();
     this.outputResolution = Size.UNKNOWN;
     this.inputFormat = new Format.Builder().build();
     this.streamStartPositionUs = C.TIME_UNSET;
@@ -111,6 +114,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
     this.firstFrameRendered = false;
     this.loggedPurePathFallback = false;
     this.loggedRuntimePathMarker = false;
+    this.isDrainingDecodedImages = false;
     this.inputReaderMode = InputReaderMode.GPU_OPTIMIZED;
   }
 
@@ -293,7 +297,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
   public void render(long positionUs, long elapsedRealtimeUs) throws VideoSinkException {
     try {
       videoFrameRenderControl.render(positionUs, elapsedRealtimeUs);
-      drainDecodedImages();
+      safeDrainDecodedImages("render");
     } catch (ExoPlaybackException e) {
       throw new VideoSinkException(e, inputFormat);
     }
@@ -314,6 +318,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
         imageReaderThread = null;
       }
       imageReaderHandler = null;
+      isDrainingDecodedImages = false;
     }
   }
 
@@ -380,7 +385,7 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
         return false;
       }
       inputImageReader.setOnImageAvailableListener(
-          reader -> drainDecodedImages(), checkNotNull(imageReaderHandler));
+          reader -> safeDrainDecodedImages("image-listener"), checkNotNull(imageReaderHandler));
       inputSurface = inputImageReader.getSurface();
       maybeLogRuntimePathMarkerLocked();
       return true;
@@ -454,6 +459,30 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
   }
 
   private void drainDecodedImages() {
+    synchronized (imageDrainLock) {
+      if (isDrainingDecodedImages) {
+        return;
+      }
+      isDrainingDecodedImages = true;
+    }
+    try {
+      drainDecodedImagesInternal();
+    } finally {
+      synchronized (imageDrainLock) {
+        isDrainingDecodedImages = false;
+      }
+    }
+  }
+
+  private void safeDrainDecodedImages(String source) {
+    try {
+      drainDecodedImages();
+    } catch (RuntimeException exception) {
+      Log.w(TAG, "DV5_HW_RENDER: drain failed source=" + source, exception);
+    }
+  }
+
+  private void drainDecodedImagesInternal() {
     ImageReader imageReader;
     Surface currentOutputSurface = outputSurface;
     Size currentOutputResolution = outputResolution;
@@ -464,7 +493,13 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
       return;
     }
     while (true) {
-      Image image = imageReader.acquireNextImage();
+      final Image image;
+      try {
+        image = imageReader.acquireNextImage();
+      } catch (RuntimeException exception) {
+        Log.w(TAG, "DV5_HW_RENDER: acquireNextImage failed", exception);
+        return;
+      }
       if (image == null) {
         return;
       }
@@ -541,7 +576,11 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
           framePresentationTimeUs, renderTimeNs, format, /* mediaFormat= */ null);
       VideoFrameHandler videoFrameHandler;
       synchronized (lock) {
-        videoFrameHandler = videoFrameHandlers.remove();
+        videoFrameHandler = videoFrameHandlers.poll();
+      }
+      if (videoFrameHandler == null) {
+        Log.w(TAG, "DV5_HW_RENDER: missing frame handler during render");
+        return;
       }
       videoFrameHandler.render(renderTimeNs);
     }
@@ -551,7 +590,11 @@ public final class ExperimentalDv5HardwareToneMapVideoSink implements VideoSink 
       listenerExecutor.execute(() -> listener.onFrameDropped());
       VideoFrameHandler videoFrameHandler;
       synchronized (lock) {
-        videoFrameHandler = videoFrameHandlers.remove();
+        videoFrameHandler = videoFrameHandlers.poll();
+      }
+      if (videoFrameHandler == null) {
+        Log.w(TAG, "DV5_HW_RENDER: missing frame handler during drop");
+        return;
       }
       videoFrameHandler.skip();
     }

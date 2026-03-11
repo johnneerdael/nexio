@@ -150,7 +150,6 @@
   <string name="audio_decoder_priority">Prioridad del decodificador</string>
   <string name="audio_tunneled">Reproducción tunelizada</string>
   <string name="audio_tunneled_sub">Sincronización de audio/vídeo a nivel de hardware. Puede mejorar la reproducción en algunos dispositivos Android TV</string>
-  <string name="audio_dv_sub">Mapear Dolby Vision Perfil 7 a HEVC estándar para dispositivos sin soporte de hardware DV</string>
   <string name="audio_decoder_device_only_desc">Usa solo decodificadores de hardware incorporados. Más compatible, pero puede que no admita todos los formatos.</string>
   <string name="audio_decoder_prefer_device_desc">Usa decodificadores de hardware cuando estén disponibles, y usa FFmpeg como respaldo. Recomendado para la mayoría de dispositivos.</string>
   <string name="audio_decoder_prefer_app_desc">Usa decodificadores FFmpeg cuando estén disponibles. Mejor soporte de formatos, pero mayor uso de CPU.</string>
@@ -569,7 +568,6 @@
   <string name="addon_confirm_total_catalogs">Total de catálogos: %1$d</string>
   <string name="addon_catalogs_types">Catálogos: %1$d - Tipos: %2$s</string>
   <string name="audio_passthrough_info">El passthrough de audio (TrueHD, DTS, AC-3, etc.) es automático. Cuando está conectado a un receptor AV o barra de sonido compatible por HDMI, el audio sin pérdida se envía tal cual, sin decodificación.</string>
-  <string name="audio_dv_title">DV7 - Alternativa HEVC</string>
   <string name="nav_home">Inicio</string>
   <string name="nav_discover">Descubrir</string>
   <string name="nav_search">Buscar</string>
@@ -593,7 +591,7 @@
   <string name="settings_animeskip_subtitle">Marcas de tiempo para saltar el intro/outro del anime</string>
   <string name="animeskip_dialog_placeholder">Introduce tu Client ID</string>
   <string name="poster_ratings_api_key_title">Clave API</string>
-  <string name="audio_dv_experimental_sub">Ruta de conversión nativa experimental. Si la conversión no está disponible o falla, la reproducción vuelve al mapeo HEVC.</string>
+  <string name="audio_dv_experimental_sub">Ruta de conversión nativa de DV7 a DV8.1. Si la conversión no está disponible o falla, la reproducción vuelve al mapeo HEVC.</string>
   <string name="trakt_catalog_popular_movies_subtitle">Películas con mayor popularidad a largo plazo.</string>
   <string name="mdblist_top_list_badge">Lista destacada</string>
   <string name="poster_ratings_rpdb_dialog_title">Clave API de RPDB</string>
@@ -671,7 +669,7 @@
   <string name="mdblist_personal_list_badge">Lista personal</string>
   <string name="trakt_waiting_approval">Esperando aprobación…</string>
   <string name="trakt_move_down">Mover abajo</string>
-  <string name="audio_dv_experimental_title">DV7 - Experimental DV8.1</string>
+  <string name="audio_dv_experimental_title">DV7 - Conversión a DV8.1</string>
   <string name="trakt_unaired_now_shown">Los próximos episodios sin emitir ahora se muestran</string>
   <string name="animeskip_client_id_subtitle">Obligatorio para obtener las marcas de salto de anime-skip.com</string>
   <string name="animeskip_dialog_title">Client ID de Anime Skip</string>
