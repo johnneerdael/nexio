@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <size
+                android:width="80dp"
+                android:height="80dp" />
+            <solid android:color="@color/splash_background" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <item
+        android:width="56dp"
+        android:height="56dp"
+        android:gravity="center">
+        <bitmap
+            android:antialias="true"
+            android:filter="true"
+            android:gravity="center"
+            android:src="@drawable/app_logo_mark" />
+    </item>
+</layer-list>
