@@ -456,10 +456,6 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithAudioDisabled(fromPos
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
-internal fun PlayerRuntimeController.retryCurrentStreamWithDolbyVisionFallback(fromPositionMs: Long) {
-    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs, clearResumeProgress = true)
-}
-
 internal fun PlayerRuntimeController.retryCurrentStreamWithVc1SoftwareFallback(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
@@ -469,6 +465,10 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithVc1TrackSelectionBypa
 }
 
 internal fun PlayerRuntimeController.retryCurrentStreamWithDv5SoftwareToneMap(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
+internal fun PlayerRuntimeController.retryCurrentStreamWithDv5HardwareToneMap(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
@@ -501,6 +501,7 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
                     "dv5=$currentVideoTrackIsLikelyDv5 " +
                     "dv5ToneMapSetting=$isDv5SoftwareToneMapSettingEnabledForCurrentPlayback " +
                     "dv5HwToneMapSetting=$isDv5HardwareToneMapSettingEnabledForCurrentPlayback " +
+                    "dv5HwToneMapNativeSupported=$isDv5HardwareToneMapNativeSupportedForCurrentPlayback " +
                     "dv5ToneMapNativeSupported=$isDv5SoftwareToneMapNativeSupportedForCurrentPlayback " +
                     "dvDisplayCapable=$isCurrentDisplayDolbyVisionCapable " +
                     "shieldDevice=$isCurrentDeviceNvidiaShield " +
@@ -542,7 +543,26 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
         }
 
         if (currentVideoTrackIsLikelyDv5 &&
+            isDv5HardwareToneMapSettingEnabledForCurrentPlayback &&
+            isDv5HardwareToneMapNativeSupportedForCurrentPlayback &&
+            isCurrentDeviceNvidiaShield &&
+            !isCurrentDisplayDolbyVisionCapable &&
+            !isDv5HardwareToneMapActiveForCurrentPlayback
+        ) {
+            dv5HardwareToneMapPreferredStreamUrls.add(currentStreamUrl)
+            dv5SoftwareToneMapPreferredStreamUrls.remove(currentStreamUrl)
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "VIDEO_TIMEOUT: retrying with DV5 hardware tone-map path " +
+                    "host=${Uri.parse(currentStreamUrl).host ?: "unknown"} positionMs=$currentPosition"
+            )
+            retryCurrentStreamWithDv5HardwareToneMap(currentPosition)
+            return@launch
+        }
+
+        if (currentVideoTrackIsLikelyDv5 &&
             isDv5SoftwareToneMapSettingEnabledForCurrentPlayback &&
+            !isDv5HardwareToneMapSettingEnabledForCurrentPlayback &&
             isDv5SoftwareToneMapNativeSupportedForCurrentPlayback &&
             !isCurrentDisplayDolbyVisionCapable &&
             !isDv5HardwareToneMapActiveForCurrentPlayback &&

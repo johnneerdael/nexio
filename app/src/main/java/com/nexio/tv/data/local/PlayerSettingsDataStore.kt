@@ -169,9 +169,7 @@ data class PlayerSettings(
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
-    // Force Dolby Vision streams to HEVC/HDR10 fallback (uses Media3 codec remap path)
-    val mapDV7ToHevc: Boolean = false,
-    // Experimental: try native DV7 -> DV8.1 conversion before HEVC fallback.
+    // Try native DV7 -> DV8.1 conversion before HEVC fallback.
     val experimentalDv7ToDv81Enabled: Boolean = true,
     // Experimental: enable the Kodi-style IEC packer custom AudioSink path.
     // When disabled, the normal Media3 passthrough path remains active.
@@ -376,7 +374,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
     private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
-    private val mapDV7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val experimentalDv7ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
     private val experimentalDtsIecPassthroughEnabledKey =
@@ -644,7 +641,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
-                mapDV7ToHevc = prefs[mapDV7ToHevcKey] ?: false,
                 experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: true,
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
@@ -1070,12 +1066,6 @@ class PlayerSettingsDataStore @Inject constructor(
             AudioLanguageOption.DEVICE,
             SUBTITLE_LANGUAGE_FORCED -> null
             else -> normalized
-        }
-    }
-
-    suspend fun setMapDV7ToHevc(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[mapDV7ToHevcKey] = enabled
         }
     }
 

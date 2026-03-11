@@ -256,7 +256,10 @@ export type PortalSettings = {
       skipSilence: boolean
       decoderPriority: number
       tunnelingEnabled: boolean
-      mapDV7ToHevc?: boolean
+      experimentalDv7ToDv81Enabled?: boolean
+      experimentalDtsIecPassthroughEnabled?: boolean
+      experimentalDv7ToDv81PreserveMappingEnabled?: boolean
+      experimentalDv5ToDv81Enabled?: boolean
     }
     subtitles: {
       preferredLanguage: string

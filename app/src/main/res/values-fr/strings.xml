@@ -148,11 +148,9 @@
   <string name="audio_decoder_prefer_device">Préférer les décodeurs de l\'appareil</string>
   <string name="audio_decoder_prefer_app">Préférer les décodeurs de l\'application (FFmpeg)</string>
   <string name="audio_decoder_priority">Priorité du décodeur</string>
-  <string name="audio_dv_title">DV7 - Repli HEVC</string>
   <string name="audio_passthrough_info">Le passthrough audio (TrueHD, DTS, AC-3, etc.) est automatique. Lorsqu\'il est connecté à un récepteur AV ou une barre de son compatible via HDMI, l\'audio sans perte est envoyé tel quel sans décodage.</string>
   <string name="audio_tunneled">Lecture tunnelisée</string>
   <string name="audio_tunneled_sub">Synchronisation audio/vidéo au niveau matériel. Peut améliorer la lecture sur certains appareils Android TV</string>
-  <string name="audio_dv_sub">Convertit le Dolby Vision Profil 7 en HEVC standard pour les appareils sans support matériel DV</string>
   <string name="audio_decoder_device_only_desc">Utiliser uniquement les décodeurs matériels intégrés. Plus compatible mais ne supporte pas tous les formats.</string>
   <string name="audio_decoder_prefer_device_desc">Utiliser les décodeurs matériels si disponibles, sinon FFmpeg. Recommandé pour la plupart des appareils.</string>
   <string name="audio_decoder_prefer_app_desc">Utiliser les décodeurs FFmpeg si disponibles. Meilleur support des formats mais consommation CPU plus élevée.</string>
@@ -593,7 +591,7 @@
   <string name="settings_animeskip_subtitle">Horodatages de saut intro/outro anime</string>
   <string name="animeskip_dialog_placeholder">Entre le Client ID</string>
   <string name="poster_ratings_api_key_title">Clé API</string>
-  <string name="audio_dv_experimental_sub">Chemin de conversion native expérimental. Si la conversion est indisponible ou échoue, la lecture revient au mappage HEVC.</string>
+  <string name="audio_dv_experimental_sub">Chemin de conversion native DV7 vers DV8.1. Si la conversion est indisponible ou échoue, la lecture revient au mappage HEVC.</string>
   <string name="trakt_catalog_popular_movies_subtitle">Films avec la plus forte popularité à long terme.</string>
   <string name="mdblist_top_list_badge">Top Liste</string>
   <string name="poster_ratings_rpdb_dialog_title">Clé API RPDB</string>
@@ -671,7 +669,7 @@
   <string name="mdblist_personal_list_badge">Liste personnelle</string>
   <string name="trakt_waiting_approval">En attente d\'approbation…</string>
   <string name="trakt_move_down">Descendre</string>
-  <string name="audio_dv_experimental_title">DV7 - DV8.1 Expérimental</string>
+  <string name="audio_dv_experimental_title">DV7 - Conversion DV8.1</string>
   <string name="trakt_unaired_now_shown">Les épisodes non diffusés sont maintenant affichés</string>
   <string name="animeskip_client_id_subtitle">Requis pour récupérer les horodatages depuis anime-skip.com</string>
   <string name="animeskip_dialog_title">Client ID Anime Skip</string>

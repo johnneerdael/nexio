@@ -263,9 +263,8 @@
     <string name="audio_decoder_priority">Decoder Priority</string>
     <string name="audio_tunneled">Tunneled Playback</string>
     <string name="audio_tunneled_sub">Hardware-level audio/video sync. May improve playback on some Android TV devices</string>
-    <string name="audio_dv_sub">Map Dolby Vision Profile 7 to standard HEVC for devices without DV hardware support</string>
-    <string name="audio_dv_experimental_title">DV7 - Experimental DV8.1</string>
-    <string name="audio_dv_experimental_sub">Experimental native conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
+    <string name="audio_dv_experimental_title">DV7 - DV8.1 Conversion</string>
+    <string name="audio_dv_experimental_sub">Native DV7 to DV8.1 conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
     <string name="audio_dts_iec_experimental_title">IEC Packer (Custom AudioSink from Kodi)</string>
     <string name="audio_dts_iec_experimental_sub">Enables the custom Kodi-style IEC packer AudioSink path. Disable this to use the normal Media3 passthrough path instead.</string>
     <string name="audio_fire_os_compatibility_fallback_title">Fire OS - Compatibility Fallback</string>
@@ -918,7 +917,7 @@
     <string name="search_voice_unavailable">Voice search is unavailable on this device.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Syncing Trakt library\u2026</string>
+    <string name="library_syncing">Syncing library\u2026</string>
     <string name="library_title">Library</string>
     <string name="library_filter_list">List</string>
     <string name="library_filter_type">Type</string>
@@ -1067,7 +1066,6 @@
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_passthrough_info">Audio passthrough (TrueHD, DTS, AC-3, etc.) is automatic. When connected to a compatible AV receiver or soundbar via HDMI, lossless audio is sent as-is without decoding.</string>
-    <string name="audio_dv_title">DV7 - HEVC Fallback</string>
 
     <!-- SidebarNavigation / MainActivity -->
     <string name="nav_home">Home</string>

@@ -102,10 +102,6 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setResolutionMatchingEnabled(enabled)
     }
 
-    suspend fun setMapDV7ToHevc(enabled: Boolean) {
-        playerSettingsDataStore.setMapDV7ToHevc(enabled)
-    }
-
     suspend fun setExperimentalDv7ToDv81Enabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDv7ToDv81Enabled(enabled)
     }

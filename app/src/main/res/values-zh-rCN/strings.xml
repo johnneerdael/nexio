@@ -9,7 +9,7 @@
   <string name="poster_ratings_subtitle">使用来自 RPDB 或 TOPPosters 的带评分海报</string>
   <string name="trakt_watching_now_label">正在观看</string>
   <string name="sub_startup_mode_fast">快速启动</string>
-  <string name="audio_dv_experimental_title">DV7 - 实验性 DV8.1</string>
+  <string name="audio_dv_experimental_title">DV7 - DV8.1 转换</string>
   <string name="tmdb_api_key_title">API 密钥</string>
   <string name="appearance_language_dialog_title">选择语言</string>
   <string name="appearance_title">外观</string>
@@ -50,7 +50,7 @@
   <string name="audio_dts_iec_experimental_sub">实验性 Fire OS 音频兼容路径。启用 Media3 音频堆栈中的 Fire TV 兼容层，包括 DTS 核心回退和路由兼容。默认关闭，因为它可能会影响非 Fire 设备。</string>
   <string name="trakt_catalog_popular_movies_subtitle">长期最受欢迎的电影。</string>
   <string name="tmdb_dialog_subtitle">输入您的个人 TMDB API 密钥</string>
-  <string name="audio_dv_experimental_sub">实验性原生转换路径。如果转换不可用或失败，播放将回退到 HEVC 映射。</string>
+  <string name="audio_dv_experimental_sub">原生 DV7 到 DV8.1 转换路径。如果转换不可用或失败，播放将回退到 HEVC 映射。</string>
   <string name="sub_startup_mode_fast_desc">立即开始播放。选择插件字幕可能会重新加载播放器一次。</string>
   <string name="trakt_catalog_calendar_subtitle">Trakt 日历中即将播出的剧集。</string>
   <string name="poster_ratings_top_dialog_subtitle">输入您的 TOPPosters API 密钥以验证并启用评分海报</string>
@@ -343,7 +343,6 @@
   <string name="audio_decoder_priority">解码器优先级</string>
   <string name="audio_tunneled">隧道模式播放 (Tunneled Playback)</string>
   <string name="audio_tunneled_sub">硬件级音视频同步。可能会改善某些 Android TV 设备的播放效果</string>
-  <string name="audio_dv_sub">对于不支持杜比视界 (DV) 硬件的设备，将 DV Profile 7 映射到标准 HEVC</string>
   <string name="audio_fire_os_compatibility_fallback_title">Fire OS - 兼容性回退</string>
   <string name="audio_fire_os_compatibility_fallback_sub">允许 Fire TV 的兼容性回退方案，包括旧版 DTS 核心降级和直通恢复。如果您需要严格的 Kodi 风格一致性，请将其与 IEC 打包程序一起禁用。</string>
   <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - 监控音频延迟</string>
@@ -880,7 +879,6 @@
   <string name="addon_catalogs_types">目录：%1$d - 包含类型：%2$s</string>
   <string name="profile_edit_title_id">编辑配置文件：%1$d</string>
   <string name="audio_passthrough_info">音频直通（TrueHD、DTS、AC-3 等）将自动进行。当通过 HDMI 连接到兼容的 AV 接收器或回音壁时，无损音频将原样发送给设备解码。</string>
-  <string name="audio_dv_title">DV7 - HEVC 回退</string>
   <string name="nav_home">主页</string>
   <string name="nav_discover">发现</string>
   <string name="nav_search">搜索</string>

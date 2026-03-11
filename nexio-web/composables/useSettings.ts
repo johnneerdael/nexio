@@ -106,7 +106,10 @@ export const useSettings = () => {
         skipSilence: false,
         decoderPriority: 1,
         tunnelingEnabled: false,
-        mapDV7ToHevc: false
+        experimentalDv7ToDv81Enabled: true,
+        experimentalDtsIecPassthroughEnabled: false,
+        experimentalDv7ToDv81PreserveMappingEnabled: false,
+        experimentalDv5ToDv81Enabled: false
       },
       subtitles: {
         preferredLanguage: 'en',
