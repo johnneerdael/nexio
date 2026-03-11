@@ -38,4 +38,8 @@ interface LibraryRepository {
     suspend fun deletePersonalList(listId: String)
     suspend fun reorderPersonalLists(orderedListIds: List<String>)
     suspend fun refreshNow()
+    suspend fun refreshTraktNow()
+    suspend fun refreshDebridNow()
+    suspend fun refreshRealDebridNow()
+    suspend fun refreshPremiumizeNow()
 }
