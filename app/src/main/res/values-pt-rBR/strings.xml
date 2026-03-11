@@ -404,7 +404,7 @@
     <string name="layout_show_hero_sub">Exibir Destaque de topo na home.</string>
     <string name="layout_show_discover">Mostrar Descobrir na busca</string>
     <string name="layout_show_discover_sub">Mostrar seção Descobrir quando a busca estiver vazia.</string>
-    <string name="layout_poster_labels">Nomes nos pôsteres</string>
+    <string name="layout_poster_labels">Título nos pôsteres</string>
     <string name="layout_poster_labels_sub">Mostrar títulos abaixo dos pôsteres e grades.</string>
     <string name="layout_addon_name">Nome do addon</string>
     <string name="layout_addon_name_sub">Mostrar addon abaixo dos títulos.</string>
@@ -622,7 +622,7 @@
     <string name="profile_plugins">plugins</string>
     <string name="profile_choose_avatar">Escolher Avatar</string>
     <string name="profile_avatar_none_selected">Nenhum avatar selecionado</string>
-    <string name="profile_avatar_focus_hint">Foque em um avatar para ver o nome</string>
+    <string name="profile_avatar_focus_hint">Selecione um avatar para ver o nome</string>
     <string name="profile_avatar_category_all">Todos</string>
     <string name="profile_avatar_category_anime">Anime</string>
     <string name="profile_avatar_category_animation">Animação</string>
