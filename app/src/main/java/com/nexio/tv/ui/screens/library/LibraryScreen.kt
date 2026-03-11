@@ -280,11 +280,12 @@ fun LibraryScreen(
             )
         }
 
-        if (uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL }) {
+        if (uiState.listTabs.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LibraryActionsRow(
                     pending = uiState.pendingOperation,
                     isSyncing = uiState.isSyncing,
+                    canManageLists = uiState.listTabs.any { it.type == LibraryListTab.Type.PERSONAL },
                     onManageLists = viewModel::onOpenManageLists,
                     onRefresh = viewModel::onRefresh
                 )
@@ -625,6 +626,7 @@ private data class LibraryOption(
 private fun LibraryActionsRow(
     pending: Boolean,
     isSyncing: Boolean,
+    canManageLists: Boolean,
     onManageLists: () -> Unit,
     onRefresh: () -> Unit
 ) {
@@ -632,15 +634,17 @@ private fun LibraryActionsRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Button(
-            onClick = onManageLists,
-            enabled = !pending && !isSyncing,
-            colors = ButtonDefaults.colors(
-                containerColor = NexioColors.BackgroundCard,
-                contentColor = NexioColors.TextPrimary
-            )
-        ) {
-            Text(stringResource(R.string.library_manage_lists))
+        if (canManageLists) {
+            Button(
+                onClick = onManageLists,
+                enabled = !pending && !isSyncing,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.library_manage_lists))
+            }
         }
         Button(
             onClick = onRefresh,

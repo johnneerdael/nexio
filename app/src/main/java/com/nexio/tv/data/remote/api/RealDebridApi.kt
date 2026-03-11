@@ -3,6 +3,7 @@ package com.nexio.tv.data.remote.api
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUserDto
 import retrofit2.Response
@@ -46,6 +47,13 @@ interface RealDebridApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 200
     ): Response<List<RealDebridDownloadDto>>
+
+    @GET("rest/1.0/torrents")
+    suspend fun getTorrents(
+        @Header("Authorization") authorization: String,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 200
+    ): Response<List<RealDebridTorrentDto>>
 
     @GET("rest/1.0/disable_access_token")
     suspend fun disableCurrentAccessToken(

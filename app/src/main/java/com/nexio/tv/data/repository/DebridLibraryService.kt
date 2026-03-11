@@ -5,7 +5,7 @@ import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllFileDto
-import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +34,12 @@ class DebridLibraryService @Inject constructor(
     private val premiumizeApi: PremiumizeApi,
     private val premiumizeService: PremiumizeService
 ) {
+    enum class RefreshTarget {
+        ALL,
+        REAL_DEBRID,
+        PREMIUMIZE
+    }
+
     private data class Snapshot(
         val listTabs: List<LibraryListTab> = emptyList(),
         val items: List<LibraryEntry> = emptyList(),
@@ -70,46 +76,78 @@ class DebridLibraryService @Inject constructor(
     }
 
     suspend fun refreshNow() {
-        ensureFresh(force = true)
+        ensureFresh(force = true, target = RefreshTarget.ALL)
     }
 
-    suspend fun ensureFresh(force: Boolean) {
+    suspend fun refreshNow(target: RefreshTarget) {
+        ensureFresh(force = true, target = target)
+    }
+
+    suspend fun ensureFresh(force: Boolean, target: RefreshTarget = RefreshTarget.ALL) {
         val now = System.currentTimeMillis()
-        if (!force && snapshotState.value.updatedAtMs > 0L && now - snapshotState.value.updatedAtMs < cacheTtlMs) {
+        if (
+            target == RefreshTarget.ALL &&
+            !force &&
+            snapshotState.value.updatedAtMs > 0L &&
+            now - snapshotState.value.updatedAtMs < cacheTtlMs
+        ) {
             return
         }
 
         refreshingState.value = true
         try {
-            premiumizeService.refreshAccountState()
+            val current = snapshotState.value
+            val refreshRealDebrid = target == RefreshTarget.ALL || target == RefreshTarget.REAL_DEBRID
+            val refreshPremiumize = target == RefreshTarget.ALL || target == RefreshTarget.PREMIUMIZE
 
-            val tabs = mutableListOf<LibraryListTab>()
-            val items = mutableListOf<LibraryEntry>()
+            val baseTabs = if (refreshRealDebrid || refreshPremiumize) {
+                current.listTabs.filterNot { tab ->
+                    (refreshRealDebrid && tab.key == REAL_DEBRID_LIST_KEY) ||
+                        (refreshPremiumize && tab.key == PREMIUMIZE_LIST_KEY)
+                }
+            } else {
+                current.listTabs
+            }
 
-            if (realDebridAuthDataStore.isAuthenticated.first()) {
-                val realDebridItems = fetchRealDebridDownloads()
+            val baseItems = if (refreshRealDebrid || refreshPremiumize) {
+                current.items.filterNot { entry ->
+                    (refreshRealDebrid && entry.listKeys.contains(REAL_DEBRID_LIST_KEY)) ||
+                        (refreshPremiumize && entry.listKeys.contains(PREMIUMIZE_LIST_KEY))
+                }
+            } else {
+                current.items
+            }
+
+            val tabs = baseTabs.toMutableList()
+            val items = baseItems.toMutableList()
+
+            if (refreshRealDebrid && realDebridAuthDataStore.isAuthenticated.first()) {
+                val realDebridItems = fetchRealDebridTorrents()
                 if (realDebridItems.isNotEmpty()) {
                     tabs += LibraryListTab(
                         key = REAL_DEBRID_LIST_KEY,
                         title = "Real-Debrid",
                         type = LibraryListTab.Type.SERVICE,
-                        description = "Direct links from your Real-Debrid downloads."
+                        description = "Direct links from your Real-Debrid torrents."
                     )
                     items += realDebridItems
                 }
             }
 
-            val premiumizeState = premiumizeService.observeAccountState().first()
-            if (premiumizeState.apiKey.isNotBlank()) {
-                val premiumizeItems = fetchPremiumizeItems(premiumizeState.apiKey)
-                if (premiumizeItems.isNotEmpty()) {
-                    tabs += LibraryListTab(
-                        key = PREMIUMIZE_LIST_KEY,
-                        title = "Premiumize",
-                        type = LibraryListTab.Type.SERVICE,
-                        description = "Files from your Premiumize cloud that have a direct stream link."
-                    )
-                    items += premiumizeItems
+            if (refreshPremiumize) {
+                premiumizeService.refreshAccountState()
+                val premiumizeState = premiumizeService.observeAccountState().first()
+                if (premiumizeState.apiKey.isNotBlank()) {
+                    val premiumizeItems = fetchPremiumizeItems(premiumizeState.apiKey)
+                    if (premiumizeItems.isNotEmpty()) {
+                        tabs += LibraryListTab(
+                            key = PREMIUMIZE_LIST_KEY,
+                            title = "Premiumize",
+                            type = LibraryListTab.Type.SERVICE,
+                            description = "Files from your Premiumize cloud that have a direct stream link."
+                        )
+                        items += premiumizeItems
+                    }
                 }
             }
 
@@ -123,18 +161,19 @@ class DebridLibraryService @Inject constructor(
         }
     }
 
-    private suspend fun fetchRealDebridDownloads(): List<LibraryEntry> {
+    private suspend fun fetchRealDebridTorrents(): List<LibraryEntry> {
         val response = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getDownloads(authorization = authHeader)
+            realDebridApi.getTorrents(authorization = authHeader)
         } ?: return emptyList()
 
         if (!response.isSuccessful) return emptyList()
 
         return response.body().orEmpty()
             .asSequence()
-            .filter { it.download?.isNotBlank() == true }
+            .filter { it.status.equals("downloaded", ignoreCase = true) }
+            .filter { it.links.orEmpty().isNotEmpty() }
             .filter(::isLikelyPlayable)
-            .map(::mapRealDebridDownload)
+            .map(::mapRealDebridTorrent)
             .toList()
     }
 
@@ -162,23 +201,24 @@ class DebridLibraryService @Inject constructor(
         }
     }
 
-    private fun mapRealDebridDownload(download: RealDebridDownloadDto): LibraryEntry {
-        val filename = download.filename.orEmpty().ifBlank { "Real-Debrid File" }
+    private fun mapRealDebridTorrent(torrent: RealDebridTorrentDto): LibraryEntry {
+        val filename = torrent.filename.orEmpty().ifBlank { "Real-Debrid Torrent" }
+        val primaryLink = torrent.links?.firstOrNull().orEmpty()
         return LibraryEntry(
-            id = "rd:download:${download.id}",
-            type = inferContentType(filename, download.mimeType),
+            id = "rd:torrent:${torrent.id}",
+            type = inferContentType(filename, mimeType = null),
             name = stripVideoExtension(filename),
             poster = null,
             background = null,
             logo = null,
-            description = download.host,
+            description = "Real-Debrid torrent",
             releaseInfo = null,
             imdbRating = null,
             genres = emptyList(),
             addonBaseUrl = null,
             listKeys = setOf(REAL_DEBRID_LIST_KEY),
-            listedAt = parseIsoToMillis(download.generated),
-            directPlaybackUrl = download.download,
+            listedAt = parseIsoToMillis(torrent.ended ?: torrent.added),
+            directPlaybackUrl = primaryLink,
             playbackStreamName = filename,
             playbackFilename = filename
         )
@@ -215,8 +255,8 @@ class DebridLibraryService @Inject constructor(
         )
     }
 
-    private fun isLikelyPlayable(download: RealDebridDownloadDto): Boolean {
-        return isLikelyVideo(download.filename, download.mimeType)
+    private fun isLikelyPlayable(torrent: RealDebridTorrentDto): Boolean {
+        return isLikelyVideo(torrent.filename, mimeType = null)
     }
 
     private fun isLikelyPlayable(file: PremiumizeListAllFileDto): Boolean {

@@ -142,7 +142,25 @@ class LibraryRepositoryImpl @Inject constructor(
         if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             traktLibraryService.refreshNow()
         }
-        debridLibraryService.refreshNow()
+        debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
+    }
+
+    override suspend fun refreshTraktNow() {
+        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
+            traktLibraryService.refreshNow()
+        }
+    }
+
+    override suspend fun refreshDebridNow() {
+        debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
+    }
+
+    override suspend fun refreshRealDebridNow() {
+        debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
+    }
+
+    override suspend fun refreshPremiumizeNow() {
+        debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.PREMIUMIZE)
     }
 
     private suspend fun requireTraktAuth() {

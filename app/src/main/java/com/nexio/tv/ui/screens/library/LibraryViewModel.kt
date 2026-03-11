@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.repository.DebridLibraryService
 import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
@@ -132,10 +133,55 @@ class LibraryViewModel @Inject constructor(
     fun onRefresh() {
         if (_uiState.value.isSyncing) return
         viewModelScope.launch {
-            setTransientMessage("Syncing Trakt library...")
+            val state = _uiState.value
+            val selectedList = state.listTabs.firstOrNull { it.key == state.selectedListKey }
+            val startMessage: String
+            val successMessage: String
+            val refreshBlock: suspend () -> Unit
+            when {
+                selectedList?.type == LibraryListTab.Type.WATCHLIST ||
+                    selectedList?.type == LibraryListTab.Type.PERSONAL -> {
+                    startMessage = "Syncing Trakt library..."
+                    successMessage = "Trakt library synced"
+                    refreshBlock = { libraryRepository.refreshTraktNow() }
+                }
+
+                selectedList?.key == DebridLibraryService.REAL_DEBRID_LIST_KEY -> {
+                    startMessage = "Syncing Real-Debrid library..."
+                    successMessage = "Real-Debrid library synced"
+                    refreshBlock = { libraryRepository.refreshRealDebridNow() }
+                }
+
+                selectedList?.key == DebridLibraryService.PREMIUMIZE_LIST_KEY -> {
+                    startMessage = "Syncing Premiumize library..."
+                    successMessage = "Premiumize library synced"
+                    refreshBlock = { libraryRepository.refreshPremiumizeNow() }
+                }
+
+                selectedList?.type == LibraryListTab.Type.SERVICE ||
+                    state.sourceMode == LibrarySourceMode.DEBRID -> {
+                    startMessage = "Syncing debrid libraries..."
+                    successMessage = "Debrid libraries synced"
+                    refreshBlock = { libraryRepository.refreshDebridNow() }
+                }
+
+                state.sourceMode == LibrarySourceMode.TRAKT -> {
+                    startMessage = "Syncing Trakt library..."
+                    successMessage = "Trakt library synced"
+                    refreshBlock = { libraryRepository.refreshTraktNow() }
+                }
+
+                else -> {
+                    startMessage = "Syncing library..."
+                    successMessage = "Library synced"
+                    refreshBlock = { libraryRepository.refreshNow() }
+                }
+            }
+
+            setTransientMessage(startMessage)
             runCatching {
-                libraryRepository.refreshNow()
-                setTransientMessage("Library synced")
+                refreshBlock()
+                setTransientMessage(successMessage)
             }.onFailure { error ->
                 setError(error.message ?: "Failed to refresh library")
             }
