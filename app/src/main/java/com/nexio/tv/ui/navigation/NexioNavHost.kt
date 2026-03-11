@@ -635,21 +635,15 @@ fun NexioNavHost(
                             returnToDetailOnBack = returnToDetailOnBack
                         )
                         navController.navigate(route) {
-                            popUpTo(Screen.Stream.route) { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    } else if (contentId.isNotBlank() && contentType.isNotBlank()) {
-                        navController.navigate(
-                            Screen.Detail.createRoute(
-                                itemId = contentId,
-                                itemType = contentType
-                            )
-                        ) {
-                            popUpTo(Screen.Stream.route) { inclusive = true }
+                            popUpTo(Screen.Detail.route) { inclusive = false }
                             launchSingleTop = true
                         }
                     } else {
-                        navController.popBackStack(Screen.Stream.route, inclusive = true)
+                        // No next episode: return to detail if it's still on the stack.
+                        val poppedToDetail = navController.popBackStack(Screen.Detail.route, inclusive = false)
+                        if (!poppedToDetail) {
+                            navController.popBackStack(Screen.Stream.route, inclusive = true)
+                        }
                     }
                 },
                 onPlaybackErrorBack = {
