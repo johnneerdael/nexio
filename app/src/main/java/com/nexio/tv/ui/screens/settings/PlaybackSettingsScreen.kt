@@ -276,19 +276,6 @@ fun PlaybackSettingsContent(
                     coroutineScope.launch { viewModel.setLibmpvAudioPassthroughEnabled(enabled) }
                 },
                 onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
-                onSetExperimentalDv5ToneMapToSdrEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setExperimentalDv5ToneMapToSdrEnabled(enabled) }
-                },
-                onSetExperimentalDv5HardwareToneMapToSdrEnabled = { enabled ->
-                    coroutineScope.launch {
-                        viewModel.setExperimentalDv5HardwareToneMapToSdrEnabled(enabled)
-                    }
-                },
-                onSetExperimentalDv5HardwareToneMapCpuFallbackEnabled = { enabled ->
-                    coroutineScope.launch {
-                        viewModel.setExperimentalDv5HardwareToneMapCpuFallbackEnabled(enabled)
-                    }
-                },
                 onSetExperimentalDv7ToDv81Enabled = {
                     enabled -> coroutineScope.launch { viewModel.setExperimentalDv7ToDv81Enabled(enabled) }
                 },
