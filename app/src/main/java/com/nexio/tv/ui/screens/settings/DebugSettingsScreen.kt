@@ -37,6 +37,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
+import com.nexio.tv.BuildConfig
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.screens.account.InputField
 import com.nexio.tv.ui.theme.NexioColors
@@ -143,6 +144,44 @@ fun DebugSettingsContent(
                 )
             }
 
+            if (BuildConfig.IS_DEBUG_BUILD) {
+                item(key = "debug_toggle_dv5_sw_tonemap") {
+                    DebugToggleCard(
+                        title = stringResource(R.string.audio_dv5_tonemap_title),
+                        subtitle = stringResource(R.string.audio_dv5_tonemap_sub),
+                        checked = uiState.dv5ToneMapToSdrEnabled,
+                        onToggle = {
+                            viewModel.onEvent(DebugSettingsEvent.ToggleDv5ToneMapToSdr(it))
+                        }
+                    )
+                }
+
+                item(key = "debug_toggle_dv5_hw_tonemap") {
+                    DebugToggleCard(
+                        title = stringResource(R.string.audio_dv5_hw_tonemap_title),
+                        subtitle = stringResource(R.string.audio_dv5_hw_tonemap_sub),
+                        checked = uiState.dv5HardwareToneMapToSdrEnabled,
+                        onToggle = {
+                            viewModel.onEvent(DebugSettingsEvent.ToggleDv5HardwareToneMapToSdr(it))
+                        }
+                    )
+                }
+
+                item(key = "debug_toggle_dv5_hw_cpu_fallback") {
+                    DebugToggleCard(
+                        title = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_title),
+                        subtitle = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_sub),
+                        checked = uiState.dv5HardwareToneMapCpuFallbackEnabled,
+                        enabled = uiState.dv5HardwareToneMapToSdrEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                DebugSettingsEvent.ToggleDv5HardwareToneMapCpuFallback(it)
+                            )
+                        }
+                    )
+                }
+            }
+
             // ── Manual Sign In ──
             item(key = "debug_account_header") {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -185,10 +224,15 @@ private fun DebugToggleCard(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onToggle: (Boolean) -> Unit
 ) {
     Card(
-        onClick = { onToggle(!checked) },
+        onClick = {
+            if (enabled) {
+                onToggle(!checked)
+            }
+        },
         modifier = Modifier
             .fillMaxWidth(),
         colors = CardDefaults.colors(
@@ -215,13 +259,13 @@ private fun DebugToggleCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = NexioColors.TextPrimary
+                    color = if (enabled) NexioColors.TextPrimary else NexioColors.TextTertiary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = NexioColors.TextSecondary
+                    color = if (enabled) NexioColors.TextSecondary else NexioColors.TextTertiary
                 )
             }
 
@@ -230,6 +274,7 @@ private fun DebugToggleCard(
             Switch(
                 checked = checked,
                 onCheckedChange = { onToggle(it) },
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = NexioColors.Secondary,
                     checkedTrackColor = NexioColors.Secondary.copy(alpha = 0.3f),

@@ -64,9 +64,6 @@ internal fun LazyListScope.videoSettingsItems(
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
-    onSetExperimentalDv5ToneMapToSdrEnabled: (Boolean) -> Unit,
-    onSetExperimentalDv5HardwareToneMapToSdrEnabled: (Boolean) -> Unit,
-    onSetExperimentalDv5HardwareToneMapCpuFallbackEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
@@ -127,42 +124,6 @@ internal fun LazyListScope.videoSettingsItems(
             onCheckedChange = onSetExperimentalDv7ToDv81Enabled,
             onFocused = onItemFocused,
             enabled = enabled
-        )
-    }
-
-    item(key = "audio_dv5_tonemap_experimental") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv5_tonemap_title),
-            subtitle = stringResource(R.string.audio_dv5_tonemap_sub),
-            isChecked = playerSettings.experimentalDv5ToneMapToSdrEnabled,
-            onCheckedChange = onSetExperimentalDv5ToneMapToSdrEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    item(key = "audio_dv5_hw_tonemap_experimental") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv5_hw_tonemap_title),
-            subtitle = stringResource(R.string.audio_dv5_hw_tonemap_sub),
-            isChecked = playerSettings.experimentalDv5HardwareToneMapToSdrEnabled,
-            onCheckedChange = onSetExperimentalDv5HardwareToneMapToSdrEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    item(key = "audio_dv5_hw_tonemap_cpu_fallback_experimental") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Tune,
-            title = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_title),
-            subtitle = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_sub),
-            isChecked = playerSettings.experimentalDv5HardwareToneMapCpuFallbackEnabled,
-            onCheckedChange = onSetExperimentalDv5HardwareToneMapCpuFallbackEnabled,
-            onFocused = onItemFocused,
-            enabled = enabled && playerSettings.experimentalDv5HardwareToneMapToSdrEnabled
         )
     }
 

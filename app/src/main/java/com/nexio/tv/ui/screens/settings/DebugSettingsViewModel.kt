@@ -45,7 +45,12 @@ class DebugSettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         bufferLogsEnabled = settings.enableBufferLogs,
-                        iecPackerLogsEnabled = settings.fireOsIecVerboseLoggingEnabled
+                        iecPackerLogsEnabled = settings.fireOsIecVerboseLoggingEnabled,
+                        dv5ToneMapToSdrEnabled = settings.experimentalDv5ToneMapToSdrEnabled,
+                        dv5HardwareToneMapToSdrEnabled =
+                            settings.experimentalDv5HardwareToneMapToSdrEnabled,
+                        dv5HardwareToneMapCpuFallbackEnabled =
+                            settings.experimentalDv5HardwareToneMapCpuFallbackEnabled
                     )
                 }
             }
@@ -83,6 +88,27 @@ class DebugSettingsViewModel @Inject constructor(
                     playerSettingsDataStore.setFireOsIecVerboseLoggingEnabled(event.enabled)
                 }
             }
+            is DebugSettingsEvent.ToggleDv5ToneMapToSdr -> {
+                viewModelScope.launch {
+                    playerSettingsDataStore.setExperimentalDv5ToneMapToSdrEnabled(event.enabled)
+                }
+            }
+            is DebugSettingsEvent.ToggleDv5HardwareToneMapToSdr -> {
+                viewModelScope.launch {
+                    playerSettingsDataStore
+                        .setExperimentalDv5HardwareToneMapToSdrEnabled(event.enabled)
+                    if (!event.enabled) {
+                        playerSettingsDataStore
+                            .setExperimentalDv5HardwareToneMapCpuFallbackEnabled(false)
+                    }
+                }
+            }
+            is DebugSettingsEvent.ToggleDv5HardwareToneMapCpuFallback -> {
+                viewModelScope.launch {
+                    playerSettingsDataStore
+                        .setExperimentalDv5HardwareToneMapCpuFallbackEnabled(event.enabled)
+                }
+            }
         }
     }
 }
@@ -93,6 +119,9 @@ data class DebugSettingsUiState(
     val streamDiagnosticsEnabled: Boolean = false,
     val bufferLogsEnabled: Boolean = false,
     val iecPackerLogsEnabled: Boolean = false,
+    val dv5ToneMapToSdrEnabled: Boolean = false,
+    val dv5HardwareToneMapToSdrEnabled: Boolean = false,
+    val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
     val signInLoading: Boolean = false,
     val signInResult: String? = null
 )
@@ -103,5 +132,8 @@ sealed class DebugSettingsEvent {
     data class ToggleStreamDiagnostics(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleBufferLogs(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleIecPackerLogs(val enabled: Boolean) : DebugSettingsEvent()
+    data class ToggleDv5ToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
+    data class ToggleDv5HardwareToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
+    data class ToggleDv5HardwareToneMapCpuFallback(val enabled: Boolean) : DebugSettingsEvent()
     data class SignIn(val email: String, val password: String) : DebugSettingsEvent()
 }
