@@ -52,7 +52,7 @@ class AndroidTvChannelPublisher @Inject constructor(
     private val mutex = Mutex()
     private val previewChannelHelper = PreviewChannelHelper(context)
     private val channelLogoBitmap by lazy(LazyThreadSafetyMode.NONE) {
-        ContextCompat.getDrawable(context, R.drawable.android_tv_channel_logo)?.toBitmap()
+        ContextCompat.getDrawable(context, R.drawable.app_logo)?.toBitmap()
     }
 
     init {
