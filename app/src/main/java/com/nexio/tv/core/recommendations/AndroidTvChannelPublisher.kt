@@ -9,7 +9,6 @@ import android.provider.BaseColumns
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
-import androidx.tvprovider.media.tv.ChannelLogoUtils
 import androidx.tvprovider.media.tv.PreviewChannel
 import androidx.tvprovider.media.tv.PreviewChannelHelper
 import androidx.tvprovider.media.tv.PreviewProgram
@@ -52,6 +51,9 @@ class AndroidTvChannelPublisher @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val previewChannelHelper = PreviewChannelHelper(context)
+    private val channelLogoBitmap by lazy(LazyThreadSafetyMode.NONE) {
+        ContextCompat.getDrawable(context, R.drawable.android_tv_channel_logo)?.toBitmap()
+    }
 
     init {
         scope.launch {
@@ -107,21 +109,27 @@ class AndroidTvChannelPublisher @Inject constructor(
             val selectedByKey = selectedRows.associateBy { it.option.key }
             val existingChannels = queryOwnedChannels().associateBy { it.internalProviderId ?: "" }
             val activeProviderIds = mutableSetOf<String>()
+            val hadBrowsableOwnedChannel = existingChannels.values.any { it.isBrowsable }
+            var autoBrowsableChannelId: Long? = null
 
-            prefs.selectedFeedKeys.forEachIndexed { index, key ->
-                val row = selectedByKey[key] ?: return@forEachIndexed
+            prefs.selectedFeedKeys.forEach { key ->
+                val row = selectedByKey[key] ?: return@forEach
                 val providerId = channelProviderId(key)
                 activeProviderIds += providerId
                 val existing = existingChannels[providerId]
                 val channelResult = upsertChannel(
                     option = row.option,
                     providerId = providerId,
-                    existingChannel = existing,
-                    publishAsDefault = existingChannels.isEmpty() && index == 0
+                    existingChannel = existing
                 )
-                val channelId = channelResult?.channelId ?: return@forEachIndexed
+                val channelId = channelResult?.channelId ?: return@forEach
                 if (channelResult.needsBrowsableRequest) {
-                    dataStore.enqueueBrowsableChannelId(channelId)
+                    if (!hadBrowsableOwnedChannel && autoBrowsableChannelId == null) {
+                        autoBrowsableChannelId = channelId
+                        dataStore.clearBrowsableChannelRequest(channelId)
+                    } else {
+                        dataStore.enqueueBrowsableChannelId(channelId)
+                    }
                 } else {
                     dataStore.clearBrowsableChannelRequest(channelId)
                 }
@@ -136,7 +144,15 @@ class AndroidTvChannelPublisher @Inject constructor(
                             addonBaseUrl = row.addonBaseUrl,
                             position = position
                         )
-                    }
+                }
+            }
+
+            autoBrowsableChannelId?.let { channelId ->
+                runCatching {
+                    TvContractCompat.requestChannelBrowsable(context, channelId)
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to request Android TV browsable channelId=$channelId", error)
+                }
             }
 
             existingChannels.values.forEach { channel ->
@@ -174,14 +190,17 @@ class AndroidTvChannelPublisher @Inject constructor(
     private fun upsertChannel(
         option: AndroidTvFeedOption,
         providerId: String,
-        existingChannel: PreviewChannel?,
-        publishAsDefault: Boolean
+        existingChannel: PreviewChannel?
     ): UpsertedChannel? {
         return runCatching {
+            val logoBitmap = channelLogoBitmap
+                ?: throw IllegalStateException("Android TV channel logo bitmap unavailable")
+
             val channel = PreviewChannel.Builder()
                 .setDisplayName(option.title)
                 .setDescription(option.subtitle)
                 .setInternalProviderId(providerId)
+                .setLogo(logoBitmap)
                 .setAppLinkIntent(buildChannelLaunchIntent(option.key))
                 .build()
 
@@ -189,16 +208,13 @@ class AndroidTvChannelPublisher @Inject constructor(
             val channelId = if (existingChannelId != null) {
                 previewChannelHelper.updatePreviewChannel(existingChannelId, channel)
                 existingChannelId
-            } else if (publishAsDefault) {
-                previewChannelHelper.publishDefaultChannel(channel)
             } else {
                 previewChannelHelper.publishChannel(channel)
             }
 
-            storeChannelLogo(channelId)
             UpsertedChannel(
                 channelId = channelId,
-                needsBrowsableRequest = !publishAsDefault && (existingChannel?.isBrowsable != true)
+                needsBrowsableRequest = existingChannel?.isBrowsable != true
             )
         }.getOrElse { error ->
             Log.w(TAG, "Failed to upsert Android TV channel ${option.key}", error)
@@ -299,15 +315,6 @@ class AndroidTvChannelPublisher @Inject constructor(
             dataStore.clearBrowsableChannelRequest(channelId)
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear Android TV browsable request state channelId=$channelId", error)
-        }
-    }
-
-    private fun storeChannelLogo(channelId: Long) {
-        val drawable = ContextCompat.getDrawable(context, R.drawable.app_logo_mark) ?: return
-        runCatching {
-            ChannelLogoUtils.storeChannelLogo(context, channelId, drawable.toBitmap())
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to store Android TV channel logo channelId=$channelId", error)
         }
     }
 

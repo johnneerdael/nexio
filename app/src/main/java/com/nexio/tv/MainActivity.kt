@@ -197,10 +197,7 @@ class MainActivity : ComponentActivity() {
         pendingBrowsableChannelId = null
         channelBrowsableRequestInFlight = false
         if (channelId != null) {
-            lifecycleScope.launch {
-                androidTvRecommendationsDataStore.markBrowsableChannelRequested(channelId)
-                maybeLaunchPendingBrowsableChannelRequest()
-            }
+            androidTvChannelPublisher.requestSync("channel_browsable_result")
         }
     }
 
@@ -540,7 +537,15 @@ class MainActivity : ComponentActivity() {
             pendingBrowsableChannelId = pendingChannelId
             runCatching {
                 channelBrowsableLauncher.launch(intent)
-            }.onFailure {
+            }.onFailure { error ->
+                Log.w("MainActivity", "Failed to launch Android TV browsable request channelId=$pendingChannelId", error)
+                runCatching {
+                    TvContractCompat.requestChannelBrowsable(this@MainActivity, pendingChannelId)
+                }.onSuccess {
+                    androidTvChannelPublisher.requestSync("channel_browsable_fallback")
+                }.onFailure { fallbackError ->
+                    Log.w("MainActivity", "Failed to request browsable Android TV channelId=$pendingChannelId", fallbackError)
+                }
                 channelBrowsableRequestInFlight = false
                 pendingBrowsableChannelId = null
             }
