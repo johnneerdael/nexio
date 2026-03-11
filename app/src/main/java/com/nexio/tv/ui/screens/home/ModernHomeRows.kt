@@ -201,9 +201,13 @@ internal fun ModernRowSection(
     val loadMoreRequestedTotals = uiCaches.loadMoreRequestedTotals
 
     Column {
+        val titleMediumStyle = MaterialTheme.typography.titleMedium
+        val rowTitleStyle = remember(titleMediumStyle) {
+            titleMediumStyle.copy(fontWeight = FontWeight.SemiBold)
+        }
         Text(
             text = row.title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            style = rowTitleStyle,
             color = NexioColors.TextPrimary,
             modifier = Modifier.padding(start = 52.dp, bottom = rowTitleBottom)
         )
@@ -305,8 +309,8 @@ internal fun ModernRowSection(
         val rowStartPadding = 52.dp
         val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec) {
             val parentStartOffsetPx = with(density) { rowStartPadding.roundToPx() }
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
-                @Suppress("DEPRECATION")
                 @Deprecated("Overrides deprecated BringIntoViewSpec.scrollAnimationSpec.")
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     defaultBringIntoViewSpec.scrollAnimationSpec
@@ -380,8 +384,8 @@ internal fun ModernRowSection(
                 ) { index, item ->
                     val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
-                    val onFocused = {
-                        onRowItemFocused(row.key, index, isContinueWatchingRow)
+                    val onFocused = remember(row.key, index, isContinueWatchingRow) {
+                        { onRowItemFocused(row.key, index, isContinueWatchingRow) }
                     }
 
                     when (val payload = item.payload) {
@@ -414,9 +418,11 @@ internal fun ModernRowSection(
                                 onItemFocus = onItemFocus,
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
-                                onLongPress = {
-                                    item.metaPreview?.let { preview ->
-                                        onCatalogItemLongPress(preview, payload.addonBaseUrl)
+                                onLongPress = remember(item.metaPreview, payload.addonBaseUrl) {
+                                    {
+                                        item.metaPreview?.let { preview ->
+                                            onCatalogItemLongPress(preview, payload.addonBaseUrl)
+                                        }
                                     }
                                 },
                                 onBackdropInteraction = onBackdropInteraction
@@ -448,7 +454,7 @@ private fun ModernCarouselCard(
     onLongPress: () -> Unit,
     onBackdropInteraction: () -> Unit
 ) {
-    val cardShape = RoundedCornerShape(cardCornerRadius)
+    val cardShape = remember(cardCornerRadius) { RoundedCornerShape(cardCornerRadius) }
     val context = LocalContext.current
     val density = LocalDensity.current
     val expandedCardWidth = cardHeight * (16f / 9f)
@@ -594,17 +600,19 @@ private fun ModernCarouselCard(
             scale = CardDefaults.scale(focusedScale = 1f)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                val mediaLayerModifier = if (hasLandscapeLogo) {
-                    Modifier
-                        .fillMaxSize()
-                        .drawWithCache {
-                            onDrawWithContent {
-                                drawContent()
-                                drawRect(brush = MODERN_LANDSCAPE_LOGO_GRADIENT, size = size)
+                val mediaLayerModifier = remember(hasLandscapeLogo) {
+                    if (hasLandscapeLogo) {
+                        Modifier
+                            .fillMaxSize()
+                            .drawWithCache {
+                                onDrawWithContent {
+                                    drawContent()
+                                    drawRect(brush = MODERN_LANDSCAPE_LOGO_GRADIENT, size = size)
+                                }
                             }
-                        }
-                } else {
-                    Modifier.fillMaxSize()
+                    } else {
+                        Modifier.fillMaxSize()
+                    }
                 }
 
                 Box(modifier = mediaLayerModifier) {

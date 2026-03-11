@@ -437,6 +437,7 @@ private fun ModernHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
+    val enrichingItemId by viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val loadMoreCatalog = remember(viewModel) {
         { catalogId: String, addonId: String, type: String ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
@@ -474,6 +475,7 @@ private fun ModernHomeRoute(
     ModernHomeContent(
         uiState = uiState,
         focusState = focusState,
+        enrichingItemId = enrichingItemId,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
