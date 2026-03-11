@@ -98,11 +98,14 @@ import android.view.KeyEvent as AndroidKeyEvent
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val KEY_REPEAT_THROTTLE_MS = 80L
+private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
+private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
 
 @Composable
 fun ModernHomeContent(
     uiState: HomeUiState,
     focusState: HomeScreenFocusState,
+    enrichingItemId: String? = null,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
@@ -201,6 +204,7 @@ fun ModernHomeContent(
                     }
                 } else {
                     val rowItemOccurrenceCounts = mutableMapOf<String, Int>()
+                    val rowItemCache = rowBuildCache.catalogItemCache.getOrPut(rowKey) { mutableMapOf() }
                     HeroCarouselRow(
                         key = rowKey,
                         title = catalogRowTitle(
@@ -219,12 +223,27 @@ fun ModernHomeContent(
                         items = row.items.map { item ->
                             val occurrence = rowItemOccurrenceCounts.getOrDefault(item.id, 0)
                             rowItemOccurrenceCounts[item.id] = occurrence + 1
-                            buildCatalogItem(
-                                item = item,
-                                row = row,
-                                useLandscapePosters = useLandscapePosters,
-                                occurrence = occurrence
-                            )
+                            val cacheKey = "${item.id}_$occurrence"
+                            val cachedItem = rowItemCache[cacheKey]
+                            if (cachedItem != null &&
+                                cachedItem.source == item &&
+                                cachedItem.useLandscapePosters == useLandscapePosters
+                            ) {
+                                cachedItem.carouselItem
+                            } else {
+                                val built = buildCatalogItem(
+                                    item = item,
+                                    row = row,
+                                    useLandscapePosters = useLandscapePosters,
+                                    occurrence = occurrence
+                                )
+                                rowItemCache[cacheKey] = CachedCarouselItem(
+                                    source = item,
+                                    useLandscapePosters = useLandscapePosters,
+                                    carouselItem = built
+                                )
+                                built
+                            }
                         }
                     )
                 }
@@ -238,6 +257,7 @@ fun ModernHomeContent(
                 add(mappedRow)
             }
             rowBuildCache.catalogRows.keys.retainAll(activeCatalogKeys)
+            rowBuildCache.catalogItemCache.keys.retainAll(activeCatalogKeys)
         }
     }
 
@@ -301,6 +321,8 @@ fun ModernHomeContent(
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastFocusedContinueWatchingIndex by remember { mutableStateOf(-1) }
     var lastKeyRepeatTime by remember { mutableStateOf(0L) }
+    var lastHeroNavigationAtMs by remember { mutableStateOf(0L) }
+    var heroFocusSettleDelayMs by remember { mutableStateOf(MODERN_HERO_FOCUS_DEBOUNCE_MS) }
     var focusedCatalogSelection by remember { mutableStateOf<FocusedCatalogSelection?>(null) }
     var expandedCatalogFocusKey by remember { mutableStateOf<String?>(null) }
     var expansionInteractionNonce by remember { mutableIntStateOf(0) }
@@ -439,8 +461,10 @@ fun ModernHomeContent(
     LaunchedEffect(activeHeroItemKey, isVerticalRowsScrolling) {
         if (isVerticalRowsScrolling) return@LaunchedEffect
         val targetHeroKey = activeHeroItemKey ?: return@LaunchedEffect
-        delay(MODERN_HERO_FOCUS_DEBOUNCE_MS)
+        val settleDelayMs = heroFocusSettleDelayMs
+        delay(settleDelayMs)
         if (isVerticalRowsScrolling) return@LaunchedEffect
+        if (System.currentTimeMillis() - lastHeroNavigationAtMs < settleDelayMs) return@LaunchedEffect
         val row = latestHeroRow ?: return@LaunchedEffect
         val latestKey = row.items.getOrNull(latestHeroIndex)?.key ?: row.items.firstOrNull()?.key
         if (latestKey != targetHeroKey) return@LaunchedEffect
@@ -493,28 +517,26 @@ fun ModernHomeContent(
         modifier = Modifier.fillMaxSize()
     ) {
         val rowHorizontalPadding = 52.dp
-
-        val resolvedHero by remember(heroItem, activeRow, clampedActiveItemIndex) {
-            derivedStateOf {
-                heroItem
-                    ?: activeRow?.items?.getOrNull(clampedActiveItemIndex)?.heroPreview
-                    ?: activeRow?.items?.firstOrNull()?.heroPreview
-            }
+        val posterCardCornerRadius = remember(uiState.posterCardCornerRadiusDp) { uiState.posterCardCornerRadiusDp.dp }
+        val activeCarouselItem by remember(activeRow, clampedActiveItemIndex) {
+            derivedStateOf { activeRow?.items?.getOrNull(clampedActiveItemIndex) }
         }
+        val enrichmentActive = enrichingItemId != null
+        val resolvedHero = activeCarouselItem?.heroPreview
+            ?: heroItem
+            ?: activeRow?.items?.firstOrNull()?.heroPreview
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
             }
         }
-        val heroBackdrop by remember(heroItem, resolvedHero, activeRowFallbackBackdrop) {
-            derivedStateOf {
-                firstNonBlank(
-                    resolvedHero?.backdrop,
-                    resolvedHero?.imageUrl,
-                    resolvedHero?.poster,
-                    if (heroItem == null) activeRowFallbackBackdrop else null
-                )
-            }
+        val heroBackdrop = remember(heroItem, resolvedHero, activeRowFallbackBackdrop) {
+            firstNonBlank(
+                resolvedHero?.backdrop,
+                resolvedHero?.imageUrl,
+                resolvedHero?.poster,
+                if (heroItem == null) activeRowFallbackBackdrop else null
+            )
         }
         val heroBackdropAlpha = 1f
         val catalogBottomPadding = 0.dp
@@ -525,8 +547,8 @@ fun ModernHomeContent(
         val localDensity = LocalDensity.current
         val verticalRowBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
             val topInsetPx = with(localDensity) { MODERN_ROW_HEADER_FOCUS_INSET.toPx() }
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {
-                @Suppress("DEPRECATION")
                 @Deprecated("Overrides deprecated BringIntoViewSpec.scrollAnimationSpec.")
                 override val scrollAnimationSpec: AnimationSpec<Float> =
                     defaultBringIntoViewSpec.scrollAnimationSpec
@@ -555,13 +577,16 @@ fun ModernHomeContent(
         ModernHeroMediaLayer(
             heroBackdrop = heroBackdrop,
             heroBackdropAlpha = heroBackdropAlpha,
-            bgColor = bgColor,
             modifier = heroMediaModifier,
             requestWidthPx = heroMediaWidthPx,
             requestHeightPx = heroMediaHeightPx
         )
+        ModernHeroGradientLayer(
+            bgColor = bgColor,
+            modifier = heroMediaModifier
+        )
         HeroTitleBlock(
-            preview = resolvedHero,
+            preview = if (enrichmentActive) null else resolvedHero,
             portraitMode = !useLandscapePosters,
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -638,13 +663,27 @@ fun ModernHomeContent(
                         },
                         onRowItemFocused = { rowKey, index, isContinueWatchingRow ->
                             val rowBecameActive = activeRowKey != rowKey
+                            val itemChanged = activeItemIndex != index
+                            if (rowBecameActive || itemChanged) {
+                                val now = System.currentTimeMillis()
+                                val timeSinceLastHeroNav = now - lastHeroNavigationAtMs
+                                heroFocusSettleDelayMs = if (
+                                    lastHeroNavigationAtMs != 0L &&
+                                    timeSinceLastHeroNav in 1 until MODERN_HERO_RAPID_NAV_THRESHOLD_MS
+                                ) {
+                                    MODERN_HERO_RAPID_NAV_SETTLE_MS
+                                } else {
+                                    MODERN_HERO_FOCUS_DEBOUNCE_MS
+                                }
+                                lastHeroNavigationAtMs = now
+                            }
                             if (focusedItemByRow[rowKey] != index) {
                                 focusedItemByRow[rowKey] = index
                             }
                             if (rowBecameActive) {
                                 activeRowKey = rowKey
                             }
-                            if (rowBecameActive || activeItemIndex != index) {
+                            if (rowBecameActive || itemChanged) {
                                 activeItemIndex = index
                             }
                             if (isContinueWatchingRow) {
@@ -658,7 +697,7 @@ fun ModernHomeContent(
                         },
                         useLandscapePosters = useLandscapePosters,
                         showLabels = uiState.posterLabelsEnabled,
-                        posterCardCornerRadius = uiState.posterCardCornerRadiusDp.dp,
+                        posterCardCornerRadius = posterCardCornerRadius,
                         effectiveExpandEnabled = effectiveExpandEnabled,
                         expandedCatalogFocusKey = expandedCatalogFocusKey,
                         modernCatalogCardWidth = modernCatalogCardWidth,

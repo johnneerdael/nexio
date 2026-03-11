@@ -1,6 +1,10 @@
 package com.nexio.tv.ui.screens.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +49,6 @@ import com.nexio.tv.ui.theme.NexioColors
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
     heroBackdropAlpha: Float,
-    bgColor: Color,
     modifier: Modifier,
     requestWidthPx: Int,
     requestHeightPx: Int
@@ -75,53 +78,58 @@ internal fun ModernHeroMediaLayer(
                 alignment = Alignment.TopEnd
             )
         }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    val leftBlendSolidWidth = size.width * 0.018f
-                    val horizontalGradientStartX = leftBlendSolidWidth
-                    val horizontalFadeEndX = horizontalGradientStartX + (size.width * 0.36f)
-                    val horizontalGradient = Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.0f to bgColor,
-                            0.18f to bgColor.copy(alpha = 0.82f),
-                            0.40f to bgColor.copy(alpha = 0.48f),
-                            0.70f to bgColor.copy(alpha = 0.14f),
-                            1.0f to Color.Transparent
-                        ),
-                        startX = horizontalGradientStartX,
-                        endX = horizontalFadeEndX
-                    )
-                    val radialGradient = Brush.radialGradient(
-                        colorStops = arrayOf(
-                            0.0f to bgColor.copy(alpha = 0.78f),
-                            0.55f to bgColor.copy(alpha = 0.52f),
-                            0.80f to bgColor.copy(alpha = 0.16f),
-                            1.0f to Color.Transparent
-                        ),
-                        center = Offset(0f, size.height / 2f),
-                        radius = size.height
-                    )
-                    val verticalGradient = Brush.verticalGradient(
-                        0.78f to Color.Transparent,
-                        0.90f to bgColor.copy(alpha = 0.72f),
-                        0.96f to bgColor.copy(alpha = 0.98f),
-                        1.0f to bgColor
-                    )
-                    onDrawBehind {
-                        drawRect(
-                            color = bgColor,
-                            size = Size(leftBlendSolidWidth, size.height)
-                        )
-                        drawRect(brush = horizontalGradient, size = size)
-                        drawRect(brush = radialGradient, size = size)
-                        drawRect(brush = verticalGradient, size = size)
-                    }
-                }
-        )
     }
+}
+
+@Composable
+internal fun ModernHeroGradientLayer(
+    bgColor: Color,
+    modifier: Modifier
+) {
+    Box(
+        modifier = modifier
+            .drawWithCache {
+                val leftBlendSolidWidth = size.width * 0.018f
+                val horizontalGradientStartX = leftBlendSolidWidth
+                val horizontalFadeEndX = horizontalGradientStartX + (size.width * 0.36f)
+                val horizontalGradient = Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0.0f to bgColor,
+                        0.18f to bgColor.copy(alpha = 0.82f),
+                        0.40f to bgColor.copy(alpha = 0.48f),
+                        0.70f to bgColor.copy(alpha = 0.14f),
+                        1.0f to Color.Transparent
+                    ),
+                    startX = horizontalGradientStartX,
+                    endX = horizontalFadeEndX
+                )
+                val radialGradient = Brush.radialGradient(
+                    colorStops = arrayOf(
+                        0.0f to bgColor.copy(alpha = 0.78f),
+                        0.55f to bgColor.copy(alpha = 0.52f),
+                        0.80f to bgColor.copy(alpha = 0.16f),
+                        1.0f to Color.Transparent
+                    ),
+                    center = Offset(0f, size.height / 2f),
+                    radius = size.height
+                )
+                val verticalGradient = Brush.verticalGradient(
+                    0.78f to Color.Transparent,
+                    0.90f to bgColor.copy(alpha = 0.72f),
+                    0.96f to bgColor.copy(alpha = 0.98f),
+                    1.0f to bgColor
+                )
+                onDrawBehind {
+                    drawRect(
+                        color = bgColor,
+                        size = Size(leftBlendSolidWidth, size.height)
+                    )
+                    drawRect(brush = horizontalGradient, size = size)
+                    drawRect(brush = radialGradient, size = size)
+                    drawRect(brush = verticalGradient, size = size)
+                }
+            }
+    )
 }
 
 @Composable
@@ -130,8 +138,26 @@ internal fun HeroTitleBlock(
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
-    if (preview == null) return
+    val fadeDuration = 220
+    AnimatedContent(
+        targetState = preview,
+        transitionSpec = {
+            fadeIn(tween(fadeDuration)) togetherWith fadeOut(tween(fadeDuration)) using null
+        },
+        contentAlignment = Alignment.BottomStart,
+        label = "heroTitleCrossfade",
+        modifier = modifier
+    ) { animatedPreview ->
+        HeroTitleContent(preview = animatedPreview, portraitMode = portraitMode)
+    }
+}
 
+@Composable
+private fun HeroTitleContent(
+    preview: HeroPreview?,
+    portraitMode: Boolean
+) {
+    if (preview == null) return
     val descriptionMaxLines = if (portraitMode) 4 else 5
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
@@ -175,7 +201,7 @@ internal fun HeroTitleBlock(
     }
 
     Column(
-        modifier = modifier,
+        modifier = Modifier,
         verticalArrangement = Arrangement.spacedBy(titleSpacing)
     ) {
         var logoLoadFailed by remember(preview.logo) { mutableStateOf(false) }

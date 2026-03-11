@@ -223,6 +223,12 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     posterStatusReconcileJob?.cancel()
     externalMetaPrefetchJob?.cancel()
     pendingExternalMetaPrefetchItemId = null
+    prefetchedExternalMetaIds.clear()
+    externalMetaPrefetchInFlightIds.clear()
+    prefetchedTmdbIds.clear()
+    tmdbEnrichFocusJob?.cancel()
+    pendingTmdbEnrichItemId = null
+    setEnrichingItemId(null)
 
     try {
         val hasRestoredContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
@@ -248,8 +254,6 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             homeCatalogSnapshotStore.clear()
             truncatedRowCache.clear()
             hasRenderedFirstCatalog = false
-            prefetchedExternalMetaIds.clear()
-            externalMetaPrefetchInFlightIds.clear()
             lastHeroEnrichmentSignature = null
             lastHeroEnrichedItems = emptyList()
             catalogsLoadInProgress = false

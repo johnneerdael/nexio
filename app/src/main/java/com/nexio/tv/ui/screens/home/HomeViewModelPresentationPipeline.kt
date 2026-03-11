@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
@@ -176,6 +177,11 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
                     externalMetaPrefetchJob?.cancel()
                     pendingExternalMetaPrefetchItemId = null
                     externalMetaPrefetchInFlightIds.clear()
+                    if (!currentTmdbSettings.isActive) {
+                        tmdbEnrichFocusJob?.cancel()
+                        pendingTmdbEnrichItemId = null
+                        setEnrichingItemId(null)
+                    }
                 }
             }
     }
@@ -185,31 +191,155 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
         return
     }
-    if (!externalMetaPrefetchEnabled) return
-    if (item.id in prefetchedExternalMetaIds) return
-    if (pendingExternalMetaPrefetchItemId == item.id) return
+    if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
+    if (pendingTmdbEnrichItemId == item.id) return
 
-    pendingExternalMetaPrefetchItemId = item.id
-    externalMetaPrefetchJob?.cancel()
-    externalMetaPrefetchJob = viewModelScope.launch(Dispatchers.IO) {
+    if (_enrichingItemId.value != null && _enrichingItemId.value != item.id) {
+        setEnrichingItemId(null)
+    }
+
+    val willEnrich = currentTmdbSettings.isActive || externalMetaPrefetchEnabled
+    if (willEnrich) {
+        setEnrichingItemId(item.id)
+    }
+
+    pendingTmdbEnrichItemId = item.id
+    tmdbEnrichFocusJob?.cancel()
+    tmdbEnrichFocusJob = viewModelScope.launch(Dispatchers.IO) {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
-        if (pendingExternalMetaPrefetchItemId != item.id) return@launch
-        if (!externalMetaPrefetchEnabled) return@launch
-        if (item.id in prefetchedExternalMetaIds) return@launch
-        if (!externalMetaPrefetchInFlightIds.add(item.id)) return@launch
-        try {
-            val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
-                .first { it is NetworkResult.Success || it is NetworkResult.Error }
+        if (pendingTmdbEnrichItemId != item.id) {
+            if (_enrichingItemId.value == item.id) {
+                setEnrichingItemId(null)
+            }
+            return@launch
+        }
+        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) {
+            if (_enrichingItemId.value == item.id) {
+                setEnrichingItemId(null)
+            }
+            return@launch
+        }
 
-            if (result is NetworkResult.Success) {
-                prefetchedExternalMetaIds.add(item.id)
-                updateCatalogItemWithMeta(item.id, result.data)
+        try {
+            var tmdbEnriched = false
+            if (currentTmdbSettings.isActive) {
+                val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
+                val enrichment = if (tmdbId != null) {
+                    runCatching {
+                        tmdbMetadataService.fetchEnrichment(
+                            tmdbId = tmdbId,
+                            contentType = item.type
+                        )
+                    }.getOrNull()
+                } else {
+                    null
+                }
+                if (enrichment != null) {
+                    prefetchedTmdbIds.add(item.id)
+                    prefetchedExternalMetaIds.add(item.id)
+                    updateCatalogItemWithTmdb(item.id, enrichment)
+                    tmdbEnriched = true
+                }
+            }
+
+            if (!tmdbEnriched &&
+                externalMetaPrefetchEnabled &&
+                item.id !in prefetchedExternalMetaIds &&
+                externalMetaPrefetchInFlightIds.add(item.id)
+            ) {
+                try {
+                    val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
+                        .first { it is NetworkResult.Success || it is NetworkResult.Error }
+
+                    if (result is NetworkResult.Success) {
+                        prefetchedExternalMetaIds.add(item.id)
+                        updateCatalogItemWithMeta(item.id, result.data)
+                    }
+                } finally {
+                    externalMetaPrefetchInFlightIds.remove(item.id)
+                }
             }
         } finally {
-            externalMetaPrefetchInFlightIds.remove(item.id)
-            if (pendingExternalMetaPrefetchItemId == item.id) {
-                pendingExternalMetaPrefetchItemId = null
+            if (pendingTmdbEnrichItemId == item.id) {
+                pendingTmdbEnrichItemId = null
             }
+            if (_enrichingItemId.value == item.id) {
+                setEnrichingItemId(null)
+            }
+        }
+    }
+}
+
+private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: TmdbEnrichment) {
+    fun mergeItem(currentItem: MetaPreview): MetaPreview {
+        var merged = currentItem
+
+        if (currentTmdbSettings.useArtwork) {
+            merged = merged.copy(
+                background = enrichment.backdrop ?: merged.background,
+                logo = enrichment.logo ?: merged.logo,
+                poster = enrichment.poster ?: merged.poster
+            )
+        }
+
+        if (currentTmdbSettings.useBasicInfo) {
+            merged = merged.copy(
+                name = enrichment.localizedTitle ?: merged.name,
+                description = enrichment.description ?: merged.description,
+                imdbRating = enrichment.rating?.toFloat() ?: merged.imdbRating,
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres
+            )
+        }
+
+        if (currentTmdbSettings.useDetails) {
+            merged = merged.copy(
+                releaseInfo = enrichment.releaseInfo ?: merged.releaseInfo
+            )
+        }
+
+        return merged
+    }
+
+    catalogsMap.forEach { (key, row) ->
+        val itemIndex = row.items.indexOfFirst { it.id == itemId }
+        if (itemIndex >= 0) {
+            val merged = mergeItem(row.items[itemIndex])
+            if (merged != row.items[itemIndex]) {
+                val mutableItems = row.items.toMutableList()
+                mutableItems[itemIndex] = merged
+                catalogsMap[key] = row.copy(items = mutableItems)
+                truncatedRowCache.remove(key)
+            }
+        }
+    }
+
+    viewModelScope.launch {
+        updatePersistedHomeSnapshotPipeline { snapshot ->
+            fun mergeRows(rows: List<CatalogRow>): List<CatalogRow> {
+                return rows.map { row ->
+                    val itemIndex = row.items.indexOfFirst { it.id == itemId }
+                    if (itemIndex < 0) {
+                        row
+                    } else {
+                        val mergedItem = mergeItem(row.items[itemIndex])
+                        if (mergedItem == row.items[itemIndex]) {
+                            row
+                        } else {
+                            val mutableItems = row.items.toMutableList()
+                            mutableItems[itemIndex] = mergedItem
+                            row.copy(items = mutableItems)
+                        }
+                    }
+                }
+            }
+
+            snapshot.copy(
+                catalogRows = mergeRows(snapshot.catalogRows),
+                fullCatalogRows = mergeRows(snapshot.fullCatalogRows),
+                heroItems = snapshot.heroItems.map { currentItem ->
+                    if (currentItem.id == itemId) mergeItem(currentItem) else currentItem
+                }
+            )
         }
     }
 }
@@ -219,7 +349,6 @@ private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) 
         background = meta.background ?: currentItem.background,
         logo = meta.logo ?: currentItem.logo,
         description = meta.description ?: currentItem.description,
-        releaseInfo = meta.releaseInfo ?: currentItem.releaseInfo,
         imdbRating = meta.imdbRating ?: currentItem.imdbRating,
         genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
     )
