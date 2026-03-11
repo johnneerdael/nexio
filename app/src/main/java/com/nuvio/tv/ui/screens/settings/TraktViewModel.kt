@@ -4,9 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
+import com.nuvio.tv.core.auth.AuthManager
+import com.nuvio.tv.core.sync.StartupSyncService
+import com.nuvio.tv.core.sync.WatchProgressSyncService
+import com.nuvio.tv.core.sync.WatchedItemsSyncService
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.TraktAuthState
 import com.nuvio.tv.data.local.TraktSettingsDataStore
+import com.nuvio.tv.data.local.WatchProgressSource
 import com.nuvio.tv.data.repository.TraktAuthService
 import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.data.repository.TraktTokenPollResult
@@ -42,6 +47,7 @@ data class TraktUiState(
     val deviceCodeExpiresAtMillis: Long? = null,
     val continueWatchingDaysCap: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
     val showUnairedNextUp: Boolean = TraktSettingsDataStore.DEFAULT_SHOW_UNAIRED_NEXT_UP,
+    val watchProgressSource: WatchProgressSource = TraktSettingsDataStore.DEFAULT_WATCH_PROGRESS_SOURCE,
     val connectedStats: TraktProgressService.TraktCachedStats? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null
@@ -49,10 +55,14 @@ data class TraktUiState(
 
 @HiltViewModel
 class TraktViewModel @Inject constructor(
+    private val authManager: AuthManager,
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val watchProgressSyncService: WatchProgressSyncService,
+    private val watchedItemsSyncService: WatchedItemsSyncService,
+    private val startupSyncService: StartupSyncService,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TraktUiState())
@@ -93,6 +103,29 @@ class TraktViewModel @Inject constructor(
                         context.getString(R.string.trakt_unaired_now_shown)
                     } else {
                         context.getString(R.string.trakt_unaired_now_hidden)
+                    }
+                )
+            }
+        }
+    }
+
+    fun onWatchProgressSourceSelected(source: WatchProgressSource) {
+        viewModelScope.launch {
+            traktSettingsDataStore.setWatchProgressSource(source)
+            if (source == WatchProgressSource.TRAKT) {
+                traktProgressService.refreshNow()
+            } else if (authManager.isAuthenticated) {
+                watchProgressSyncService.pushToRemote()
+                watchedItemsSyncService.pushToRemote()
+                startupSyncService.requestSyncNow()
+            }
+            _uiState.update {
+                it.copy(
+                    watchProgressSource = source,
+                    statusMessage = if (source == WatchProgressSource.TRAKT) {
+                        context.getString(R.string.trakt_watch_progress_trakt_selected)
+                    } else {
+                        context.getString(R.string.trakt_watch_progress_nuvio_selected)
                     }
                 )
             }
@@ -195,14 +228,16 @@ class TraktViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 traktSettingsDataStore.continueWatchingDaysCap,
-                traktSettingsDataStore.showUnairedNextUp
-            ) { daysCap, showUnairedNextUp ->
-                daysCap to showUnairedNextUp
-            }.collectLatest { (daysCap, showUnairedNextUp) ->
+                traktSettingsDataStore.showUnairedNextUp,
+                traktSettingsDataStore.watchProgressSource
+            ) { daysCap, showUnairedNextUp, watchProgressSource ->
+                Triple(daysCap, showUnairedNextUp, watchProgressSource)
+            }.collectLatest { (daysCap, showUnairedNextUp, watchProgressSource) ->
                 _uiState.update {
                     it.copy(
                         continueWatchingDaysCap = daysCap,
-                        showUnairedNextUp = showUnairedNextUp
+                        showUnairedNextUp = showUnairedNextUp,
+                        watchProgressSource = watchProgressSource
                     )
                 }
             }
