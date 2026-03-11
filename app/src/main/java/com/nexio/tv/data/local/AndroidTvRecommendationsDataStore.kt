@@ -86,6 +86,9 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
     suspend fun enqueueBrowsableChannelId(channelId: Long) {
         if (channelId <= 0L) return
         dataStore.edit { prefs ->
+            val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey])
+            if (channelId in requested) return@edit
+
             val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).toMutableList()
             if (channelId !in pending) {
                 pending += channelId

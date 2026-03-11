@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
+import android.app.Activity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalView
 import androidx.metrics.performance.JankStats
@@ -192,12 +193,17 @@ class MainActivity : ComponentActivity() {
     private var channelBrowsableRequestInFlight: Boolean = false
     private val channelBrowsableLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) {
+    ) { result ->
         val channelId = pendingBrowsableChannelId
         pendingBrowsableChannelId = null
         channelBrowsableRequestInFlight = false
         if (channelId != null) {
-            androidTvChannelPublisher.requestSync("channel_browsable_result")
+            lifecycleScope.launch {
+                if (result.resultCode == Activity.RESULT_OK) {
+                    androidTvRecommendationsDataStore.markBrowsableChannelRequested(channelId)
+                }
+                androidTvChannelPublisher.requestSync("channel_browsable_result")
+            }
         }
     }
 
