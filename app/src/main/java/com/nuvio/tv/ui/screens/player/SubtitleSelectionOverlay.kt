@@ -1196,7 +1196,7 @@ private fun selectedSubtitleLanguageKey(
         ?.let(::normalizeOverlayLanguageKey)
     if (selectedInternalKey != null) return selectedInternalKey
 
-    return languageItems.firstOrNull { it.key != SubtitleOffLanguageKey }?.key ?: SubtitleOffLanguageKey
+    return SubtitleOffLanguageKey
 }
 
 private fun normalizeOverlayLanguageKey(language: String?): String {
