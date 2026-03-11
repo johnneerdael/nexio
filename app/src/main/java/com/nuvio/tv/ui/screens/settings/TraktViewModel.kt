@@ -4,10 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
-import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.sync.StartupSyncService
-import com.nuvio.tv.core.sync.WatchProgressSyncService
-import com.nuvio.tv.core.sync.WatchedItemsSyncService
 import com.nuvio.tv.data.local.TraktAuthDataStore
 import com.nuvio.tv.data.local.TraktAuthState
 import com.nuvio.tv.data.local.TraktSettingsDataStore
@@ -55,13 +52,10 @@ data class TraktUiState(
 
 @HiltViewModel
 class TraktViewModel @Inject constructor(
-    private val authManager: AuthManager,
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
-    private val watchProgressSyncService: WatchProgressSyncService,
-    private val watchedItemsSyncService: WatchedItemsSyncService,
     private val startupSyncService: StartupSyncService,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -114,9 +108,7 @@ class TraktViewModel @Inject constructor(
             traktSettingsDataStore.setWatchProgressSource(source)
             if (source == WatchProgressSource.TRAKT) {
                 traktProgressService.refreshNow()
-            } else if (authManager.isAuthenticated) {
-                watchProgressSyncService.pushToRemote()
-                watchedItemsSyncService.pushToRemote()
+            } else {
                 startupSyncService.requestSyncNow()
             }
             _uiState.update {
