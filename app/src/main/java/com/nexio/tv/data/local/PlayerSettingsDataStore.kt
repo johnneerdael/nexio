@@ -152,8 +152,6 @@ enum class IecPackerChannelLayout(val storedValue: String, val kodiChannelLayout
  */
 data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
-    val libmpvVideoOutputMode: LibmpvVideoOutputMode = LibmpvVideoOutputMode.AUTO,
-    val libmpvGpuNextDolbyVisionReshapingEnabled: Boolean = false,
     val useLibass: Boolean = false,
     val libassRenderType: LibassRenderType = LibassRenderType.OVERLAY_OPEN_GL,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
@@ -164,7 +162,6 @@ data class PlayerSettings(
     val skipSilence: Boolean = false,
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
     val secondaryPreferredAudioLanguage: String? = null,
-    val libmpvAudioPassthroughEnabled: Boolean = false,
     val loadingOverlayEnabled: Boolean = true,
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
@@ -285,50 +282,8 @@ enum class AddonSubtitleStartupMode {
 
 enum class PlayerPreference {
     INTERNAL,
-    LIBMPV,
     EXTERNAL,
     ASK_EVERY_TIME
-}
-
-enum class LibmpvVideoOutputMode {
-    AUTO,
-    SHIELD_EXPERIMENTAL,
-    SHIELD_EXPERIMENTAL_DV_RESHAPE,
-    GPU_NEXT_ANDROID_OPENGL,
-    GPU_NEXT_VULKAN,
-    GPU_ANDROID_OPENGL,
-    MEDIACODEC_EMBED;
-
-    fun usesGpuNextRenderer(): Boolean {
-        return when (this) {
-            AUTO,
-            SHIELD_EXPERIMENTAL,
-            SHIELD_EXPERIMENTAL_DV_RESHAPE,
-            GPU_NEXT_ANDROID_OPENGL,
-            GPU_NEXT_VULKAN -> true
-            GPU_ANDROID_OPENGL,
-            MEDIACODEC_EMBED -> false
-        }
-    }
-
-    companion object {
-        fun fromStoredValue(rawValue: String?): LibmpvVideoOutputMode {
-            return when (rawValue?.trim()?.uppercase()) {
-                null,
-                "",
-                "AUTO" -> AUTO
-                "SHIELD_EXPERIMENTAL" -> SHIELD_EXPERIMENTAL
-                "SHIELD_EXPERIMENTAL_DV_RESHAPE" -> SHIELD_EXPERIMENTAL_DV_RESHAPE
-                "GPU_NEXT",
-                "GPU_NEXT_VULKAN" -> GPU_NEXT_VULKAN
-                "GPU",
-                "GPU_ANDROID_OPENGL" -> GPU_ANDROID_OPENGL
-                "GPU_NEXT_ANDROID_OPENGL" -> GPU_NEXT_ANDROID_OPENGL
-                "MEDIACODEC_EMBED" -> MEDIACODEC_EMBED
-                else -> AUTO
-            }
-        }
-    }
 }
 
 /**
@@ -354,9 +309,6 @@ class PlayerSettingsDataStore @Inject constructor(
 
     // Player preference key
     private val playerPreferenceKey = stringPreferencesKey("player_preference")
-    private val libmpvVideoOutputModeKey = stringPreferencesKey("libmpv_video_output_mode")
-    private val libmpvGpuNextDolbyVisionReshapingEnabledKey =
-        booleanPreferencesKey("libmpv_gpu_next_dolby_vision_reshaping_enabled")
 
     // Libass settings keys
     private val useLibassKey = booleanPreferencesKey("use_libass")
@@ -368,8 +320,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val skipSilenceKey = booleanPreferencesKey("skip_silence")
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val secondaryPreferredAudioLanguageKey = stringPreferencesKey("secondary_preferred_audio_language")
-    private val libmpvAudioPassthroughEnabledKey =
-        booleanPreferencesKey("libmpv_audio_passthrough_enabled")
     private val loadingOverlayEnabledKey = booleanPreferencesKey("loading_overlay_enabled")
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
     private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
@@ -616,13 +566,11 @@ class PlayerSettingsDataStore @Inject constructor(
     val playerSettings: Flow<PlayerSettings> = dataStore.data.map { prefs ->
             PlayerSettings(
                 playerPreference = prefs[playerPreferenceKey]?.let {
-                    runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
+                    when (it) {
+                        "LIBMPV" -> PlayerPreference.INTERNAL
+                        else -> runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
+                    }
                 } ?: PlayerPreference.INTERNAL,
-                libmpvVideoOutputMode = LibmpvVideoOutputMode.fromStoredValue(
-                    prefs[libmpvVideoOutputModeKey]
-                ),
-                libmpvGpuNextDolbyVisionReshapingEnabled =
-                    prefs[libmpvGpuNextDolbyVisionReshapingEnabledKey] ?: false,
                 useLibass = prefs[useLibassKey] ?: false,
                 libassRenderType = prefs[libassRenderTypeKey]?.let {
                     try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
@@ -635,8 +583,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 secondaryPreferredAudioLanguage = prefs[secondaryPreferredAudioLanguageKey]
                     ?.let(::normalizeSecondaryAudioLanguageCode),
-                libmpvAudioPassthroughEnabled =
-                    prefs[libmpvAudioPassthroughEnabledKey] ?: false,
                 loadingOverlayEnabled = prefs[loadingOverlayEnabledKey] ?: true,
                 pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
@@ -790,18 +736,6 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun setLibmpvVideoOutputMode(mode: LibmpvVideoOutputMode) {
-        store().edit { prefs ->
-            prefs[libmpvVideoOutputModeKey] = mode.name
-        }
-    }
-
-    suspend fun setLibmpvGpuNextDolbyVisionReshapingEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[libmpvGpuNextDolbyVisionReshapingEnabledKey] = enabled
-        }
-    }
-
     // Audio settings setters
 
     suspend fun setDecoderPriority(priority: Int) {
@@ -819,12 +753,6 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setSkipSilence(enabled: Boolean) {
         store().edit { prefs ->
             prefs[skipSilenceKey] = enabled
-        }
-    }
-
-    suspend fun setLibmpvAudioPassthroughEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[libmpvAudioPassthroughEnabledKey] = enabled
         }
     }
 

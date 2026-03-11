@@ -147,7 +147,6 @@ internal fun LazyListScope.audioSettingsItems(
     onShowDecoderPriorityDialog: () -> Unit,
     onShowIecPackerChannelLayoutDialog: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
-    onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerAc3PassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerEac3PassthroughEnabled: (Boolean) -> Unit,
@@ -219,18 +218,6 @@ internal fun LazyListScope.audioSettingsItems(
             subtitle = stringResource(R.string.audio_skip_silence_sub),
             isChecked = playerSettings.skipSilence,
             onCheckedChange = onSetSkipSilence,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    item(key = "audio_libmpv_passthrough") {
-        ToggleSettingsItem(
-            icon = Icons.AutoMirrored.Filled.VolumeUp,
-            title = stringResource(R.string.audio_libmpv_passthrough_title),
-            subtitle = stringResource(R.string.audio_libmpv_passthrough_sub),
-            isChecked = playerSettings.libmpvAudioPassthroughEnabled,
-            onCheckedChange = onSetLibmpvAudioPassthroughEnabled,
             onFocused = onItemFocused,
             enabled = enabled
         )

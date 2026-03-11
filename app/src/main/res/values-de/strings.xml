@@ -20,8 +20,6 @@
   <string name="playback_osd_clock">OSD-Uhr</string>
   <string name="sub_startup_mode_all">Alle Untertitel</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - Experimentelle Audio-Kompatibilität</string>
-  <string name="audio_libmpv_passthrough_title">libmpv-Audio-Passthrough</string>
-  <string name="audio_libmpv_passthrough_sub">Erlaubt libmpv, AC-3, E-AC-3, DTS, DTS-HD und TrueHD direkt weiterzugeben, wenn das Gerät dies unterstützt</string>
   <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Mapping erhalten</string>
   <string name="settings_rounded_ui">Abgerundete Benutzeroberfläche</string>
   <string name="settings_catalogs">Kataloge</string>
@@ -139,22 +137,6 @@
   <string name="streams_filter_wrong_episodes_sub">Blende Streams aus, deren erkannte Staffel- oder Episodenangaben nicht zur angeforderten Episode passen.</string>
   <string name="streams_filter_wrong_movie_year_title">Falsches Filmjahr filtern</string>
   <string name="streams_filter_wrong_movie_year_sub">Blende Film-Streams aus, deren erkanntes Jahr nicht zum angeforderten Titeljahr passt.</string>
-  <string name="playback_player_libmpv">libmpv</string>
-  <string name="playback_player_libmpv_desc">Das libmpv-Wiedergabe-Backend mit derselben Nexio-Oberfläche verwenden</string>
-  <string name="libmpv_video_output_title">libmpv-Videoausgabe</string>
-  <string name="libmpv_video_output_auto">Automatisch</string>
-  <string name="libmpv_video_output_auto_desc">Versucht zuerst gpu-next mit Android OpenGL, dann gpu-next mit Vulkan, dann gpu mit Android OpenGL und danach mediacodec_embed.</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl">gpu-next (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl_desc">Empfohlenes Android-TV-Renderprofil mit gpu-next, gpu-context=android und gpu-api=opengl.</string>
-  <string name="libmpv_video_output_gpu_next_vulkan">gpu-next (Vulkan)</string>
-  <string name="libmpv_video_output_gpu_next_vulkan_desc">Verwendet gpu-next mit Vulkan auf Geräten, bei denen der Vulkan-Pfad stabil ist.</string>
-  <string name="libmpv_video_output_gpu_android_opengl">GPU (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_android_opengl_desc">Verwendet den klassischen gpu-Renderer mit gpu-context=android für maximale Kompatibilität mit mpv-Untertiteln und OSD.</string>
-  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
-  <string name="libmpv_video_output_mediacodec_embed_desc">Direkte Android-Surface-Ausgabe mit Fokus auf Kompatibilität und HDR-Signalisierung, aber mit weniger mpv-Renderer-Funktionen.</string>
-  <string name="libmpv_gpu_next_dv_reshaping_title">gpu-next Dolby Vision-Reshaping</string>
-  <string name="libmpv_gpu_next_dv_reshaping_sub">Erzwingt Software-Decoding in gpu-next, damit libplacebo Dolby Vision auf Nicht-DV-Displays umformen kann. Erhöht die CPU-Auslastung.</string>
-  <string name="stream_player_libmpv">libmpv</string>
   <string name="trakt_popular_lists_search_hint">Beliebte Listen suchen</string>
   <string name="trakt_popular_lists_empty">Noch keine beliebten Listen verfügbar. Synchronisiere Trakt und versuche es erneut.</string>
   <string name="trakt_popular_lists_no_search_results">Keine beliebten Listen entsprechen deiner Suche.</string>
@@ -324,10 +306,6 @@
   <string name="playback_afr_on_start_stop_sub">Beim Start wechseln und beim Stopp wiederherstellen.</string>
   <string name="playback_player_external_desc">Streams immer in einer externen App öffnen</string>
   <string name="playback_player_ask_desc">Jedes Mal den Player wählen</string>
-  <string name="libmpv_video_output_shield_experimental">NVIDIA Shield experimentell</string>
-  <string name="libmpv_video_output_shield_experimental_desc">Experimentelles Shield-fokussiertes gpu-next Vulkan-Profil mit direkter MediaCodec-Dekodierung, libplacebo-Tuning und Passthrough-freundlichen Standardeinstellungen.</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape">NVIDIA Shield Experimentell (DV Reshape)</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape_desc">Shield-fokussiertes gpu-next Vulkan-Profil für Dolby Vision Reshaping-Experimente. Erfordert den DV-Reshape-Schalter und fällt auf das Standard-Shield-Profil zurück, falls Reshaping nicht verfügbar ist.</string>
   <string name="video_section">Video</string>
   <string name="audio_section">Audio</string>
   <string name="audio_lang_default">Standard (Mediendatei)</string>

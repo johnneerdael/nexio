@@ -155,7 +155,6 @@ fun PlaybackSettingsContent(
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
-    var showLibmpvVideoOutputDialog by remember { mutableStateOf(false) }
 
     fun dismissAllDialogs() {
         showLanguageDialog = false
@@ -175,7 +174,6 @@ fun PlaybackSettingsContent(
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
-        showLibmpvVideoOutputDialog = false
     }
 
     fun openDialog(setter: () -> Unit) {
@@ -208,7 +206,6 @@ fun PlaybackSettingsContent(
                 initialFocusRequester = initialFocusRequester,
                 playerSettings = playerSettings,
                 onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },
-                onShowLibmpvVideoOutputDialog = { openDialog { showLibmpvVideoOutputDialog = true } },
                 onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
                 onShowSecondaryAudioLanguageDialog = { openDialog { showSecondaryAudioLanguageDialog = true } },
                 onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
@@ -262,19 +259,11 @@ fun PlaybackSettingsContent(
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
                 onSetOsdClockEnabled = { enabled -> coroutineScope.launch { viewModel.setOsdClockEnabled(enabled) } },
                 onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
-                onSetLibmpvGpuNextDolbyVisionReshapingEnabled = { enabled ->
-                    coroutineScope.launch {
-                        viewModel.setLibmpvGpuNextDolbyVisionReshapingEnabled(enabled)
-                    }
-                },
                 onSetFrameRateMatchingMode = { mode -> coroutineScope.launch { viewModel.setFrameRateMatchingMode(mode) } },
                 onSetResolutionMatchingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setResolutionMatchingEnabled(enabled) }
                 },
                 onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
-                onSetLibmpvAudioPassthroughEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setLibmpvAudioPassthroughEnabled(enabled) }
-                },
                 onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
                 onSetExperimentalDv7ToDv81Enabled = {
                     enabled -> coroutineScope.launch { viewModel.setExperimentalDv7ToDv81Enabled(enabled) }
@@ -391,7 +380,6 @@ fun PlaybackSettingsContent(
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
         showPlayerPreferenceDialog = showPlayerPreferenceDialog,
-        showLibmpvVideoOutputDialog = showLibmpvVideoOutputDialog,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
         showSubtitleStartupModeDialog = showSubtitleStartupModeDialog,
@@ -411,11 +399,7 @@ fun PlaybackSettingsContent(
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
-        onSetLibmpvVideoOutputMode = { mode ->
-            coroutineScope.launch { viewModel.setLibmpvVideoOutputMode(mode) }
-        },
         onDismissPlayerPreferenceDialog = ::dismissAllDialogs,
-        onDismissLibmpvVideoOutputDialog = ::dismissAllDialogs,
         onSetSubtitlePreferredLanguage = { language ->
             coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }
         },

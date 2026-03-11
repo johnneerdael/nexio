@@ -5,8 +5,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
-import com.nexio.tv.core.mpv.NexioMpvRenderState
-import com.nexio.tv.core.mpv.NexioMpvSurfaceView
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -20,7 +18,6 @@ import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
@@ -67,12 +64,6 @@ class PlayerViewModel @Inject constructor(
     val exoPlayer: ExoPlayer?
         get() = controller.exoPlayer
 
-    val mpvRenderState: StateFlow<NexioMpvRenderState>
-        get() = controller.mpvRenderState
-
-    val usesLibmpvBackend: Boolean
-        get() = controller.playerBackendPreference == com.nexio.tv.data.local.PlayerPreference.LIBMPV
-
     fun getCurrentStreamUrl(): String = controller.getCurrentStreamUrl()
 
     fun getCurrentHeaders(): Map<String, String> = controller.getCurrentHeaders()
@@ -107,14 +98,6 @@ class PlayerViewModel @Inject constructor(
 
     fun onEvent(event: PlayerEvent) {
         controller.onEvent(event)
-    }
-
-    fun setLibmpvSubtitleVisibility(visible: Boolean) {
-        controller.setLibmpvSubtitleVisibility(visible)
-    }
-
-    fun attachMpvView(view: NexioMpvSurfaceView?) {
-        controller.attachMpvView(view)
     }
 
     override fun onCleared() {

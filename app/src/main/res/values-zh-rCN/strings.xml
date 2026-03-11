@@ -20,8 +20,6 @@
   <string name="playback_osd_clock">OSD 时钟</string>
   <string name="sub_startup_mode_all">全部字幕</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - 实验性音频兼容性</string>
-  <string name="audio_libmpv_passthrough_title">libmpv 音频直通</string>
-  <string name="audio_libmpv_passthrough_sub">当设备支持时，允许 libmpv 直通 AC-3、E-AC-3、DTS、DTS-HD 和 TrueHD</string>
   <string name="audio_dv_experimental_preserve_mapping_title">DV7 - 保留映射</string>
   <string name="settings_rounded_ui">圆角界面</string>
   <string name="settings_catalogs">目录</string>
@@ -139,22 +137,6 @@
   <string name="streams_filter_wrong_episodes_sub">隐藏解析出的季数或集数与请求的剧集不匹配的资源。</string>
   <string name="streams_filter_wrong_movie_year_title">过滤错误的电影年份</string>
   <string name="streams_filter_wrong_movie_year_sub">隐藏解析年份与请求的影片年份不匹配的电影资源。</string>
-  <string name="playback_player_libmpv">libmpv</string>
-  <string name="playback_player_libmpv_desc">使用 libmpv 播放引擎并保留相同的 Nexio 控制界面</string>
-  <string name="libmpv_video_output_title">libmpv 视频输出</string>
-  <string name="libmpv_video_output_auto">自动</string>
-  <string name="libmpv_video_output_auto_desc">先尝试 gpu-next + Android OpenGL，再尝试 gpu-next + Vulkan，然后是 gpu + Android OpenGL，最后回退到 mediacodec_embed。</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl">gpu-next (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl_desc">推荐的 Android TV 渲染预设，使用 gpu-next、gpu-context=android 和 gpu-api=opengl。</string>
-  <string name="libmpv_video_output_gpu_next_vulkan">gpu-next (Vulkan)</string>
-  <string name="libmpv_video_output_gpu_next_vulkan_desc">在 Vulkan 路径稳定的设备上使用 gpu-next + Vulkan。</string>
-  <string name="libmpv_video_output_gpu_android_opengl">gpu (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_android_opengl_desc">使用经典 gpu 渲染器和 gpu-context=android，以获得最佳的 mpv 字幕与 OSD 兼容性。</string>
-  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
-  <string name="libmpv_video_output_mediacodec_embed_desc">直接输出到 Android 界面，优先保证兼容性和 HDR 信号，但不支持部分 mpv 渲染功能。</string>
-  <string name="libmpv_gpu_next_dv_reshaping_title">gpu-next 杜比视界重塑</string>
-  <string name="libmpv_gpu_next_dv_reshaping_sub">在 gpu-next 中强制使用软件解码，让 libplacebo 可在非 DV 显示器上重塑杜比视界。这会增加 CPU 占用率。</string>
-  <string name="stream_player_libmpv">libmpv</string>
   <string name="trakt_popular_lists_search_hint">搜索热门列表</string>
   <string name="trakt_popular_lists_empty">暂无热门列表。请先同步 Trakt 后重试。</string>
   <string name="trakt_popular_lists_no_search_results">没有与搜索匹配的热门列表。</string>
@@ -324,10 +306,6 @@
   <string name="playback_afr_on_start_stop_sub">开始时切换，停止时恢复系统帧率。</string>
   <string name="playback_player_external_desc">始终使用外部应用程序打开视频流</string>
   <string name="playback_player_ask_desc">每次都选择播放器</string>
-  <string name="libmpv_video_output_shield_experimental">NVIDIA Shield 实验性</string>
-  <string name="libmpv_video_output_shield_experimental_desc">针对 Shield 优化的实验性 gpu-next Vulkan 配置文件，支持直接 MediaCodec 解码、libplacebo 调整和音频直通。</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape">NVIDIA Shield 实验性（DV 重塑）</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape_desc">针对 Shield 的 GPU-next Vulkan 配置文件，用于杜比视界重塑测试。需要开启 DV 重塑开关，如果不可用则退回标准 Shield 配置。</string>
   <string name="video_section">视频</string>
   <string name="audio_section">音频</string>
   <string name="audio_lang_default">默认（跟随媒体文件）</string>

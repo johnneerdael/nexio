@@ -120,9 +120,6 @@ fun StreamScreen(
             PlayerPreference.INTERNAL -> {
                 onStreamSelected(playbackInfo.copy(playerBackend = PlayerPreference.INTERNAL))
             }
-            PlayerPreference.LIBMPV -> {
-                onStreamSelected(playbackInfo.copy(playerBackend = PlayerPreference.LIBMPV))
-            }
             PlayerPreference.EXTERNAL -> {
                 playbackInfo.url?.let { url ->
                     ExternalPlayerLauncher.launch(
@@ -279,13 +276,6 @@ fun StreamScreen(
                     showPlayerChoiceDialog = false
                     pendingPlaybackInfo?.let {
                         onStreamSelected(it.copy(playerBackend = PlayerPreference.INTERNAL))
-                    }
-                    pendingPlaybackInfo = null
-                },
-                onLibmpvSelected = {
-                    showPlayerChoiceDialog = false
-                    pendingPlaybackInfo?.let {
-                        onStreamSelected(it.copy(playerBackend = PlayerPreference.LIBMPV))
                     }
                     pendingPlaybackInfo = null
                 },
@@ -1038,7 +1028,6 @@ private fun StreamTypeChip(
 @Composable
 private fun PlayerChoiceDialog(
     onInternalSelected: () -> Unit,
-    onLibmpvSelected: () -> Unit,
     onExternalSelected: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1097,36 +1086,6 @@ private fun PlayerChoiceDialog(
                             text = stringResource(R.string.stream_player_internal),
                             style = MaterialTheme.typography.titleMedium,
                             color = if (internalFocused) NexioColors.OnSecondary else NexioColors.TextPrimary,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
-                                .fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    var libmpvFocused by remember { mutableStateOf(false) }
-                    Card(
-                        onClick = onLibmpvSelected,
-                        modifier = Modifier
-                            .weight(1f)
-                            .onFocusChanged { libmpvFocused = it.isFocused },
-                        colors = CardDefaults.colors(
-                            containerColor = NexioColors.BackgroundElevated,
-                            focusedContainerColor = NexioColors.Secondary
-                        ),
-                        border = CardDefaults.border(
-                            focusedBorder = Border(
-                                border = BorderStroke(2.dp, NexioColors.FocusRing),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                        ),
-                        shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                        scale = CardDefaults.scale(focusedScale = 1.05f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.stream_player_libmpv),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (libmpvFocused) NexioColors.OnSecondary else NexioColors.TextPrimary,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                                 .fillMaxWidth(),

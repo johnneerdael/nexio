@@ -845,12 +845,6 @@ internal fun PlayerRuntimeController.startFrameRateProbe(
 }
 
 internal fun PlayerRuntimeController.applySubtitlePreferences(preferred: String, secondary: String?) {
-    if (usesLibmpvBackend()) {
-        if (preferred == "none") {
-            disableSubtitles()
-        }
-        return
-    }
     _exoPlayer?.let { player ->
         val builder = player.trackSelectionParameters.buildUpon()
 
