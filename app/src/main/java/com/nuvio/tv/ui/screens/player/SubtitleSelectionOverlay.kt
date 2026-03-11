@@ -470,19 +470,35 @@ private fun SubtitleStyleRail(
                 }
             }
             item {
-                OverlaySectionCard(title = stringResource(R.string.subtitle_tab_delay)) {
-                    StepperRow(
-                        value = formatSubtitleDelay(subtitleDelayMs),
-                        onDecrease = { onEvent(PlayerEvent.OnAdjustSubtitleDelay(-SUBTITLE_DELAY_STEP_MS)) },
-                        onIncrease = { onEvent(PlayerEvent.OnAdjustSubtitleDelay(SUBTITLE_DELAY_STEP_MS)) },
-                        valueWidth = 108.dp,
-                        rowLeftFocusRequester = railLeftFocusRequester,
-                        decrementFocusRequester = focusRequesters[StyleFocusKey.DelayDecrease],
-                        incrementFocusRequester = focusRequesters[StyleFocusKey.DelayIncrease],
-                        decrementFocusKey = StyleFocusKey.DelayDecrease,
-                        incrementFocusKey = StyleFocusKey.DelayIncrease,
-                        onFocusChanged = onStyleFocused
-                    )
+                Card(
+                    onClick = { onEvent(PlayerEvent.OnShowSubtitleDelayOverlay) },
+                    colors = overlayCardColors(selected = false),
+                    shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(requireNotNull(focusRequesters[StyleFocusKey.DelaySet]))
+                        .focusProperties { left = railLeftFocusRequester }
+                        .onFocusChanged { if (it.isFocused) onStyleFocused(StyleFocusKey.DelaySet) },
+                    scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.subtitle_tab_delay),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White
+                        )
+                        Text(
+                            text = formatSubtitleDelay(subtitleDelayMs),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
                 }
             }
             item {
@@ -1003,8 +1019,7 @@ private object StyleFocusKey {
     const val OutlineToggle = "outline_toggle"
     const val OffsetDecrease = "offset_decrease"
     const val OffsetIncrease = "offset_increase"
-    const val DelayDecrease = "delay_decrease"
-    const val DelayIncrease = "delay_increase"
+    const val DelaySet = "delay_set"
     const val Reset = "reset"
     const val TextColorPrefix = "text_color"
     const val OutlineColorPrefix = "outline_color"
@@ -1025,8 +1040,7 @@ private fun rememberStyleFocusRequesters(): Map<String, FocusRequester> {
             StyleFocusKey.OutlineToggle,
             StyleFocusKey.OffsetDecrease,
             StyleFocusKey.OffsetIncrease,
-            StyleFocusKey.DelayDecrease,
-            StyleFocusKey.DelayIncrease,
+            StyleFocusKey.DelaySet,
             StyleFocusKey.Reset
         ).associateWith { FocusRequester() } +
             OverlayTextColors.associate { color ->
