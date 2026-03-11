@@ -45,6 +45,7 @@
     <string name="cw_upcoming">Upcoming</string>
     <string name="cw_next_up">Next Up</string>
     <string name="cw_resume">Resume</string>
+    <string name="cw_percent_watched">%1$d%% watched</string>
     <string name="cw_hours_min_left">%1$dh %2$dm left</string>
     <string name="cw_min_left">%1$dm left</string>
     <string name="cw_almost_done">Almost done</string>
@@ -118,6 +119,15 @@
     <string name="detail_section_network">Network</string>
     <string name="detail_section_production">Production</string>
     <string name="episodes_unavailable">Unavailable</string>
+    <string name="series_status_ended">Ended</string>
+    <string name="series_status_continuing">Ongoing</string>
+    <string name="series_status_current">Current</string>
+    <string name="series_status_cancelled">Cancelled</string>
+    <string name="series_status_released">Released</string>
+    <string name="series_status_planned">Planned</string>
+    <string name="series_status_rumored">Rumored</string>
+    <string name="series_status_in_production">In Production</string>
+    <string name="series_status_post_production">Post Production</string>
     <string name="detail_lists_fallback">Lists</string>
     <string name="detail_lists_subtitle">Select which lists should include this title.</string>
     <string name="action_save">Save</string>
@@ -294,7 +304,7 @@
     <string name="sub_outline_color">Outline Color</string>
     <string name="sub_advanced_section">Advanced Subtitle Rendering</string>
     <string name="sub_libass">Use libass for ASS/SSA subtitles</string>
-    <string name="sub_libass_sub">Temporarily disabled for maintenance</string>
+    <string name="sub_libass_sub">Experimental: advanced ASS/SSA rendering (styles, positioning, animations)</string>
     <string name="sub_libass_mode">Libass Render Mode</string>
     <string name="sub_mode_overlay_gl">Overlay OpenGL (Recommended)</string>
     <string name="sub_mode_overlay_gl_sub">Best quality with HDR support. Renders subtitles on a separate thread.</string>
@@ -342,6 +352,10 @@
     <string name="autoplay_scope_addons">Installed addons only</string>
     <string name="autoplay_scope_plugins">Enabled plugins only</string>
     <string name="autoplay_scope">Auto-play Source Scope</string>
+    <string name="autoplay_timeout_title">Stream Selection Timeout</string>
+    <string name="autoplay_timeout_sub">Wait time for addons before selecting.</string>
+    <string name="autoplay_timeout_instant">Instant</string>
+    <string name="autoplay_timeout_unlimited">Unlimited</string>
     <string name="autoplay_allowed_addons">Allowed Addons</string>
     <string name="autoplay_all_addons">All installed addons</string>
     <string name="autoplay_allowed_plugins">Allowed Plugins</string>
@@ -525,6 +539,14 @@
     <string name="trakt_token_refreshes">Trakt access token refreshes in %1$s</string>
     <string name="trakt_login_instruction">Press Login to start Trakt device authentication. A QR code will appear here.</string>
     <string name="trakt_missing_credentials">Missing TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
+    <string name="trakt_watch_progress_title">Watch Progress</string>
+    <string name="trakt_watch_progress_subtitle">Choose which progress source powers resume and continue watching</string>
+    <string name="trakt_watch_progress_dialog_title">Watch Progress</string>
+    <string name="trakt_watch_progress_dialog_subtitle">Choose whether resume and continue watching should use Trakt or Nuvio Sync while Trakt scrobbling stays active.</string>
+    <string name="trakt_watch_progress_source_trakt">Trakt</string>
+    <string name="trakt_watch_progress_source_nuvio">Nuvio Sync</string>
+    <string name="trakt_watch_progress_trakt_selected">Watch progress source set to Trakt</string>
+    <string name="trakt_watch_progress_nuvio_selected">Watch progress source set to Nuvio Sync</string>
     <string name="trakt_continue_watching_window">Continue Watching Window</string>
     <string name="trakt_continue_watching_subtitle">Trakt history considered for continue watching</string>
     <string name="trakt_unaired_next_up">Unaired Next Up Episodes</string>
@@ -732,6 +754,7 @@
     <string name="subtitle_on">On</string>
     <string name="subtitle_off">Off</string>
     <string name="subtitle_style_title">Subtitle Style</string>
+    <string name="subtitle_style_customize">Customize</string>
     <string name="subtitle_style_color">Color</string>
     <string name="subtitle_style_reset">Reset</string>
     <string name="subtitle_style_font_size">Font Size</string>
@@ -814,6 +837,7 @@
     <!-- AccountSettingsContent -->
     <string name="account_loading">Loading\u2026</string>
     <string name="account_sync_description">Sync your library, watch progress, addons, and plugins across devices.</string>
+    <string name="account_sync_restart_note">Sync is not real-time across active devices. Restart this device after signing in or to pick up changes made elsewhere.</string>
     <string name="account_signin_qr_title">Sign In with QR</string>
     <string name="account_signin_qr_subtitle">Scan a QR code and complete email login on your phone</string>
     <string name="account_signed_in_label">Signed in</string>
@@ -918,10 +942,12 @@
     <!-- UpdatePromptDialog -->
     <string name="update_title">App Update</string>
     <string name="update_downloading">Downloading update</string>
+    <string name="update_download">Download</string>
+    <string name="update_downloading_ellipsis">Downloading…</string>
     <string name="update_unknown_sources">Allow installs from unknown sources to continue.</string>
     <!-- AccountScreen -->
     <string name="account_title">Account</string>
-    <string name="account_sign_in_description">Sign in to sync your library, watch progress, addons, and plugins across devices. Library and watch progress sync only when Trakt is not connected.</string>
+    <string name="account_sign_in_description">Sign in to sync your library, watch progress, addons, and plugins across devices. Library sync uses Nuvio Sync when Trakt is not connected, and watch progress can use either Trakt or Nuvio Sync.</string>
     <string name="account_sync_code_title">Sync Code</string>
     <string name="account_sync_code_description">Sync across devices without creating an account.</string>
     <string name="account_linked_devices">Linked Devices (%1$d)</string>
@@ -981,6 +1007,6 @@
     <string name="update_open_settings">Open Settings</string>
     <string name="update_install">Install</string>
     <string name="update_ignore">Ignore</string>
-    <string name="update_download">Download</string>
-    <string name="update_downloading_progress">Downloading…</string>
+    <string name="watchlist_added">Added to watchlist</string>
+    <string name="watchlist_removed">Removed from watchlist</string>
 </resources>

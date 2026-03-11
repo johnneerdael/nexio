@@ -157,17 +157,25 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
     val ids = toTraktIds(parsedIds)
     val parsedYear = extractYear(year)
     val normalizedType = contentType?.lowercase()
+    val currentMappingKey = currentEpisodeMappingCacheKey()
+    val mappedEpisode = if (currentTraktEpisodeMappingKey == currentMappingKey) {
+        currentTraktEpisodeMapping
+    } else {
+        null
+    }
+    val effectiveSeason = mappedEpisode?.season ?: currentSeason
+    val effectiveEpisode = mappedEpisode?.episode ?: currentEpisode
 
     val isEpisode = normalizedType in listOf("series", "tv") &&
-        currentSeason != null && currentEpisode != null
+        effectiveSeason != null && effectiveEpisode != null
 
     val item = if (isEpisode) {
         TraktScrobbleItem.Episode(
             showTitle = contentName ?: title,
             showYear = parsedYear,
             showIds = ids,
-            season = currentSeason ?: return null,
-            number = currentEpisode ?: return null,
+            season = effectiveSeason ?: return null,
+            number = effectiveEpisode ?: return null,
             episodeTitle = currentEpisodeTitle
         )
     } else {
@@ -270,11 +278,12 @@ fun PlayerRuntimeController.scheduleHideControls() {
     hideControlsJob?.cancel()
     hideControlsJob = scope.launch {
         delay(3000)
-        if (_uiState.value.isPlaying && !_uiState.value.showAudioDialog &&
-            !_uiState.value.showSubtitleDialog && !_uiState.value.showSubtitleStylePanel &&
+        if (_uiState.value.isPlaying && !_uiState.value.showAudioOverlay &&
+            !_uiState.value.showSubtitleOverlay && !_uiState.value.showSubtitleStylePanel &&
             !_uiState.value.showSpeedDialog && !_uiState.value.showMoreDialog &&
             !_uiState.value.showSubtitleDelayOverlay &&
-            !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel) {
+            !_uiState.value.showEpisodesPanel && !_uiState.value.showSourcesPanel &&
+            !_uiState.value.showStreamInfoOverlay) {
             _uiState.update { it.copy(showControls = false) }
         }
     }
@@ -286,8 +295,8 @@ internal fun PlayerRuntimeController.showSubtitleDelayOverlay() {
         it.copy(
             showControls = false,
             showSubtitleDelayOverlay = true,
-            showAudioDialog = false,
-            showSubtitleDialog = false,
+            showAudioOverlay = false,
+            showSubtitleOverlay = false,
             showSubtitleStylePanel = false,
             showSpeedDialog = false
         )
@@ -302,21 +311,35 @@ internal fun PlayerRuntimeController.hideSubtitleDelayOverlay() {
 }
 
 internal fun PlayerRuntimeController.adjustSubtitleDelay(deltaMs: Int) {
-    val currentDelayMs = _uiState.value.subtitleDelayMs
+    val currentState = _uiState.value
+    val currentDelayMs = currentState.subtitleDelayMs
     val newDelayMs = (currentDelayMs + deltaMs).coerceIn(
         minimumValue = SUBTITLE_DELAY_MIN_MS,
         maximumValue = SUBTITLE_DELAY_MAX_MS
     )
+    val keepInlineInSubtitleOverlay = currentState.showSubtitleOverlay
 
     subtitleDelayUs.set(newDelayMs.toLong() * 1000L)
     _uiState.update {
         it.copy(
             subtitleDelayMs = newDelayMs,
-            showControls = false,
-            showSubtitleDelayOverlay = true
+            showControls = if (keepInlineInSubtitleOverlay) it.showControls else false,
+            showSubtitleDelayOverlay = if (keepInlineInSubtitleOverlay) false else true
         )
     }
-    scheduleHideSubtitleDelayOverlay()
+
+    _exoPlayer?.let { player ->
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .build()
+    }
+    
+    if (keepInlineInSubtitleOverlay) {
+        hideSubtitleDelayOverlayJob?.cancel()
+        hideSubtitleDelayOverlayJob = null
+    } else {
+        scheduleHideSubtitleDelayOverlay()
+    }
 }
 
 internal fun PlayerRuntimeController.scheduleHideSubtitleDelayOverlay() {
@@ -339,9 +362,9 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
     pauseOverlayJob = scope.launch {
         delay(pauseOverlayDelayMs)
         val s = _uiState.value
-        val anyPanelOpen = s.showSubtitleDialog || s.showSubtitleStylePanel ||
+        val anyPanelOpen = s.showSubtitleOverlay || s.showSubtitleStylePanel ||
             s.showSpeedDialog || s.showMoreDialog || s.showEpisodesPanel ||
-            s.showSourcesPanel || s.showAudioDialog
+            s.showSourcesPanel || s.showAudioOverlay || s.showStreamInfoOverlay
         if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
         }
@@ -452,7 +475,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSelectAudioTrack -> {
             rememberSameSeriesAudioSelection(event.index)
             selectAudioTrack(event.index)
-            _uiState.update { it.copy(showAudioDialog = false, showSubtitleDelayOverlay = false) }
+            _uiState.update { it.copy(showAudioOverlay = false, showSubtitleDelayOverlay = false) }
         }
         is PlayerEvent.OnSelectSubtitleTrack -> {
             autoSubtitleSelected = true
@@ -463,7 +486,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             selectSubtitleTrack(event.index)
             _uiState.update { 
                 it.copy(
-                    showSubtitleDialog = false,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false,
                     selectedAddonSubtitle = null 
@@ -479,7 +502,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             disableSubtitles()
             _uiState.update { 
                 it.copy(
-                    showSubtitleDialog = false,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false,
                     selectedAddonSubtitle = null,
@@ -493,7 +516,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             selectAddonSubtitle(event.subtitle)
             _uiState.update {
                 it.copy(
-                    showSubtitleDialog = false,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false
                 )
@@ -518,10 +541,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 scheduleHideControls()
             }
         }
-        PlayerEvent.OnShowAudioDialog -> {
+        PlayerEvent.OnShowAudioOverlay -> {
             _uiState.update {
                 it.copy(
-                    showAudioDialog = true,
+                    showAudioOverlay = true,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
@@ -529,10 +553,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 )
             }
         }
-        PlayerEvent.OnShowSubtitleDialog -> {
+        PlayerEvent.OnShowSubtitleOverlay -> {
             _uiState.update {
                 it.copy(
-                    showSubtitleDialog = true,
+                    showSubtitleOverlay = true,
+                    showAudioOverlay = false,
                     showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
@@ -543,7 +568,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnOpenSubtitleStylePanel -> {
             _uiState.update {
                 it.copy(
-                    showSubtitleDialog = false,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = true,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
@@ -568,6 +593,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update {
                 it.copy(
                     showSpeedDialog = true,
+                    showAudioOverlay = false,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = false,
                     showMoreDialog = false,
                     showSubtitleDelayOverlay = false,
@@ -579,8 +606,8 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             _uiState.update {
                 it.copy(
                     showMoreDialog = true,
-                    showAudioDialog = false,
-                    showSubtitleDialog = false,
+                    showAudioOverlay = false,
+                    showSubtitleOverlay = false,
                     showSubtitleStylePanel = false,
                     showSubtitleDelayOverlay = false,
                     showSpeedDialog = false,
@@ -636,11 +663,11 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         is PlayerEvent.OnSourceStreamSelected -> {
             switchToSourceStream(event.stream)
         }
-        PlayerEvent.OnDismissDialog -> {
+        PlayerEvent.OnDismissTransientOverlay -> {
             _uiState.update { 
                 it.copy(
-                    showAudioDialog = false, 
-                    showSubtitleDialog = false, 
+                    showAudioOverlay = false, 
+                    showSubtitleOverlay = false, 
                     showSubtitleStylePanel = false,
                     showSpeedDialog = false,
                     showSubtitleDelayOverlay = false,
@@ -745,19 +772,68 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             val newMode = PlayerDisplayModeUtils.nextResizeMode(currentMode)
             val modeText = PlayerDisplayModeUtils.resizeModeLabel(newMode, context)
             Log.d("PlayerViewModel", "Aspect ratio toggled: $currentMode -> $newMode")
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
                     resizeMode = newMode,
                     showAspectRatioIndicator = true,
                     aspectRatioIndicatorText = modeText
-                ) 
+                )
             }
-            // Auto-hide indicator after 1.5 seconds
+            scope.launch { playerSettingsDataStore.setResizeMode(newMode) }
             hideAspectRatioIndicatorJob?.cancel()
             hideAspectRatioIndicatorJob = scope.launch {
                 delay(1500)
                 _uiState.update { it.copy(showAspectRatioIndicator = false) }
             }
         }
+        PlayerEvent.OnShowStreamInfo -> {
+            val info = buildStreamInfoData()
+            _uiState.update {
+                it.copy(
+                    showStreamInfoOverlay = true,
+                    streamInfoData = info,
+                    showMoreDialog = false,
+                    showControls = false
+                )
+            }
+        }
+        PlayerEvent.OnDismissStreamInfo -> {
+            _uiState.update { it.copy(showStreamInfoOverlay = false) }
+        }
     }
+}
+
+internal fun PlayerRuntimeController.buildStreamInfoData(): StreamInfoData {
+    val state = _uiState.value
+    val selectedAudio = state.audioTracks.firstOrNull { it.isSelected }
+    val selectedSubtitle = state.subtitleTracks.firstOrNull { it.isSelected }
+    val addonSub = state.selectedAddonSubtitle
+
+    return StreamInfoData(
+        addonName = currentAddonName,
+        addonLogo = currentAddonLogo,
+        streamName = state.currentStreamName,
+        streamDescription = currentStreamDescription,
+        filename = currentFilename,
+        fileSize = currentVideoSize,
+        videoCodec = currentVideoCodec,
+        videoWidth = currentVideoWidth,
+        videoHeight = currentVideoHeight,
+        videoFrameRate = state.detectedFrameRate.takeIf { it > 0f },
+        videoBitrate = currentVideoBitrate,
+        audioCodec = selectedAudio?.codec,
+        audioChannels = selectedAudio?.channelCount?.let {
+            CustomDefaultTrackNameProvider.getChannelLayoutName(it)
+        },
+        audioSampleRate = selectedAudio?.sampleRate,
+        audioLanguage = selectedAudio?.language,
+        subtitleName = selectedSubtitle?.name ?: addonSub?.lang,
+        subtitleCodec = selectedSubtitle?.codec,
+        subtitleLanguage = selectedSubtitle?.language ?: addonSub?.lang,
+        subtitleSource = when {
+            addonSub != null -> "Addon"
+            selectedSubtitle != null -> "Embedded"
+            else -> null
+        }
+    )
 }
