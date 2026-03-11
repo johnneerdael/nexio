@@ -11,11 +11,11 @@ import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.R
-import com.nuvio.tv.ui.components.formatRemainingTime
+import com.nuvio.tv.ui.components.formatContinueWatchingProgressLabel
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 internal const val MODERN_HERO_TEXT_WIDTH_FRACTION = 0.42f
-internal const val MODERN_HERO_BACKDROP_HEIGHT_FRACTION = 0.62f
+internal const val MODERN_HERO_MEDIA_WIDTH_FRACTION = 0.72f
 internal const val MODERN_TRAILER_OVERSCAN_ZOOM = 1.35f
 internal const val MODERN_HERO_FOCUS_DEBOUNCE_MS = 90L
 internal val MODERN_ROW_HEADER_FOCUS_INSET = 40.dp
@@ -93,6 +93,7 @@ internal data class HeroCarouselRow(
     val isLoading: Boolean = false
 )
 
+@Immutable
 internal data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
@@ -121,6 +122,7 @@ internal class ModernHomeUiCaches {
     }
 }
 
+@Stable
 internal class ModernCarouselRowBuildCache {
     var continueWatchingItems: List<ContinueWatchingItem> = emptyList()
     var continueWatchingTitle: String = ""
@@ -129,7 +131,15 @@ internal class ModernCarouselRowBuildCache {
     var continueWatchingUseLandscapePosters: Boolean = false
     var continueWatchingRow: HeroCarouselRow? = null
     val catalogRows = mutableMapOf<String, ModernCatalogRowBuildCacheEntry>()
+    // per-item cache: rowKey -> (itemId -> cached carousel item + source MetaPreview)
+    val catalogItemCache = mutableMapOf<String, MutableMap<String, CachedCarouselItem>>()
 }
+
+internal data class CachedCarouselItem(
+    val source: MetaPreview,
+    val useLandscapePosters: Boolean,
+    val carouselItem: ModernCarouselItem
+)
 
 
 internal fun buildContinueWatchingItem(
@@ -142,17 +152,11 @@ internal fun buildContinueWatchingItem(
     val secondaryHighlightText = when (item) {
         is ContinueWatchingItem.InProgress -> {
             val progress = item.progress
-            when {
-                progress.duration > 0L -> formatRemainingTime(
-                    remainingMs = progress.remainingTime,
-                    strHoursMinLeft = context.getString(R.string.cw_hours_min_left),
-                    strMinLeft = context.getString(R.string.cw_min_left),
-                    strAlmostDone = context.getString(R.string.cw_almost_done)
-                )
-                progress.progressPercent != null ->
-                    "${progress.progressPercent.toInt().coerceIn(0, 100)}% watched"
-                else -> context.getString(R.string.cw_resume)
-            }
+            formatContinueWatchingProgressLabel(
+                progress = progress,
+                resumeLabel = context.getString(R.string.cw_resume),
+                percentWatchedLabel = context.getString(R.string.cw_percent_watched)
+            )
         }
         is ContinueWatchingItem.NextUp -> {
             if (!item.info.hasAired) {
@@ -178,7 +182,7 @@ internal fun buildContinueWatchingItem(
             HeroPreview(
                 title = item.progress.name,
                 logo = item.progress.logo,
-                description = item.episodeDescription ?: item.progress.episodeTitle,
+                description = item.episodeDescription ?: item.progress.episodeTitle?.localizeEpisodeTitle(context),
                 contentTypeText = episodeLabel,
                 isSeries = isSeries,
                 yearText = extractYear(item.releaseInfo),
@@ -202,7 +206,7 @@ internal fun buildContinueWatchingItem(
                 title = item.info.name,
                 logo = item.info.logo,
                 description = item.info.episodeDescription
-                    ?: item.info.episodeTitle
+                    ?: item.info.episodeTitle?.localizeEpisodeTitle(context)
                     ?: item.info.airDateLabel?.let { airsDateTemplate.format(it) },
                 contentTypeText = episodeLabel,
                 isSeries = true,
@@ -273,13 +277,19 @@ internal fun buildCatalogItem(
     item: MetaPreview,
     row: CatalogRow,
     useLandscapePosters: Boolean,
-    occurrence: Int
+    occurrence: Int,
+    strTypeMovie: String = "",
+    strTypeSeries: String = ""
 ): ModernCarouselItem {
     val heroPreview = HeroPreview(
         title = item.name,
         logo = item.logo,
         description = item.description,
-        contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
+        contentTypeText = when (item.apiType.lowercase()) {
+            "movie" -> strTypeMovie.ifBlank { item.apiType.replaceFirstChar { ch -> ch.uppercase() } }
+            "series" -> strTypeSeries.ifBlank { item.apiType.replaceFirstChar { ch -> ch.uppercase() } }
+            else -> item.apiType.replaceFirstChar { ch -> ch.uppercase() }
+        },
         isSeries = isSeriesType(item.apiType),
         yearText = extractYear(item.releaseInfo),
         runtimeText = formatHeroRuntime(item.runtime),
