@@ -121,6 +121,7 @@ internal fun SubtitleSelectionOverlay(
     var lastFocusedLanguageKey by rememberSaveable { mutableStateOf<String?>(null) }
     var lastFocusedOptionId by rememberSaveable { mutableStateOf<String?>(null) }
     var lastFocusedStyleKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var showStyleRail by rememberSaveable { mutableStateOf(false) }
     val languageRailFocusRequester = remember { FocusRequester() }
     val optionRailFocusRequester = remember { FocusRequester() }
     val styleRailFocusRequester = remember { FocusRequester() }
@@ -170,7 +171,14 @@ internal fun SubtitleSelectionOverlay(
         LaunchedEffect(visible, initialLanguageKey) {
             if (visible) {
                 selectedLanguageKey = initialLanguageKey
+                showStyleRail = false
                 languageRailFocusRequester.requestFocusAfterFrames()
+            }
+        }
+
+        LaunchedEffect(showStyleRail) {
+            if (showStyleRail) {
+                styleRailFocusRequester.requestFocusAfterFrames()
             }
         }
 
@@ -191,8 +199,10 @@ internal fun SubtitleSelectionOverlay(
                     restoreLanguageKey = languageRestoreKey,
                     rightFocusRequester = if (subtitleOptions.isNotEmpty()) {
                         optionRailFocusRequester
-                    } else {
+                    } else if (showStyleRail) {
                         styleRailFocusRequester
+                    } else {
+                        FocusRequester.Default
                     },
                     onLanguageSelected = { languageKey ->
                         selectedLanguageKey = languageKey
@@ -207,30 +217,38 @@ internal fun SubtitleSelectionOverlay(
                     selectedLanguageKey = selectedLanguageKey,
                     options = subtitleOptions,
                     isLoadingAddons = isLoadingAddons,
+                    showStyleToggle = !showStyleRail,
                     railFocusRequester = optionRailFocusRequester,
                     railLeftFocusRequester = languageRailFocusRequester,
-                    railRightFocusRequester = styleRailFocusRequester,
+                    railRightFocusRequester = if (showStyleRail) {
+                        styleRailFocusRequester
+                    } else {
+                        FocusRequester.Default
+                    },
                     itemFocusRequesters = optionItemRequesters,
                     restoreOptionId = optionRestoreId,
                     onOptionFocused = { lastFocusedOptionId = it },
                     onInternalTrackSelected = onInternalTrackSelected,
-                    onAddonSubtitleSelected = onAddonSubtitleSelected
+                    onAddonSubtitleSelected = onAddonSubtitleSelected,
+                    onStyleToggleClicked = { showStyleRail = true }
                 )
 
-                SubtitleStyleRail(
-                    subtitleStyle = subtitleStyle,
-                    subtitleDelayMs = subtitleDelayMs,
-                    railFocusRequester = styleRailFocusRequester,
-                    railLeftFocusRequester = if (subtitleOptions.isNotEmpty()) {
-                        optionRailFocusRequester
-                    } else {
-                        languageRailFocusRequester
-                    },
-                    focusRequesters = styleRequesters,
-                    restoreStyleKey = styleRestoreKey,
-                    onStyleFocused = { lastFocusedStyleKey = it },
-                    onEvent = onEvent
-                )
+                if (showStyleRail) {
+                    SubtitleStyleRail(
+                        subtitleStyle = subtitleStyle,
+                        subtitleDelayMs = subtitleDelayMs,
+                        railFocusRequester = styleRailFocusRequester,
+                        railLeftFocusRequester = if (subtitleOptions.isNotEmpty()) {
+                            optionRailFocusRequester
+                        } else {
+                            languageRailFocusRequester
+                        },
+                        focusRequesters = styleRequesters,
+                        restoreStyleKey = styleRestoreKey,
+                        onStyleFocused = { lastFocusedStyleKey = it },
+                        onEvent = onEvent
+                    )
+                }
             }
         }
     }
@@ -285,6 +303,7 @@ private fun SubtitleOptionsRail(
     selectedLanguageKey: String,
     options: List<SubtitleOptionRailItem>,
     isLoadingAddons: Boolean,
+    showStyleToggle: Boolean,
     railFocusRequester: FocusRequester,
     railLeftFocusRequester: FocusRequester,
     railRightFocusRequester: FocusRequester,
@@ -292,7 +311,8 @@ private fun SubtitleOptionsRail(
     restoreOptionId: String?,
     onOptionFocused: (String) -> Unit,
     onInternalTrackSelected: (Int) -> Unit,
-    onAddonSubtitleSelected: (Subtitle) -> Unit
+    onAddonSubtitleSelected: (Subtitle) -> Unit,
+    onStyleToggleClicked: () -> Unit
 ) {
     var railHadFocus by remember { mutableStateOf(false) }
 
@@ -346,6 +366,28 @@ private fun SubtitleOptionsRail(
                                 }
                             }
                         )
+                    }
+                    if (showStyleToggle) {
+                        item(key = "__style_toggle__") {
+                            Card(
+                                onClick = onStyleToggleClicked,
+                                colors = overlayCardColors(selected = false),
+                                shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                                border = overlayCardBorder(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                                    .focusProperties { left = railLeftFocusRequester },
+                                scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.subtitle_style_customize),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = NuvioColors.TextTertiary,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
