@@ -31,20 +31,13 @@ internal fun PlayerRuntimeController.releasePlayer() {
     hideSubtitleDelayOverlayJob?.cancel()
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
-    mpvSubtitleCueCollectionJob?.cancel()
-    mpvSubtitleCueCollectionJob = null
-    observedMpvView = null
     builtInAiSubtitleTranslationJob?.cancel()
     builtInAiSubtitleTranslationJob = null
-    mpvView?.releasePlayer()
-    mpvView = null
-    mpvRenderState.value = com.nexio.tv.core.mpv.NexioMpvRenderState()
     _exoPlayer?.release()
     _exoPlayer = null
 }
 
 internal fun PlayerRuntimeController.notifyAudioSessionUpdate(active: Boolean) {
-    if (usesLibmpvBackend()) return
     _exoPlayer?.let { player ->
         try {
             val intent = Intent(

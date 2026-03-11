@@ -103,7 +103,6 @@
   <string name="playback_section_player_desc">Préférence de lecteur, lecture automatique et filtrage des sources.</string>
   <string name="playback_player">Lecteur</string>
   <string name="playback_player_internal">Interne</string>
-  <string name="playback_player_libmpv">libmpv</string>
   <string name="playback_player_external">Externe</string>
   <string name="playback_player_ask">Demander à chaque fois</string>
   <string name="playback_section_audio">Audio et vidéo</string>
@@ -119,29 +118,13 @@
   <string name="playback_afr_on_start_stop">Au démarrage/arrêt</string>
   <string name="playback_afr_on_start_stop_sub">Changer au début et restaurer à l\'arrêt.</string>
   <string name="playback_player_external_desc">Toujours ouvrir les flux dans une application externe</string>
-  <string name="playback_player_libmpv_desc">Utiliser le moteur libmpv avec la même interface Nexio</string>
   <string name="playback_player_ask_desc">Choisir le lecteur à chaque fois</string>
-  <string name="libmpv_video_output_title">Sortie vidéo libmpv</string>
-  <string name="libmpv_video_output_auto">Auto</string>
-  <string name="libmpv_video_output_auto_desc">Essaie d\'abord gpu-next avec Android OpenGL, puis gpu-next avec Vulkan, puis gpu avec Android OpenGL, et enfin mediacodec_embed.</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl">gpu-next (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl_desc">Profil Android TV recommandé avec gpu-next, gpu-context=android et gpu-api=opengl.</string>
-  <string name="libmpv_video_output_gpu_next_vulkan">gpu-next (Vulkan)</string>
-  <string name="libmpv_video_output_gpu_next_vulkan_desc">Utilise gpu-next avec Vulkan sur les appareils où le chemin Vulkan est stable.</string>
-  <string name="libmpv_video_output_gpu_android_opengl">GPU (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_android_opengl_desc">Utilise le rendu gpu classique avec gpu-context=android pour une compatibilité maximale avec les sous-titres et l\'OSD mpv.</string>
-  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
-  <string name="libmpv_video_output_mediacodec_embed_desc">Sortie directe vers l\'interface Android, axée sur la compatibilité et le signal HDR, mais avec moins de fonctionnalités de rendu mpv.</string>
-  <string name="libmpv_gpu_next_dv_reshaping_title">Remodelage Dolby Vision gpu-next</string>
-  <string name="libmpv_gpu_next_dv_reshaping_sub">Force le décodage logiciel dans gpu-next pour que libplacebo puisse remodeler le Dolby Vision sur les écrans non DV. Cela augmente l\'utilisation CPU.</string>
   <string name="audio_section">Audio</string>
   <string name="audio_lang_default">Par défaut (fichier média)</string>
   <string name="audio_lang_device">Langue de l\'appareil</string>
   <string name="audio_preferred_lang">Langue audio préférée</string>
   <string name="audio_skip_silence">Passer les silences</string>
   <string name="audio_skip_silence_sub">Passe les passages silencieux de l\'audio pendant la lecture</string>
-  <string name="audio_libmpv_passthrough_title">Passthrough audio libmpv</string>
-  <string name="audio_libmpv_passthrough_sub">Permet à libmpv d\'envoyer AC-3, E-AC-3, DTS, DTS-HD et TrueHD en bitstream lorsque l\'appareil le prend en charge</string>
   <string name="audio_advanced_section">Audio avancé</string>
   <string name="audio_advanced_warning">Ces paramètres peuvent causer des problèmes sur certains appareils. Ne les modifie que si tu sais ce que tu fais.</string>
   <string name="audio_decoder_device_only">Décodeurs de l\'appareil uniquement</string>
@@ -437,7 +420,6 @@
   <string name="stream_type_external">Externe</string>
   <string name="stream_player_picker_title">Quel lecteur utiliser ?</string>
   <string name="stream_player_internal">Interne</string>
-  <string name="stream_player_libmpv">libmpv</string>
   <string name="stream_player_external">Externe</string>
   <string name="player_ends_at">Fin à : %1$s</string>
   <string name="player_via">via %1$s</string>
@@ -759,10 +741,6 @@
   <string name="playback_buffer_chunk_size_sub">Taille de chaque segment de téléchargement par connexion.</string>
   <string name="playback_buffer_info">État : %1$s. Plage : %2$d-%3$d Mo. Conserve environ %4$dMB d\'espace libre. Disque libre disponible : %5$s.</string>
   <string name="playback_memory_usage_estimate">Utilisation estimée de la mémoire : %1$d / %2$d Mo</string>
-  <string name="libmpv_video_output_shield_experimental">NVIDIA Shield (Expérimental)</string>
-  <string name="libmpv_video_output_shield_experimental_desc">Profil Vulkan gpu-next optimisé pour Shield avec décodage direct MediaCodec, réglage libplacebo et paramètres par défaut compatibles passthrough.</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape">NVIDIA Shield (Remodelage DV)</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape_desc">Profil Vulkan gpu-next optimisé pour la Shield pour les tests de remodelage Dolby Vision. Nécessite l\'activation du remodelage DV et revient au profil Shield normal lorsque ce n\'est pas disponible.</string>
   <string name="video_section">Vidéo</string>
   <string name="audio_fire_os_compatibility_fallback_title">Fire OS – Compatibilité de secours</string>
   <string name="audio_fire_os_compatibility_fallback_sub">Permet les solutions de secours de compatibilité Fire TV, y compris le rétrogradage du DTS ancien et la récupération passthrough à l\'exécution. Désactive ceci avec le packer IEC pour une parité stricte de style Kodi.</string>

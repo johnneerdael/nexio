@@ -20,8 +20,6 @@
   <string name="playback_osd_clock">OSD-klok</string>
   <string name="sub_startup_mode_all">Alle ondertitels</string>
   <string name="audio_dts_iec_experimental_title">Fire OS - Experimentele audiocompatibiliteit</string>
-  <string name="audio_libmpv_passthrough_title">libmpv audio-passthrough</string>
-  <string name="audio_libmpv_passthrough_sub">Laat libmpv AC-3, E-AC-3, DTS, DTS-HD en TrueHD bitstreamen wanneer het apparaat dit ondersteunt</string>
   <string name="audio_dv_experimental_preserve_mapping_title">DV7 - Mapping behouden</string>
   <string name="settings_rounded_ui">Afgeronde interface</string>
   <string name="settings_catalogs">Catalogi</string>
@@ -139,22 +137,6 @@
   <string name="streams_filter_wrong_episodes_sub">Verberg episodische streams waarvan de seizoen- of afleveringstags niet overeenkomen met de gevraagde aflevering.</string>
   <string name="streams_filter_wrong_movie_year_title">Filter verkeerd jaar (films)</string>
   <string name="streams_filter_wrong_movie_year_sub">Verberg filmstreams waarvan het geparste jaar niet overeenkomt met het jaar van de titel.</string>
-  <string name="playback_player_libmpv">libmpv</string>
-  <string name="playback_player_libmpv_desc">Gebruik de libmpv-afspeelbackend met dezelfde Nexio-overlay</string>
-  <string name="libmpv_video_output_title">libmpv-video-uitvoer</string>
-  <string name="libmpv_video_output_auto">Automatisch</string>
-  <string name="libmpv_video_output_auto_desc">Probeert eerst gpu-next met Android OpenGL, daarna gpu-next met Vulkan, daarna gpu met Android OpenGL en daarna mediacodec_embed.</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl">GPU-volgende (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_next_android_opengl_desc">Aanbevolen render-preset voor Android TV met gpu-next, gpu-context=android en gpu-api=opengl.</string>
-  <string name="libmpv_video_output_gpu_next_vulkan">gpu-volgende (Vulkan)</string>
-  <string name="libmpv_video_output_gpu_next_vulkan_desc">Gebruik gpu-next met Vulkan op apparaten waar het Vulkan-pad stabiel is.</string>
-  <string name="libmpv_video_output_gpu_android_opengl">GPU (Android OpenGL)</string>
-  <string name="libmpv_video_output_gpu_android_opengl_desc">Gebruik de klassieke gpu-renderer met gpu-context=android voor maximale compatibiliteit met mpv-ondertitels en OSD.</string>
-  <string name="libmpv_video_output_mediacodec_embed">mediacodec_embed</string>
-  <string name="libmpv_video_output_mediacodec_embed_desc">Directe Android-surface-uitvoer gericht op compatibiliteit en HDR-signaal, met minder mpv-renderfuncties.</string>
-  <string name="libmpv_gpu_next_dv_reshaping_title">gpu-next Dolby Vision-reshaping</string>
-  <string name="libmpv_gpu_next_dv_reshaping_sub">Forceer softwaredecoding in gpu-next zodat libplacebo Dolby Vision kan omvormen op niet-DV-schermen. Dit verhoogt het CPU-gebruik.</string>
-  <string name="stream_player_libmpv">libmpv</string>
   <string name="settings_account">Account</string>
   <string name="settings_account_subtitle">Account- en synchronisatiestatus.</string>
   <string name="settings_layout">Indeling</string>
@@ -327,10 +309,6 @@
   <string name="playback_afr_on_start_stop_sub">Schakel in bij start en herstel bij stop.</string>
   <string name="playback_player_external_desc">Open streams altijd in een externe app</string>
   <string name="playback_player_ask_desc">Kies elke keer de speler</string>
-  <string name="libmpv_video_output_shield_experimental">NVIDIA Shield experimenteel</string>
-  <string name="libmpv_video_output_shield_experimental_desc">Experimenteel Shield-gericht gpu-next Vulkan-profiel met directe MediaCodec-decodering, libplacebo-afstemming en passthrough-vriendelijke standaardinstellingen.</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape">NVIDIA Shield Experimenteel (DV-reshaping)</string>
-  <string name="libmpv_video_output_shield_experimental_dv_reshape_desc">Op shield-gericht gpu-next Vulkan-profiel voor experimenten die Dolby Vision opnieuw vormgeven. Vereist de DV-hervormschakelaar en valt terug op het niet-hervormbare Shield-profiel wanneer hervormen niet beschikbaar is.</string>
   <string name="video_section">Video</string>
   <string name="audio_section">Audio</string>
   <string name="audio_lang_default">Standaard (mediabestand)</string>

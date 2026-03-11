@@ -113,7 +113,6 @@ import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
-import com.nexio.tv.core.mpv.NexioMpvSurfaceView
 import com.nexio.tv.core.player.ExternalPlayerLauncher
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
@@ -215,7 +214,6 @@ fun PlayerScreen(
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val mpvRenderState by viewModel.mpvRenderState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val containerFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -580,26 +578,7 @@ fun PlayerScreen(
             }
     ) {
         // Video Player
-        if (viewModel.usesLibmpvBackend) {
-            val subtitleStyle = uiState.subtitleStyle
-            AndroidView(
-                factory = { context ->
-                    NexioMpvSurfaceView(context).also { view ->
-                        viewModel.attachMpvView(view)
-                    }
-                },
-                update = { mpvView ->
-                    viewModel.attachMpvView(mpvView)
-                    mpvView.applySubtitleStyle(subtitleStyle)
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-            DisposableEffect(Unit) {
-                onDispose {
-                    viewModel.attachMpvView(null)
-                }
-            }
-        } else viewModel.exoPlayer?.let { player ->
+        viewModel.exoPlayer?.let { player ->
             val subtitleStyle = uiState.subtitleStyle
             val resizeMode = uiState.resizeMode
             val useAiOverlay = uiState.useBuiltInAiSubtitleOverlay

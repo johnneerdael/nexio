@@ -61,8 +61,8 @@ android {
         applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 38
-        versionName = "0.20"
+        versionCode = 39
+        versionName = "0.21"
 
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
         buildConfigField("String", "REAL_DEBRID_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "REAL_DEBRID_CLIENT_ID")}\"")
@@ -173,15 +173,10 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Keep local jniLibs disabled by default, but package libmpv natives from third_party when present.
             jniLibs.srcDirs(
-                "src/main/_jni_disabled",
-                "../third_party/libmpv/jniLibs"
+                "src/main/_jni_disabled"
             )
-            assets.srcDirs(
-                "src/main/assets",
-                "../mpv-android/app/src/main/assets"
-            )
+            assets.srcDirs("src/main/assets")
         }
     }
 

@@ -56,7 +56,6 @@ import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
-import com.nexio.tv.data.local.LibmpvVideoOutputMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
@@ -77,8 +76,7 @@ private data class PlaybackGeneralUi(
 )
 
 private data class PlaybackStreamSelectionUi(
-    val playerPreferenceLabel: String,
-    val libmpvVideoOutputLabel: String
+    val playerPreferenceLabel: String
 )
 
 private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode, off: String, onStart: String, onStartStop: String): String {
@@ -94,7 +92,6 @@ internal fun PlaybackSettingsSections(
     initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
     onShowPlayerPreferenceDialog: () -> Unit,
-    onShowLibmpvVideoOutputDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
@@ -126,11 +123,9 @@ internal fun PlaybackSettingsSections(
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
-    onSetLibmpvGpuNextDolbyVisionReshapingEnabled: (Boolean) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
-    onSetLibmpvAudioPassthroughEnabled: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
@@ -198,24 +193,8 @@ internal fun PlaybackSettingsSections(
     val streamSelectionUi = PlaybackStreamSelectionUi(
         playerPreferenceLabel = when (playerSettings.playerPreference) {
             PlayerPreference.INTERNAL -> stringResource(R.string.playback_player_internal)
-            PlayerPreference.LIBMPV -> stringResource(R.string.playback_player_libmpv)
             PlayerPreference.EXTERNAL -> stringResource(R.string.playback_player_external)
             PlayerPreference.ASK_EVERY_TIME -> stringResource(R.string.playback_player_ask)
-        },
-        libmpvVideoOutputLabel = when (playerSettings.libmpvVideoOutputMode) {
-            LibmpvVideoOutputMode.AUTO -> stringResource(R.string.libmpv_video_output_auto)
-            LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL ->
-                stringResource(R.string.libmpv_video_output_shield_experimental)
-            LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE ->
-                stringResource(R.string.libmpv_video_output_shield_experimental_dv_reshape)
-            LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL ->
-                stringResource(R.string.libmpv_video_output_gpu_next_android_opengl)
-            LibmpvVideoOutputMode.GPU_NEXT_VULKAN ->
-                stringResource(R.string.libmpv_video_output_gpu_next_vulkan)
-            LibmpvVideoOutputMode.GPU_ANDROID_OPENGL ->
-                stringResource(R.string.libmpv_video_output_gpu_android_opengl)
-            LibmpvVideoOutputMode.MEDIACODEC_EMBED ->
-                stringResource(R.string.libmpv_video_output_mediacodec_embed)
         }
     )
 
@@ -328,30 +307,6 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
-            if (playerSettings.playerPreference == PlayerPreference.LIBMPV) {
-                item(key = "stream_libmpv_video_output") {
-                    NavigationSettingsItem(
-                        icon = Icons.Default.Image,
-                        title = stringResource(R.string.libmpv_video_output_title),
-                        subtitle = streamSelectionUi.libmpvVideoOutputLabel,
-                        onClick = onShowLibmpvVideoOutputDialog,
-                        onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
-                    )
-                }
-
-                item(key = "stream_libmpv_gpu_next_dv_reshaping") {
-                    ToggleSettingsItem(
-                        icon = Icons.Default.Image,
-                        title = stringResource(R.string.libmpv_gpu_next_dv_reshaping_title),
-                        subtitle = stringResource(R.string.libmpv_gpu_next_dv_reshaping_sub),
-                        isChecked = playerSettings.libmpvGpuNextDolbyVisionReshapingEnabled,
-                        onCheckedChange = onSetLibmpvGpuNextDolbyVisionReshapingEnabled,
-                        onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION },
-                        enabled = playerSettings.libmpvVideoOutputMode.usesGpuNextRenderer()
-                    )
-                }
-            }
-
             autoPlaySettingsItems(
                 playerSettings = playerSettings,
                 onShowModeDialog = onShowStreamAutoPlayModeDialog,
@@ -407,7 +362,6 @@ internal fun PlaybackSettingsSections(
                 onShowDecoderPriorityDialog = onShowDecoderPriorityDialog,
                 onShowIecPackerChannelLayoutDialog = onShowIecPackerChannelLayoutDialog,
                 onSetSkipSilence = onSetSkipSilence,
-                onSetLibmpvAudioPassthroughEnabled = onSetLibmpvAudioPassthroughEnabled,
                 onSetExperimentalDtsIecPassthroughEnabled = onSetExperimentalDtsIecPassthroughEnabled,
                 onSetIecPackerAc3PassthroughEnabled = onSetIecPackerAc3PassthroughEnabled,
                 onSetIecPackerEac3PassthroughEnabled = onSetIecPackerEac3PassthroughEnabled,
@@ -590,7 +544,6 @@ internal fun PlaybackSettingsDialogsHost(
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
     showPlayerPreferenceDialog: Boolean,
-    showLibmpvVideoOutputDialog: Boolean,
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
     showSubtitleStartupModeDialog: Boolean,
@@ -608,9 +561,7 @@ internal fun PlaybackSettingsDialogsHost(
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
-    onSetLibmpvVideoOutputMode: (LibmpvVideoOutputMode) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
-    onDismissLibmpvVideoOutputDialog: () -> Unit,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
     onSetAddonSubtitleStartupMode: (AddonSubtitleStartupMode) -> Unit,
@@ -652,21 +603,6 @@ internal fun PlaybackSettingsDialogsHost(
                 onDismissPlayerPreferenceDialog()
             },
             onDismiss = onDismissPlayerPreferenceDialog
-        )
-    }
-
-    if (showLibmpvVideoOutputDialog) {
-        LibmpvVideoOutputDialog(
-            currentMode = playerSettings.libmpvVideoOutputMode,
-            showShieldExperimentalDvReshapeOption =
-                playerSettings.libmpvGpuNextDolbyVisionReshapingEnabled ||
-                    playerSettings.libmpvVideoOutputMode ==
-                    LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE,
-            onModeSelected = {
-                onSetLibmpvVideoOutputMode(it)
-                onDismissLibmpvVideoOutputDialog()
-            },
-            onDismiss = onDismissLibmpvVideoOutputDialog
         )
     }
 
@@ -749,7 +685,6 @@ private fun PlayerPreferenceDialog(
 
     val options = listOf(
         Triple(PlayerPreference.INTERNAL, stringResource(R.string.playback_player_internal), "Use NEXIO's built-in player"),
-        Triple(PlayerPreference.LIBMPV, stringResource(R.string.playback_player_libmpv), stringResource(R.string.playback_player_libmpv_desc)),
         Triple(PlayerPreference.EXTERNAL, stringResource(R.string.playback_player_external), stringResource(R.string.playback_player_external_desc)),
         Triple(PlayerPreference.ASK_EVERY_TIME, stringResource(R.string.playback_player_ask), stringResource(R.string.playback_player_ask_desc))
     )
@@ -778,132 +713,6 @@ private fun PlayerPreferenceDialog(
 
                     Card(
                         onClick = { onPreferenceSelected(preference) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
-                        colors = CardDefaults.colors(
-                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
-                            focusedContainerColor = NexioColors.FocusBackground
-                        ),
-                        shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
-                        scale = CardDefaults.scale(focusedScale = 1f)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = title,
-                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = description,
-                                    color = NexioColors.TextSecondary,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            if (isSelected) {
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = stringResource(R.string.cd_selected),
-                                    tint = NexioColors.Primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LibmpvVideoOutputDialog(
-    currentMode: LibmpvVideoOutputMode,
-    showShieldExperimentalDvReshapeOption: Boolean,
-    onModeSelected: (LibmpvVideoOutputMode) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    val options = listOf(
-        Triple(
-            LibmpvVideoOutputMode.AUTO,
-            stringResource(R.string.libmpv_video_output_auto),
-            stringResource(R.string.libmpv_video_output_auto_desc)
-        ),
-        Triple(
-            LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL,
-            stringResource(R.string.libmpv_video_output_shield_experimental),
-            stringResource(R.string.libmpv_video_output_shield_experimental_desc)
-        ),
-        Triple(
-            LibmpvVideoOutputMode.GPU_NEXT_ANDROID_OPENGL,
-            stringResource(R.string.libmpv_video_output_gpu_next_android_opengl),
-            stringResource(R.string.libmpv_video_output_gpu_next_android_opengl_desc)
-        ),
-        Triple(
-            LibmpvVideoOutputMode.GPU_NEXT_VULKAN,
-            stringResource(R.string.libmpv_video_output_gpu_next_vulkan),
-            stringResource(R.string.libmpv_video_output_gpu_next_vulkan_desc)
-        ),
-        Triple(
-            LibmpvVideoOutputMode.GPU_ANDROID_OPENGL,
-            stringResource(R.string.libmpv_video_output_gpu_android_opengl),
-            stringResource(R.string.libmpv_video_output_gpu_android_opengl_desc)
-        ),
-        Triple(
-            LibmpvVideoOutputMode.MEDIACODEC_EMBED,
-            stringResource(R.string.libmpv_video_output_mediacodec_embed),
-            stringResource(R.string.libmpv_video_output_mediacodec_embed_desc)
-        )
-    ).let { baseOptions ->
-        if (showShieldExperimentalDvReshapeOption) {
-            baseOptions + Triple(
-                LibmpvVideoOutputMode.SHIELD_EXPERIMENTAL_DV_RESHAPE,
-                stringResource(R.string.libmpv_video_output_shield_experimental_dv_reshape),
-                stringResource(R.string.libmpv_video_output_shield_experimental_dv_reshape_desc)
-            )
-        } else {
-            baseOptions
-        }
-    }
-
-    NexioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(R.string.libmpv_video_output_title),
-        width = 460.dp,
-        suppressFirstKeyUp = false
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 360.dp)
-        ) {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                items(
-                    count = options.size,
-                    key = { index -> options[index].first.name }
-                ) { index ->
-                    val (mode, title, description) = options[index]
-                    val isSelected = mode == currentMode
-
-                    Card(
-                        onClick = { onModeSelected(mode) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),

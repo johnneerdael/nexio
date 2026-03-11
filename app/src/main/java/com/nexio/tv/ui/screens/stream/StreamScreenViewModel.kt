@@ -183,8 +183,7 @@ class StreamScreenViewModel @Inject constructor(
         playerPreference: PlayerPreference,
         streamAutoPlayMode: StreamAutoPlayMode
     ): Boolean {
-        return (playerPreference == PlayerPreference.INTERNAL ||
-            playerPreference == PlayerPreference.LIBMPV) &&
+        return playerPreference == PlayerPreference.INTERNAL &&
             streamAutoPlayMode != StreamAutoPlayMode.MANUAL
     }
 

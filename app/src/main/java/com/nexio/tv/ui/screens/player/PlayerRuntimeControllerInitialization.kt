@@ -139,22 +139,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
             )
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
-            if (usesLibmpvBackend()) {
-                _uiState.update {
-                    it.copy(
-                        addonSubtitles = startupSubtitlePreparation.fetchedSubtitles,
-                        isLoadingAddonSubtitles = !startupSubtitlePreparation.fetchCompleted,
-                        addonSubtitlesError = null
-                    )
-                }
-                mpvInitializationInProgress = true
-                try {
-                    initializeLibmpvPlayer(url, headers, playerSettings)
-                } finally {
-                    mpvInitializationInProgress = false
-                }
-                return@launch
-            }
             val useLibass = when {
                 !requestedUseLibassByUser -> false
                 libassPipelineOverrideForCurrentStream != null -> libassPipelineOverrideForCurrentStream == true
