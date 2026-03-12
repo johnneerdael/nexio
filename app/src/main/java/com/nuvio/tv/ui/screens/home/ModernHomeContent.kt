@@ -66,6 +66,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.metrics.performance.PerformanceMetricsState
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -327,6 +329,15 @@ fun ModernHomeContent(
     )
     val isVerticalRowsScrolling by remember(verticalRowListState) {
         derivedStateOf { verticalRowListState.isScrollInProgress }
+    }
+
+    // Tag JankStats with key UI states so jank reports are actionable.
+    val metricsHolder = PerformanceMetricsState.getHolderForHierarchy(LocalView.current)
+    LaunchedEffect(isVerticalRowsScrolling) {
+        metricsHolder.state?.putState("HomeScrolling", isVerticalRowsScrolling.toString())
+    }
+    LaunchedEffect(enrichingItemId) {
+        metricsHolder.state?.putState("HeroEnriching", (enrichingItemId != null).toString())
     }
 
     val uiCaches = remember { ModernHomeUiCaches() }
