@@ -476,21 +476,10 @@ internal fun ModernRowSection(
             }
         }
 
-        val restoreFocusRequester = remember(row.key, focusedItemByRow[row.key], row.items.size) {
-            val rememberedIndex = (focusedItemByRow[row.key] ?: 0)
-                .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-            val itemKey = row.items.getOrNull(rememberedIndex)?.key ?: row.items.firstOrNull()?.key
-            if (itemKey != null) {
-                itemFocusRequesters[row.key]?.get(itemKey) ?: FocusRequester.Default
-            } else {
-                FocusRequester.Default
-            }
-        }
-
         CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
             LazyRow(
                 state = rowListState,
-                modifier = Modifier.focusRestorer(restoreFocusRequester),
+                modifier = Modifier,
                 contentPadding = PaddingValues(horizontal = rowStartPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
