@@ -29,7 +29,6 @@ object FrameRateUtils {
     private const val TAG = "FrameRateUtils"
     private const val SWITCH_TIMEOUT_MS = 4000L
     private const val REFRESH_MATCH_MIN_TOLERANCE_HZ = 0.08f
-    private const val UI_BASELINE_REFRESH_HZ = 60f
     private const val NTSC_FILM_FPS = 24000f / 1001f
     private const val CINEMA_24_FPS = 24f
     private const val MIN_VALID_VIDEO_FPS = 10f
@@ -345,11 +344,16 @@ object FrameRateUtils {
     }
 
     /**
-     * Forces UI screens (e.g. Home/Details) back to a 60Hz baseline.
-     * This path is intentionally allowed outside main player session.
+     * Forces UI screens (e.g. Home/Details) back to the highest supported refresh rate for the
+     * current resolution. This path is intentionally allowed outside main player session and should
+     * not be called while the main player session controls AFR.
      */
-    fun enforceUiBaselineRefreshRate(activity: Activity): Boolean {
+    fun enforceUiPreferredRefreshRate(activity: Activity): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        if (mainPlayerDisplayModeSessionActive) {
+            Log.d(TAG, "Skipping UI preferred refresh while main player session is active")
+            return false
+        }
         return try {
             val window = activity.window ?: return false
             val display = window.decorView.display ?: return false
@@ -359,16 +363,18 @@ object FrameRateUtils {
                     it.physicalHeight == activeMode.physicalHeight
             }
             val candidates = if (sameSizeModes.isNotEmpty()) sameSizeModes else display.supportedModes.toList()
-            val target = candidates.minByOrNull { abs(it.refreshRate - UI_BASELINE_REFRESH_HZ) } ?: return false
+            val target = candidates.maxWithOrNull(
+                compareBy<Display.Mode>({ it.refreshRate }, { it.physicalWidth * it.physicalHeight })
+            ) ?: return false
 
             if (activeMode.modeId == target.modeId) return true
             val layoutParams = window.attributes
             layoutParams.preferredDisplayModeId = target.modeId
             window.attributes = layoutParams
-            Log.d(TAG, "UI baseline refresh set to ${target.refreshRate}Hz (modeId=${target.modeId})")
+            Log.d(TAG, "UI preferred refresh set to ${target.refreshRate}Hz (modeId=${target.modeId})")
             true
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to enforce UI baseline refresh rate", e)
+            Log.w(TAG, "Failed to enforce UI preferred refresh rate", e)
             false
         }
     }
