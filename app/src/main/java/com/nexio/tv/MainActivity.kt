@@ -3,9 +3,11 @@ package com.nexio.tv
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.os.SystemClock
 import android.os.Bundle
 import android.util.Log
 import android.app.Activity
+import android.view.Choreographer
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalView
 import androidx.metrics.performance.JankStats
@@ -110,6 +112,7 @@ import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.repository.TraktProgressService
@@ -134,7 +137,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -142,6 +148,8 @@ import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.DrawerItem
 import com.nexio.tv.ModernSidebarBlurPanel
+import androidx.lifecycle.Lifecycle
+import kotlin.coroutines.resume
 
 val LocalSidebarExpanded = compositionLocalOf { false }
 
@@ -161,6 +169,9 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RECOMMENDATION_CONTENT_ID = "recommendation_content_id"
         const val EXTRA_RECOMMENDATION_CONTENT_TYPE = "recommendation_content_type"
         const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
+        private const val STARTUP_PERF_WINDOW_MS = 12_000L
+        private const val STARTUP_DEFERRED_WORK_MIN_DELAY_MS = 2_000L
+        private const val BROWSABLE_REQUEST_COOLDOWN_MS = 24L * 60 * 60 * 1000
     }
 
     @Inject
@@ -187,11 +198,23 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var androidTvChannelPublisher: AndroidTvChannelPublisher
 
+    @Inject
+    lateinit var debugSettingsDataStore: DebugSettingsDataStore
+
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
     private val pendingFeedNavigation = mutableStateOf<RecommendationFeedNavigation?>(null)
     private var pendingBrowsableChannelId: Long? = null
     private var channelBrowsableRequestInFlight: Boolean = false
+    @Volatile
+    private var startupPerfTelemetryEnabled: Boolean = false
+    @Volatile
+    private var startupPerfWindowOpen: Boolean = false
+    private var startupWindowOpenedAtMs: Long = 0L
+    private var startupDeferralGeneration: Long = 0L
+    private var deferredStartupWorkJob: Job? = null
+    private var deferredBrowsableRequestJob: Job? = null
+    private var startupPerfWindowJob: Job? = null
     private val channelBrowsableLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -200,8 +223,15 @@ class MainActivity : ComponentActivity() {
         channelBrowsableRequestInFlight = false
         if (channelId != null) {
             lifecycleScope.launch {
+                logStartupPerf("browsable_request_result", "channelId=$channelId code=${result.resultCode}")
                 if (result.resultCode == Activity.RESULT_OK) {
                     androidTvRecommendationsDataStore.markBrowsableChannelRequested(channelId)
+                } else {
+                    androidTvRecommendationsDataStore.markBrowsableChannelCooldown(
+                        channelId = channelId,
+                        cooldownDurationMs = BROWSABLE_REQUEST_COOLDOWN_MS
+                    )
+                    logStartupPerf("browsable_request_cooldown_applied", "channelId=$channelId")
                 }
                 androidTvChannelPublisher.requestSync("channel_browsable_result")
             }
@@ -228,12 +258,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleRecommendationIntent(intent)
         lifecycleScope.launch {
+            debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
+                startupPerfTelemetryEnabled = enabled
+            }
+        }
+        lifecycleScope.launch {
             androidTvRecommendationsDataStore.preferences
                 .map { it.pendingBrowsableChannelIds }
                 .distinctUntilChanged()
                 .collect { pendingIds ->
                     if (pendingIds.isNotEmpty()) {
-                        maybeLaunchPendingBrowsableChannelRequest()
+                        scheduleDeferredBrowsableChannelRequest()
                     }
                 }
         }
@@ -467,11 +502,15 @@ class MainActivity : ComponentActivity() {
         }
 
         jankStats = JankStats.createAndTrack(window) { frameData ->
+            val frameMs = frameData.frameDurationUiNanos / 1_000_000
             if (frameData.isJank) {
                 Log.w(
                     "JankStats",
-                    "JANK: ${frameData.frameDurationUiNanos / 1_000_000}ms | states: ${frameData.states}"
+                    "JANK: ${frameMs}ms | states: ${frameData.states}"
                 )
+            }
+            if (startupPerfTelemetryEnabled && startupPerfWindowOpen && (frameData.isJank || frameMs >= 24)) {
+                Log.i("StartupPerf", "doFrame=${frameMs}ms jank=${frameData.isJank} states=${frameData.states}")
             }
         }
     }
@@ -494,12 +533,120 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        startupSyncService.requestSyncNow()
-        androidTvChannelPublisher.requestSync("app_start")
-        maybeLaunchPendingBrowsableChannelRequest()
-        lifecycleScope.launch {
-            traktProgressService.refreshNow()
+        startupSyncService.setStartupGateOpen(false)
+        logStartupPerf("on_start")
+        startupPerfWindowOpen = true
+        startupWindowOpenedAtMs = SystemClock.elapsedRealtime()
+        startupPerfWindowJob?.cancel()
+        startupPerfWindowJob = lifecycleScope.launch {
+            delay(STARTUP_PERF_WINDOW_MS)
+            startupPerfWindowOpen = false
+            logStartupPerf("startup_window_closed")
         }
+        scheduleDeferredStartupWork()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        startupPerfWindowOpen = false
+        deferredStartupWorkJob?.cancel()
+        deferredBrowsableRequestJob?.cancel()
+        startupPerfWindowJob?.cancel()
+        startupSyncService.setStartupGateOpen(false)
+    }
+
+    private fun scheduleDeferredStartupWork() {
+        val generation = ++startupDeferralGeneration
+        val deferStartedAt = SystemClock.elapsedRealtime()
+        deferredStartupWorkJob?.cancel()
+        deferredStartupWorkJob = lifecycleScope.launch {
+            val reachedStableFrames = withTimeoutOrNull(3_000) {
+                awaitStableFrames(frameCount = 3)
+                true
+            } ?: false
+            val elapsed = SystemClock.elapsedRealtime() - deferStartedAt
+            if (elapsed < STARTUP_DEFERRED_WORK_MIN_DELAY_MS) {
+                delay(STARTUP_DEFERRED_WORK_MIN_DELAY_MS - elapsed)
+            }
+            if (generation != startupDeferralGeneration) return@launch
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
+
+            logStartupPerf("deferred_startup_begin", "stable_frames=$reachedStableFrames")
+            startupSyncService.setStartupGateOpen(true)
+            logStartupPerf("startup_sync_request_start")
+            startupSyncService.requestSyncNow()
+            logStartupPerf("startup_sync_request_end")
+            logStartupPerf("channel_sync_request_start", "reason=app_start_deferred")
+            androidTvChannelPublisher.requestSync("app_start_deferred")
+            logStartupPerf("channel_sync_request_end", "reason=app_start_deferred")
+            maybeLaunchPendingBrowsableChannelRequest()
+            launch {
+                logStartupPerf("trakt_refresh_start")
+                runCatching { traktProgressService.refreshNow() }
+                    .onFailure { error ->
+                        logStartupPerf("trakt_refresh_failed", "message=${error.message ?: "unknown"}")
+                        Log.w("MainActivity", "Deferred Trakt startup refresh failed", error)
+                    }
+                    .onSuccess {
+                        logStartupPerf("trakt_refresh_end")
+                    }
+            }
+            logStartupPerf("deferred_startup_end")
+        }
+    }
+
+    private fun scheduleDeferredBrowsableChannelRequest() {
+        val deferStartedAt = SystemClock.elapsedRealtime()
+        deferredBrowsableRequestJob?.cancel()
+        deferredBrowsableRequestJob = lifecycleScope.launch {
+            withTimeoutOrNull(3_000) { awaitStableFrames(frameCount = 3) }
+            val elapsed = SystemClock.elapsedRealtime() - deferStartedAt
+            if (elapsed < STARTUP_DEFERRED_WORK_MIN_DELAY_MS) {
+                delay(STARTUP_DEFERRED_WORK_MIN_DELAY_MS - elapsed)
+            }
+            delayForStartupWindowClose()
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
+            logStartupPerf("deferred_browsable_channel_request")
+            maybeLaunchPendingBrowsableChannelRequest()
+        }
+    }
+
+    private suspend fun delayForStartupWindowClose() {
+        val openedAt = startupWindowOpenedAtMs
+        if (openedAt <= 0L) {
+            delay(STARTUP_PERF_WINDOW_MS)
+            return
+        }
+        val elapsed = SystemClock.elapsedRealtime() - openedAt
+        if (elapsed < STARTUP_PERF_WINDOW_MS) {
+            delay(STARTUP_PERF_WINDOW_MS - elapsed)
+        }
+    }
+
+    private suspend fun awaitStableFrames(frameCount: Int) {
+        repeat(frameCount.coerceAtLeast(1)) {
+            awaitNextFrame()
+        }
+    }
+
+    private suspend fun awaitNextFrame() {
+        suspendCancellableCoroutine<Unit> { continuation ->
+            val choreographer = Choreographer.getInstance()
+            val callback = Choreographer.FrameCallback {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+            choreographer.postFrameCallback(callback)
+            continuation.invokeOnCancellation {
+                choreographer.removeFrameCallback(callback)
+            }
+        }
+    }
+
+    private fun logStartupPerf(event: String, details: String? = null) {
+        if (!startupPerfTelemetryEnabled) return
+        val nowMs = SystemClock.elapsedRealtime()
+        val suffix = details?.let { " $it" }.orEmpty()
+        Log.i("StartupPerf", "t=${nowMs}ms event=$event$suffix")
     }
 
     private fun handleRecommendationIntent(intent: Intent?) {
@@ -534,24 +681,46 @@ class MainActivity : ComponentActivity() {
     private fun maybeLaunchPendingBrowsableChannelRequest() {
         if (channelBrowsableRequestInFlight) return
         lifecycleScope.launch {
-            val pendingChannelId = androidTvRecommendationsDataStore.preferences
-                .map { it.pendingBrowsableChannelIds.firstOrNull() }
-                .first() ?: return@launch
+            val prefs = androidTvRecommendationsDataStore.preferences.first()
+            val pendingChannelId = prefs.pendingBrowsableChannelIds.firstOrNull() ?: return@launch
+            val nowMs = System.currentTimeMillis()
+            val cooldownUntilMs = prefs.browsableRequestCooldownUntilMsByChannelId[pendingChannelId] ?: 0L
+            if (cooldownUntilMs > nowMs) {
+                androidTvRecommendationsDataStore.markBrowsableChannelCooldown(
+                    channelId = pendingChannelId,
+                    cooldownDurationMs = cooldownUntilMs - nowMs
+                )
+                logStartupPerf(
+                    "browsable_request_skipped_cooldown",
+                    "channelId=$pendingChannelId cooldownRemainingMs=${cooldownUntilMs - nowMs}"
+                )
+                return@launch
+            }
 
             val intent = Intent(TvContractCompat.ACTION_REQUEST_CHANNEL_BROWSABLE)
                 .putExtra(TvContractCompat.EXTRA_CHANNEL_ID, pendingChannelId)
 
             channelBrowsableRequestInFlight = true
             pendingBrowsableChannelId = pendingChannelId
+            logStartupPerf("browsable_request_launch", "channelId=$pendingChannelId")
             runCatching {
                 channelBrowsableLauncher.launch(intent)
             }.onFailure { error ->
+                lifecycleScope.launch {
+                    androidTvRecommendationsDataStore.markBrowsableChannelCooldown(
+                        channelId = pendingChannelId,
+                        cooldownDurationMs = BROWSABLE_REQUEST_COOLDOWN_MS
+                    )
+                }
+                logStartupPerf("browsable_request_launch_failed", "channelId=$pendingChannelId")
                 Log.w("MainActivity", "Failed to launch Android TV browsable request channelId=$pendingChannelId", error)
                 runCatching {
                     TvContractCompat.requestChannelBrowsable(this@MainActivity, pendingChannelId)
                 }.onSuccess {
+                    logStartupPerf("browsable_request_fallback_success", "channelId=$pendingChannelId")
                     androidTvChannelPublisher.requestSync("channel_browsable_fallback")
                 }.onFailure { fallbackError ->
+                    logStartupPerf("browsable_request_fallback_failed", "channelId=$pendingChannelId")
                     Log.w("MainActivity", "Failed to request browsable Android TV channelId=$pendingChannelId", fallbackError)
                 }
                 channelBrowsableRequestInFlight = false
