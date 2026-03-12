@@ -15,6 +15,7 @@ import com.nexio.tv.domain.repository.AddonRepository
 import java.time.LocalDate
 import com.nexio.tv.domain.repository.CatalogRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -173,13 +174,13 @@ class SearchViewModel @Inject constructor(
 
             val addons = try {
                 addonRepository.getInstalledAddons().first()
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 return@launch
             }
 
-            val allTargets = buildSearchTargets(addons)
-            val firstAddonId = allTargets.firstOrNull()?.first?.id
-            val searchTargets = if (firstAddonId != null) allTargets.filter { it.first.id == firstAddonId } else emptyList()
+            val searchTargets = buildSearchTargets(addons)
             if (searchTargets.isEmpty()) {
                 _uiState.update { it.copy(suggestions = emptyList()) }
                 return@launch
@@ -219,6 +220,8 @@ class SearchViewModel @Inject constructor(
                                 }
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         // Ignore per-catalog errors for suggestions
                     }
@@ -378,8 +381,12 @@ class SearchViewModel @Inject constructor(
         catalogsMap[key] = currentRow.copy(isLoading = true)
         scheduleCatalogRowsUpdate()
 
-        val query = uiState.value.query.trim()
-        if (query.isBlank()) return
+        val query = uiState.value.submittedQuery.trim()
+        if (query.isBlank()) {
+            catalogsMap[key] = currentRow.copy(isLoading = false)
+            scheduleCatalogRowsUpdate()
+            return
+        }
 
         viewModelScope.launch {
             val addon = uiState.value.installedAddons.find { it.id == addonId } ?: run {
@@ -730,4 +737,3 @@ class SearchViewModel @Inject constructor(
         return "${addonId}_${type}_${catalogId}"
     }
 }
-

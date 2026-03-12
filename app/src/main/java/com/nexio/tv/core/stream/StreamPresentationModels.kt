@@ -3,6 +3,7 @@ package com.nexio.tv.core.stream
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
+import java.util.LinkedHashMap
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -171,15 +172,44 @@ data class StreamFilteringDiagnostics(
 )
 
 object StreamPresentationEngine {
+    class ParserCache(private val maxEntries: Int = 4096) {
+        private val cache = object : LinkedHashMap<String, ParsedStreamInfo>(maxEntries, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, ParsedStreamInfo>?
+            ): Boolean {
+                return size > maxEntries
+            }
+        }
+
+        fun parse(stream: Stream): ParsedStreamInfo {
+            val key = stableStreamKey(stream)
+            synchronized(cache) {
+                cache[key]?.let { return it }
+            }
+            val parsed = AioStyleStreamParser.parse(stream)
+            synchronized(cache) {
+                cache[key] = parsed
+            }
+            return parsed
+        }
+
+        fun clear() {
+            synchronized(cache) {
+                cache.clear()
+            }
+        }
+    }
+
     fun organize(
         streams: List<Stream>,
         availableAddons: List<String>,
         selectedAddonFilter: String?,
         flags: StreamFeatureFlags,
-        requestContext: StreamRequestContext = StreamRequestContext()
+        requestContext: StreamRequestContext = StreamRequestContext(),
+        parserCache: ParserCache? = null
     ): OrganizedStreams {
         val parsed = streams.map { stream ->
-            val parsedInfo = AioStyleStreamParser.parse(stream)
+            val parsedInfo = parserCache?.parse(stream) ?: AioStyleStreamParser.parse(stream)
             StreamCardModel(
                 stream = stream,
                 parsed = parsedInfo,
@@ -729,6 +759,37 @@ object StreamPresentationEngine {
         val rawText = listOfNotNull(parsed.title, parsed.filename).joinToString(" ")
         if (rawText.isBlank()) return false
         return Regex("""\b(19|20)\d{2}\b""").containsMatchIn(rawText)
+    }
+
+    private fun stableStreamKey(stream: Stream): String {
+        val hints = stream.behaviorHints
+        return buildString {
+            append(stream.addonName)
+            append('|')
+            append(stream.addonParserPreset.name)
+            append('|')
+            append(stream.name.orEmpty())
+            append('|')
+            append(stream.title.orEmpty())
+            append('|')
+            append(stream.description.orEmpty())
+            append('|')
+            append(stream.url.orEmpty())
+            append('|')
+            append(stream.externalUrl.orEmpty())
+            append('|')
+            append(stream.ytId.orEmpty())
+            append('|')
+            append(stream.infoHash.orEmpty())
+            append('|')
+            append(stream.fileIdx ?: -1)
+            append('|')
+            append(hints?.filename.orEmpty())
+            append('|')
+            append(hints?.videoHash.orEmpty())
+            append('|')
+            append(hints?.videoSize ?: -1L)
+        }
     }
 }
 

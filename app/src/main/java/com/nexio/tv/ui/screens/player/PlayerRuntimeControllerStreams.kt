@@ -121,6 +121,7 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
             videoId = vid,
             season = seasonArg,
             episode = episodeArg,
+            installedAddons = installedAddons,
             requestOrigin = "player_sources"
         ).collect { result ->
             when (result) {
@@ -361,6 +362,10 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null
     attachedAddonSubtitleKeys = emptySet()
+    startupAfrPreflightJob?.cancel()
+    startupAfrPreflightJob = null
+    startupSubtitlePreparationJob?.cancel()
+    startupSubtitlePreparationJob = null
     hasRetriedCurrentStreamAfter416 = false
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
@@ -375,6 +380,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),
+            addonSubtitles = emptyList(),
+            selectedAddonSubtitle = null,
             selectedAudioTrackIndex = -1,
             selectedSubtitleTrackIndex = -1,
             showSourcesPanel = false,
@@ -389,18 +396,18 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
         scope.launch {
             try {
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
-                runAfrPreflightIfEnabled(
-                    url = url,
-                    headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
-                )
                 val mediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(url, newHeaders)
                 }
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
+                launchStartupAfrPreflight(
+                    url = url,
+                    headers = newHeaders,
+                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
             }
@@ -566,6 +573,7 @@ internal fun PlayerRuntimeController.loadStreamsForEpisode(video: Video, forceRe
             videoId = video.id,
             season = video.season,
             episode = video.episode,
+            installedAddons = installedAddons,
             requestOrigin = "episode_picker"
         ).collect { result ->
             when (result) {
@@ -659,6 +667,10 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null
     attachedAddonSubtitleKeys = emptySet()
+    startupAfrPreflightJob?.cancel()
+    startupAfrPreflightJob = null
+    startupSubtitlePreparationJob?.cancel()
+    startupSubtitlePreparationJob = null
     hasRetriedCurrentStreamAfter416 = false
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
@@ -681,6 +693,8 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),
+            addonSubtitles = emptyList(),
+            selectedAddonSubtitle = null,
             selectedAudioTrackIndex = -1,
             selectedSubtitleTrackIndex = -1,
             showEpisodesPanel = false,
@@ -712,18 +726,18 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
         scope.launch {
             try {
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
-                runAfrPreflightIfEnabled(
-                    url = url,
-                    headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
-                )
                 val mediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(url, newHeaders)
                 }
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
+                launchStartupAfrPreflight(
+                    url = url,
+                    headers = newHeaders,
+                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
             }
@@ -827,6 +841,7 @@ internal fun PlayerRuntimeController.playNextEpisode() {
                 videoId = nextVideo.id,
                 season = nextVideo.season,
                 episode = nextVideo.episode,
+                installedAddons = installedAddons,
                 requestOrigin = "next_episode_autoplay"
             ).firstOrNull { result ->
                 when (result) {

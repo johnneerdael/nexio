@@ -27,7 +27,10 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,7 +70,8 @@ private enum class PlaybackSection {
     STREAM_SELECTION,
     AUDIO,
     SUBTITLES,
-    BUFFER_NETWORK
+    BUFFER_NETWORK,
+    LOGGING
 }
 
 private data class PlaybackGeneralUi(
@@ -136,6 +140,10 @@ internal fun PlaybackSettingsSections(
     onSetIecPackerDtshdPassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerDtshdCoreFallbackEnabled: (Boolean) -> Unit,
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
+    streamDiagnosticsEnabled: Boolean,
+    onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
+    onSetEnableBufferLogs: (Boolean) -> Unit,
+    onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
@@ -157,6 +165,7 @@ internal fun PlaybackSettingsSections(
     var audioExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
     var bufferAndNetworkExpanded by rememberSaveable { mutableStateOf(false) }
+    var loggingExpanded by rememberSaveable { mutableStateOf(false) }
 
     val defaultGeneralHeaderFocus = remember { FocusRequester() }
     val afrHeaderFocus = remember { FocusRequester() }
@@ -164,6 +173,7 @@ internal fun PlaybackSettingsSections(
     val audioHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
     val bufferAndNetworkHeaderFocus = remember { FocusRequester() }
+    val loggingHeaderFocus = remember { FocusRequester() }
     val generalHeaderFocus = initialFocusRequester ?: defaultGeneralHeaderFocus
 
     var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
@@ -181,6 +191,8 @@ internal fun PlaybackSettingsSections(
     val strSectionSubtitlesDesc = stringResource(R.string.playback_section_subtitles_desc)
     val strSectionNetworkCache = stringResource(R.string.playback_section_network_cache)
     val strSectionNetworkCacheDesc = stringResource(R.string.playback_section_network_cache_desc)
+    val strSectionLogging = stringResource(R.string.playback_section_logging)
+    val strSectionLoggingDesc = stringResource(R.string.playback_section_logging_desc)
     val generalUi = PlaybackGeneralUi(
         isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL,
         frameRateMatchingLabel = frameRateMatchingModeLabel(
@@ -221,6 +233,11 @@ internal fun PlaybackSettingsSections(
     LaunchedEffect(bufferAndNetworkExpanded, focusedSection) {
         if (!bufferAndNetworkExpanded && focusedSection == PlaybackSection.BUFFER_NETWORK) {
             bufferAndNetworkHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(loggingExpanded, focusedSection) {
+        if (!loggingExpanded && focusedSection == PlaybackSection.LOGGING) {
+            loggingHeaderFocus.requestFocus()
         }
     }
 
@@ -421,6 +438,49 @@ internal fun PlaybackSettingsSections(
                 onSetParallelChunkSizeMb = onSetParallelChunkSizeMb,
                 onResetNetworkToDefaults = onResetNetworkSettingsToDefaults
             )
+        }
+
+        playbackCollapsibleSection(
+            keyPrefix = "logging",
+            title = strSectionLogging,
+            description = strSectionLoggingDesc,
+            expanded = loggingExpanded,
+            onToggle = { loggingExpanded = !loggingExpanded },
+            focusRequester = loggingHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.LOGGING }
+        ) {
+            item(key = "logging_buffer") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Storage,
+                    title = stringResource(R.string.playback_logging_buffer_title),
+                    subtitle = stringResource(R.string.playback_logging_buffer_subtitle),
+                    isChecked = playerSettings.enableBufferLogs,
+                    onCheckedChange = onSetEnableBufferLogs,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_iec") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.playback_logging_iec_title),
+                    subtitle = stringResource(R.string.playback_logging_iec_subtitle),
+                    isChecked = playerSettings.fireOsIecVerboseLoggingEnabled,
+                    onCheckedChange = onSetFireOsIecVerboseLoggingEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_stream") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Wifi,
+                    title = stringResource(R.string.playback_logging_stream_title),
+                    subtitle = stringResource(R.string.playback_logging_stream_subtitle),
+                    isChecked = streamDiagnosticsEnabled,
+                    onCheckedChange = onSetStreamDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
         }
     }
 }

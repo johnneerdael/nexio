@@ -456,6 +456,10 @@ internal fun PlayerRuntimeController.retryCurrentStreamWithVc1SoftwareFallback(f
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
+internal fun PlayerRuntimeController.retryCurrentStreamWithAv1FfmpegFallback(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
+}
+
 internal fun PlayerRuntimeController.retryCurrentStreamWithVc1TrackSelectionBypass(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }

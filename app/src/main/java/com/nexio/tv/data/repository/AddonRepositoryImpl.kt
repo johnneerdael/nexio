@@ -32,6 +32,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.sync.AddonSyncService
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -51,7 +53,19 @@ class AddonRepositoryImpl @Inject constructor(
 
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
-    var isSyncingFromRemote = false
+    private val remoteSyncInProgressCount = AtomicInteger(0)
+    val isSyncingFromRemote: Boolean
+        get() = remoteSyncInProgressCount.get() > 0
+
+    fun beginRemoteSyncReconcile() {
+        remoteSyncInProgressCount.incrementAndGet()
+    }
+
+    fun endRemoteSyncReconcile() {
+        remoteSyncInProgressCount.updateAndGet { count ->
+            if (count > 0) count - 1 else 0
+        }
+    }
 
     private fun canonicalizeUrl(url: String): String {
         return normalizeAddonInstallUrl(url)
@@ -86,7 +100,7 @@ class AddonRepositoryImpl @Inject constructor(
     }
 
     private val gson = Gson()
-    private val manifestCache = mutableMapOf<String, Addon>()
+    private val manifestCache = ConcurrentHashMap<String, Addon>()
 
     init {
         loadManifestCacheFromDisk()

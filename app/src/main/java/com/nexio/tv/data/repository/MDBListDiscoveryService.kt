@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -68,9 +69,11 @@ class MDBListDiscoveryService @Inject constructor(
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
 
     init {
-        snapshotStore.read()?.let { persisted ->
-            snapshotState.value = persisted
-            lastRefreshMs = persisted.updatedAtMs
+        scope.launch {
+            snapshotStore.read()?.let { persisted ->
+                snapshotState.value = persisted
+                lastRefreshMs = persisted.updatedAtMs
+            }
         }
     }
 
@@ -85,7 +88,7 @@ class MDBListDiscoveryService @Inject constructor(
         }
     }
 
-    suspend fun ensureFresh(force: Boolean) {
+    suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         val settings = mdbListSettingsDataStore.settings.first()
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val apiKey = settings.apiKey.trim()
@@ -93,12 +96,12 @@ class MDBListDiscoveryService @Inject constructor(
             Log.d("MDBListDiscovery", "Skipping refresh enabled=${settings.enabled} apiKeyPresent=${apiKey.isNotBlank()}")
             snapshotState.value = MDBListDiscoverySnapshot()
             snapshotStore.clear()
-            return
+            return@withContext
         }
 
         val now = System.currentTimeMillis()
         if (!force && now - lastRefreshMs < minRefreshIntervalMs && snapshotState.value.updatedAtMs > 0L) {
-            return
+            return@withContext
         }
 
         refreshMutex.withLock {
@@ -107,7 +110,7 @@ class MDBListDiscoveryService @Inject constructor(
                 lockedNow - lastRefreshMs < minRefreshIntervalMs &&
                 snapshotState.value.updatedAtMs > 0L
             ) {
-                return
+                return@withLock
             }
 
             val personalLists = fetchPersonalLists(apiKey)

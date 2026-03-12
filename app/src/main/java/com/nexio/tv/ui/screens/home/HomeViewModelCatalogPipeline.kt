@@ -32,7 +32,10 @@ private data class CatalogUpdateResult(
     val displayRows: List<CatalogRow>,
     val heroItems: List<com.nexio.tv.domain.model.MetaPreview>,
     val gridItems: List<GridItem>,
-    val fullRows: List<CatalogRow>
+    val fullRows: List<CatalogRow>,
+    val truncatedCache: Map<String, HomeViewModel.TruncatedRowCacheEntry>,
+    val orderDiagnosticsSignature: String,
+    val orderDiagnosticsMessage: String
 )
 
 private data class SyntheticCatalogOrderGroup(
@@ -58,15 +61,27 @@ private const val MDBLIST_RAIL_ADDON_NAME = "MDBList"
 private const val MDBLIST_RAIL_ADDON_BASE_URL = "https://api.mdblist.com"
 
 internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
-    val snapshot = homeCatalogSnapshotStore.read() ?: return
-    if (snapshot.catalogRows.isEmpty() && snapshot.fullCatalogRows.isEmpty() && snapshot.heroItems.isEmpty()) {
-        return
-    }
+    viewModelScope.launch(Dispatchers.IO) {
+        val snapshot = homeCatalogSnapshotStore.read() ?: return@launch
+        if (snapshot.catalogRows.isEmpty() && snapshot.fullCatalogRows.isEmpty() && snapshot.heroItems.isEmpty()) {
+            return@launch
+        }
 
-    hasPersistedCatalogSnapshot = true
-    startupRefreshPending = true
-    restoredCatalogSnapshotActive = true
-    applyHomeSnapshotToUiPipeline(snapshot)
+        withContext(Dispatchers.Main.immediate) {
+            val hasRenderedContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
+                _uiState.value.heroItems.isNotEmpty()
+            if (hasRenderedContent) {
+                return@withContext
+            }
+
+            hasPersistedCatalogSnapshot = true
+            startupRefreshPending = true
+            restoredCatalogSnapshotActive = true
+            inMemoryHomeSnapshot = snapshot
+            pendingHomeSnapshotPersist = null
+            applyHomeSnapshotToUiPipeline(snapshot)
+        }
+    }
 }
 
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
@@ -251,9 +266,17 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             catalogsMap.clear()
             reconcilePosterStatusObserversPipeline(emptyList())
             _fullCatalogRows.value = emptyList()
+            homeSnapshotPersistJob?.cancel()
+            pendingHomeSnapshotPersist = null
+            inMemoryHomeSnapshot = null
+            homeSnapshotPersistGeneration += 1
+            hasPersistedCatalogSnapshot = false
+            restoredCatalogSnapshotActive = false
             homeCatalogSnapshotStore.clear()
             truncatedRowCache.clear()
             hasRenderedFirstCatalog = false
+            lastCatalogComputationSignature = null
+            lastCatalogOrderDiagnosticsSignature = null
             lastHeroEnrichmentSignature = null
             lastHeroEnrichedItems = emptyList()
             catalogsLoadInProgress = false
@@ -271,6 +294,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             }
             hasPersistedCatalogSnapshot = false
             startupRefreshPending = false
+            homeSnapshotPersistJob?.cancel()
+            pendingHomeSnapshotPersist = null
+            inMemoryHomeSnapshot = null
+            homeSnapshotPersistGeneration += 1
+            lastCatalogComputationSignature = null
+            lastCatalogOrderDiagnosticsSignature = null
+            restoredCatalogSnapshotActive = false
             homeCatalogSnapshotStore.clear()
             catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
@@ -383,7 +413,12 @@ internal fun HomeViewModel.loadMoreCatalogItemsPipeline(catalogId: String, addon
     _loadingCatalogs.update { it + key }
 
     viewModelScope.launch {
-        val addon = addonsCache.find { it.id == addonId } ?: return@launch
+        val addon = addonsCache.find { it.id == addonId } ?: run {
+            catalogsMap[key] = currentRow.copy(isLoading = false)
+            _loadingCatalogs.update { it - key }
+            scheduleUpdateCatalogRows()
+            return@launch
+        }
 
         val nextSkip = (currentRow.currentPage + 1) * currentRow.skipStep
         catalogRepository.getCatalog(
@@ -426,33 +461,64 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val orderedKeys = catalogOrder.toList()
     val catalogSnapshot = catalogsMap.toMap()
     val heroCatalogKeys = currentHeroCatalogKeys
-    val currentLayout = _uiState.value.homeLayout
-    val currentGridItems = _uiState.value.gridItems
-    val continueWatchingItems = _uiState.value.continueWatchingItems
-    val heroSectionEnabled = _uiState.value.heroSectionEnabled
-    val hideUnreleased = _uiState.value.hideUnreleasedContent
+    val currentState = _uiState.value
+    val currentLayout = currentState.homeLayout
+    val currentGridItems = currentState.gridItems
+    val continueWatchingItems = currentState.continueWatchingItems
+    val heroSectionEnabled = currentState.heroSectionEnabled
+    val hideUnreleased = currentState.hideUnreleasedContent
     val traktSnapshot = traktDiscoverySnapshot
     val traktPrefs = traktCatalogPreferences
     val mdbListSnapshot = mdbListDiscoverySnapshot
     val mdbListPrefs = mdbListCatalogPreferences
     val currentVisibleFullRows = _fullCatalogRows.value
+    val previousTruncatedRowCache = truncatedRowCache.toMap()
     val startupHydrationPending = !installedAddonsObserved || !traktDiscoveryObserved || !mdbListDiscoveryObserved
-    val traktUpNextItems = continueWatchingItems
-        .filterIsInstance<ContinueWatchingItem.NextUp>()
-        .take(20)
-        .map { nextUpToMetaPreview(it) }
-    val syntheticTraktGroups = buildSyntheticTraktRows(
-        prefs = traktPrefs,
-        upNextItems = traktUpNextItems,
-        snapshot = traktSnapshot
-    )
-    val syntheticMDBListGroups = buildSyntheticMDBListRows(
-        prefs = mdbListPrefs,
-        snapshot = mdbListSnapshot
-    )
     val recommendationRefMap = traktSnapshot.recommendationRefsByStatusKey
+    val activeRefreshInProgress =
+        catalogsLoadInProgress ||
+            traktDiscoveryRefreshInProgress ||
+            mdbListDiscoveryRefreshInProgress
+    val refreshInProgress = startupRefreshPending || activeRefreshInProgress
 
-    val (displayRows, baseHeroItems, _, fullRowsFiltered) = withContext(Dispatchers.Default) {
+    val computationSignature = withContext(Dispatchers.Default) {
+        buildCatalogComputationSignature(
+            orderedKeys = orderedKeys,
+            catalogSnapshot = catalogSnapshot,
+            heroCatalogKeys = heroCatalogKeys,
+            currentLayout = currentLayout,
+            heroSectionEnabled = heroSectionEnabled,
+            hideUnreleased = hideUnreleased,
+            continueWatchingItems = continueWatchingItems,
+            traktSnapshot = traktSnapshot,
+            traktPrefs = traktPrefs,
+            mdbListSnapshot = mdbListSnapshot,
+            mdbListPrefs = mdbListPrefs,
+            startupHydrationPending = startupHydrationPending,
+            refreshInProgress = refreshInProgress,
+            hasPersistedCatalogSnapshot = hasPersistedCatalogSnapshot,
+            restoredCatalogSnapshotActive = restoredCatalogSnapshotActive
+        )
+    }
+    if (computationSignature == lastCatalogComputationSignature && !refreshInProgress) {
+        return
+    }
+    lastCatalogComputationSignature = computationSignature
+
+    val updateResult = withContext(Dispatchers.Default) {
+        val traktUpNextItems = continueWatchingItems
+            .filterIsInstance<ContinueWatchingItem.NextUp>()
+            .take(20)
+            .map { nextUpToMetaPreview(it) }
+        val syntheticTraktGroups = buildSyntheticTraktRows(
+            prefs = traktPrefs,
+            upNextItems = traktUpNextItems,
+            snapshot = traktSnapshot
+        )
+        val syntheticMDBListGroups = buildSyntheticMDBListRows(
+            prefs = mdbListPrefs,
+            snapshot = mdbListSnapshot
+        )
         val rawRowsByKey = orderedKeys
             .mapNotNull { key ->
                 catalogSnapshot[key]?.let { row ->
@@ -487,10 +553,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
         val savedOrderSet = savedOrderKeys.toSet()
         val effectiveOrderKeys = savedOrderKeys + defaultOrderKeys.filterNot { it in savedOrderSet }
-        Log.d(
-            HomeViewModel.TAG,
+        val orderDiagnosticsSignature = "${savedOrderKeys.hashCode()}:${defaultOrderKeys.hashCode()}:${effectiveOrderKeys.hashCode()}"
+        val orderDiagnosticsMessage =
             "Catalog order reconciliation saved=${savedOrderKeys.size} default=${defaultOrderKeys.size} effective=${effectiveOrderKeys.size}"
-        )
         val combinedRows = buildList {
             effectiveOrderKeys.forEach { key ->
                 syntheticRowsByKey[key]?.let { addAll(it) } ?: rawRowsByKey[key]?.let { add(it) }
@@ -560,24 +625,25 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             else -> emptyList()
         }
 
+        val nextTruncatedCache = mutableMapOf<String, HomeViewModel.TruncatedRowCacheEntry>()
         val computedDisplayRows = effectiveOrderedRows.map { row ->
             val shouldKeepFullRowInModern = currentLayout == HomeLayout.MODERN && row.supportsSkip
             if (row.items.size > 25 && !shouldKeepFullRowInModern) {
                 val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
-                val cachedEntry = truncatedRowCache[key]
+                val cachedEntry = previousTruncatedRowCache[key]
                 if (cachedEntry != null && cachedEntry.sourceRow === row) {
+                    nextTruncatedCache[key] = cachedEntry
                     cachedEntry.truncatedRow
                 } else {
                     val truncatedRow = row.copy(items = row.items.take(25))
-                    truncatedRowCache[key] = HomeViewModel.TruncatedRowCacheEntry(
+                    val nextEntry = HomeViewModel.TruncatedRowCacheEntry(
                         sourceRow = row,
                         truncatedRow = truncatedRow
                     )
+                    nextTruncatedCache[key] = nextEntry
                     truncatedRow
                 }
             } else {
-                val key = "${row.addonId}_${row.apiType}_${row.catalogId}"
-                truncatedRowCache.remove(key)
                 row
             }
         }
@@ -592,17 +658,32 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             currentGridItems
         }
 
-        CatalogUpdateResult(computedDisplayRows, computedHeroItems, computedGridItems, effectiveOrderedRows)
+        CatalogUpdateResult(
+            displayRows = computedDisplayRows,
+            heroItems = computedHeroItems,
+            gridItems = computedGridItems,
+            fullRows = effectiveOrderedRows,
+            truncatedCache = nextTruncatedCache,
+            orderDiagnosticsSignature = orderDiagnosticsSignature,
+            orderDiagnosticsMessage = orderDiagnosticsMessage
+        )
     }
 
-    val currentState = _uiState.value
+    if (lastCatalogOrderDiagnosticsSignature != updateResult.orderDiagnosticsSignature) {
+        lastCatalogOrderDiagnosticsSignature = updateResult.orderDiagnosticsSignature
+        Log.d(HomeViewModel.TAG, updateResult.orderDiagnosticsMessage)
+    }
+
+    val displayRows = updateResult.displayRows
+    val baseHeroItems = updateResult.heroItems
+    val fullRowsFiltered = updateResult.fullRows
+    val nextTruncatedRowCache = updateResult.truncatedCache
+
+    truncatedRowCache.clear()
+    truncatedRowCache.putAll(nextTruncatedRowCache)
+
     val hasCurrentRenderedContent = currentState.catalogRows.any { it.items.isNotEmpty() } ||
         currentState.heroItems.isNotEmpty()
-    val activeRefreshInProgress =
-        catalogsLoadInProgress ||
-            traktDiscoveryRefreshInProgress ||
-            mdbListDiscoveryRefreshInProgress
-    val refreshInProgress = startupRefreshPending || activeRefreshInProgress
     val shouldKeepVisibleContent =
         hasCurrentRenderedContent &&
             displayRows.isEmpty() &&
@@ -657,14 +738,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             val enrichmentSignature = heroEnrichmentSignaturePipeline(baseHeroItems, tmdbSettings)
             if (lastHeroEnrichmentSignature == enrichmentSignature) {
                 val cached = lastHeroEnrichedItems
-                updatePersistedHomeSnapshotPipeline { snapshot ->
+                updateInMemoryHomeSnapshotPipeline { snapshot ->
                     snapshot.copy(heroItems = cached)
                 }
             } else {
                 val enrichedItems = enrichHeroItemsPipeline(baseHeroItems, tmdbSettings)
                 lastHeroEnrichmentSignature = enrichmentSignature
                 lastHeroEnrichedItems = enrichedItems
-                updatePersistedHomeSnapshotPipeline { snapshot ->
+                updateInMemoryHomeSnapshotPipeline { snapshot ->
                     snapshot.copy(heroItems = enrichedItems)
                 }
             }
@@ -702,28 +783,85 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     }
 }
 
-internal suspend fun HomeViewModel.persistAndApplyHomeSnapshotPipeline(
+internal fun HomeViewModel.persistAndApplyHomeSnapshotPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ): Boolean {
-    val persistedSnapshot = withContext(Dispatchers.IO) {
-        homeCatalogSnapshotStore.write(snapshot)
-        homeCatalogSnapshotStore.read()
-    } ?: return false
-
-    applyHomeSnapshotToUiPipeline(persistedSnapshot)
+    inMemoryHomeSnapshot = snapshot
+    applyHomeSnapshotToUiPipeline(snapshot)
+    persistHomeSnapshotDebouncedPipeline(snapshot)
     return true
 }
 
-internal suspend fun HomeViewModel.updatePersistedHomeSnapshotPipeline(
+internal fun HomeViewModel.updateInMemoryHomeSnapshotPipeline(
     transform: (
         com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
     ) -> com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ): Boolean {
-    val currentSnapshot = withContext(Dispatchers.IO) {
-        homeCatalogSnapshotStore.read()
-    } ?: return false
+    val currentSnapshot = inMemoryHomeSnapshot ?: return false
+    val nextSnapshot = transform(currentSnapshot)
+    if (nextSnapshot == currentSnapshot) return false
+    inMemoryHomeSnapshot = nextSnapshot
+    applyHomeSnapshotToUiPipeline(nextSnapshot)
+    persistHomeSnapshotDebouncedPipeline(nextSnapshot)
+    return true
+}
 
-    return persistAndApplyHomeSnapshotPipeline(transform(currentSnapshot))
+internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
+    snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
+) {
+    pendingHomeSnapshotPersist = snapshot
+    homeSnapshotPersistGeneration += 1
+    val persistGeneration = homeSnapshotPersistGeneration
+    homeSnapshotPersistJob?.cancel()
+    homeSnapshotPersistJob = viewModelScope.launch(Dispatchers.IO) {
+        delay(HomeViewModel.HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS)
+        if (homeSnapshotPersistGeneration != persistGeneration) return@launch
+        val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
+        homeCatalogSnapshotStore.write(latestSnapshot)
+        withContext(Dispatchers.Main.immediate) {
+            if (homeSnapshotPersistGeneration == persistGeneration) {
+                pendingHomeSnapshotPersist = null
+            }
+        }
+    }
+}
+
+private fun buildCatalogComputationSignature(
+    orderedKeys: List<String>,
+    catalogSnapshot: Map<String, CatalogRow>,
+    heroCatalogKeys: List<String>,
+    currentLayout: HomeLayout,
+    heroSectionEnabled: Boolean,
+    hideUnreleased: Boolean,
+    continueWatchingItems: List<ContinueWatchingItem>,
+    traktSnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    traktPrefs: TraktCatalogPreferences,
+    mdbListSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
+    mdbListPrefs: MDBListCatalogPreferences,
+    startupHydrationPending: Boolean,
+    refreshInProgress: Boolean,
+    hasPersistedCatalogSnapshot: Boolean,
+    restoredCatalogSnapshotActive: Boolean
+): String {
+    var signature = 17
+    orderedKeys.forEach { key ->
+        signature = (signature * 31) + key.hashCode()
+        signature = (signature * 31) + (catalogSnapshot[key]?.hashCode() ?: 0)
+    }
+    signature = (signature * 31) + heroCatalogKeys.hashCode()
+    signature = (signature * 31) + currentLayout.hashCode()
+    signature = (signature * 31) + heroSectionEnabled.hashCode()
+    signature = (signature * 31) + hideUnreleased.hashCode()
+    signature = (signature * 31) + continueWatchingItems.hashCode()
+    signature = (signature * 31) + traktSnapshot.hashCode()
+    signature = (signature * 31) + traktPrefs.hashCode()
+    signature = (signature * 31) + mdbListSnapshot.hashCode()
+    signature = (signature * 31) + mdbListPrefs.hashCode()
+    signature = (signature * 31) + startupHydrationPending.hashCode()
+    signature = (signature * 31) + refreshInProgress.hashCode()
+    signature = (signature * 31) + hasPersistedCatalogSnapshot.hashCode()
+    signature = (signature * 31) + restoredCatalogSnapshotActive.hashCode()
+    return signature.toString()
 }
 
 private data class CachedHomePreservationState(

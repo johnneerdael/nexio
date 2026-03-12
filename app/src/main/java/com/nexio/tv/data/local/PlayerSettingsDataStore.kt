@@ -173,11 +173,15 @@ data class PlayerSettings(
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
     // IEC packer codec-level passthrough toggles modeled after Kodi.
     val iecPackerAc3PassthroughEnabled: Boolean = true,
+    val iecPackerAc3TranscodeEnabled: Boolean = false,
     val iecPackerEac3PassthroughEnabled: Boolean = true,
     val iecPackerDtsPassthroughEnabled: Boolean = true,
     val iecPackerTruehdPassthroughEnabled: Boolean = true,
     val iecPackerDtshdPassthroughEnabled: Boolean = true,
     val iecPackerDtshdCoreFallbackEnabled: Boolean = true,
+    val iecPackerAudioConfig: Int = 0,
+    val iecPackerAudioDevice: String = "",
+    val iecPackerPassthroughDevice: String = "",
     val iecPackerMaxPcmChannelLayout: IecPackerChannelLayout = IecPackerChannelLayout.CH_7_1,
     // Legacy fallback toggle kept in storage for compatibility with older installs.
     val fireOsCompatibilityFallbackEnabled: Boolean = false,
@@ -330,6 +334,8 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
     private val iecPackerAc3PassthroughEnabledKey =
         booleanPreferencesKey("iec_packer_ac3_passthrough_enabled")
+    private val iecPackerAc3TranscodeEnabledKey =
+        booleanPreferencesKey("iec_packer_ac3_transcode_enabled")
     private val iecPackerEac3PassthroughEnabledKey =
         booleanPreferencesKey("iec_packer_eac3_passthrough_enabled")
     private val iecPackerDtsPassthroughEnabledKey =
@@ -340,6 +346,12 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("iec_packer_dtshd_passthrough_enabled")
     private val iecPackerDtshdCoreFallbackEnabledKey =
         booleanPreferencesKey("iec_packer_dtshd_core_fallback_enabled")
+    private val iecPackerAudioConfigKey =
+        intPreferencesKey("iec_packer_audio_config")
+    private val iecPackerAudioDeviceKey =
+        stringPreferencesKey("iec_packer_audio_device")
+    private val iecPackerPassthroughDeviceKey =
+        stringPreferencesKey("iec_packer_passthrough_device")
     private val iecPackerMaxPcmChannelLayoutKey =
         stringPreferencesKey("iec_packer_max_pcm_channel_layout")
     private val fireOsCompatibilityFallbackEnabledKey =
@@ -592,6 +604,8 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
                 iecPackerAc3PassthroughEnabled =
                     prefs[iecPackerAc3PassthroughEnabledKey] ?: true,
+                iecPackerAc3TranscodeEnabled =
+                    prefs[iecPackerAc3TranscodeEnabledKey] ?: false,
                 iecPackerEac3PassthroughEnabled =
                     prefs[iecPackerEac3PassthroughEnabledKey] ?: true,
                 iecPackerDtsPassthroughEnabled =
@@ -602,6 +616,12 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[iecPackerDtshdPassthroughEnabledKey] ?: true,
                 iecPackerDtshdCoreFallbackEnabled =
                     prefs[iecPackerDtshdCoreFallbackEnabledKey] ?: true,
+                iecPackerAudioConfig =
+                    prefs[iecPackerAudioConfigKey] ?: 0,
+                iecPackerAudioDevice =
+                    prefs[iecPackerAudioDeviceKey] ?: "",
+                iecPackerPassthroughDevice =
+                    prefs[iecPackerPassthroughDeviceKey] ?: "",
                 iecPackerMaxPcmChannelLayout = IecPackerChannelLayout.fromStoredValue(
                     prefs[iecPackerMaxPcmChannelLayoutKey]
                 ),
@@ -1015,6 +1035,12 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setIecPackerAc3TranscodeEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[iecPackerAc3TranscodeEnabledKey] = enabled
+        }
+    }
+
     suspend fun setIecPackerEac3PassthroughEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[iecPackerEac3PassthroughEnabledKey] = enabled
@@ -1042,6 +1068,24 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setIecPackerDtshdCoreFallbackEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[iecPackerDtshdCoreFallbackEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setIecPackerAudioConfig(config: Int) {
+        store().edit { prefs ->
+            prefs[iecPackerAudioConfigKey] = config
+        }
+    }
+
+    suspend fun setIecPackerAudioDevice(device: String) {
+        store().edit { prefs ->
+            prefs[iecPackerAudioDeviceKey] = device
+        }
+    }
+
+    suspend fun setIecPackerPassthroughDevice(device: String) {
+        store().edit { prefs ->
+            prefs[iecPackerPassthroughDeviceKey] = device
         }
     }
 

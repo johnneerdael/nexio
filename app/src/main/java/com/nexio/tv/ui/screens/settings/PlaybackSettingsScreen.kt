@@ -132,6 +132,7 @@ fun PlaybackSettingsContent(
     initialFocusRequester: FocusRequester? = null
 ) {
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
+    val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
     var memoryUsageTrigger by remember { mutableStateOf(0) }
@@ -295,6 +296,16 @@ fun PlaybackSettingsContent(
                     enabled -> coroutineScope.launch {
                         viewModel.setFireOsIecSuperviseAudioDelayEnabled(enabled)
                     }
+                },
+                streamDiagnosticsEnabled = streamDiagnosticsEnabled,
+                onSetFireOsIecVerboseLoggingEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setFireOsIecVerboseLoggingEnabled(enabled) }
+                },
+                onSetEnableBufferLogs = { enabled ->
+                    coroutineScope.launch { viewModel.setEnableBufferLogs(enabled) }
+                },
+                onSetStreamDiagnosticsEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setStreamDiagnosticsEnabled(enabled) }
                 },
                 onSetIecPackerMaxPcmChannelLayout = { layout ->
                     coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }

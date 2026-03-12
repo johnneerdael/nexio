@@ -24,7 +24,6 @@
   <string name="settings_rounded_ui">Abgerundete Benutzeroberfläche</string>
   <string name="settings_catalogs">Kataloge</string>
   <string name="sub_startup_mode_title">Untertitel-Startmodus</string>
-  <string name="debug_buffer_logs_subtitle">Detaillierte Buffer-/Fortschrittslogs für Debugging aktivieren.</string>
   <string name="animeskip_title">Anime Skip</string>
   <string name="tmdb_missing_api_key">TMDB API-Schlüssel ist erforderlich</string>
   <string name="poster_ratings_title">Poster-Bewertungen</string>
@@ -40,7 +39,6 @@
   <string name="settings_catalogs_subtitle">Reihenfolge und Sichtbarkeit der Startseiten-Kataloge anpassen.</string>
   <string name="appearance_language_system">Systemstandard</string>
   <string name="mdblist_catalogs_subtitle">Persönliche Reihen und Top-Listen von MDBList verwalten</string>
-  <string name="debug_buffer_logs_title">Buffer-Logs</string>
   <string name="trakt_catalogs_dialog_subtitle">Aktiviere oder deaktiviere integrierte Trakt-Kataloge. Wähle beliebte Listen aus, um benutzerdefinierte Reihen hinzuzufügen.</string>
   <string name="poster_ratings_top_api_key_subtitle">Erforderlich, wenn TOPPosters aktiviert ist</string>
   <string name="mdblist_personal_list_badge">Persönliche Liste</string>
@@ -557,10 +555,6 @@
   <string name="debug_account_tab_subtitle">Zeige den Tab Konto in den Einstellungen an</string>
   <string name="debug_sync_code_title">Sync-Code-Funktionen</string>
   <string name="debug_sync_code_subtitle">Buttons für Synchronisierungscode in den Kontoeinstellungen anzeigen</string>
-  <string name="debug_iec_packer_logs_title">IEC-Packer-Logs aktivieren</string>
-  <string name="debug_iec_packer_logs_subtitle">Ausführliche Fire OS IEC-Packer-Diagnosen zur ADB-Fehlersuche an logcat senden</string>
-  <string name="debug_stream_diagnostics_title">Stream-Diagnose-Logs</string>
-  <string name="debug_stream_diagnostics_subtitle">Sende detaillierte Logs zum Abrufen und Filtern von Streams an Logcat (nur Debug)</string>
   <string name="debug_section_account">Konto</string>
   <string name="debug_manual_signin_title">Manuelle Anmeldung</string>
   <string name="debug_manual_signin_subtitle">Melde dich mit E-Mail und Passwort an (Supabase-Auth)</string>

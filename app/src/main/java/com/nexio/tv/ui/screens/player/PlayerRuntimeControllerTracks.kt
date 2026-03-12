@@ -31,6 +31,9 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     var hdrType: String? = null
     var selectedAudioCodec: String? = null
     var selectedAudioChannelLayout: String? = null
+    var selectedAudioMimeType: String? = null
+    var selectedAudioCodecs: String? = null
+    var selectedAudioLanguage: String? = null
     var hasVideoTrack = false
     var firstVideoFormat: Format? = null
     var selectedVideoFormat: Format? = null
@@ -113,6 +116,9 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                         selectedAudioChannelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
                             format.channelCount
                         )
+                        selectedAudioMimeType = format.sampleMimeType
+                        selectedAudioCodecs = format.codecs
+                        selectedAudioLanguage = format.language
                     }
 
                     
@@ -359,6 +365,32 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         selectedAudioChannelLayout = CustomDefaultTrackNameProvider.getChannelLayoutName(
             selectedAudioTrack.channelCount ?: 0
         )
+        val audioTrackSignature = buildString {
+            append(selectedAudioMimeType ?: "unknown")
+            append('|')
+            append(selectedAudioCodecs ?: "unknown")
+            append('|')
+            append(selectedAudioLanguage ?: "und")
+            append('|')
+            append(selectedAudioTrack.channelCount ?: 0)
+            append('|')
+            append(selectedAudioCodec ?: "unknown")
+            append('|')
+            append(selectedAudioChannelLayout ?: "unknown")
+        }
+        if (audioTrackSignature != lastLoggedAudioTrackSignature) {
+            lastLoggedAudioTrackSignature = audioTrackSignature
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "AUDIO_TRACK: mime=${selectedAudioMimeType ?: "unknown"} " +
+                    "codecs=${selectedAudioCodecs ?: "unknown"} " +
+                    "lang=${selectedAudioLanguage ?: "und"} " +
+                    "channels=${selectedAudioTrack.channelCount ?: 0} " +
+                    "codec=${selectedAudioCodec ?: "unknown"} " +
+                    "layout=${selectedAudioChannelLayout ?: "unknown"} " +
+                    "selectedIndex=$selectedAudioIndex"
+            )
+        }
     }
 
     _uiState.update {
@@ -436,13 +468,16 @@ private fun isLikelyVc1VideoFormat(
     codecs: String?,
     label: String?
 ): Boolean {
-    val haystack = listOfNotNull(sampleMimeType, codecs, label)
-        .joinToString(" ")
-        .lowercase(Locale.ROOT)
-    return haystack.contains("wvc1") ||
-        haystack.contains("vc-1") ||
-        haystack.contains("vc1") ||
-        haystack.contains("wmv3")
+    val tokens = listOfNotNull(sampleMimeType, codecs, label)
+        .flatMap { value -> value.split(',', ' ', '/', '(', ')') }
+        .map { it.trim().lowercase(Locale.ROOT) }
+        .filter { it.isNotEmpty() }
+    return tokens.any { token ->
+        token == "wvc1" ||
+            token == "vc-1" ||
+            token == "vc1" ||
+            token == "wmv3"
+    }
 }
 
 private fun isDolbyVisionProfile5VideoFormat(codecs: String?): Boolean {

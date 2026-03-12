@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.content.Intent
 import android.media.audiofx.AudioEffect
+import androidx.media3.common.C
 
 internal fun PlayerRuntimeController.releasePlayer() {
     flushPlaybackSnapshotForSwitchOrExit()
@@ -27,6 +28,10 @@ internal fun PlayerRuntimeController.releasePlayer() {
     scrobbleHeartbeatJob?.cancel()
     seekProgressSyncJob?.cancel()
     frameRateProbeJob?.cancel()
+    startupAfrPreflightJob?.cancel()
+    startupAfrPreflightJob = null
+    startupSubtitlePreparationJob?.cancel()
+    startupSubtitlePreparationJob = null
     hideStreamSourceIndicatorJob?.cancel()
     hideSubtitleDelayOverlayJob?.cancel()
     nextEpisodeAutoPlayJob?.cancel()
@@ -39,6 +44,12 @@ internal fun PlayerRuntimeController.releasePlayer() {
 
 internal fun PlayerRuntimeController.notifyAudioSessionUpdate(active: Boolean) {
     _exoPlayer?.let { player ->
+        if (isKodiCustomAudioSinkActiveForCurrentPlayback) {
+            return
+        }
+        if (player.audioSessionId == C.AUDIO_SESSION_ID_UNSET || player.audioSessionId <= 0) {
+            return
+        }
         try {
             val intent = Intent(
                 if (active) AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION

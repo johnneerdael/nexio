@@ -185,6 +185,8 @@ class PlayerRuntimeController(
     internal var scrobbleHeartbeatJob: Job? = null
     internal var seekProgressSyncJob: Job? = null
     internal var frameRateProbeJob: Job? = null
+    internal var startupAfrPreflightJob: Job? = null
+    internal var startupSubtitlePreparationJob: Job? = null
     internal var frameRateProbeToken: Long = 0L
     internal var hideAspectRatioIndicatorJob: Job? = null
     internal var hideStreamSourceIndicatorJob: Job? = null
@@ -264,6 +266,7 @@ class PlayerRuntimeController(
     internal var timeoutRecoveryAttempts: Int = 0
     internal val dv5SoftwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val dv5HardwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
+    internal val av1FfmpegPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1SoftwarePreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val vc1TrackSelectionBypassStreamUrls: MutableSet<String> = mutableSetOf()
     internal val safeAudioForcedStreamUrls: MutableSet<String> = mutableSetOf()
@@ -277,10 +280,12 @@ class PlayerRuntimeController(
     internal var isCurrentDeviceNvidiaShield: Boolean = false
     internal var isCurrentDisplayDolbyVisionCapable: Boolean = false
     internal var isExperimentalDv7ToDv81ActiveForCurrentPlayback: Boolean = false
+    internal var isAv1FfmpegFallbackActiveForCurrentPlayback: Boolean = false
     internal var isVc1SoftwareFallbackActiveForCurrentPlayback: Boolean = false
     internal var isVc1TrackSelectionBypassActiveForCurrentPlayback: Boolean = false
     internal var isSafeAudioModeActiveForCurrentPlayback: Boolean = false
     internal var isAudioDisabledForCurrentPlayback: Boolean = false
+    internal var isKodiCustomAudioSinkActiveForCurrentPlayback: Boolean = false
     internal var dv7ToDv81BridgeVersionForCurrentPlayback: String? = null
     internal var dv7ToDv81LastProbeReasonForCurrentPlayback: String? = null
     internal var playerInitializationStartedAtMs: Long = 0L
@@ -310,6 +315,7 @@ class PlayerRuntimeController(
     internal var currentVideoTrackSelected: Boolean = false
     internal var currentVideoTrackBestSupport: Int = C.FORMAT_UNSUPPORTED_TYPE
     internal var lastLoggedVideoTrackSignature: String? = null
+    internal var lastLoggedAudioTrackSignature: String? = null
     internal var episodeStreamsJob: Job? = null
     internal var episodeStreamsCacheRequestKey: String? = null
     internal val streamCacheKey: String? by lazy {

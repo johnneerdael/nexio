@@ -117,33 +117,6 @@ fun DebugSettingsContent(
                 )
             }
 
-            item(key = "debug_toggle_buffer_logs") {
-                DebugToggleCard(
-                    title = stringResource(R.string.debug_buffer_logs_title),
-                    subtitle = stringResource(R.string.debug_buffer_logs_subtitle),
-                    checked = uiState.bufferLogsEnabled,
-                    onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleBufferLogs(it)) }
-                )
-            }
-
-            item(key = "debug_toggle_iec_packer_logs") {
-                DebugToggleCard(
-                    title = stringResource(R.string.debug_iec_packer_logs_title),
-                    subtitle = stringResource(R.string.debug_iec_packer_logs_subtitle),
-                    checked = uiState.iecPackerLogsEnabled,
-                    onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleIecPackerLogs(it)) }
-                )
-            }
-
-            item(key = "debug_toggle_stream_diagnostics") {
-                DebugToggleCard(
-                    title = stringResource(R.string.debug_stream_diagnostics_title),
-                    subtitle = stringResource(R.string.debug_stream_diagnostics_subtitle),
-                    checked = uiState.streamDiagnosticsEnabled,
-                    onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleStreamDiagnostics(it)) }
-                )
-            }
-
             if (BuildConfig.IS_DEBUG_BUILD) {
                 item(key = "debug_toggle_dv5_sw_tonemap") {
                     DebugToggleCard(

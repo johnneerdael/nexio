@@ -61,8 +61,8 @@ android {
         applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 39
-        versionName = "0.21"
+        versionCode = 40
+        versionName = "0.22"
 
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
         buildConfigField("String", "REAL_DEBRID_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "REAL_DEBRID_CLIENT_ID")}\"")
@@ -271,7 +271,7 @@ dependencies {
     // Media3 core modules.
     if (useMedia3Source) {
         implementation(libs.media3.exoplayer)
-        implementation("androidx.media3:media3-exoplayer-kodi-native-sink")
+        implementation("androidx.media3:media3-exoplayer-kodi-cpp-audiosink")
         implementation(libs.media3.ui)
         implementation("androidx.media3:media3-decoder-ffmpeg")
     }

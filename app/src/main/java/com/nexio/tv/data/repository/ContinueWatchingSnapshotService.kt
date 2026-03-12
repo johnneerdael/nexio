@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -49,11 +50,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private var hasSeenAuthenticatedSession = false
 
     init {
-        snapshotStore.read()?.let { persisted ->
-            val normalized = sanitizeSnapshot(persisted)
-            rawSnapshotState.value = normalized
-            snapshotState.value = normalized
-            lastRefreshRequestMs = normalized.updatedAtMs
+        scope.launch {
+            snapshotStore.read()?.let { persisted ->
+                val normalized = sanitizeSnapshot(persisted)
+                rawSnapshotState.value = normalized
+                snapshotState.value = normalized
+                lastRefreshRequestMs = normalized.updatedAtMs
+            }
         }
 
         scope.launch {
@@ -125,10 +128,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
-    suspend fun ensureFresh(force: Boolean) {
+    suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         if (!force && now - lastRefreshRequestMs < minRefreshIntervalMs && snapshotState.value.updatedAtMs > 0L) {
-            return
+            return@withContext
         }
 
         refreshMutex.withLock {
@@ -137,7 +140,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 lockedNow - lastRefreshRequestMs < minRefreshIntervalMs &&
                 snapshotState.value.updatedAtMs > 0L
             ) {
-                return
+                return@withLock
             }
             traktProgressService.refreshNow()
             lastRefreshRequestMs = lockedNow

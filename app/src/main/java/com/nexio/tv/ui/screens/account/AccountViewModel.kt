@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -457,19 +458,21 @@ class AccountViewModel @Inject constructor(
     }
 
     private suspend fun pullRemoteData(): Result<Unit> {
+        addonRepository.beginRemoteSyncReconcile()
         try {
-            addonRepository.isSyncingFromRemote = true
             val remoteAddonConfigs = accountSettingsSyncService.pullFromRemoteAndApply().getOrElse { throw it }
             addonRepository.reconcileWithRemoteAddonConfigs(
                 remoteAddons = remoteAddonConfigs,
                 removeMissingLocal = true
             )
             accountSyncRefreshNotifier.notifyRefreshRequired()
-            addonRepository.isSyncingFromRemote = false
             return Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            addonRepository.isSyncingFromRemote = false
             return Result.failure(e)
+        } finally {
+            addonRepository.endRemoteSyncReconcile()
         }
     }
 
