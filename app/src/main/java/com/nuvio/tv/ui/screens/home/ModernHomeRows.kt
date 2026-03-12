@@ -102,6 +102,18 @@ private fun ModernContinueWatchingRowItem(
     val item = payload.item
     val onClick = remember(item) { { onContinueWatchingClick(item) } }
     val onLongPress = remember(item) { { onShowOptions(item) } }
+    var focusEventId by remember { mutableStateOf(0) }
+    var isCardFocused by remember { mutableStateOf(false) }
+    val latestOnFocused by rememberUpdatedState(onFocused)
+
+    LaunchedEffect(focusEventId, isCardFocused) {
+        if (focusEventId == 0 || !isCardFocused) return@LaunchedEffect
+        val targetEventId = focusEventId
+        delay(MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS)
+        if (!isCardFocused || focusEventId != targetEventId) return@LaunchedEffect
+        latestOnFocused()
+    }
+
     ContinueWatchingCard(
         item = item,
         onClick = onClick,
@@ -111,8 +123,9 @@ private fun ModernContinueWatchingRowItem(
         modifier = Modifier
             .focusRequester(requester)
             .onFocusChanged {
+                isCardFocused = it.isFocused
                 if (it.isFocused) {
-                    onFocused()
+                    focusEventId += 1
                 }
             }
     )
