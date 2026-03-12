@@ -62,9 +62,11 @@ Backpressure model:
 - output writes are non-blocking at `AudioTrack` boundary.
 - passthrough acceptance is output-progress-driven:
   - flush queued packed bytes to `AudioTrack`
-  - if packed queue is still non-empty, stop accepting new upstream bytes (return backpressure)
+  - if packed queue is still non-empty and playback is active, stop accepting new upstream bytes (return backpressure)
+  - if packed queue is still non-empty and playback is paused, allow bounded startup software reservoir fill (250ms) before returning backpressure
   - feed parser at most one packed packet worth each cycle, then flush again
-- no deep software pre-roll reservoir in passthrough mode (single-threaded sink, no background drain worker).
+- startup-only software reservoir cap: `STARTUP_SOFTWARE_RESERVOIR_US = 250000`.
+- still no unbounded deep pre-roll reservoir (single-threaded sink, no background drain worker).
 
 ## 4) Configure / Flush / Reset
 `Configure(...)`:
@@ -94,7 +96,9 @@ Public `Write(...)`:
 ### 5.1 Passthrough write
 `WritePassthroughLocked(...)`:
 1. Flushes residual packed data to hardware.
-2. If packed queue is still non-empty after flush, stops immediately (`0` additional bytes consumed) to propagate backpressure to Media3.
+2. If packed queue is still non-empty after flush:
+   - when playing: stops immediately (`0` additional bytes consumed) to propagate backpressure to Media3.
+   - when paused: permits additional parser feed only until the queued software reservoir reaches 250ms.
 3. Splits feed by encoded access-unit count and parses/packs via `KodiIecPipeline::Feed(..., maxPackets=1)`.
 4. On first emitted packet, configures passthrough output from packet metadata (`outputRate`, `outputChannels`).
 5. Flushes emitted packet bytes to `AudioTrack` and conditionally starts output.
@@ -102,8 +106,10 @@ Public `Write(...)`:
 
 Important current behavior:
 - while paused, writes are still attempted to paused hardware under `WRITE_NON_BLOCKING`.
-- passthrough admission is now tied to real write progress, not estimated duration headroom.
-- no deep software pre-roll is allowed in passthrough mode because there is no worker thread draining queue while Java thread sleeps.
+- passthrough admission is tied to real write progress, with a bounded paused startup reservoir (250ms).
+- startup has two recovery guards:
+  - immediate post-`play()` refill attempt,
+  - one-shot passthrough output rebuild/re-prime when startup refill reports no write progress and queued packed data remains.
 
 ### 5.2 PCM write
 `WritePcmLocked(...)`:
@@ -161,6 +167,17 @@ Flush/release:
 - ensures PCM output configured (passthrough output is packet-driven on first packed AU).
 - resets position estimator/timestamp poller state for resume safety.
 - starts output only when primed (`totalWrittenFrames_ > safePlayedFrames`).
+- logs startup telemetry:
+  - pre-play accept gap (`prePlayAcceptGapUs`)
+  - pre-play write gap (`prePlayWriteGapUs`)
+  - queue and frame-frontier state at start.
+- performs immediate post-start refill (`FlushPackedQueueToHardwareLocked` / `FlushPcmQueueToHardwareLocked`).
+- passthrough-only one-shot recovery:
+  - triggers when post-start refill writes zero additional frames while packed queue remains non-empty,
+  - rewinds packet write offsets,
+  - rebuilds passthrough output,
+  - resets position/write accounting baseline,
+  - retries one immediate refill.
 
 `Pause()`:
 - clears play/start flags.
@@ -237,6 +254,9 @@ Entry:
 ## 11) Current Observed Runtime Characteristics
 - Passthrough output is recreated after passthrough flush (`Flush -> output.Release`).
 - Writes are non-blocking at AudioTrack boundary.
-- Passthrough backpressure is output-progress-driven and parser-backlog aware (no deep software pre-roll).
+- Passthrough backpressure is output-progress-driven and parser-backlog aware, with a bounded paused startup reservoir (250ms).
 - Pause/resume rebase resets estimator/timestamp state to avoid stale timestamp carry-over.
 - Position is anchored to packet PTS and mapped through guarded timestamp/playhead estimator + checkpoints.
+- Startup instrumentation is present and expected in logs:
+  - `KodiActiveAEEngine::Play startup prePlayAcceptGapUs=...`
+  - `KodiActiveAEEngine::Play startup refill ... wroteFramesDelta=...`.
