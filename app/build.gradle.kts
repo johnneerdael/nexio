@@ -109,6 +109,19 @@ android {
             buildConfigField("String", "DONATIONS_DONATE_URL", "\"${localProperties.getProperty("DONATIONS_DONATE_URL", "")}\"")
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
         }
+        create("benchmark") {
+            initWith(buildTypes.getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            applicationIdSuffix = ".debug"
+            matchingFallbacks += "release"
+        }
     }
 
     splits {
@@ -284,7 +297,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // Performance profiling
-    implementation("androidx.metrics:metrics-performance:1.0.0-beta01")  // JankStats
+    implementation("androidx.metrics:metrics-performance:1.0.0-rc01")  // JankStats
     debugImplementation("androidx.compose.runtime:runtime-tracing")     
 
     // Bundle real crypto-js (JS) for QuickJS plugins

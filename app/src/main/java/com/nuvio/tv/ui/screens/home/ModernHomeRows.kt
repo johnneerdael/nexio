@@ -656,7 +656,7 @@ private fun ModernCarouselCard(
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
     val watchedIconEndPadding by animateDpAsState(
-        targetValue = if (isFocused) 16.dp else 8.dp,
+        targetValue = 8.dp,
         animationSpec = tween(durationMillis = 180),
         label = "modernCardWatchedIconEndPadding"
     )
