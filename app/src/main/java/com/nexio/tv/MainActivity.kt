@@ -106,6 +106,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.rememberDrawerState
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.recommendations.AndroidTvChannelPublisher
 import com.nexio.tv.data.local.AppOnboardingDataStore
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
@@ -478,6 +479,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = true
+        FrameRateUtils.enforceUiPreferredRefreshRate(this)
     }
 
     override fun onNewIntent(intent: Intent) {
