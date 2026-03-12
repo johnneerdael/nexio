@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -99,9 +98,7 @@ internal fun AudioSelectionOverlay(
         Column(
             modifier = Modifier
                 .width(760.dp)
-                .align(Alignment.BottomStart)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.Bottom
+                .align(Alignment.TopStart)
         ) {
             Text(
                 text = stringResource(R.string.audio_dialog_title),
@@ -112,7 +109,7 @@ internal fun AudioSelectionOverlay(
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.Bottom,
+                verticalAlignment = Alignment.Top,
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
                 Column(modifier = Modifier.width(460.dp)) {
