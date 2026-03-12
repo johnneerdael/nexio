@@ -23,7 +23,7 @@ Recent JNI sink fixes that are now in place:
 
 * written-frontier clamp in `GetCurrentPositionUs` (stock parity with `min(position, writtenFramesDuration)`)
 * resume rebase + stale playhead/timestamp plausibility fallback
-* passthrough backpressure now bounded to physical AudioTrack headroom (no deep software pre-roll without a worker thread)
+* passthrough backpressure now output-progress-driven (flush queued packed data first; if still queued, return backpressure; no deep software pre-roll without a worker thread)
 * `isEnded` parity fix: end-state only reported after explicit EOS path
 * discontinuity handoff wired from Java `handleDiscontinuity()` to native retime path
 
@@ -34,13 +34,13 @@ What changed in observed behavior:
 
 Current failure signature in `debug-atmos.log`:
 
-* playback after a later seek/restart goes out of sync, then quickly underruns
-* `AudioFlinger: pause because of UNDERRUN, framesReady = 0` and `AudioTrack ... disabled due to previous underrun, restarting`
-* example lines: `debug-atmos.log:125`, `debug-atmos.log:126`, `debug-atmos.log:127`
+* historical regression signature: playback after seek/restart went out of sync, then quickly underran
+* `AudioFlinger: pause because of UNDERRUN` loops were observed in that regression window
+* after output-progress-driven backpressure convergence, latest validation indicates seek no longer crashes and audio remains in sync; treat underrun-loop signature as a regression check, not current baseline
 
 Interpret this as:
 
-* the remaining issue is now closer to sustained feed/write cadence and timing/accounting parity, not the old stale-timestamp jump alone
+* remaining work should focus on parity hardening and regression prevention, not the original stale-timestamp jump root cause
 
 ## 1. Capture the core logs first
 
