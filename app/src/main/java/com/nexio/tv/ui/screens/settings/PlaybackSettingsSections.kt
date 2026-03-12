@@ -141,9 +141,11 @@ internal fun PlaybackSettingsSections(
     onSetIecPackerDtshdCoreFallbackEnabled: (Boolean) -> Unit,
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
     streamDiagnosticsEnabled: Boolean,
+    startupPerfTelemetryEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
     onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
+    onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
@@ -478,6 +480,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_stream_subtitle),
                     isChecked = streamDiagnosticsEnabled,
                     onCheckedChange = onSetStreamDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_startup_perf") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Timer,
+                    title = stringResource(R.string.playback_logging_startup_perf_title),
+                    subtitle = stringResource(R.string.playback_logging_startup_perf_subtitle),
+                    isChecked = startupPerfTelemetryEnabled,
+                    onCheckedChange = onSetStartupPerfTelemetryEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

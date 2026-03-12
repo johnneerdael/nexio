@@ -29,6 +29,8 @@ class StartupSyncService @Inject constructor(
     private var forceSyncRequested: Boolean = false
     @Volatile
     private var pendingResyncKey: String? = null
+    @Volatile
+    private var startupGateOpen: Boolean = false
 
     init {
         scope.launch {
@@ -59,10 +61,18 @@ class StartupSyncService @Inject constructor(
         }
     }
 
+    fun setStartupGateOpen(open: Boolean) {
+        startupGateOpen = open
+    }
+
     private fun pullKey(userId: String): String = "${userId}_addons"
 
     private fun scheduleStartupPull(userId: String, force: Boolean = false): Boolean {
         val key = pullKey(userId)
+        if (!startupGateOpen) {
+            if (force) forceSyncRequested = true
+            return false
+        }
         if (!force && lastPulledKey == key) return false
         if (startupPullJob?.isActive == true) {
             if (force) pendingResyncKey = key

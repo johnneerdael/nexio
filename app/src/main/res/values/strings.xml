@@ -221,6 +221,8 @@
     <string name="playback_logging_iec_subtitle">Emit verbose native Kodi AudioSink and IEC packer diagnostics to logcat for ADB troubleshooting.</string>
     <string name="playback_logging_stream_title">Enable Stream Fetching Performance Logs</string>
     <string name="playback_logging_stream_subtitle">Emit detailed stream fetch timing and filtering diagnostics to logcat.</string>
+    <string name="playback_logging_startup_perf_title">Enable Startup Frame Telemetry</string>
+    <string name="playback_logging_startup_perf_subtitle">Emit startup milestone and slow-frame timing diagnostics to logcat for first-render profiling.</string>
     <string name="playback_afr_open">Open</string>
     <string name="playback_afr_closed">Closed</string>
     <string name="playback_afr_off">Off</string>

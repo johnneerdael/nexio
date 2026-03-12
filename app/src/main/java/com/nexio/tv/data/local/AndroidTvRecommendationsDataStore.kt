@@ -23,7 +23,8 @@ data class AndroidTvRecommendationsPreferences(
     val enabled: Boolean = false,
     val selectedFeedKeys: List<String> = emptyList(),
     val pendingBrowsableChannelIds: List<Long> = emptyList(),
-    val requestedBrowsableChannelIds: List<Long> = emptyList()
+    val requestedBrowsableChannelIds: List<Long> = emptyList(),
+    val browsableRequestCooldownUntilMsByChannelId: Map<Long, Long> = emptyMap()
 )
 
 @Singleton
@@ -37,13 +38,16 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
     private val selectedFeedKeysKey = stringPreferencesKey("android_tv_recommendations_selected_feed_keys")
     private val pendingBrowsableChannelIdsKey = stringPreferencesKey("android_tv_pending_browsable_channel_ids")
     private val requestedBrowsableChannelIdsKey = stringPreferencesKey("android_tv_requested_browsable_channel_ids")
+    private val browsableRequestCooldownKey = stringPreferencesKey("android_tv_browsable_request_cooldowns")
 
     val preferences: Flow<AndroidTvRecommendationsPreferences> = dataStore.data.map { prefs ->
+        val cooldowns = parseCooldowns(prefs[browsableRequestCooldownKey])
         AndroidTvRecommendationsPreferences(
             enabled = prefs[enabledKey] ?: false,
             selectedFeedKeys = parseKeys(prefs[selectedFeedKeysKey]),
             pendingBrowsableChannelIds = parseLongs(prefs[pendingBrowsableChannelIdsKey]),
-            requestedBrowsableChannelIds = parseLongs(prefs[requestedBrowsableChannelIdsKey])
+            requestedBrowsableChannelIds = parseLongs(prefs[requestedBrowsableChannelIdsKey]),
+            browsableRequestCooldownUntilMsByChannelId = cooldowns
         )
     }
 
@@ -86,20 +90,29 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
     suspend fun enqueueBrowsableChannelId(channelId: Long) {
         if (channelId <= 0L) return
         dataStore.edit { prefs ->
+            val nowMs = System.currentTimeMillis()
+            val cooldowns = pruneExpiredCooldowns(parseCooldowns(prefs[browsableRequestCooldownKey]), nowMs)
             val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey])
             if (channelId in requested) return@edit
+            if ((cooldowns[channelId] ?: 0L) > nowMs) {
+                prefs[browsableRequestCooldownKey] = encodeCooldowns(cooldowns)
+                return@edit
+            }
 
             val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).toMutableList()
             if (channelId !in pending) {
                 pending += channelId
                 prefs[pendingBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(pending))
             }
+            prefs[browsableRequestCooldownKey] = encodeCooldowns(cooldowns)
         }
     }
 
     suspend fun markBrowsableChannelRequested(channelId: Long) {
         if (channelId <= 0L) return
         dataStore.edit { prefs ->
+            val nowMs = System.currentTimeMillis()
+            val cooldowns = pruneExpiredCooldowns(parseCooldowns(prefs[browsableRequestCooldownKey]), nowMs)
             val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).filterNot { it == channelId }
             val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey]).toMutableList()
             if (channelId !in requested) {
@@ -113,14 +126,40 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
             }
 
             prefs[requestedBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(requested))
+            val nextCooldowns = cooldowns.toMutableMap().apply { remove(channelId) }
+            if (nextCooldowns.isEmpty()) {
+                prefs.remove(browsableRequestCooldownKey)
+            } else {
+                prefs[browsableRequestCooldownKey] = encodeCooldowns(nextCooldowns)
+            }
+        }
+    }
+
+    suspend fun markBrowsableChannelCooldown(channelId: Long, cooldownDurationMs: Long) {
+        if (channelId <= 0L || cooldownDurationMs <= 0L) return
+        dataStore.edit { prefs ->
+            val nowMs = System.currentTimeMillis()
+            val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).filterNot { it == channelId }
+            val cooldowns = pruneExpiredCooldowns(parseCooldowns(prefs[browsableRequestCooldownKey]), nowMs).toMutableMap()
+            cooldowns[channelId] = nowMs + cooldownDurationMs
+
+            if (pending.isEmpty()) {
+                prefs.remove(pendingBrowsableChannelIdsKey)
+            } else {
+                prefs[pendingBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(pending))
+            }
+            prefs[browsableRequestCooldownKey] = encodeCooldowns(cooldowns)
         }
     }
 
     suspend fun clearBrowsableChannelRequest(channelId: Long) {
         if (channelId <= 0L) return
         dataStore.edit { prefs ->
+            val nowMs = System.currentTimeMillis()
             val pending = parseLongs(prefs[pendingBrowsableChannelIdsKey]).filterNot { it == channelId }
             val requested = parseLongs(prefs[requestedBrowsableChannelIdsKey]).filterNot { it == channelId }
+            val cooldowns = pruneExpiredCooldowns(parseCooldowns(prefs[browsableRequestCooldownKey]), nowMs).toMutableMap()
+            cooldowns.remove(channelId)
 
             if (pending.isEmpty()) {
                 prefs.remove(pendingBrowsableChannelIdsKey)
@@ -132,6 +171,12 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
                 prefs.remove(requestedBrowsableChannelIdsKey)
             } else {
                 prefs[requestedBrowsableChannelIdsKey] = gson.toJson(normalizeLongs(requested))
+            }
+
+            if (cooldowns.isEmpty()) {
+                prefs.remove(browsableRequestCooldownKey)
+            } else {
+                prefs[browsableRequestCooldownKey] = encodeCooldowns(cooldowns)
             }
         }
     }
@@ -154,6 +199,35 @@ class AndroidTvRecommendationsDataStore @Inject constructor(
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun parseCooldowns(raw: String?): Map<Long, Long> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, Long>>() {}.type
+            val parsed = gson.fromJson<Map<String, Long>>(raw, type).orEmpty()
+            parsed.entries
+                .mapNotNull { (key, value) ->
+                    key.toLongOrNull()?.takeIf { it > 0L }?.let { channelId ->
+                        channelId to value
+                    }
+                }
+                .toMap()
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun encodeCooldowns(cooldowns: Map<Long, Long>): String {
+        val normalized = cooldowns.entries
+            .asSequence()
+            .filter { it.key > 0L && it.value > 0L }
+            .associate { it.key.toString() to it.value }
+        return gson.toJson(normalized)
+    }
+
+    private fun pruneExpiredCooldowns(cooldowns: Map<Long, Long>, nowMs: Long): Map<Long, Long> {
+        return cooldowns.filterValues { it > nowMs }
     }
 
     private fun normalizeKeys(keys: List<String>): List<String> {

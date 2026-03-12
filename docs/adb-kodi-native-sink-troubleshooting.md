@@ -17,6 +17,31 @@ The goal is to separate these failure classes:
 5. Surface / display timing issue
 6. Wrong track / wrong route / muted output
 
+## Current Truth (2026-03-12)
+
+Recent JNI sink fixes that are now in place:
+
+* written-frontier clamp in `GetCurrentPositionUs` (stock parity with `min(position, writtenFramesDuration)`)
+* resume rebase + stale playhead/timestamp plausibility fallback
+* passthrough backpressure now bounded to physical AudioTrack headroom (no deep software pre-roll without a worker thread)
+* `isEnded` parity fix: end-state only reported after explicit EOS path
+* discontinuity handoff wired from Java `handleDiscontinuity()` to native retime path
+
+What changed in observed behavior:
+
+* seek no longer immediately fails in the previous stale-timestamp pattern
+* previous `AudioTrack getTimestamp_l(... stale timestamp time corrected)` plus `framesReady ~= 889xx` underrun signature is no longer the primary failure mode
+
+Current failure signature in `debug-atmos.log`:
+
+* playback after a later seek/restart goes out of sync, then quickly underruns
+* `AudioFlinger: pause because of UNDERRUN, framesReady = 0` and `AudioTrack ... disabled due to previous underrun, restarting`
+* example lines: `debug-atmos.log:125`, `debug-atmos.log:126`, `debug-atmos.log:127`
+
+Interpret this as:
+
+* the remaining issue is now closer to sustained feed/write cadence and timing/accounting parity, not the old stale-timestamp jump alone
+
 ## 1. Capture the core logs first
 
 Use these while reproducing the issue:
@@ -32,6 +57,8 @@ What to look for:
   * Confirms the sink mode, codec family, output encoding, channel config, and buffer size.
 * `KodiNativeSink handleBuffer queue`
   * Confirms Media3 is feeding the native sink.
+* `Accepted audio bytes before Media3 play() command`
+  * Confirms pre-roll buffering is happening before `play()`.
 * `KodiNativeSink engine emit`
   * Confirms the native parser/packer is producing output packets.
 * `KodiNativeSink track write`
@@ -417,4 +444,3 @@ If that is true and audio is still silent, the problem is likely outside the pac
 * AVR support
 * volume/mute
 * display/render pipeline
-

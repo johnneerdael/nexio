@@ -23,6 +23,7 @@ class DebugSettingsDataStore @Inject constructor(
     private val accountTabEnabledKey = booleanPreferencesKey("account_tab_enabled")
     private val syncCodeFeaturesEnabledKey = booleanPreferencesKey("sync_code_features_enabled")
     private val streamDiagnosticsEnabledKey = booleanPreferencesKey("stream_diagnostics_enabled")
+    private val startupPerfTelemetryEnabledKey = booleanPreferencesKey("startup_perf_telemetry_enabled")
 
     val accountTabEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[accountTabEnabledKey] ?: false
@@ -34,6 +35,10 @@ class DebugSettingsDataStore @Inject constructor(
 
     val streamDiagnosticsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[streamDiagnosticsEnabledKey] ?: false
+    }
+
+    val startupPerfTelemetryEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[startupPerfTelemetryEnabledKey] ?: false
     }
 
     suspend fun setAccountTabEnabled(enabled: Boolean) {
@@ -51,6 +56,12 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[streamDiagnosticsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setStartupPerfTelemetryEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[startupPerfTelemetryEnabledKey] = enabled
         }
     }
 }
