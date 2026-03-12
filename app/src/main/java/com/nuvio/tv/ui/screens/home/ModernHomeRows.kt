@@ -167,7 +167,7 @@ private fun ModernCatalogRowItem(
     val latestOnPreloadAdjacentItem by rememberUpdatedState(onPreloadAdjacentItem)
     val latestOnCatalogSelectionFocused by rememberUpdatedState(onCatalogSelectionFocused)
 
-    LaunchedEffect(focusEventId, isCardFocused, focusKey, payload) {
+    LaunchedEffect(focusEventId, isCardFocused, focusKey) {
         if (focusEventId == 0 || !isCardFocused) return@LaunchedEffect
         val targetEventId = focusEventId
         delay(MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS)
@@ -399,7 +399,8 @@ internal fun ModernRowSection(
         val context = LocalContext.current
         val imageLoader = context.imageLoader
 
-        LaunchedEffect(row.key, row.items, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
+        val rowItemCount = row.items.size
+        LaunchedEffect(row.key, rowItemCount, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
             val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
             val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
             val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }
@@ -423,8 +424,9 @@ internal fun ModernRowSection(
                 )
             }
             // Prefetch initial visible + ahead items immediately when row appears
-            for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE, row.items.size)) {
-                val item = row.items.getOrNull(i) ?: continue
+            val items = currentRowState.value.items
+            for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE, items.size)) {
+                val item = items.getOrNull(i) ?: continue
                 val (wPx, hPx) = when (item.payload) {
                     is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
                     is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
@@ -436,8 +438,9 @@ internal fun ModernRowSection(
             }
                 .distinctUntilChanged()
                 .collect { lastVisibleIndex ->
+                    val currentItems = currentRowState.value.items
                     for (i in (lastVisibleIndex + 1)..(lastVisibleIndex + POSTER_PREFETCH_DISTANCE)) {
-                        val item = row.items.getOrNull(i) ?: continue
+                        val item = currentItems.getOrNull(i) ?: continue
                         val (wPx, hPx) = when (item.payload) {
                             is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
                             is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
@@ -447,7 +450,7 @@ internal fun ModernRowSection(
                 }
         }
 
-        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec) {
+        val horizontalBringIntoViewSpec = remember(density, defaultBringIntoViewSpec, rowStartPadding) {
             val parentStartOffsetPx = with(density) { rowStartPadding.roundToPx() }
             @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
             object : BringIntoViewSpec {

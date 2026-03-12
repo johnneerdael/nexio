@@ -603,7 +603,7 @@ fun ModernHomeContent(
         val resolvedHero = activeCarouselItem?.heroPreview
             ?: heroItem
             ?: activeRow?.items?.firstOrNull()?.heroPreview
-        val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
+        val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items?.size) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
             }
