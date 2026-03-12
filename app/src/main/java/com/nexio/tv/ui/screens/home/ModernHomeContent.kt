@@ -619,6 +619,66 @@ fun ModernHomeContent(
                 FocusRequester.Default
             }
         }
+        val onPendingRowFocusCleared = remember {
+            {
+                pendingRowFocusKey = null
+                pendingRowFocusIndex = null
+            }
+        }
+        val onRowItemFocused = remember {
+            { rowKey: String, index: Int, isContinueWatchingRow: Boolean ->
+                val rowBecameActive = activeRowKey != rowKey
+                val itemChanged = activeItemIndex != index
+                if (rowBecameActive || itemChanged) {
+                    val now = System.currentTimeMillis()
+                    val timeSinceLastHeroNav = now - lastHeroNavigationAtMs
+                    heroFocusSettleDelayMs = if (
+                        lastHeroNavigationAtMs != 0L &&
+                        timeSinceLastHeroNav in 1 until MODERN_HERO_RAPID_NAV_THRESHOLD_MS
+                    ) {
+                        MODERN_HERO_RAPID_NAV_SETTLE_MS
+                    } else {
+                        MODERN_HERO_FOCUS_DEBOUNCE_MS
+                    }
+                    lastHeroNavigationAtMs = now
+                }
+                if (focusedItemByRow[rowKey] != index) {
+                    focusedItemByRow[rowKey] = index
+                }
+                if (rowBecameActive) {
+                    activeRowKey = rowKey
+                }
+                if (rowBecameActive || itemChanged) {
+                    activeItemIndex = index
+                }
+                if (isContinueWatchingRow) {
+                    if (lastFocusedContinueWatchingIndex != index) {
+                        lastFocusedContinueWatchingIndex = index
+                    }
+                    if (focusedCatalogSelection != null) {
+                        focusedCatalogSelection = null
+                    }
+                }
+            }
+        }
+        val onContinueWatchingOptions = remember {
+            { item: ContinueWatchingItem ->
+                optionsItem = item
+            }
+        }
+        val onCatalogSelectionFocused = remember {
+            { selection: FocusedCatalogSelection ->
+                if (focusedCatalogSelection != selection) {
+                    focusedCatalogSelection = selection
+                }
+            }
+        }
+        val onBackdropInteraction = remember {
+            {
+                expansionInteractionNonce++
+                Unit
+            }
+        }
 
         CompositionLocalProvider(LocalBringIntoViewSpec provides verticalRowBringIntoViewSpec) {
             LazyColumn(
@@ -657,44 +717,8 @@ fun ModernHomeContent(
                         pendingRowFocusKey = pendingRowFocusKey,
                         pendingRowFocusIndex = pendingRowFocusIndex,
                         pendingRowFocusNonce = pendingRowFocusNonce,
-                        onPendingRowFocusCleared = {
-                            pendingRowFocusKey = null
-                            pendingRowFocusIndex = null
-                        },
-                        onRowItemFocused = { rowKey, index, isContinueWatchingRow ->
-                            val rowBecameActive = activeRowKey != rowKey
-                            val itemChanged = activeItemIndex != index
-                            if (rowBecameActive || itemChanged) {
-                                val now = System.currentTimeMillis()
-                                val timeSinceLastHeroNav = now - lastHeroNavigationAtMs
-                                heroFocusSettleDelayMs = if (
-                                    lastHeroNavigationAtMs != 0L &&
-                                    timeSinceLastHeroNav in 1 until MODERN_HERO_RAPID_NAV_THRESHOLD_MS
-                                ) {
-                                    MODERN_HERO_RAPID_NAV_SETTLE_MS
-                                } else {
-                                    MODERN_HERO_FOCUS_DEBOUNCE_MS
-                                }
-                                lastHeroNavigationAtMs = now
-                            }
-                            if (focusedItemByRow[rowKey] != index) {
-                                focusedItemByRow[rowKey] = index
-                            }
-                            if (rowBecameActive) {
-                                activeRowKey = rowKey
-                            }
-                            if (rowBecameActive || itemChanged) {
-                                activeItemIndex = index
-                            }
-                            if (isContinueWatchingRow) {
-                                if (lastFocusedContinueWatchingIndex != index) {
-                                    lastFocusedContinueWatchingIndex = index
-                                }
-                                if (focusedCatalogSelection != null) {
-                                    focusedCatalogSelection = null
-                                }
-                            }
-                        },
+                        onPendingRowFocusCleared = onPendingRowFocusCleared,
+                        onRowItemFocused = onRowItemFocused,
                         useLandscapePosters = useLandscapePosters,
                         showLabels = uiState.posterLabelsEnabled,
                         posterCardCornerRadius = posterCardCornerRadius,
@@ -705,20 +729,14 @@ fun ModernHomeContent(
                         continueWatchingCardWidth = continueWatchingCardWidth,
                         continueWatchingCardHeight = continueWatchingCardHeight,
                         onContinueWatchingClick = onContinueWatchingClick,
-                        onContinueWatchingOptions = { optionsItem = it },
+                        onContinueWatchingOptions = onContinueWatchingOptions,
                         isCatalogItemWatched = isCatalogItemWatched,
                         onCatalogItemLongPress = onCatalogItemLongPress,
                         onItemFocus = onItemFocus,
-                        onCatalogSelectionFocused = { selection ->
-                            if (focusedCatalogSelection != selection) {
-                                focusedCatalogSelection = selection
-                            }
-                        },
+                        onCatalogSelectionFocused = onCatalogSelectionFocused,
                         onNavigateToDetail = onNavigateToDetail,
                         onLoadMoreCatalog = onLoadMoreCatalog,
-                        onBackdropInteraction = {
-                            expansionInteractionNonce++
-                        }
+                        onBackdropInteraction = onBackdropInteraction
                     )
                 }
             }

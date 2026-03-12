@@ -11,8 +11,10 @@ import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.repository.CatalogRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -115,7 +117,7 @@ class CatalogRepositoryImpl @Inject constructor(
             }
             NetworkResult.Loading -> { /* Already emitted */ }
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     private fun buildCatalogUrl(
         baseUrl: String,

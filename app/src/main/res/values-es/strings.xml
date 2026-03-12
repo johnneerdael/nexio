@@ -567,7 +567,6 @@
   <string name="animeskip_title">Anime Skip</string>
   <string name="tmdb_collections_subtitle">Colecciones de películas de TMDB en orden de estreno</string>
   <string name="tmdb_api_key_title">Clave API</string>
-  <string name="debug_buffer_logs_title">Registros de búfer</string>
   <string name="trakt_auth_status_subtitle">Estado actual de la conexión con Trakt</string>
   <string name="trakt_unaired_now_hidden">Los próximos episodios sin emitir ahora están ocultos</string>
   <string name="settings_animeskip_subtitle">Marcas de tiempo para saltar el intro/outro del anime</string>
@@ -604,7 +603,6 @@
   <string name="trakt_catalog_recommended_shows">Series recomendadas</string>
   <string name="mdblist_catalogs_title">Catálogos</string>
   <string name="trakt_hide_recommendation">Ocultar recomendación</string>
-  <string name="debug_buffer_logs_subtitle">Activar registros detallados de búfer/progreso para la depuración.</string>
   <string name="poster_ratings_title">Valoraciones en pósters</string>
   <string name="poster_ratings_rpdb_subtitle">Pósters con valoración de RPDB (incompatible con TOPPosters)</string>
   <string name="action_sync_now">Sincronizar ahora</string>
@@ -754,10 +752,6 @@
   <string name="qr_login_approved">Inicio de sesión aprobado. Finalizando\u2026</string>
   <string name="qr_login_pending">Esperando tu aprobación en el teléfono...</string>
   <string name="qr_login_expired">El inicio de sesión por QR expiró. Genera un nuevo código.</string>
-  <string name="debug_stream_diagnostics_title">Registro de diagnóstico de streams</string>
-  <string name="debug_stream_diagnostics_subtitle">Emitir diagnósticos detallados de filtrado de streams y búsqueda de complementos a logcat (solo debug)</string>
-  <string name="debug_iec_packer_logs_title">Activar registros del empaquetador IEC</string>
-  <string name="debug_iec_packer_logs_subtitle">Emitir diagnósticos detallados del empaquetador IEC de Fire OS a logcat para depuración con ADB</string>
   <string name="profile_title">Perfiles</string>
   <string name="profile_subtitle">Administra los perfiles de usuario de esta cuenta.</string>
   <string name="profile_primary_label">Primario</string>

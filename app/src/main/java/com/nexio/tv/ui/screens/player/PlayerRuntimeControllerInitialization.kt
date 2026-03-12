@@ -26,7 +26,7 @@ import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.kodi.KodiNativeAudioSinkFactory
+import androidx.media3.exoplayer.audio.kodi.KodiNativeAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
@@ -91,6 +91,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             AudioCapabilities.setIecPackerAc3PassthroughEnabled(
                 playerSettings.iecPackerAc3PassthroughEnabled
             )
+            AudioCapabilities.setIecPackerAc3TranscodeEnabled(
+                playerSettings.iecPackerAc3TranscodeEnabled
+            )
             AudioCapabilities.setIecPackerEac3PassthroughEnabled(
                 playerSettings.iecPackerEac3PassthroughEnabled
             )
@@ -106,6 +109,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             AudioCapabilities.setIecPackerDtshdCoreFallbackEnabled(
                 playerSettings.iecPackerDtshdCoreFallbackEnabled
             )
+            AudioCapabilities.setIecPackerAudioConfig(
+                playerSettings.iecPackerAudioConfig
+            )
+            AudioCapabilities.setIecPackerAudioDevice(
+                playerSettings.iecPackerAudioDevice
+            )
+            AudioCapabilities.setIecPackerPassthroughDevice(
+                playerSettings.iecPackerPassthroughDevice
+            )
             AudioCapabilities.setIecPackerMaxPcmChannelLayout(
                 playerSettings.iecPackerMaxPcmChannelLayout.kodiChannelLayoutValue
             )
@@ -120,29 +132,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode
                 )
             }
-            runAfrPreflightIfEnabled(
-                url = url,
-                headers = headers,
-                frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
-            )
             requestedUseLibassByUser = playerSettings.useLibass
             if (libassPipelineDecisionStreamUrl != currentStreamUrl) {
                 libassPipelineDecisionStreamUrl = currentStreamUrl
                 libassPipelineOverrideForCurrentStream = null
                 libassPipelineSwitchInFlight = false
             }
-            val startupSubtitlePreparation = prepareStartupSubtitles(
-                mode = playerSettings.addonSubtitleStartupMode,
-                preferredLanguage = playerSettings.subtitleStyle.preferredLanguage,
-                secondaryLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage,
-                retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
-            )
+            val retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
             val useLibass = when {
                 !requestedUseLibassByUser -> false
                 libassPipelineOverrideForCurrentStream != null -> libassPipelineOverrideForCurrentStream == true
-                else -> true
+                else -> false
             }
             val requestedLibassRenderType = playerSettings.libassRenderType.toAssRenderType()
             val libassRenderType = when {
@@ -206,6 +207,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             isSafeAudioModeActiveForCurrentPlayback = safeAudioModeEnabled
             isAudioDisabledForCurrentPlayback = audioDisabledForStream
             isVc1TrackSelectionBypassActiveForCurrentPlayback = vc1TrackSelectionBypassActive
+            isKodiCustomAudioSinkActiveForCurrentPlayback = kodiCustomAudioSinkEnabled
 
             
             trackSelector = DefaultTrackSelector(context).apply {
@@ -351,12 +353,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
             val vc1SoftwareFallbackActive = vc1SoftwarePreferredStreamUrls.contains(url)
+            val av1FfmpegFallbackActive = av1FfmpegPreferredStreamUrls.contains(url)
+            isAv1FfmpegFallbackActiveForCurrentPlayback = av1FfmpegFallbackActive
             isVc1SoftwareFallbackActiveForCurrentPlayback = vc1SoftwareFallbackActive
             val codecSelector = createDolbyVisionFallbackCodecSelector(
                 forceVc1SoftwareDecode = true,
                 forceDolbyVisionSoftwareDecode = dv5SoftwareToneMapActive
             )
-            val effectiveDecoderPriority = if (vc1SoftwareFallbackActive) {
+            val effectiveDecoderPriority = if (av1FfmpegFallbackActive) {
+                DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+            } else if (vc1SoftwareFallbackActive) {
                 DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
             } else if (dv5SoftwareToneMapActive) {
                 DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
@@ -371,6 +377,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 cueGroupSubtitleTranslator = builtInSubtitleCueTranslator,
                 experimentalFireOsIecPassthroughEnabled =
                     playerSettings.experimentalDtsIecPassthroughEnabled,
+                disableDav1dForAv1 = av1FfmpegFallbackActive,
                 experimentalDv5HardwareToneMapEnabled = dv5HardwareToneMapActive,
                 experimentalDv5HardwareToneMapCpuFallbackEnabled =
                     dv5HardwareToneMapCpuFallbackEnabled
@@ -394,6 +401,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "dv5HwForced=$dv5HardwareForced " +
                     "dv5HwToneMapActive=$dv5HardwareToneMapActive " +
                     "dv5ToneMapActive=$dv5SoftwareToneMapActive " +
+                    "av1FfmpegFallbackActive=$av1FfmpegFallbackActive " +
                     "vc1FallbackActive=$vc1SoftwareFallbackActive " +
                     "vc1TrackBypassActive=$vc1TrackSelectionBypassActive " +
                     "host=${url.safeHost()}"
@@ -458,7 +466,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
                 try {
                     loudnessEnhancer?.release()
-                    loudnessEnhancer = LoudnessEnhancer(audioSessionId)
+                    loudnessEnhancer =
+                        if (!isKodiCustomAudioSinkActiveForCurrentPlayback &&
+                            audioSessionId != C.AUDIO_SESSION_ID_UNSET &&
+                            audioSessionId > 0
+                        ) {
+                            LoudnessEnhancer(audioSessionId)
+                        } else {
+                            null
+                        }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -469,30 +485,16 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 val preferred = playerSettings.subtitleStyle.preferredLanguage
                 val secondary = playerSettings.subtitleStyle.secondaryPreferredLanguage
                 applySubtitlePreferences(preferred, secondary)
-                attachedAddonSubtitleKeys = startupSubtitlePreparation.attachedSubtitles
+                val retainedStartupSubtitles = listOfNotNull(retainedSelectedSubtitle)
+                    .distinctBy { "${it.id}|${it.url}" }
+                attachedAddonSubtitleKeys = retainedStartupSubtitles
                     .distinctBy { addonSubtitleKey(it) }
                     .map(::addonSubtitleKey)
                     .toSet()
-                val startupSubtitleConfigurations = startupSubtitlePreparation.attachedSubtitles
+                val startupSubtitleConfigurations = retainedStartupSubtitles
                     .distinctBy { "${it.id}|${it.url}" }
                     .map { subtitle -> toSubtitleConfiguration(subtitle) }
-                val initialMediaSource = withContext(Dispatchers.IO) {
-                    mediaSourceFactory.createMediaSource(
-                        url = url,
-                        headers = headers,
-                        subtitleConfigurations = startupSubtitleConfigurations
-                    )
-                }
-                setMediaSource(initialMediaSource)
-                playWhenReady = true
-                prepare()
-                if (dv5HardwareToneMapActive) {
-                    setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
-                        Dv5HardwareToneMapRpuTap.onFrameAboutToRender(presentationTimeUs)
-                    }
-                }
-
-                addListener(object : Player.Listener {
+                val playerListener = object : Player.Listener {
                     override fun onCues(cueGroup: CueGroup) {
                         currentCueGroup = cueGroup
                         handleBuiltInCueGroupUpdate()
@@ -691,6 +693,20 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             return
                         }
 
+                        if (error.isDav1dNeonFailure() &&
+                            !isAv1FfmpegFallbackActiveForCurrentPlayback
+                        ) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "AV1 dav1d init failure detected, retrying current stream " +
+                                    "with FFmpeg video fallback host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            av1FfmpegPreferredStreamUrls.add(currentStreamUrl)
+                            retryCurrentStreamWithAv1FfmpegFallback(currentPosition)
+                            return
+                        }
+
                         if (error.isVc1DecoderFailure() &&
                             isVc1SoftwareFallbackActiveForCurrentPlayback &&
                             !isVc1TrackSelectionBypassActiveForCurrentPlayback
@@ -844,19 +860,29 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             )
                         }
                     }
-                })
-            }
-            when {
-                startupSubtitlePreparation.fetchCompleted -> {
-                    _uiState.update {
-                        it.copy(
-                            addonSubtitles = startupSubtitlePreparation.fetchedSubtitles,
-                            isLoadingAddonSubtitles = false,
-                            addonSubtitlesError = null
-                        )
+                }
+                addListener(playerListener)
+                if (dv5HardwareToneMapActive) {
+                    setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
+                        Dv5HardwareToneMapRpuTap.onFrameAboutToRender(presentationTimeUs)
                     }
                 }
-                else -> fetchAddonSubtitles()
+                val initialMediaSource = withContext(Dispatchers.IO) {
+                    mediaSourceFactory.createMediaSource(
+                        url = url,
+                        headers = headers,
+                        subtitleConfigurations = startupSubtitleConfigurations
+                    )
+                }
+                setMediaSource(initialMediaSource)
+                playWhenReady = true
+                prepare()
+                launchStartupPreparationTasks(
+                    url = url,
+                    headers = headers,
+                    playerSettings = playerSettings,
+                    retainedSelectedSubtitle = retainedSelectedSubtitle
+                )
             }
         } catch (e: Exception) {
             _uiState.update {
@@ -865,6 +891,82 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     showLoadingOverlay = false
                 )
             }
+        }
+    }
+}
+
+private fun PlayerRuntimeController.launchStartupPreparationTasks(
+    url: String,
+    headers: Map<String, String>,
+    playerSettings: com.nexio.tv.data.local.PlayerSettings,
+    retainedSelectedSubtitle: Subtitle?
+) {
+    launchStartupAfrPreflight(
+        url = url,
+        headers = headers,
+        frameRateMatchingMode = playerSettings.frameRateMatchingMode,
+        resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+    )
+
+    startupSubtitlePreparationJob?.cancel()
+    startupSubtitlePreparationJob = scope.launch {
+        val startupSubtitlePreparation = prepareStartupSubtitles(
+            mode = playerSettings.addonSubtitleStartupMode,
+            preferredLanguage = playerSettings.subtitleStyle.preferredLanguage,
+            secondaryLanguage = playerSettings.subtitleStyle.secondaryPreferredLanguage,
+            retainedSelectedSubtitle = retainedSelectedSubtitle
+        )
+        if (currentStreamUrl != url) {
+            return@launch
+        }
+        if (startupSubtitlePreparation.fetchCompleted) {
+            _uiState.update {
+                it.copy(
+                    addonSubtitles = startupSubtitlePreparation.fetchedSubtitles,
+                    isLoadingAddonSubtitles = false,
+                    addonSubtitlesError = null
+                )
+            }
+            tryAutoSelectPreferredSubtitleFromAvailableTracks()
+        } else {
+            fetchAddonSubtitlesForCurrentStream(url)
+        }
+    }
+}
+
+private suspend fun PlayerRuntimeController.fetchAddonSubtitlesForCurrentStream(
+    url: String
+) {
+    if (currentStreamUrl != url) {
+        return
+    }
+    if (buildSubtitleFetchRequest() == null) {
+        _uiState.update { it.copy(isLoadingAddonSubtitles = false, addonSubtitlesError = null) }
+        return
+    }
+    _uiState.update { it.copy(isLoadingAddonSubtitles = true, addonSubtitlesError = null) }
+    try {
+        val subtitles = fetchAddonSubtitlesNow()
+        if (currentStreamUrl != url) {
+            return
+        }
+        _uiState.update {
+            it.copy(
+                addonSubtitles = subtitles,
+                isLoadingAddonSubtitles = false,
+                addonSubtitlesError = null
+            )
+        }
+        tryAutoSelectPreferredSubtitleFromAvailableTracks()
+    } catch (e: Exception) {
+        if (currentStreamUrl != url) {
+            return
+        }
+        _uiState.update {
+            it.copy(
+                isLoadingAddonSubtitles = false,
+                addonSubtitlesError = e.message
+            )
         }
     }
 }
@@ -988,10 +1090,12 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
+    isAv1FfmpegFallbackActiveForCurrentPlayback = false
     isVc1SoftwareFallbackActiveForCurrentPlayback = false
     isVc1TrackSelectionBypassActiveForCurrentPlayback = false
     isSafeAudioModeActiveForCurrentPlayback = false
     isAudioDisabledForCurrentPlayback = false
+    isKodiCustomAudioSinkActiveForCurrentPlayback = false
     dv7ToDv81BridgeVersionForCurrentPlayback = null
     dv7ToDv81LastProbeReasonForCurrentPlayback = null
     playerInitializationStartedAtMs = 0L
@@ -1025,6 +1129,7 @@ private class SubtitleOffsetRenderersFactory(
     private val safeAudioModeEnabled: Boolean,
     private val cueGroupSubtitleTranslator: CueGroupSubtitleTranslator?,
     private val experimentalFireOsIecPassthroughEnabled: Boolean,
+    private val disableDav1dForAv1: Boolean,
     private val experimentalDv5HardwareToneMapEnabled: Boolean,
     private val experimentalDv5HardwareToneMapCpuFallbackEnabled: Boolean
 ) : DefaultRenderersFactory(context) {
@@ -1049,6 +1154,11 @@ private class SubtitleOffsetRenderersFactory(
             allowedVideoJoiningTimeMs,
             out
         )
+        if (disableDav1dForAv1) {
+            out.removeAll { renderer ->
+                renderer is androidx.media3.decoder.av1.Libdav1dVideoRenderer
+            }
+        }
         if (!experimentalDv5HardwareToneMapEnabled) {
             return
         }
@@ -1087,8 +1197,7 @@ private class SubtitleOffsetRenderersFactory(
         enableAudioOutputPlaybackParams: Boolean
     ): AudioSink {
         if (experimentalFireOsIecPassthroughEnabled) {
-            return KodiNativeAudioSinkFactory.wrap(
-                context,
+            return KodiNativeAudioSink(
                 DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
@@ -1149,6 +1258,11 @@ private class SubtitleOffsetRenderersFactory(
             eventListener,
             out
         )
+        if (experimentalFireOsIecPassthroughEnabled) {
+            out.removeAll { renderer ->
+                renderer is androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
+            }
+        }
     }
 }
 
@@ -1303,6 +1417,23 @@ private fun PlaybackException.isVc1DecoderFailure(): Boolean {
     return details.contains("video/wvc1") ||
         details.contains("vc-1") ||
         details.contains(" wvc1")
+}
+
+private fun PlaybackException.isDav1dNeonFailure(): Boolean {
+    if (errorCode != PlaybackException.ERROR_CODE_DECODING_FAILED &&
+        errorCode != PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+    ) {
+        return false
+    }
+    val details = buildString {
+        append(message ?: "")
+        append(' ')
+        append(cause?.message ?: "")
+        append(' ')
+        append(cause?.cause?.message ?: "")
+    }.lowercase()
+    return details.contains("libdav1dvideorenderer") &&
+        details.contains("neon is not supported")
 }
 
 private fun describeExtensionRendererMode(mode: Int): String {

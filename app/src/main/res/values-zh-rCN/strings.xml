@@ -24,7 +24,6 @@
   <string name="settings_rounded_ui">圆角界面</string>
   <string name="settings_catalogs">目录</string>
   <string name="sub_startup_mode_title">字幕启动模式</string>
-  <string name="debug_buffer_logs_subtitle">启用详细缓冲/进度调试日志。</string>
   <string name="animeskip_title">跳过动漫片头片尾 (Anime Skip)</string>
   <string name="tmdb_missing_api_key">需要 TMDB API 密钥</string>
   <string name="poster_ratings_title">海报评分</string>
@@ -40,7 +39,6 @@
   <string name="settings_catalogs_subtitle">自定义主页目录顺序和可见性。</string>
   <string name="appearance_language_system">系统默认</string>
   <string name="mdblist_catalogs_subtitle">管理 MDBList 个人列表和热门列表栏目</string>
-  <string name="debug_buffer_logs_title">缓冲日志</string>
   <string name="trakt_catalogs_dialog_subtitle">启用或禁用内置 Trakt 目录。选择热门列表以添加自定义栏目。</string>
   <string name="poster_ratings_top_api_key_subtitle">启用 TOPPosters 时需要</string>
   <string name="mdblist_personal_list_badge">个人列表</string>
@@ -557,8 +555,6 @@
   <string name="debug_account_tab_subtitle">在“设置”菜单中显示“帐户”选项卡</string>
   <string name="debug_sync_code_title">同步码功能</string>
   <string name="debug_sync_code_subtitle">在帐户设置中显示生成/输入同步代码按钮</string>
-  <string name="debug_stream_diagnostics_title">流媒体诊断日志</string>
-  <string name="debug_stream_diagnostics_subtitle">向 logcat 写入详细的插件获取和流媒体过滤诊断信息（仅 Debug 模式）</string>
   <string name="debug_section_account">帐户</string>
   <string name="debug_manual_signin_title">手动登录</string>
   <string name="debug_manual_signin_subtitle">使用电子邮件和密码登录（Supabase 身份验证）</string>

@@ -1,6 +1,7 @@
 package com.nexio.tv.domain.repository
 
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,7 @@ interface StreamRepository {
         videoId: String,
         season: Int? = null,
         episode: Int? = null,
+        installedAddons: List<Addon>? = null,
         requestOrigin: String = "unknown",
         requestId: String = UUID.randomUUID().toString()
     ): Flow<NetworkResult<List<AddonStreams>>>

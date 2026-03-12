@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
@@ -20,6 +21,7 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.LibraryEntryInput
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.AddonRepository
@@ -67,6 +69,8 @@ class HomeViewModel @Inject constructor(
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
+        internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 750L
+        internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
     }
@@ -102,11 +106,20 @@ class HomeViewModel @Inject constructor(
     internal var activeCatalogLoadSignature: String? = null
     internal var catalogLoadGeneration: Long = 0L
     internal var catalogsLoadInProgress: Boolean = false
+    internal var lastCatalogComputationSignature: String? = null
+    internal var lastCatalogOrderDiagnosticsSignature: String? = null
     internal data class TruncatedRowCacheEntry(
         val sourceRow: CatalogRow,
         val truncatedRow: CatalogRow
     )
     internal val truncatedRowCache = mutableMapOf<String, TruncatedRowCacheEntry>()
+    internal var inMemoryHomeSnapshot: HomeCatalogSnapshotStore.Snapshot? = null
+    internal var homeSnapshotPersistJob: Job? = null
+    internal var pendingHomeSnapshotPersist: HomeCatalogSnapshotStore.Snapshot? = null
+    internal var homeSnapshotPersistGeneration: Long = 0L
+    internal val pendingTmdbEnrichmentByItemId = linkedMapOf<String, TmdbEnrichment>()
+    internal val pendingMetaEnrichmentByItemId = linkedMapOf<String, Meta>()
+    internal var metadataEnrichmentFlushJob: Job? = null
     internal var currentTmdbSettings: TmdbSettings = TmdbSettings()
     internal var traktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
@@ -340,6 +353,11 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         posterStatusReconcileJob?.cancel()
+        metadataEnrichmentFlushJob?.cancel()
+        homeSnapshotPersistJob?.cancel()
+        pendingTmdbEnrichmentByItemId.clear()
+        pendingMetaEnrichmentByItemId.clear()
+        pendingHomeSnapshotPersist = null
         cancelInFlightCatalogLoads()
         posterLibraryObserverJobs.values.forEach { it.cancel() }
         movieWatchedObserverJobs.values.forEach { it.cancel() }

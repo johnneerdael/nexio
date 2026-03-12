@@ -15,12 +15,14 @@ import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -42,6 +44,7 @@ class StreamRepositoryImpl @Inject constructor(
         videoId: String,
         season: Int?,
         episode: Int?,
+        installedAddons: List<Addon>?,
         requestOrigin: String,
         requestId: String
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
@@ -50,7 +53,7 @@ class StreamRepositoryImpl @Inject constructor(
         try {
             val diagnosticsEnabled = debugSettingsDataStore.streamDiagnosticsEnabled.first()
             val requestStartedAtNs = System.nanoTime()
-            val addons = addonRepository.getInstalledAddons().first()
+            val addons = installedAddons ?: addonRepository.getInstalledAddons().first()
 
             // Filter addons that support streams for this type
             val streamAddons = addons.filter { addon ->
@@ -67,7 +70,7 @@ class StreamRepositoryImpl @Inject constructor(
 
                 // Launch addon jobs
                 val jobs = streamAddons.map { addon ->
-                    launch {
+                    launch(Dispatchers.IO) {
                         val addonStartedAtNs = System.nanoTime()
                         var outcome = "exception"
                         var streamCount = 0
@@ -178,7 +181,7 @@ class StreamRepositoryImpl @Inject constructor(
         } finally {
             cancelActiveStreamRequests(requestId)
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     override suspend fun getStreamsFromAddon(
         baseUrl: String,

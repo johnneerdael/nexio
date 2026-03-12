@@ -567,7 +567,6 @@
   <string name="animeskip_title">Anime Skip</string>
   <string name="tmdb_collections_subtitle">Collections de films TMDB par ordre de sortie</string>
   <string name="tmdb_api_key_title">Clé API</string>
-  <string name="debug_buffer_logs_title">Journaux de buffer</string>
   <string name="trakt_auth_status_subtitle">État actuel de la connexion Trakt</string>
   <string name="trakt_unaired_now_hidden">Les épisodes non diffusés sont maintenant masqués</string>
   <string name="settings_animeskip_subtitle">Horodatages de saut intro/outro anime</string>
@@ -604,7 +603,6 @@
   <string name="trakt_catalog_recommended_shows">Séries recommandées</string>
   <string name="mdblist_catalogs_title">Catalogues</string>
   <string name="trakt_hide_recommendation">Masquer la recommandation</string>
-  <string name="debug_buffer_logs_subtitle">Activer les journaux détaillés de buffer/progression pour le débogage.</string>
   <string name="poster_ratings_title">Notes sur les affiches</string>
   <string name="poster_ratings_rpdb_subtitle">Affiches notées de RPDB (incompatible avec TOPPosters)</string>
   <string name="action_sync_now">Synchroniser maintenant</string>
@@ -754,10 +752,6 @@
   <string name="qr_login_approved">Connexion approuvée. Fin de la connexion…</string>
   <string name="qr_login_pending">En attente d\'approbation sur ton téléphone…</string>
   <string name="qr_login_expired">La connexion QR a expiré. Génère un nouveau code.</string>
-  <string name="debug_stream_diagnostics_title">Logs de diagnostic des flux</string>
-  <string name="debug_stream_diagnostics_subtitle">Envoie des diagnostics détaillés sur la récupération des addons et le filtrage des flux vers logcat (débogage uniquement)</string>
-  <string name="debug_iec_packer_logs_title">Activer les journaux du packer IEC</string>
-  <string name="debug_iec_packer_logs_subtitle">Envoyer des diagnostics détaillés du packer IEC Fire OS vers logcat pour le dépannage ADB</string>
   <string name="profile_title">Profils</string>
   <string name="profile_subtitle">Gérer les profils utilisateur pour ce compte.</string>
   <string name="profile_primary_label">Principal</string>

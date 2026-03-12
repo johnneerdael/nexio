@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class CoreLayoutPrefs(
     val layout: HomeLayout,
@@ -205,7 +206,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 
     pendingTmdbEnrichItemId = item.id
     tmdbEnrichFocusJob?.cancel()
-    tmdbEnrichFocusJob = viewModelScope.launch(Dispatchers.IO) {
+    tmdbEnrichFocusJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS)
         if (pendingTmdbEnrichItemId != item.id) {
             if (_enrichingItemId.value == item.id) {
@@ -223,18 +224,22 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         try {
             var tmdbEnriched = false
             if (currentTmdbSettings.isActive) {
-                val tmdbId = runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
+                val tmdbId = withContext(Dispatchers.IO) {
+                    runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
+                }
                 val enrichment = if (tmdbId != null) {
-                    runCatching {
-                        tmdbMetadataService.fetchEnrichment(
-                            tmdbId = tmdbId,
-                            contentType = item.type
-                        )
-                    }.getOrNull()
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            tmdbMetadataService.fetchEnrichment(
+                                tmdbId = tmdbId,
+                                contentType = item.type
+                            )
+                        }.getOrNull()
+                    }
                 } else {
                     null
                 }
-                if (enrichment != null) {
+                if (enrichment != null && pendingTmdbEnrichItemId == item.id) {
                     prefetchedTmdbIds.add(item.id)
                     prefetchedExternalMetaIds.add(item.id)
                     updateCatalogItemWithTmdb(item.id, enrichment)
@@ -248,10 +253,12 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
                 externalMetaPrefetchInFlightIds.add(item.id)
             ) {
                 try {
-                    val result = metaRepository.getMetaFromAllAddons(item.apiType, item.id)
-                        .first { it is NetworkResult.Success || it is NetworkResult.Error }
+                    val result = withContext(Dispatchers.IO) {
+                        metaRepository.getMetaFromAllAddons(item.apiType, item.id)
+                            .first { it is NetworkResult.Success || it is NetworkResult.Error }
+                    }
 
-                    if (result is NetworkResult.Success) {
+                    if (result is NetworkResult.Success && pendingTmdbEnrichItemId == item.id) {
                         prefetchedExternalMetaIds.add(item.id)
                         updateCatalogItemWithMeta(item.id, result.data)
                     }
@@ -271,131 +278,100 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 }
 
 private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: TmdbEnrichment) {
-    fun mergeItem(currentItem: MetaPreview): MetaPreview {
-        var merged = currentItem
-
-        if (currentTmdbSettings.useArtwork) {
-            merged = merged.copy(
-                background = enrichment.backdrop ?: merged.background,
-                logo = enrichment.logo ?: merged.logo,
-                poster = enrichment.poster ?: merged.poster
-            )
-        }
-
-        if (currentTmdbSettings.useBasicInfo) {
-            merged = merged.copy(
-                name = enrichment.localizedTitle ?: merged.name,
-                description = enrichment.description ?: merged.description,
-                imdbRating = enrichment.rating?.toFloat() ?: merged.imdbRating,
-                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres
-            )
-        }
-
-        if (currentTmdbSettings.useDetails) {
-            merged = merged.copy(
-                releaseInfo = enrichment.releaseInfo ?: merged.releaseInfo
-            )
-        }
-
-        return merged
-    }
-
-    catalogsMap.forEach { (key, row) ->
-        val itemIndex = row.items.indexOfFirst { it.id == itemId }
-        if (itemIndex >= 0) {
-            val merged = mergeItem(row.items[itemIndex])
-            if (merged != row.items[itemIndex]) {
-                val mutableItems = row.items.toMutableList()
-                mutableItems[itemIndex] = merged
-                catalogsMap[key] = row.copy(items = mutableItems)
-                truncatedRowCache.remove(key)
-            }
-        }
-    }
-
-    viewModelScope.launch {
-        updatePersistedHomeSnapshotPipeline { snapshot ->
-            fun mergeRows(rows: List<CatalogRow>): List<CatalogRow> {
-                return rows.map { row ->
-                    val itemIndex = row.items.indexOfFirst { it.id == itemId }
-                    if (itemIndex < 0) {
-                        row
-                    } else {
-                        val mergedItem = mergeItem(row.items[itemIndex])
-                        if (mergedItem == row.items[itemIndex]) {
-                            row
-                        } else {
-                            val mutableItems = row.items.toMutableList()
-                            mutableItems[itemIndex] = mergedItem
-                            row.copy(items = mutableItems)
-                        }
-                    }
-                }
-            }
-
-            snapshot.copy(
-                catalogRows = mergeRows(snapshot.catalogRows),
-                fullCatalogRows = mergeRows(snapshot.fullCatalogRows),
-                heroItems = snapshot.heroItems.map { currentItem ->
-                    if (currentItem.id == itemId) mergeItem(currentItem) else currentItem
-                }
-            )
-        }
-    }
+    pendingTmdbEnrichmentByItemId[itemId] = enrichment
+    scheduleMetadataEnrichmentFlushPipeline()
 }
 
 private fun HomeViewModel.updateCatalogItemWithMeta(itemId: String, meta: Meta) {
-    fun mergeItem(currentItem: MetaPreview): MetaPreview = currentItem.copy(
-        background = meta.background ?: currentItem.background,
-        logo = meta.logo ?: currentItem.logo,
-        description = meta.description ?: currentItem.description,
-        imdbRating = meta.imdbRating ?: currentItem.imdbRating,
-        genres = if (meta.genres.isNotEmpty()) meta.genres else currentItem.genres
-    )
+    pendingMetaEnrichmentByItemId[itemId] = meta
+    scheduleMetadataEnrichmentFlushPipeline()
+}
 
+private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
+    metadataEnrichmentFlushJob?.cancel()
+    metadataEnrichmentFlushJob = viewModelScope.launch {
+        delay(HomeViewModel.FOCUS_ENRICHMENT_BATCH_WINDOW_MS)
+        flushMetadataEnrichmentPipeline()
+    }
+}
+
+private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
+    if (pendingTmdbEnrichmentByItemId.isEmpty() && pendingMetaEnrichmentByItemId.isEmpty()) {
+        return
+    }
+    val tmdbByItemId = pendingTmdbEnrichmentByItemId.toMap()
+    val metaByItemId = pendingMetaEnrichmentByItemId.toMap()
+    pendingTmdbEnrichmentByItemId.clear()
+    pendingMetaEnrichmentByItemId.clear()
+
+    var changed = false
+    val changedCatalogKeys = mutableSetOf<String>()
     catalogsMap.forEach { (key, row) ->
-        val itemIndex = row.items.indexOfFirst { it.id == itemId }
-        if (itemIndex >= 0) {
-            val merged = mergeItem(row.items[itemIndex])
-            if (merged != row.items[itemIndex]) {
-                val mutableItems = row.items.toMutableList()
-                mutableItems[itemIndex] = merged
-                catalogsMap[key] = row.copy(items = mutableItems)
-                truncatedRowCache.remove(key)
+        var mutableItems: MutableList<MetaPreview>? = null
+        row.items.forEachIndexed { index, currentItem ->
+            val mergedItem = mergeFocusedItemEnrichment(
+                currentItem = currentItem,
+                tmdbEnrichment = tmdbByItemId[currentItem.id],
+                externalMeta = metaByItemId[currentItem.id]
+            )
+            if (mergedItem != currentItem) {
+                val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
+                updatedItems[index] = mergedItem
             }
+        }
+
+        val updatedItems = mutableItems
+        if (updatedItems != null) {
+            catalogsMap[key] = row.copy(items = updatedItems)
+            changedCatalogKeys += key
+            changed = true
         }
     }
 
-    viewModelScope.launch {
-        updatePersistedHomeSnapshotPipeline { snapshot ->
-            fun mergeRows(rows: List<CatalogRow>): List<CatalogRow> {
-                return rows.map { row ->
-                    val itemIndex = row.items.indexOfFirst { it.id == itemId }
-                    if (itemIndex < 0) {
-                        row
-                    } else {
-                        val mergedItem = mergeItem(row.items[itemIndex])
-                        if (mergedItem == row.items[itemIndex]) {
-                            row
-                        } else {
-                            val mutableItems = row.items.toMutableList()
-                            mutableItems[itemIndex] = mergedItem
-                            row.copy(items = mutableItems)
-                        }
-                    }
-                }
-            }
+    if (!changed) return
 
-            snapshot.copy(
-                catalogRows = mergeRows(snapshot.catalogRows),
-                fullCatalogRows = mergeRows(snapshot.fullCatalogRows),
-                heroItems = snapshot.heroItems.map { item ->
-                    if (item.id == itemId) mergeItem(item) else item
-                }
+    changedCatalogKeys.forEach(truncatedRowCache::remove)
+    scheduleUpdateCatalogRows()
+}
+
+private fun HomeViewModel.mergeFocusedItemEnrichment(
+    currentItem: MetaPreview,
+    tmdbEnrichment: TmdbEnrichment?,
+    externalMeta: Meta?
+): MetaPreview {
+    var merged = currentItem
+    if (tmdbEnrichment != null) {
+        if (currentTmdbSettings.useArtwork) {
+            merged = merged.copy(
+                background = tmdbEnrichment.backdrop ?: merged.background,
+                logo = tmdbEnrichment.logo ?: merged.logo,
+                poster = tmdbEnrichment.poster ?: merged.poster
+            )
+        }
+        if (currentTmdbSettings.useBasicInfo) {
+            merged = merged.copy(
+                name = tmdbEnrichment.localizedTitle ?: merged.name,
+                description = tmdbEnrichment.description ?: merged.description,
+                imdbRating = tmdbEnrichment.rating?.toFloat() ?: merged.imdbRating,
+                genres = if (tmdbEnrichment.genres.isNotEmpty()) tmdbEnrichment.genres else merged.genres
+            )
+        }
+        if (currentTmdbSettings.useDetails) {
+            merged = merged.copy(
+                releaseInfo = tmdbEnrichment.releaseInfo ?: merged.releaseInfo
             )
         }
     }
-
+    if (externalMeta != null) {
+        merged = merged.copy(
+            background = externalMeta.background ?: merged.background,
+            logo = externalMeta.logo ?: merged.logo,
+            description = externalMeta.description ?: merged.description,
+            imdbRating = externalMeta.imdbRating ?: merged.imdbRating,
+            genres = if (externalMeta.genres.isNotEmpty()) externalMeta.genres else merged.genres
+        )
+    }
+    return merged
 }
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(

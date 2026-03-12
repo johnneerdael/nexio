@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.util.UnstableApi
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -24,10 +25,12 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
+    val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons
             .filter { addon ->
@@ -131,6 +134,18 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setFireOsIecSuperviseAudioDelayEnabled(enabled: Boolean) {
         playerSettingsDataStore.setFireOsIecSuperviseAudioDelayEnabled(enabled)
+    }
+
+    suspend fun setFireOsIecVerboseLoggingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setFireOsIecVerboseLoggingEnabled(enabled)
+    }
+
+    suspend fun setEnableBufferLogs(enabled: Boolean) {
+        playerSettingsDataStore.setEnableBufferLogs(enabled)
+    }
+
+    suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
+        debugSettingsDataStore.setStreamDiagnosticsEnabled(enabled)
     }
 
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {

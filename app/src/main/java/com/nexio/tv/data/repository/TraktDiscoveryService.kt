@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -99,10 +100,12 @@ class TraktDiscoveryService @Inject constructor(
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
 
     init {
-        snapshotStore.read()?.let { persisted ->
-            rawSnapshotState.value = persisted
-            snapshotState.value = persisted
-            lastRefreshMs = persisted.updatedAtMs
+        scope.launch {
+            snapshotStore.read()?.let { persisted ->
+                rawSnapshotState.value = persisted
+                snapshotState.value = persisted
+                lastRefreshMs = persisted.updatedAtMs
+            }
         }
         scope.launch {
             combine(
@@ -147,23 +150,23 @@ class TraktDiscoveryService @Inject constructor(
         }
     }
 
-    suspend fun ensureFresh(force: Boolean) {
+    suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) {
             rawSnapshotState.value = TraktDiscoverySnapshot()
             snapshotStore.clear()
-            return
+            return@withContext
         }
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
 
         val now = System.currentTimeMillis()
         if (!force && now - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
-            return
+            return@withContext
         }
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
             if (!force && lockedNow - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
-                return
+                return@withLock
             }
             val snapshot = rawSnapshotState.value
             val snapshotAgeMs = if (snapshot.updatedAtMs > 0L) {
@@ -175,7 +178,7 @@ class TraktDiscoveryService @Inject constructor(
 
             if (!force && !hasActivitiesChanged() && !fallbackRefreshDue) {
                 lastRefreshMs = lockedNow
-                return
+                return@withLock
             }
 
             val prefs = traktSettingsDataStore.catalogPreferences.first()
@@ -249,7 +252,7 @@ class TraktDiscoveryService @Inject constructor(
         }
     }
 
-    suspend fun dismissRecommendation(ref: TraktRecommendationRef) {
+    suspend fun dismissRecommendation(ref: TraktRecommendationRef) = withContext(Dispatchers.IO) {
         runCatching {
             traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                 traktApi.hideRecommendation(

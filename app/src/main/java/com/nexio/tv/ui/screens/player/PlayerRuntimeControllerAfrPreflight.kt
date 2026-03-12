@@ -6,6 +6,7 @@ import com.nexio.tv.data.local.FrameRateMatchingMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
@@ -18,14 +19,18 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     frameRateMatchingMode: FrameRateMatchingMode,
     resolutionMatchingEnabled: Boolean
 ) {
+    if (currentStreamUrl != url) return
+
     if (frameRateMatchingMode == FrameRateMatchingMode.OFF) {
-        _uiState.update {
-            it.copy(
-                detectedFrameRateRaw = 0f,
-                detectedFrameRate = 0f,
-                detectedFrameRateSource = null,
-                afrProbeRunning = false
-            )
+        if (currentStreamUrl == url) {
+            _uiState.update {
+                it.copy(
+                    detectedFrameRateRaw = 0f,
+                    detectedFrameRate = 0f,
+                    detectedFrameRateSource = null,
+                    afrProbeRunning = false
+                )
+            }
         }
         return
     }
@@ -36,6 +41,7 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
         return
     }
 
+    if (currentStreamUrl != url) return
     _uiState.update {
         it.copy(
             detectedFrameRateRaw = 0f,
@@ -83,6 +89,9 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
             return
         }
 
+        if (currentStreamUrl != url) {
+            return
+        }
         _uiState.update {
             it.copy(
                 detectedFrameRateRaw = detection.raw,
@@ -106,7 +115,7 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
             resolutionMatchingEnabled = resolutionMatchingEnabled
         )
 
-        if (result != null) {
+        if (result != null && currentStreamUrl == url) {
             _uiState.update {
                 it.copy(
                     displayModeInfo = DisplayModeInfo(
@@ -120,7 +129,26 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
         }
     } finally {
         withContext(NonCancellable) {
-            _uiState.update { it.copy(afrProbeRunning = false) }
+            if (currentStreamUrl == url) {
+                _uiState.update { it.copy(afrProbeRunning = false) }
+            }
         }
+    }
+}
+
+internal fun PlayerRuntimeController.launchStartupAfrPreflight(
+    url: String,
+    headers: Map<String, String>,
+    frameRateMatchingMode: FrameRateMatchingMode,
+    resolutionMatchingEnabled: Boolean
+) {
+    startupAfrPreflightJob?.cancel()
+    startupAfrPreflightJob = scope.launch {
+        runAfrPreflightIfEnabled(
+            url = url,
+            headers = headers,
+            frameRateMatchingMode = frameRateMatchingMode,
+            resolutionMatchingEnabled = resolutionMatchingEnabled
+        )
     }
 }
