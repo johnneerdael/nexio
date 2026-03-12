@@ -4,8 +4,8 @@ import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -367,21 +367,22 @@ fun ContentCard(
                 }
 
                 if (isBackdropExpanded) {
-                    val logoAreaGradient = remember {
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.76f)
-                            )
-                        )
-                    }
-
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
                             .height(96.dp)
-                            .background(logoAreaGradient)
+                            .drawWithCache {
+                                val gradient = Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.76f)
+                                    ),
+                                    startY = 0f,
+                                    endY = size.height
+                                )
+                                onDrawBehind { drawRect(gradient) }
+                            }
                     )
 
                     Column(

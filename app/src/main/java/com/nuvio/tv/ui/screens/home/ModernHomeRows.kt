@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -98,10 +99,13 @@ private fun ModernContinueWatchingRowItem(
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onShowOptions: (ContinueWatchingItem) -> Unit
 ) {
+    val item = payload.item
+    val onClick = remember(item) { { onContinueWatchingClick(item) } }
+    val onLongPress = remember(item) { { onShowOptions(item) } }
     ContinueWatchingCard(
-        item = payload.item,
-        onClick = { onContinueWatchingClick(payload.item) },
-        onLongPress = { onShowOptions(payload.item) },
+        item = item,
+        onClick = onClick,
+        onLongPress = onLongPress,
         cardWidth = cardWidth,
         imageHeight = imageHeight,
         modifier = Modifier
@@ -280,7 +284,8 @@ internal fun ModernRowSection(
 
         val rowListState = rowListStates.getOrPut(row.key) {
             LazyListState(
-                firstVisibleItemIndex = focusStateCatalogRowScrollStates[row.key] ?: 0
+                firstVisibleItemIndex = focusStateCatalogRowScrollStates[row.key] ?: 0,
+                prefetchStrategy = LazyListPrefetchStrategy(nestedPrefetchItemCount = 2)
             )
         }
         val isRowScrolling by remember(rowListState) {
@@ -376,23 +381,37 @@ internal fun ModernRowSection(
         val context = LocalContext.current
         val imageLoader = context.imageLoader
 
-        LaunchedEffect(row.key, row.items, modernCatalogCardWidth, modernCatalogCardHeight) {
-            val widthPx = with(density) { modernCatalogCardWidth.roundToPx() }
-            val heightPx = with(density) { modernCatalogCardHeight.roundToPx() }
-            // Prefetch initial visible + ahead items immediately when row appears
-            for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE, row.items.size)) {
-                val imageUrl = row.items.getOrNull(i)
-                    ?.takeIf { it.payload is ModernPayload.Catalog }
-                    ?.imageUrl ?: continue
-                val cacheKey = "${imageUrl}_${widthPx}x${heightPx}"
-                if (imageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) continue
+        LaunchedEffect(row.key, row.items, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
+            val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
+            val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
+            val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }
+            val cwHeightPx = with(density) { continueWatchingCardHeight.roundToPx() }
+            fun imageUrlAndKey(item: ModernCarouselItem): Pair<String, String>? {
+                val url = item.imageUrl ?: return null
+                return when (item.payload) {
+                    is ModernPayload.Catalog -> url to "${url}_${catalogWidthPx}x${catalogHeightPx}"
+                    is ModernPayload.ContinueWatching -> url to "${url}_${cwWidthPx}x${cwHeightPx}"
+                }
+            }
+            fun enqueueIfNeeded(item: ModernCarouselItem, widthPx: Int, heightPx: Int) {
+                val (url, cacheKey) = imageUrlAndKey(item) ?: return
+                if (imageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) return
                 imageLoader.enqueue(
                     ImageRequest.Builder(context)
-                        .data(imageUrl)
+                        .data(url)
                         .memoryCacheKey(cacheKey)
                         .size(width = widthPx, height = heightPx)
                         .build()
                 )
+            }
+            // Prefetch initial visible + ahead items immediately when row appears
+            for (i in 0 until minOf(POSTER_PREFETCH_DISTANCE, row.items.size)) {
+                val item = row.items.getOrNull(i) ?: continue
+                val (wPx, hPx) = when (item.payload) {
+                    is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
+                    is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
+                }
+                enqueueIfNeeded(item, wPx, hPx)
             }
             snapshotFlow {
                 rowListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -400,18 +419,12 @@ internal fun ModernRowSection(
                 .distinctUntilChanged()
                 .collect { lastVisibleIndex ->
                     for (i in (lastVisibleIndex + 1)..(lastVisibleIndex + POSTER_PREFETCH_DISTANCE)) {
-                        val imageUrl = row.items.getOrNull(i)
-                            ?.takeIf { it.payload is ModernPayload.Catalog }
-                            ?.imageUrl ?: continue
-                        val cacheKey = "${imageUrl}_${widthPx}x${heightPx}"
-                        if (imageLoader.memoryCache?.get(MemoryCache.Key(cacheKey)) != null) continue
-                        imageLoader.enqueue(
-                            ImageRequest.Builder(context)
-                                .data(imageUrl)
-                                .memoryCacheKey(cacheKey)
-                                .size(width = widthPx, height = heightPx)
-                                .build()
-                        )
+                        val item = row.items.getOrNull(i) ?: continue
+                        val (wPx, hPx) = when (item.payload) {
+                            is ModernPayload.Catalog -> catalogWidthPx to catalogHeightPx
+                            is ModernPayload.ContinueWatching -> cwWidthPx to cwHeightPx
+                        }
+                        enqueueIfNeeded(item, wPx, hPx)
                     }
                 }
         }
