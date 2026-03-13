@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
@@ -61,11 +62,10 @@ private data class ModernHeroSecondaryMeta(
 @Composable
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
-    heroBackdropAlpha: Float,
     shouldPlayHeroTrailer: Boolean,
+    heroTrailerFirstFrameRendered: Boolean,
     heroTrailerUrl: String?,
     heroTrailerAudioUrl: String?,
-    heroTrailerAlpha: Float,
     muted: Boolean,
     onTrailerEnded: () -> Unit,
     onFirstFrameRendered: () -> Unit,
@@ -73,13 +73,18 @@ internal fun ModernHeroMediaLayer(
     requestWidthPx: Int,
     requestHeightPx: Int
 ) {
+    val transitionProgressState = animateFloatAsState(
+        targetValue = if (shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 1f else 0f,
+        animationSpec = tween(durationMillis = 480),
+        label = "heroBackdropTrailerCrossfadeProgress"
+    )
     val localContext = LocalContext.current
     Box(modifier = modifier) {
         Crossfade(
             targetState = heroBackdrop,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = heroBackdropAlpha },
+                .graphicsLayer { alpha = 1f - transitionProgressState.value },
             animationSpec = tween(durationMillis = 350),
             label = "modernHeroBackground"
         ) { imageUrl ->
@@ -111,7 +116,7 @@ internal fun ModernHeroMediaLayer(
                 overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = heroTrailerAlpha }
+                    .graphicsLayer { alpha = transitionProgressState.value }
             )
         }
     }

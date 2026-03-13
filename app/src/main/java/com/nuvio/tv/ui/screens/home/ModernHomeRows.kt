@@ -52,6 +52,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
@@ -97,7 +98,8 @@ private fun ModernContinueWatchingRowItem(
     imageHeight: Dp,
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
-    onShowOptions: (ContinueWatchingItem) -> Unit
+    onShowOptions: (ContinueWatchingItem) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val item = payload.item
     val onClick = remember(item) { { onContinueWatchingClick(item) } }
@@ -120,7 +122,7 @@ private fun ModernContinueWatchingRowItem(
         onLongPress = onLongPress,
         cardWidth = cardWidth,
         imageHeight = imageHeight,
-        modifier = Modifier
+        modifier = modifier
             .focusRequester(requester)
             .onFocusChanged {
                 isCardFocused = it.isFocused
@@ -157,7 +159,8 @@ private fun ModernCatalogRowItem(
     onNavigateToDetail: (String, String, String) -> Unit,
     onLongPress: () -> Unit,
     onBackdropInteraction: () -> Unit,
-    onExpandedCatalogFocusKeyChange: (String?) -> Unit
+    onExpandedCatalogFocusKeyChange: (String?) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val focusKey = payload.focusKey
     var focusEventId by remember(focusKey) { mutableStateOf(0) }
@@ -212,6 +215,7 @@ private fun ModernCatalogRowItem(
         cardCornerRadius = posterCardCornerRadius,
         cardWidth = modernCatalogCardWidth,
         cardHeight = modernCatalogCardHeight,
+        modifier = modifier,
         focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
         isBackdropExpanded = effectiveBackdropExpanded,
         playTrailerInExpandedCard = playTrailerInExpandedCard,
@@ -283,6 +287,7 @@ internal fun ModernRowSection(
     val rowListStates = uiCaches.rowListStates
     val loadMoreRequestedTotals = uiCaches.loadMoreRequestedTotals
 
+    val rowKey = row.key
     Column {
         val titleMediumStyle = MaterialTheme.typography.titleMedium
         val rowTitleStyle = remember(titleMediumStyle) {
@@ -306,7 +311,7 @@ internal fun ModernRowSection(
                 prefetchStrategy = LazyListPrefetchStrategy(nestedPrefetchItemCount = 2)
             )
         }
-        val isRowScrolling by remember(rowListState) {
+        val isRowScrollingState = remember(rowListState) {
             derivedStateOf { rowListState.isScrollInProgress }
         }
         val currentRowState = rememberUpdatedState(row)
@@ -538,7 +543,7 @@ internal fun ModernRowSection(
                                 effectiveExpandEnabled = effectiveExpandEnabled,
                                 effectiveAutoplayEnabled = effectiveAutoplayEnabled,
                                 trailerPlaybackTarget = trailerPlaybackTarget,
-                                isBackdropExpanded = effectiveExpandEnabled && !isRowScrolling &&
+                                isBackdropExpanded = effectiveExpandEnabled && !isRowScrollingState.value &&
                                     expandedCatalogFocusKey == payload.focusKey,
                                 expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
                                 expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,
@@ -585,7 +590,8 @@ private fun ModernCarouselCard(
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     onBackdropInteraction: () -> Unit,
-    onTrailerEnded: () -> Unit
+    onTrailerEnded: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val cardShape = remember(cardCornerRadius) { RoundedCornerShape(cardCornerRadius) }
     val context = LocalContext.current
@@ -596,7 +602,7 @@ private fun ModernCarouselCard(
     } else {
         cardWidth
     }
-    val animatedCardWidth by if (focusedPosterBackdropExpandEnabled) {
+    val animatedCardWidthState = if (focusedPosterBackdropExpandEnabled) {
         animateDpAsState(
             targetValue = targetCardWidth,
             label = "modernCardWidth"
@@ -604,6 +610,7 @@ private fun ModernCarouselCard(
     } else {
         rememberUpdatedState(cardWidth)
     }
+    val animatedCardWidth by animatedCardWidthState
     val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
     } else {
@@ -658,11 +665,6 @@ private fun ModernCarouselCard(
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
-    val watchedIconEndPadding by animateDpAsState(
-        targetValue = 8.dp,
-        animationSpec = tween(durationMillis = 180),
-        label = "modernCardWatchedIconEndPadding"
-    )
     val backgroundCardColor = NuvioColors.BackgroundCard
     val focusRingColor = NuvioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
@@ -677,7 +679,7 @@ private fun ModernCarouselCard(
     }
 
     Column(
-        modifier = Modifier.width(animatedCardWidth),
+        modifier = modifier.width(animatedCardWidth),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Card(
@@ -812,7 +814,7 @@ private fun ModernCarouselCard(
                         tint = Color.White,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(end = watchedIconEndPadding, top = 8.dp)
+                            .padding(end = 8.dp, top = 8.dp)
                             .zIndex(2f)
                             .size(21.dp)
                             .drawBehind {

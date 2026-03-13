@@ -8,7 +8,6 @@ package com.nuvio.tv.ui.screens.home
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -99,6 +98,7 @@ import com.nuvio.tv.ui.components.ContinueWatchingOptionsDialog
 import com.nuvio.tv.ui.components.MonochromePosterPlaceholder
 import com.nuvio.tv.ui.components.TrailerPlayer
 import com.nuvio.tv.LocalSidebarExpanded
+import com.nuvio.tv.LocalContentFocusRequester
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlinx.coroutines.delay
 import android.view.KeyEvent as AndroidKeyEvent
@@ -351,13 +351,13 @@ fun ModernHomeContent(
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var pendingRowFocusNonce by remember { mutableIntStateOf(0) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
-    var heroTransitioning by remember { mutableStateOf(false) }
+    val heroTransitioningRef = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
-    var lastFocusedContinueWatchingIndex by remember { mutableStateOf(-1) }
-    var lastKeyRepeatTime by remember { mutableStateOf(0L) }
-    var lastHeroNavigationAtMs by remember { mutableStateOf(0L) }
-    var heroFocusSettleDelayMs by remember { mutableStateOf(MODERN_HERO_FOCUS_DEBOUNCE_MS) }
+    val lastFocusedContinueWatchingIndexRef = remember { java.util.concurrent.atomic.AtomicInteger(-1) }
+    val lastKeyRepeatTimeRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+    val lastHeroNavigationAtMsRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+    val heroFocusSettleDelayMsRef = remember { java.util.concurrent.atomic.AtomicLong(MODERN_HERO_FOCUS_DEBOUNCE_MS) }
     var focusedCatalogSelection by remember { mutableStateOf<FocusedCatalogSelection?>(null) }
     var lastRequestedTrailerFocusKey by remember { mutableStateOf<String?>(null) }
     var expandedCatalogFocusKey by remember { mutableStateOf<String?>(null) }
@@ -468,7 +468,7 @@ fun ModernHomeContent(
         focusedItemByRow[resolvedActive.key] = resolvedIndex
         heroItem = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
             ?: resolvedActive.items.firstOrNull()?.heroPreview
-        if (!focusState.hasSavedFocus && !hadActiveRow) {
+        if (!focusState.hasSavedFocus && (!hadActiveRow || existingActive == null)) {
             pendingRowFocusKey = resolvedActive.key
             pendingRowFocusIndex = resolvedIndex
             pendingRowFocusNonce++
@@ -526,21 +526,21 @@ fun ModernHomeContent(
     LaunchedEffect(activeHeroItemKey, isVerticalRowsScrolling) {
         if (isVerticalRowsScrolling) return@LaunchedEffect
         val targetHeroKey = activeHeroItemKey ?: return@LaunchedEffect
-        heroTransitioning = true
-        val settleDelayMs = heroFocusSettleDelayMs
+        heroTransitioningRef.set(true)
+        val settleDelayMs = heroFocusSettleDelayMsRef.get()
         delay(settleDelayMs)
         if (isVerticalRowsScrolling) {
-            heroTransitioning = false
+            heroTransitioningRef.set(false)
             return@LaunchedEffect
         }
-        if (System.currentTimeMillis() - lastHeroNavigationAtMs < settleDelayMs) {
-            heroTransitioning = false
+        if (System.currentTimeMillis() - lastHeroNavigationAtMsRef.get() < settleDelayMs) {
+            heroTransitioningRef.set(false)
             return@LaunchedEffect
         }
-        val row = latestHeroRow ?: run { heroTransitioning = false; return@LaunchedEffect }
+        val row = latestHeroRow ?: run { heroTransitioningRef.set(false); return@LaunchedEffect }
         val latestKey = row.items.getOrNull(latestHeroIndex)?.key ?: row.items.firstOrNull()?.key
         if (latestKey != targetHeroKey) {
-            heroTransitioning = false
+            heroTransitioningRef.set(false)
             return@LaunchedEffect
         }
         val latestHero =
@@ -548,7 +548,7 @@ fun ModernHomeContent(
         if (latestHero != null && heroItem != latestHero) {
             heroItem = latestHero
         }
-        heroTransitioning = false
+        heroTransitioningRef.set(false)
     }
     val latestActiveRow by rememberUpdatedState(activeRow)
     val latestActiveItemIndex by rememberUpdatedState(clampedActiveItemIndex)
@@ -600,8 +600,8 @@ fun ModernHomeContent(
         }
         val activeItemId = activeCarouselItem?.metaPreview?.id
         val enrichmentActive = enrichingItemId != null
-        val resolvedHero = activeCarouselItem?.heroPreview
-            ?: heroItem
+        val resolvedHero = heroItem
+            ?: activeCarouselItem?.heroPreview
             ?: activeRow?.items?.firstOrNull()?.heroPreview
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items?.size) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
@@ -646,13 +646,6 @@ fun ModernHomeContent(
                 heroTrailerFirstFrameRendered = false
             }
         }
-        val heroTransitionProgress by animateFloatAsState(
-            targetValue = if (shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 1f else 0f,
-            animationSpec = tween(durationMillis = 480),
-            label = "heroBackdropTrailerCrossfadeProgress"
-        )
-        val heroBackdropAlpha = 1f - heroTransitionProgress
-        val heroTrailerAlpha = heroTransitionProgress
         val catalogBottomPadding = 0.dp
         val heroToCatalogGap = 16.dp
         val rowTitleBottom = 14.dp
@@ -681,6 +674,7 @@ fun ModernHomeContent(
             }
         }
         val bgColor = NuvioColors.Background
+        val contentFocusRequester = LocalContentFocusRequester.current
         val heroMediaWidthPx = remember(maxWidth, localDensity) {
             with(localDensity) { (maxWidth * MODERN_HERO_MEDIA_WIDTH_FRACTION).roundToPx() }
         }
@@ -698,11 +692,10 @@ fun ModernHomeContent(
 
         ModernHeroMediaLayer(
             heroBackdrop = heroBackdrop,
-            heroBackdropAlpha = heroBackdropAlpha,
             shouldPlayHeroTrailer = shouldPlayHeroTrailer,
+            heroTrailerFirstFrameRendered = heroTrailerFirstFrameRendered,
             heroTrailerUrl = heroTrailerUrl,
             heroTrailerAudioUrl = heroTrailerAudioUrl,
-            heroTrailerAlpha = heroTrailerAlpha,
             muted = uiState.focusedPosterBackdropTrailerMuted,
             onTrailerEnded = { expandedCatalogFocusKey = null },
             onFirstFrameRendered = { heroTrailerFirstFrameRendered = true },
@@ -736,13 +729,15 @@ fun ModernHomeContent(
                     .fillMaxWidth()
                     .height(rowsViewportHeight)
                     .padding(bottom = catalogBottomPadding)
+                    .focusRequester(contentFocusRequester)
                     .focusRestorer(
                         run {
                             val rowKey = activeRowKey
-                            val itemIndex = activeItemIndex
                             if (rowKey != null) {
                                 val row = carouselRows.firstOrNull { it.key == rowKey }
-                                val safeIndex = itemIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
+                                val rowListState = uiCaches.rowListStates[rowKey]
+                                val firstVisibleIndex = rowListState?.firstVisibleItemIndex ?: 0
+                                val safeIndex = firstVisibleIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
                                 val itemKey = row?.items?.getOrNull(safeIndex)?.key
                                 if (itemKey != null) {
                                     uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
@@ -754,10 +749,10 @@ fun ModernHomeContent(
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
                             val now = System.currentTimeMillis()
-                            if (now - lastKeyRepeatTime < KEY_REPEAT_THROTTLE_MS) {
+                            if (now - lastKeyRepeatTimeRef.get() < KEY_REPEAT_THROTTLE_MS) {
                                 return@onPreviewKeyEvent true
                             }
-                            lastKeyRepeatTime = now
+                            lastKeyRepeatTimeRef.set(now)
                         }
                         false
                     },
@@ -769,6 +764,43 @@ fun ModernHomeContent(
                     key = { _, row -> row.key },
                     contentType = { _, _ -> "modern_home_row" }
                 ) { _, row ->
+                    val stableOnContinueWatchingOptions = remember(Unit) {
+                        { item: ContinueWatchingItem -> optionsItem = item }
+                    }
+                    val stableOnRowItemFocused = remember(Unit) {
+                        { rowKey: String, index: Int, isContinueWatchingRow: Boolean ->
+                            val rowBecameActive = activeRowKey != rowKey
+                            val itemChanged = activeItemIndex != index
+                            if (rowBecameActive || itemChanged) {
+                                val now = System.currentTimeMillis()
+                                val timeSinceLastHeroNav = now - lastHeroNavigationAtMsRef.get()
+                                heroFocusSettleDelayMsRef.set(
+                                    if (lastHeroNavigationAtMsRef.get() != 0L &&
+                                        timeSinceLastHeroNav in 1 until MODERN_HERO_RAPID_NAV_THRESHOLD_MS
+                                    ) MODERN_HERO_RAPID_NAV_SETTLE_MS
+                                    else MODERN_HERO_FOCUS_DEBOUNCE_MS
+                                )
+                                lastHeroNavigationAtMsRef.set(now)
+                            }
+                            if (focusedItemByRow[rowKey] != index) {
+                                focusedItemByRow[rowKey] = index
+                            }
+                            if (rowBecameActive) {
+                                activeRowKey = rowKey
+                            }
+                            if (rowBecameActive || itemChanged) {
+                                activeItemIndex = index
+                            }
+                            if (isContinueWatchingRow) {
+                                if (lastFocusedContinueWatchingIndexRef.get() != index) {
+                                    lastFocusedContinueWatchingIndexRef.set(index)
+                                }
+                                if (focusedCatalogSelection != null) {
+                                    focusedCatalogSelection = null
+                                }
+                            }
+                        }
+                    }
                     ModernRowSection(
                         row = row,
                         rowTitleBottom = rowTitleBottom,
@@ -784,40 +816,7 @@ fun ModernHomeContent(
                                 pendingRowFocusIndex = null
                             }
                         },
-                        onRowItemFocused = { rowKey, index, isContinueWatchingRow ->
-                            val rowBecameActive = activeRowKey != rowKey
-                            val itemChanged = activeItemIndex != index
-                            if (rowBecameActive || itemChanged) {
-                                val now = System.currentTimeMillis()
-                                val timeSinceLastHeroNav = now - lastHeroNavigationAtMs
-                                heroFocusSettleDelayMs = if (
-                                    lastHeroNavigationAtMs != 0L &&
-                                    timeSinceLastHeroNav in 1 until MODERN_HERO_RAPID_NAV_THRESHOLD_MS
-                                ) {
-                                    MODERN_HERO_RAPID_NAV_SETTLE_MS
-                                } else {
-                                    MODERN_HERO_FOCUS_DEBOUNCE_MS
-                                }
-                                lastHeroNavigationAtMs = now
-                            }
-                            if (focusedItemByRow[rowKey] != index) {
-                                focusedItemByRow[rowKey] = index
-                            }
-                            if (rowBecameActive) {
-                                activeRowKey = rowKey
-                            }
-                            if (rowBecameActive || itemChanged) {
-                                activeItemIndex = index
-                            }
-                            if (isContinueWatchingRow) {
-                                if (lastFocusedContinueWatchingIndex != index) {
-                                    lastFocusedContinueWatchingIndex = index
-                                }
-                                if (focusedCatalogSelection != null) {
-                                    focusedCatalogSelection = null
-                                }
-                            }
-                        },
+                        onRowItemFocused = stableOnRowItemFocused,
                         useLandscapePosters = useLandscapePosters,
                         showLabels = uiState.posterLabelsEnabled,
                         posterCardCornerRadius = posterCardCornerRadius,
@@ -833,7 +832,7 @@ fun ModernHomeContent(
                         continueWatchingCardWidth = continueWatchingCardWidth,
                         continueWatchingCardHeight = continueWatchingCardHeight,
                         onContinueWatchingClick = onContinueWatchingClick,
-                        onContinueWatchingOptions = { optionsItem = it },
+                        onContinueWatchingOptions = stableOnContinueWatchingOptions,
                         isCatalogItemWatched = isCatalogItemWatched,
                         onCatalogItemLongPress = onCatalogItemLongPress,
                         onItemFocus = onItemFocus,
@@ -864,7 +863,7 @@ fun ModernHomeContent(
                 val targetIndex = if (uiState.continueWatchingItems.size <= 1) {
                     null
                 } else {
-                    minOf(lastFocusedContinueWatchingIndex, uiState.continueWatchingItems.size - 2)
+                    minOf(lastFocusedContinueWatchingIndexRef.get(), uiState.continueWatchingItems.size - 2)
                         .coerceAtLeast(0)
                 }
                 pendingRowFocusKey = if (targetIndex != null) "continue_watching" else null
