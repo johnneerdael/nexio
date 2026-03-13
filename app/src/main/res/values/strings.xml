@@ -7,6 +7,8 @@
     <!-- HomeScreen -->
     <string name="home_no_addons">No addons installed. Add one to get started.</string>
     <string name="home_no_catalog_addons">No catalog addons installed. Install a catalog addon to see content.</string>
+    <string name="auth_notice_nuvio_logged_out">You have been signed out of Nuvio. Please sign in again.</string>
+    <string name="auth_notice_trakt_logged_out">You have been signed out of Trakt. Please reconnect.</string>
     <string name="error_generic">An error occurred</string>
 
     <!-- ErrorState -->
@@ -641,6 +643,9 @@
     <string name="addon_install_placeholder">https://example.com</string>
     <string name="addon_installing">Installing</string>
     <string name="addon_install_btn">Install</string>
+    <string name="addon_install_success">Installed %1$s</string>
+    <string name="addon_error_invalid_url">Enter a valid addon URL</string>
+    <string name="addon_error_invalid_scheme">Addon URL must start with http or https</string>
     <string name="addon_installed_section">Installed</string>
     <string name="addon_empty">No addons installed. Add one to get started.</string>
     <string name="addon_remove">Remove</string>
