@@ -420,7 +420,6 @@ fun ContentCard(
                             .padding(end = 8.dp, top = 8.dp)
                             .zIndex(2f)
                             .size(21.dp)
-                            .graphicsLayer { translationX = -with(density) { (watchedIconEndPaddingState.value - 8.dp).toPx() } }
                             .drawBehind {
                                 drawCircle(
                                     color = androidx.compose.ui.graphics.Color.Black,
