@@ -85,7 +85,10 @@ internal fun ModernHeroMediaLayer(
             targetState = heroBackdrop,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = 1f - transitionProgressState.value },
+                .graphicsLayer {
+                    alpha = 1f - transitionProgressState.value
+                    compositingStrategy = CompositingStrategy.Offscreen
+                },
             animationSpec = tween(durationMillis = 200),
             label = "modernHeroBackground"
         ) { imageUrl ->
@@ -117,7 +120,10 @@ internal fun ModernHeroMediaLayer(
                 overscanZoom = MODERN_TRAILER_OVERSCAN_ZOOM,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = transitionProgressState.value }
+                    .graphicsLayer {
+                    alpha = transitionProgressState.value
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
             )
         }
     }
