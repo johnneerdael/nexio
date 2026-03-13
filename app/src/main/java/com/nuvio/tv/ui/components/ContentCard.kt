@@ -101,11 +101,7 @@ fun ContentCard(
     var interactionNonce by remember { mutableIntStateOf(0) }
     var isBackdropExpanded by remember { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
-    val watchedIconEndPadding by animateDpAsState(
-        targetValue = if (isFocused) 18.dp else 8.dp,
-        animationSpec = tween(durationMillis = 180),
-        label = "contentCardWatchedIconEndPadding"
-    )
+
 
     val needsFocusState = focusedPosterBackdropExpandEnabled || focusedPosterBackdropTrailerEnabled
     val lastFocusedRef = remember { booleanArrayOf(false) }
@@ -421,9 +417,10 @@ fun ContentCard(
                         tint = Color.White,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(end = watchedIconEndPadding, top = 8.dp)
+                            .padding(end = 8.dp, top = 8.dp)
                             .zIndex(2f)
                             .size(21.dp)
+                            .graphicsLayer { translationX = -with(density) { (watchedIconEndPaddingState.value - 8.dp).toPx() } }
                             .drawBehind {
                                 drawCircle(
                                     color = androidx.compose.ui.graphics.Color.Black,

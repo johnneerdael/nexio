@@ -1,7 +1,6 @@
 package com.nuvio.tv.ui.components
 
 import android.view.KeyEvent as AndroidKeyEvent
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -69,11 +68,7 @@ fun GridContentCard(
     val requestHeightPx = remember(density, posterCardStyle.height) { with(density) { posterCardStyle.height.roundToPx() } }
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
-    val watchedIconEndPadding by animateDpAsState(
-        targetValue = if (isFocused) 14.dp else 8.dp,
-        animationSpec = tween(durationMillis = 180),
-        label = "gridContentCardWatchedIconEndPadding"
-    )
+
 
     Column(
         modifier = modifier.width(posterCardStyle.width)
@@ -173,7 +168,7 @@ fun GridContentCard(
                         tint = Color.White,
                         modifier = Modifier
                             .align(androidx.compose.ui.Alignment.TopEnd)
-                            .padding(end = watchedIconEndPadding, top = 8.dp)
+                            .padding(end = 8.dp, top = 8.dp)
                             .zIndex(2f)
                             .size(21.dp)
                             .drawBehind {
