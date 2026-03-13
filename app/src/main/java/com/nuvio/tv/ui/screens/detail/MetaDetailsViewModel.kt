@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -307,10 +308,15 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
         viewModelScope.launch {
-            watchProgressRepository.isWatched(itemId)
+            _uiState.map { it.meta?.imdbId?.takeIf { id -> id != itemId && id.isNotBlank() } }
+                .distinctUntilChanged()
+                .flatMapLatest { videoId ->
+                    watchProgressRepository.isWatched(itemId, videoId = videoId)
+                }
                 .distinctUntilChanged()
                 .collectLatest { watched ->
                 _uiState.update { state ->
@@ -1141,7 +1147,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { it.copy(isMovieWatchedPending = true) }
             runCatching {
                 if (_uiState.value.isMovieWatched) {
-                    watchProgressRepository.removeFromHistory(itemId)
+                    watchProgressRepository.removeFromHistory(itemId, videoId = resolveFallbackVideoId())
                     showMessage(context.getString(R.string.detail_movie_marked_unwatched))
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta))
@@ -1173,7 +1179,7 @@ class MetaDetailsViewModel @Inject constructor(
                 || _uiState.value.watchedEpisodes.contains(season to episode)
             runCatching {
                 if (isWatched) {
-                    watchProgressRepository.removeFromHistory(itemId, season, episode)
+                    watchProgressRepository.removeFromHistory(itemId, videoId = resolveFallbackVideoId(), season = season, episode = episode)
                     showMessage(context.getString(R.string.detail_episode_marked_unwatched))
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
@@ -1268,7 +1274,7 @@ class MetaDetailsViewModel @Inject constructor(
             for (video in watched) {
                 val key = episodePendingKey(video)
                 runCatching {
-                    watchProgressRepository.removeFromHistory(itemId, video.season!!, video.episode!!)
+                    watchProgressRepository.removeFromHistory(itemId, videoId = resolveFallbackVideoId(), season = video.season!!, episode = video.episode!!)
                     unmarked++
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to unmark S${video.season}E${video.episode}: ${error.message}")
@@ -1324,6 +1330,11 @@ class MetaDetailsViewModel @Inject constructor(
 
             showMessage(context.getString(R.string.detail_marked_previous_watched, marked))
         }
+    }
+
+    private fun resolveFallbackVideoId(): String? {
+        val meta = _uiState.value.meta ?: return null
+        return meta.imdbId?.takeIf { it != itemId && it.isNotBlank() }
     }
 
     private fun buildCompletedMovieProgress(meta: Meta): WatchProgress {

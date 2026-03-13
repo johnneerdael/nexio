@@ -349,7 +349,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
     }
 
-    override fun isWatched(contentId: String, season: Int?, episode: Int?): Flow<Boolean> {
+    override fun isWatched(contentId: String, videoId: String?, season: Int?, episode: Int?): Flow<Boolean> {
         return useTraktProgressFlow()
             .flatMapLatest { useTraktProgress ->
                 if (!useTraktProgress) {
@@ -382,7 +382,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         }
                         .distinctUntilChanged()
                 } else {
-                    traktProgressService.observeMovieWatched(contentId)
+                    traktProgressService.observeMovieWatched(contentId, videoId)
                 }
             }
     }
@@ -444,10 +444,10 @@ class WatchProgressRepositoryImpl @Inject constructor(
         triggerRemoteSync()
     }
 
-    override suspend fun removeFromHistory(contentId: String, season: Int?, episode: Int?) {
+    override suspend fun removeFromHistory(contentId: String, videoId: String?, season: Int?, episode: Int?) {
         val useTraktProgress = shouldUseTraktProgress()
         if (hasEffectiveTraktConnection()) {
-            traktProgressService.removeFromHistory(contentId, season, episode)
+            traktProgressService.removeFromHistory(contentId, videoId, season, episode)
         }
         watchProgressPreferences.removeProgress(contentId, season, episode)
         watchedItemsPreferences.unmarkAsWatched(contentId, season, episode)
