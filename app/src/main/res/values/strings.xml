@@ -598,6 +598,12 @@
     <string name="debug_error_dialog_title">Playback Error</string>
     <string name="debug_error_dialog_subtitle">An error occurred during playback.\n\nError: Test simulated error - this is not a real failure. Source returned HTTP 503 (Service Unavailable).</string>
     <string name="debug_dismiss">Dismiss</string>
+    <string name="debug_section_library">Library</string>
+    <string name="debug_generate_library_title">Generate Library Items</string>
+    <string name="debug_generate_library_subtitle">Add random movies/shows to the library for testing</string>
+    <string name="debug_generate_library_placeholder">Number of items</string>
+    <string name="debug_generate_library_button">Generate</string>
+    <string name="debug_generating_library">Generating\u2026</string>
 
     <!-- ProfileSettingsContent -->
     <string name="profile_title">Profiles</string>
