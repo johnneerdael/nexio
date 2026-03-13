@@ -29,8 +29,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -359,7 +357,6 @@ fun ContinueWatchingCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(imageHeight)
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .clip(CwClipShape)
             ) {
                 // Background image with size hints for efficient decoding

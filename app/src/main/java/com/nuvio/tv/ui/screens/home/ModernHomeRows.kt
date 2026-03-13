@@ -314,6 +314,7 @@ internal fun ModernRowSection(
         val isRowScrollingState = remember(rowListState) {
             derivedStateOf { rowListState.isScrollInProgress }
         }
+        val isRowScrolling by isRowScrollingState
         val currentRowState = rememberUpdatedState(row)
         val loadMoreCatalogId = row.catalogId
         val loadMoreAddonId = row.addonId
@@ -523,7 +524,7 @@ internal fun ModernRowSection(
                         is ModernPayload.Catalog -> {
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
                             val metaPreview = item.metaPreview ?: return@itemsIndexed
-                            val isWatched = isCatalogItemWatched(metaPreview)
+                            val isWatched = remember(metaPreview) { isCatalogItemWatched(metaPreview) }
                             val onLongPress: () -> Unit = remember(metaPreview, payload.addonBaseUrl) {
                                 {
                                     onCatalogItemLongPress(metaPreview, payload.addonBaseUrl)
@@ -543,7 +544,7 @@ internal fun ModernRowSection(
                                 effectiveExpandEnabled = effectiveExpandEnabled,
                                 effectiveAutoplayEnabled = effectiveAutoplayEnabled,
                                 trailerPlaybackTarget = trailerPlaybackTarget,
-                                isBackdropExpanded = effectiveExpandEnabled && !isRowScrollingState.value &&
+                                isBackdropExpanded = effectiveExpandEnabled && !isRowScrolling &&
                                     expandedCatalogFocusKey == payload.focusKey,
                                 expandedTrailerPreviewUrl = expandedTrailerPreviewUrl,
                                 expandedTrailerPreviewAudioUrl = expandedTrailerPreviewAudioUrl,

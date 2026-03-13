@@ -345,6 +345,13 @@ fun ModernHomeContent(
     val itemFocusRequesters = uiCaches.itemFocusRequesters
     val rowListStates = uiCaches.rowListStates
     val loadMoreRequestedTotals = uiCaches.loadMoreRequestedTotals
+    // Holder for hot-path focus tracking — lambdas read through reference, no stale closure
+    val focusHolder = remember {
+        object {
+            var activeRowKey: String? = null
+            var activeItemIndex: Int = 0
+        }
+    }
     var activeRowKey by remember { mutableStateOf<String?>(null) }
     var activeItemIndex by remember { mutableIntStateOf(0) }
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
@@ -445,6 +452,8 @@ fun ModernHomeContent(
                 .coerceAtLeast(0)
                 .coerceAtMost((resolvedRow.items.size - 1).coerceAtLeast(0))
 
+            focusHolder.activeRowKey = resolvedRow.key
+            focusHolder.activeItemIndex = resolvedIndex
             activeRowKey = resolvedRow.key
             activeItemIndex = resolvedIndex
             focusedItemByRow[resolvedRow.key] = resolvedIndex
@@ -457,13 +466,15 @@ fun ModernHomeContent(
             return@LaunchedEffect
         }
 
-        val hadActiveRow = activeRowKey != null
-        val existingActive = activeRowKey?.let { key -> carouselRows.firstOrNull { it.key == key } }
+        val hadActiveRow = focusHolder.activeRowKey != null
+        val existingActive = focusHolder.activeRowKey?.let { key -> carouselRows.firstOrNull { it.key == key } }
         val resolvedActive = existingActive ?: carouselRows.first()
-        activeRowKey = resolvedActive.key
         val resolvedIndex = focusedItemByRow[resolvedActive.key]
             ?.coerceIn(0, (resolvedActive.items.size - 1).coerceAtLeast(0))
             ?: 0
+        focusHolder.activeRowKey = resolvedActive.key
+        focusHolder.activeItemIndex = resolvedIndex
+        activeRowKey = resolvedActive.key
         activeItemIndex = resolvedIndex
         focusedItemByRow[resolvedActive.key] = resolvedIndex
         heroItem = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
@@ -508,8 +519,9 @@ fun ModernHomeContent(
 
     LaunchedEffect(activeRow?.key, activeRow?.items?.size) {
         val row = activeRow ?: return@LaunchedEffect
-        val clampedIndex = activeItemIndex.coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-        if (activeItemIndex != clampedIndex) {
+        val clampedIndex = focusHolder.activeItemIndex.coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
+        if (focusHolder.activeItemIndex != clampedIndex) {
+            focusHolder.activeItemIndex = clampedIndex
             activeItemIndex = clampedIndex
         }
         focusedItemByRow[row.key] = clampedIndex
@@ -675,6 +687,21 @@ fun ModernHomeContent(
         }
         val bgColor = NuvioColors.Background
         val contentFocusRequester = LocalContentFocusRequester.current
+        val focusRestorerRequester by remember(carouselRows, uiCaches) {
+            derivedStateOf {
+                val rowKey = activeRowKey
+                if (rowKey != null) {
+                    val row = carouselRows.firstOrNull { it.key == rowKey }
+                    val rowListState = uiCaches.rowListStates[rowKey]
+                    val firstVisibleIndex = rowListState?.firstVisibleItemIndex ?: 0
+                    val safeIndex = firstVisibleIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
+                    val itemKey = row?.items?.getOrNull(safeIndex)?.key
+                    if (itemKey != null) {
+                        uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
+                    } else FocusRequester.Default
+                } else FocusRequester.Default
+            }
+        }
         val heroMediaWidthPx = remember(maxWidth, localDensity) {
             with(localDensity) { (maxWidth * MODERN_HERO_MEDIA_WIDTH_FRACTION).roundToPx() }
         }
@@ -730,21 +757,7 @@ fun ModernHomeContent(
                     .height(rowsViewportHeight)
                     .padding(bottom = catalogBottomPadding)
                     .focusRequester(contentFocusRequester)
-                    .focusRestorer(
-                        run {
-                            val rowKey = activeRowKey
-                            if (rowKey != null) {
-                                val row = carouselRows.firstOrNull { it.key == rowKey }
-                                val rowListState = uiCaches.rowListStates[rowKey]
-                                val firstVisibleIndex = rowListState?.firstVisibleItemIndex ?: 0
-                                val safeIndex = firstVisibleIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
-                                val itemKey = row?.items?.getOrNull(safeIndex)?.key
-                                if (itemKey != null) {
-                                    uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
-                                } else FocusRequester.Default
-                            } else FocusRequester.Default
-                        }
-                    )
+                    .focusRestorer { focusRestorerRequester }
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
@@ -769,8 +782,8 @@ fun ModernHomeContent(
                     }
                     val stableOnRowItemFocused = remember(Unit) {
                         { rowKey: String, index: Int, isContinueWatchingRow: Boolean ->
-                            val rowBecameActive = activeRowKey != rowKey
-                            val itemChanged = activeItemIndex != index
+                            val rowBecameActive = focusHolder.activeRowKey != rowKey
+                            val itemChanged = focusHolder.activeItemIndex != index
                             if (rowBecameActive || itemChanged) {
                                 val now = System.currentTimeMillis()
                                 val timeSinceLastHeroNav = now - lastHeroNavigationAtMsRef.get()
@@ -781,15 +794,13 @@ fun ModernHomeContent(
                                     else MODERN_HERO_FOCUS_DEBOUNCE_MS
                                 )
                                 lastHeroNavigationAtMsRef.set(now)
+                                focusHolder.activeRowKey = rowKey
+                                focusHolder.activeItemIndex = index
+                                activeRowKey = rowKey
+                                activeItemIndex = index
                             }
                             if (focusedItemByRow[rowKey] != index) {
                                 focusedItemByRow[rowKey] = index
-                            }
-                            if (rowBecameActive) {
-                                activeRowKey = rowKey
-                            }
-                            if (rowBecameActive || itemChanged) {
-                                activeItemIndex = index
                             }
                             if (isContinueWatchingRow) {
                                 if (lastFocusedContinueWatchingIndexRef.get() != index) {

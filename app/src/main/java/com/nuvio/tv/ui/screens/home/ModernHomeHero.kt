@@ -85,7 +85,7 @@ internal fun ModernHeroMediaLayer(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = 1f - transitionProgressState.value },
-            animationSpec = tween(durationMillis = 350),
+            animationSpec = tween(durationMillis = 200),
             label = "modernHeroBackground"
         ) { imageUrl ->
             val imageModel = remember(localContext, imageUrl, requestWidthPx, requestHeightPx) {
@@ -192,7 +192,7 @@ internal fun HeroTitleBlock(
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val fadeDuration = 220
+    val fadeDuration = 120
     AnimatedContent(
         targetState = preview,
         transitionSpec = { fadeIn(tween(fadeDuration)) togetherWith fadeOut(tween(fadeDuration)) using null },

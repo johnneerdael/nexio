@@ -301,7 +301,6 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     }
 
     val willEnrich = currentTmdbSettings.enabled || externalMetaPrefetchEnabled
-    if (willEnrich) setEnrichingItemId(item.id)
 
     pendingTmdbEnrichItemId = item.id
     tmdbEnrichFocusJob?.cancel()
@@ -315,6 +314,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             if (_enrichingItemId.value == item.id) setEnrichingItemId(null)
             return@launch
         }
+        if (willEnrich) setEnrichingItemId(item.id)
 
         try {
             var tmdbEnriched = false
