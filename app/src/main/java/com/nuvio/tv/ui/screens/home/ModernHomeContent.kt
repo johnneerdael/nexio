@@ -631,11 +631,15 @@ fun ModernHomeContent(
         val expandedFocusedSelection = remember(focusedCatalogSelection, expandedCatalogFocusKey) {
             focusedCatalogSelection?.takeIf { it.focusKey == expandedCatalogFocusKey }
         }
-        val heroTrailerUrl = remember(expandedFocusedSelection, trailerPreviewUrls) {
-            expandedFocusedSelection?.payload?.itemId?.let { trailerPreviewUrls[it] }
+        val heroTrailerUrl by remember(expandedFocusedSelection) {
+            derivedStateOf {
+                expandedFocusedSelection?.payload?.itemId?.let { trailerPreviewUrls[it] }
+            }
         }
-        val heroTrailerAudioUrl = remember(expandedFocusedSelection, trailerPreviewAudioUrls) {
-            expandedFocusedSelection?.payload?.itemId?.let { trailerPreviewAudioUrls[it] }
+        val heroTrailerAudioUrl by remember(expandedFocusedSelection) {
+            derivedStateOf {
+                expandedFocusedSelection?.payload?.itemId?.let { trailerPreviewAudioUrls[it] }
+            }
         }
         val expandedCatalogTrailerUrl = heroTrailerUrl
         val expandedCatalogTrailerAudioUrl = heroTrailerAudioUrl
