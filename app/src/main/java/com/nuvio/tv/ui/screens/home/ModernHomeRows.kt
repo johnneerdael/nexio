@@ -552,8 +552,8 @@ internal fun ModernRowSection(
                                 isWatched = isWatched,
                                 onFocused = onFocused,
                                 onItemFocus = onItemFocus,
-                                onPreloadAdjacentItem = {
-                                    nextCatalogItem?.let(onPreloadAdjacentItem)
+                                onPreloadAdjacentItem = remember(nextCatalogItem, onPreloadAdjacentItem) {
+                                     { nextCatalogItem?.let(onPreloadAdjacentItem) }
                                 },
                                 onCatalogSelectionFocused = onCatalogSelectionFocused,
                                 onNavigateToDetail = onNavigateToDetail,
