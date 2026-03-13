@@ -611,10 +611,10 @@ fun ModernHomeContent(
             activeRow?.items?.getOrNull(clampedActiveItemIndex)
         }
         val activeItemId = activeCarouselItem?.metaPreview?.id
-        val enrichmentActive = enrichingItemId != null
-        val resolvedHero = heroItem
-            ?: activeCarouselItem?.heroPreview
-            ?: activeRow?.items?.firstOrNull()?.heroPreview
+        val enrichmentActive = enrichingItemId != null && enrichingItemId == activeItemId
+        // When enrichment is active use heroItem (frozen), when done use activeCarouselItem
+        // which already has the enriched data from uiState update
+        val resolvedHero = if (enrichmentActive) heroItem else activeCarouselItem?.heroPreview ?: heroItem
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items?.size) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
@@ -723,6 +723,7 @@ fun ModernHomeContent(
 
         ModernHeroMediaLayer(
             heroBackdrop = heroBackdrop,
+            enrichmentActive = enrichmentActive,
             shouldPlayHeroTrailer = shouldPlayHeroTrailer,
             heroTrailerFirstFrameRendered = heroTrailerFirstFrameRendered,
             heroTrailerUrl = heroTrailerUrl,
@@ -820,7 +821,9 @@ fun ModernHomeContent(
                         row = row,
                         rowTitleBottom = rowTitleBottom,
                         defaultBringIntoViewSpec = defaultBringIntoViewSpec,
-                        focusStateCatalogRowScrollStates = focusState.catalogRowScrollStates,
+                        focusStateCatalogRowScrollIndex = remember(focusState.catalogRowScrollStates, row.key) {
+                            focusState.catalogRowScrollStates[row.key] ?: 0
+                        },
                         uiCaches = uiCaches,
                         pendingRowFocusKey = pendingRowFocusKey,
                         pendingRowFocusIndex = pendingRowFocusIndex,

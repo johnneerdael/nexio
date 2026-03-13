@@ -33,6 +33,8 @@ import androidx.media3.exoplayer.source.MergingMediaSource
 import com.nuvio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import android.view.LayoutInflater
+import com.nuvio.tv.R
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 
@@ -222,17 +224,14 @@ fun TrailerPlayer(
         ) {
             AndroidView(
                 factory = { ctx ->
-                    PlayerView(ctx).apply {
+                    (LayoutInflater.from(ctx).inflate(R.layout.trailer_player_view, null) as PlayerView).apply {
                         player = trailerPlayer
-                        useController = false
                         isFocusable = true
                         isFocusableInTouchMode = true
                         setOnKeyListener { _, keyCode, event ->
                             currentOnRemoteKey(keyCode, event.action, event.repeatCount)
                         }
                         keepScreenOn = true
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                         resizeMode = if (cropToFill) {
                             AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                         } else {

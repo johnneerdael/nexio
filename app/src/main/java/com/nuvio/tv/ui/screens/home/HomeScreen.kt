@@ -427,8 +427,8 @@ private fun ModernHomeRoute(
         onRemoveContinueWatching = removeContinueWatching,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
-        onItemFocus = { item ->
-            viewModel.onItemFocus(item)
+        onItemFocus = remember(viewModel) {
+            { item -> viewModel.onItemFocus(item) }
         },
         onPreloadAdjacentItem = preloadAdjacentItem,
         onSaveFocusState = saveModernFocusState

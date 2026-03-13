@@ -1,12 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -63,6 +58,7 @@ private data class ModernHeroSecondaryMeta(
 @Composable
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
+    enrichmentActive: Boolean,
     shouldPlayHeroTrailer: Boolean,
     heroTrailerFirstFrameRendered: Boolean,
     heroTrailerUrl: String?,
@@ -80,33 +76,33 @@ internal fun ModernHeroMediaLayer(
         label = "heroBackdropTrailerCrossfadeProgress"
     )
     val localContext = LocalContext.current
+
+    // Freeze the backdrop URL while enrichment is active — only update when enrichment ends
+    // so Coil crossfade starts with the final URL, not an intermediate one.
+    var stableBackdrop by remember { mutableStateOf(heroBackdrop) }
+    if (!enrichmentActive) stableBackdrop = heroBackdrop
+
+    val imageModel = remember(localContext, stableBackdrop, requestWidthPx, requestHeightPx) {
+        ImageRequest.Builder(localContext)
+            .data(stableBackdrop)
+            .crossfade(400)
+            .size(width = requestWidthPx, height = requestHeightPx)
+            .build()
+    }
+
     Box(modifier = modifier) {
-        Crossfade(
-            targetState = heroBackdrop,
+        AsyncImage(
+            model = imageModel,
+            contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     alpha = 1f - transitionProgressState.value
                     compositingStrategy = CompositingStrategy.Offscreen
                 },
-            animationSpec = tween(durationMillis = 200),
-            label = "modernHeroBackground"
-        ) { imageUrl ->
-            val imageModel = remember(localContext, imageUrl, requestWidthPx, requestHeightPx) {
-                ImageRequest.Builder(localContext)
-                    .data(imageUrl)
-                    .crossfade(false)
-                    .size(width = requestWidthPx, height = requestHeightPx)
-                    .build()
-            }
-            AsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.TopEnd
-            )
-        }
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.TopEnd
+        )
 
         if (shouldPlayHeroTrailer) {
             TrailerPlayer(
@@ -200,15 +196,17 @@ internal fun HeroTitleBlock(
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val fadeDuration = 120
-    AnimatedContent(
-        targetState = preview,
-        transitionSpec = { fadeIn(tween(fadeDuration)) togetherWith fadeOut(tween(fadeDuration)) using null },
-        contentAlignment = Alignment.BottomStart,
-        label = "heroTitleCrossfade",
-        modifier = modifier
-    ) { animatedPreview ->
-        HeroTitleContent(preview = animatedPreview, portraitMode = portraitMode)
+    var stablePreview by remember { mutableStateOf<HeroPreview?>(null) }
+
+    if (!enrichmentActive && preview != null) stablePreview = preview
+    if (enrichmentActive) stablePreview = null
+
+    if (stablePreview == null) return
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.BottomStart
+    ) {
+        HeroTitleContent(preview = stablePreview!!, portraitMode = portraitMode)
     }
 }
 
