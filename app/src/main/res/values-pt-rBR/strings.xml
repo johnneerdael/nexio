@@ -88,7 +88,7 @@
     <string name="episodes_play">Assistir</string>
     <string name="play_manually">Assistir manualmente</string>
     <string name="episodes_season_actions">Opções da temporada</string>
-    
+        
     <!-- MetaDetailsViewModel -->
     <string name="detail_added_to_library">Adicionado à Biblioteca</string>
     <string name="detail_removed_from_library">Removido da Biblioteca</string>
@@ -729,6 +729,15 @@
 
     <!-- AudioDialog -->
     <string name="audio_dialog_title">Áudio</string>
+    <string name="audio_dialog_tab_tracks">Áudio</string>
+    <string name="audio_dialog_tab_mix">Mixagem</string>
+    <string name="audio_mix_label">Amplificação (PCM)</string>
+    <string name="audio_mix_value_db">%1$d dB</string>
+    <string name="audio_mix_persist_on">Persistir entre sessões: ATIVADO</string>
+    <string name="audio_mix_persist_off">Persistir entre sessões: DESATIVADO</string>
+    <string name="audio_mix_range">Faixa: %1$d dB a %2$d dB</string>
+    <string name="audio_mix_range_saved">Faixa: %1$d dB a %2$d dB (salvo)</string>
+    <string name="audio_mix_unavailable">Amplificação não disponível neste dispositivo</string>
 
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Legendas</string>
@@ -946,8 +955,8 @@
     <string name="update_downloading_ellipsis">Baixando…</string>
     <string name="update_unknown_sources">Permita a instalação de fontes desconhecidas para continuar.</string>
     <!-- AccountScreen -->
-  <string name="account_title">Conta</string>
-    <string name="account_sign_in_description">Faça login para sincronizar sua biblioteca, progresso, addons e plugins entre dispositivos. A biblioteca e o progresso só sincronizam se o Trakt NÃO estiver conectado.</string>
+    <string name="account_title">Conta</string>
+    <string name="account_sign_in_description">Acesse sua conta para manter sua biblioteca, progresso e complementos sempre sincronizados entre os dispositivos. O Nuvio Sync gerencia sua biblioteca quando o Trakt não está conectado e o progresso de reprodução pode usar tanto o Trakt quanto o Nuvio Sync.</string>
     <string name="account_sync_code_title">Código de Sincronia</string>
     <string name="account_sync_code_description">Sincronize entre dispositivos sem precisar criar uma conta.</string>
     <string name="account_linked_devices">Aparelhos Vinculados (%1$d)</string>
