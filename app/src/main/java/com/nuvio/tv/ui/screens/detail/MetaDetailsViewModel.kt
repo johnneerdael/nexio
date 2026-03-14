@@ -33,7 +33,10 @@ import com.nuvio.tv.core.util.isUnreleased
 import java.time.LocalDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -464,12 +467,13 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private suspend fun applyMetaWithEnrichment(meta: Meta) {
-        // Start recommendations fetch early so it can run in parallel with enrichment.
+        // Fire all independent async jobs immediately — they run in parallel.
         loadMoreLikeThisAsync(meta)
         val enriched = enrichMeta(meta)
         applyMeta(enriched)
+        // Episode ratings and MDBList are independent — launch both without waiting.
         loadEpisodeRatingsAsync(enriched)
-        loadMDBListRatings(enriched)
+        viewModelScope.launch { loadMDBListRatings(enriched) }
     }
 
     private fun loadMoreLikeThisAsync(meta: Meta) {
@@ -673,15 +677,33 @@ class MetaDetailsViewModel @Inject constructor(
             ?: tmdbService.ensureTmdbId(itemId, itemType)
             ?: return meta
 
-        val enrichment = tmdbMetadataService.fetchEnrichment(
-            tmdbId = tmdbId,
-            contentType = tmdbContentType,
-            language = settings.language
-        )
+        val isSeries = meta.apiType in listOf("series", "tv")
+        val needsEpisodes = settings.useEpisodes && isSeries
+
+        // Fetch main enrichment and episode enrichment in parallel.
+        val (enrichment, episodeMap) = coroutineScope {
+            val main = async(Dispatchers.IO) {
+                tmdbMetadataService.fetchEnrichment(
+                    tmdbId = tmdbId,
+                    contentType = tmdbContentType,
+                    language = settings.language
+                )
+            }
+            val episodes = if (needsEpisodes) {
+                async(Dispatchers.IO) {
+                    val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
+                    tmdbMetadataService.fetchEpisodeEnrichment(
+                        tmdbId = tmdbId,
+                        seasonNumbers = seasonNumbers,
+                        language = settings.language
+                    )
+                }
+            } else null
+            main.await() to episodes?.await()
+        }
 
         var updated = meta
 
-        // Group: Artwork (logo, backdrop)
         if (enrichment != null && settings.useArtwork) {
             updated = updated.copy(
                 background = enrichment.backdrop ?: updated.background,
@@ -689,7 +711,6 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        // Group: Basic Info (description, genres, rating)
         if (enrichment != null && settings.useBasicInfo) {
             updated = updated.copy(
                 name = enrichment.localizedTitle ?: updated.name,
@@ -701,7 +722,6 @@ class MetaDetailsViewModel @Inject constructor(
             updated = updated.copy(imdbRating = enrichment.rating?.toFloat() ?: updated.imdbRating)
         }
 
-        // Group: Details (runtime, release info, country, language)
         if (enrichment != null && settings.useDetails) {
             updated = updated.copy(
                 runtime = enrichment.runtimeMinutes?.toString() ?: updated.runtime,
@@ -713,7 +733,6 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        // Group: Credits (cast with photos, director, writer)
         if (enrichment != null && settings.useCredits) {
             val peopleCredits = buildList {
                 addAll(enrichment.directorMembers)
@@ -735,42 +754,28 @@ class MetaDetailsViewModel @Inject constructor(
             )
         }
 
-        // Group: Productions
         if (enrichment != null && settings.useProductions && enrichment.productionCompanies.isNotEmpty()) {
             updated = updated.copy(productionCompanies = enrichment.productionCompanies)
         }
 
-        // Group: Networks
         if (enrichment != null && settings.useNetworks && enrichment.networks.isNotEmpty()) {
             updated = updated.copy(networks = enrichment.networks)
         }
 
-        // Group: Episodes (titles, overviews, thumbnails, runtime)
-        if (settings.useEpisodes && meta.apiType in listOf("series", "tv")) {
-            val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
-            val episodeMap = tmdbMetadataService.fetchEpisodeEnrichment(
-                tmdbId = tmdbId,
-                seasonNumbers = seasonNumbers,
-                language = settings.language
+        if (!episodeMap.isNullOrEmpty()) {
+            updated = updated.copy(
+                videos = meta.videos.map { video ->
+                    val key = if (video.season != null && video.episode != null) video.season to video.episode else null
+                    val ep = key?.let { episodeMap[it] }
+                    video.copy(
+                        title = ep?.title ?: video.title,
+                        overview = ep?.overview ?: video.overview,
+                        released = ep?.airDate ?: video.released,
+                        thumbnail = ep?.thumbnail ?: video.thumbnail,
+                        runtime = ep?.runtimeMinutes
+                    )
+                }
             )
-            if (episodeMap.isNotEmpty()) {
-                updated = updated.copy(
-                    videos = meta.videos.map { video ->
-                        val season = video.season
-                        val episode = video.episode
-                        val key = if (season != null && episode != null) season to episode else null
-                        val ep = key?.let { episodeMap[it] }
-
-                        video.copy(
-                            title = ep?.title ?: video.title,
-                            overview = ep?.overview ?: video.overview,
-                            released = ep?.airDate ?: video.released,
-                            thumbnail = ep?.thumbnail ?: video.thumbnail,
-                            runtime = ep?.runtimeMinutes
-                        )
-                    }
-                )
-            }
         }
 
         if (enrichment?.collectionId != null) {

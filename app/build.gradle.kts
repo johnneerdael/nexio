@@ -2,7 +2,7 @@
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // alias(libs.plugins.androidx.baselineprofile) 
+    alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -109,6 +109,19 @@ android {
             buildConfigField("String", "DONATIONS_DONATE_URL", "\"${localProperties.getProperty("DONATIONS_DONATE_URL", "")}\"")
             buildConfigField("String", "AVATAR_PUBLIC_BASE_URL", "\"${localProperties.getProperty("AVATAR_PUBLIC_BASE_URL", "")}\"")
         }
+        create("benchmark") {
+            initWith(buildTypes.getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            applicationIdSuffix = ".debug"
+            matchingFallbacks += "release"
+        }
     }
 
     splits {
@@ -175,11 +188,23 @@ configurations.all {
     exclude(group = "androidx.media3", module = "media3-ui")
 }
 
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
+    mergeIntoMain = true
+    baselineProfileOutputDir = "."
+    buildTypeEnabled("benchmark", true)
+    buildTypeEnabled("release", false)
+    filter {
+        include("com.nuvio.tv.**")
+    }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     val composeBom = platform("androidx.compose:compose-bom:2026.01.01")
 
-    // baselineProfile(project(":benchmark"))  // TODO: create benchmark module later
+    baselineProfile(project(":baselineprofile"))
     implementation(libs.androidx.core.ktx)
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.appcompat)
@@ -284,7 +309,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // Performance profiling
-    implementation("androidx.metrics:metrics-performance:1.0.0-beta01")  // JankStats
+    implementation("androidx.metrics:metrics-performance:1.0.0-rc01")  // JankStats
     debugImplementation("androidx.compose.runtime:runtime-tracing")     
 
     // Bundle real crypto-js (JS) for QuickJS plugins
