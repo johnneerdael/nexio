@@ -113,10 +113,10 @@ def parse_versions(contents: str) -> tuple[str, int]:
 
 def updated_build_file(contents: str, version_name: str, version_code: int) -> str:
     contents, version_replacements = VERSION_NAME_RE.subn(
-        rf'\1{version_name}\3', contents, count=1
+        rf"\g<1>{version_name}\g<3>", contents, count=1
     )
     contents, code_replacements = VERSION_CODE_RE.subn(
-        rf"\1{version_code}", contents, count=1
+        rf"\g<1>{version_code}", contents, count=1
     )
     if version_replacements != 1 or code_replacements != 1:
         raise SystemExit(f"Failed to update versionName/versionCode in {BUILD_FILE}")
