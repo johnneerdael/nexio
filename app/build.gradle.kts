@@ -192,9 +192,7 @@ baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
     mergeIntoMain = true
-    baselineProfileOutputDir = "."
-    buildTypeEnabled("benchmark", true)
-    buildTypeEnabled("release", false)
+    baselineProfileOutputDir = "src/main"
     filter {
         include("com.nuvio.tv.**")
     }
