@@ -51,6 +51,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Prepare signing config
+        if: ${{ !inputs.dry_run }}
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nuviotv.jks"
+            {
+              echo "NUVIO_RELEASE_STORE_FILE=$RUNNER_TEMP/nuviotv.jks"
+              echo "NUVIO_RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
+              echo "NUVIO_RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
+              echo "NUVIO_RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "CI_USE_DEBUG_SIGNING=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Preview beta release
         if: ${{ inputs.dry_run }}
         run: |

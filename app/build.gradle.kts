@@ -24,6 +24,18 @@ val devProperties = Properties().apply {
     }
 }
 
+fun env(name: String): String? = providers.environmentVariable(name).orNull
+
+val useDebugReleaseSigning = env("CI_USE_DEBUG_SIGNING").equals("true", ignoreCase = true)
+val releaseStoreFilePath = env("NUVIO_RELEASE_STORE_FILE")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_FILE")
+val releaseKeyAliasValue = env("NUVIO_RELEASE_KEY_ALIAS")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_ALIAS", "nuviotv")
+val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
+    ?: localProperties.getProperty("NUVIO_RELEASE_KEY_PASSWORD", "815787")
+val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
+    ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
+
 android {
     namespace = "com.nuvio.tv"
     compileSdk = 36
@@ -57,10 +69,10 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = "nuviotv"
-            keyPassword = "815787"
-            storeFile = file("../nuviotv.jks")
-            storePassword = "815787"
+            keyAlias = releaseKeyAliasValue
+            keyPassword = releaseKeyPasswordValue
+            storeFile = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
+            storePassword = releaseStorePasswordValue
         }
     }
 
@@ -92,7 +104,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (useDebugReleaseSigning) {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
+            }
 
             buildConfigField("boolean", "IS_DEBUG_BUILD", "false")
 
