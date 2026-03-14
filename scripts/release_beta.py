@@ -261,7 +261,7 @@ def write_release_notes(version_name: str, notes: str) -> Path:
 
 def append_job_summary(
     *,
-    dry_run: bool,
+    mode: str,
     version_name: str,
     release_tag: str,
     release_title: str,
@@ -278,7 +278,7 @@ def append_job_summary(
     lines = [
         "## Beta Release Preview",
         "",
-        f"- Mode: {'dry-run' if dry_run else 'publish'}",
+        f"- Mode: `{mode}`",
         f"- Version: `{version_name}`",
         f"- Tag: `{release_tag}`",
         f"- Title: `{release_title}`",
@@ -373,7 +373,12 @@ def commit_tag_push(
 
 
 def create_github_release(
-    release_tag: str, release_title: str, notes_path: Path, assets: list[Path]
+    release_tag: str,
+    release_title: str,
+    notes_path: Path,
+    assets: list[Path],
+    *,
+    draft: bool,
 ) -> None:
     require_tool("gh")
     command = [
@@ -386,15 +391,18 @@ def create_github_release(
         release_title,
         "--notes-file",
         str(notes_path),
-        "--latest",
     ]
+    if draft:
+        command.append("--draft")
+    else:
+        command.append("--latest")
     subprocess.run(command, cwd=ROOT, check=True, text=True)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Preview or publish a beta GitHub release by bumping app version, "
+            "Preview, draft, or publish a beta GitHub release by bumping app version, "
             "building APKs, and generating release notes from recent commits."
         )
     )
@@ -454,14 +462,20 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Build all release APKs, commit the version bump, push tag/branch, and create the GitHub release.",
     )
+    parser.add_argument(
+        "--draft",
+        action="store_true",
+        help="Build all release APKs, commit the version bump, push tag/branch, and create the GitHub release as a draft.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
 
-    if args.dry_run and args.publish:
-        raise SystemExit("Use either --dry-run or --publish, not both.")
+    selected_modes = [args.dry_run, args.publish, args.draft]
+    if sum(1 for enabled in selected_modes if enabled) > 1:
+        raise SystemExit("Use only one of --dry-run, --draft, or --publish.")
     if args.custom_notes and args.custom_notes_file:
         raise SystemExit("Use either --custom-notes or --custom-notes-file, not both.")
 
@@ -503,12 +517,19 @@ def main() -> int:
     print(notes.strip())
     print()
 
+    mode = (
+        "dry-run" if args.dry_run
+        else "draft" if args.draft
+        else "publish" if args.publish
+        else "local-build"
+    )
+
     if args.dry_run:
         print("Dry run expected assets:")
         for asset_name in EXPECTED_ASSET_NAMES:
             print(f"- {asset_name}")
         append_job_summary(
-            dry_run=True,
+            mode=mode,
             version_name=args.version,
             release_tag=release_tag,
             release_title=release_title,
@@ -520,7 +541,7 @@ def main() -> int:
         )
         return 0
 
-    if args.publish:
+    if args.publish or args.draft:
         ensure_clean_worktree()
         ensure_version_available(release_tag)
 
@@ -537,23 +558,35 @@ def main() -> int:
         for asset in assets:
             print(f"- {asset.relative_to(ROOT)}")
 
-        if args.publish:
+        if args.publish or args.draft:
             branch_name = current_branch()
             commit_tag_push(
                 args.version, release_tag, release_title, commit_message, branch_name
             )
-            create_github_release(release_tag, release_title, notes_path, assets)
-            print(
-                f"Published GitHub release {release_tag} "
-                f"({release_title}) from branch {branch_name}"
+            create_github_release(
+                release_tag,
+                release_title,
+                notes_path,
+                assets,
+                draft=args.draft,
             )
+            if args.draft:
+                print(
+                    f"Created draft GitHub release {release_tag} "
+                    f"({release_title}) from branch {branch_name}"
+                )
+            else:
+                print(
+                    f"Published GitHub release {release_tag} "
+                    f"({release_title}) from branch {branch_name}"
+                )
     except Exception:
-        if not args.publish:
+        if not (args.publish or args.draft):
             write_build_file(original_contents)
         raise
 
     append_job_summary(
-        dry_run=False,
+        mode=mode,
         version_name=args.version,
         release_tag=release_tag,
         release_title=release_title,
