@@ -400,6 +400,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("version", help="Target versionName, for example 0.4.19-beta")
     parser.add_argument(
+        "--version-code",
+        type=int,
+        help="Explicit versionCode to write. Defaults to current versionCode + 1.",
+    )
+    parser.add_argument(
         "--release-tag",
         help="Git tag to create for the release. Defaults to the target versionName.",
     )
@@ -465,7 +470,9 @@ def main() -> int:
 
     original_contents = read_build_file()
     current_version_name, current_version_code = parse_versions(original_contents)
-    next_version_code = current_version_code + 1
+    next_version_code = args.version_code if args.version_code is not None else current_version_code + 1
+    if next_version_code < 1:
+        raise SystemExit("versionCode must be a positive integer.")
     previous_tag = last_tag()
     release_tag = args.release_tag or args.version
     release_title = args.release_title or release_tag

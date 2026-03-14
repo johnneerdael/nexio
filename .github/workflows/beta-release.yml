@@ -7,6 +7,10 @@ on:
         description: "Target versionName, for example 0.4.19-beta"
         required: true
         type: string
+      version_code:
+        description: "Optional versionCode override. Defaults to current versionCode + 1."
+        required: false
+        type: string
       dry_run:
         description: "Preview release notes only without building or publishing"
         required: true
@@ -93,6 +97,9 @@ jobs:
           CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
           args=(python3 scripts/release_beta.py "${{ inputs.version }}" --dry-run)
+          if [ -n "${{ inputs.version_code }}" ]; then
+            args+=(--version-code "${{ inputs.version_code }}")
+          fi
           if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
             printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
             args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
@@ -119,6 +126,9 @@ jobs:
           CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
           args=(python3 scripts/release_beta.py "${{ inputs.version }}" --publish)
+          if [ -n "${{ inputs.version_code }}" ]; then
+            args+=(--version-code "${{ inputs.version_code }}")
+          fi
           if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
             printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
             args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
