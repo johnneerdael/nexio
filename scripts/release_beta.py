@@ -224,7 +224,11 @@ def build_release_notes(
     downloader_code: str | None,
     extra_notes: str | None,
     extra_lines: list[str],
+    custom_notes: str | None,
 ) -> str:
+    if custom_notes and custom_notes.strip():
+        return custom_notes.strip() + "\n"
+
     normalized = [
         note
         for note in (normalize_subject(subject) for subject in commit_subjects(previous_tag))
@@ -382,6 +386,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("version", help="Target versionName, for example 0.4.19-beta")
     parser.add_argument(
+        "--custom-notes",
+        help="Full release notes markdown. When set, it replaces the generated notes entirely.",
+    )
+    parser.add_argument(
+        "--custom-notes-file",
+        help="Path to a markdown file whose contents replace the generated release notes entirely.",
+    )
+    parser.add_argument(
         "--downloader-code",
         help="Optional release-note footer value for the downloader code",
     )
@@ -419,6 +431,8 @@ def main() -> int:
 
     if args.dry_run and args.publish:
         raise SystemExit("Use either --dry-run or --publish, not both.")
+    if args.custom_notes and args.custom_notes_file:
+        raise SystemExit("Use either --custom-notes or --custom-notes-file, not both.")
 
     if not VERSION_PATTERN.match(args.version):
         raise SystemExit(f"Invalid version format: {args.version}")
@@ -427,12 +441,16 @@ def main() -> int:
     current_version_name, current_version_code = parse_versions(original_contents)
     next_version_code = current_version_code + 1
     previous_tag = last_tag()
+    custom_notes = args.custom_notes
+    if args.custom_notes_file:
+        custom_notes = Path(args.custom_notes_file).read_text(encoding="utf-8")
     notes = build_release_notes(
         previous_tag=previous_tag,
         max_items=args.max_items,
         downloader_code=args.downloader_code,
         extra_notes=args.extra_notes,
         extra_lines=args.extra_line,
+        custom_notes=custom_notes,
     )
     notes_path = write_release_notes(args.version, notes)
 

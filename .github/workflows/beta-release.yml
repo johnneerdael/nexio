@@ -16,6 +16,10 @@ on:
         description: "Optional downloader code footer"
         required: false
         type: string
+      custom_release_notes:
+        description: "Optional full Markdown release notes. When set, it replaces generated notes entirely."
+        required: false
+        type: string
       extra_notes:
         description: "Optional extra bullet lines, one per line"
         required: false
@@ -85,9 +89,17 @@ jobs:
 
       - name: Preview beta release
         if: ${{ inputs.dry_run }}
+        env:
+          CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
+          CUSTOM_NOTES_ARG=""
+          if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
+            printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
+            CUSTOM_NOTES_ARG="--custom-notes-file $RUNNER_TEMP/custom-release-notes.md"
+          fi
           python3 scripts/release_beta.py "${{ inputs.version }}" \
             --dry-run \
+            $CUSTOM_NOTES_ARG \
             --downloader-code "${{ inputs.downloader_code }}" \
             --extra-notes "${{ inputs.extra_notes }}"
 
@@ -102,8 +114,15 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
+          CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
+          CUSTOM_NOTES_ARG=""
+          if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
+            printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
+            CUSTOM_NOTES_ARG="--custom-notes-file $RUNNER_TEMP/custom-release-notes.md"
+          fi
           python3 scripts/release_beta.py "${{ inputs.version }}" \
             --publish \
+            $CUSTOM_NOTES_ARG \
             --downloader-code "${{ inputs.downloader_code }}" \
             --extra-notes "${{ inputs.extra_notes }}"
