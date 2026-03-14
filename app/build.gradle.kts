@@ -2,7 +2,7 @@
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // alias(libs.plugins.androidx.baselineprofile) 
+    alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
@@ -188,11 +188,23 @@ configurations.all {
     exclude(group = "androidx.media3", module = "media3-ui")
 }
 
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
+    mergeIntoMain = true
+    baselineProfileOutputDir = "."
+    buildTypeEnabled("benchmark", true)
+    buildTypeEnabled("release", false)
+    filter {
+        include("com.nuvio.tv.**")
+    }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     val composeBom = platform("androidx.compose:compose-bom:2026.01.01")
 
-    // baselineProfile(project(":benchmark"))  // TODO: create benchmark module later
+    baselineProfile(project(":baselineprofile"))
     implementation(libs.androidx.core.ktx)
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.appcompat)
