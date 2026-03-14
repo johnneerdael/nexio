@@ -92,16 +92,18 @@ jobs:
         env:
           CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
-          CUSTOM_NOTES_ARG=""
+          args=(python3 scripts/release_beta.py "${{ inputs.version }}" --dry-run)
           if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
             printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
-            CUSTOM_NOTES_ARG="--custom-notes-file $RUNNER_TEMP/custom-release-notes.md"
+            args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
           fi
-          python3 scripts/release_beta.py "${{ inputs.version }}" \
-            --dry-run \
-            $CUSTOM_NOTES_ARG \
-            --downloader-code "${{ inputs.downloader_code }}" \
-            --extra-notes "${{ inputs.extra_notes }}"
+          if [ -n "${{ inputs.downloader_code }}" ]; then
+            args+=(--downloader-code "${{ inputs.downloader_code }}")
+          fi
+          if [ -n "${{ inputs.extra_notes }}" ]; then
+            args+=(--extra-notes "${{ inputs.extra_notes }}")
+          fi
+          "${args[@]}"
 
       - name: Upload preview notes
         if: ${{ inputs.dry_run }}
@@ -116,13 +118,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
-          CUSTOM_NOTES_ARG=""
+          args=(python3 scripts/release_beta.py "${{ inputs.version }}" --publish)
           if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
             printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
-            CUSTOM_NOTES_ARG="--custom-notes-file $RUNNER_TEMP/custom-release-notes.md"
+            args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
           fi
-          python3 scripts/release_beta.py "${{ inputs.version }}" \
-            --publish \
-            $CUSTOM_NOTES_ARG \
-            --downloader-code "${{ inputs.downloader_code }}" \
-            --extra-notes "${{ inputs.extra_notes }}"
+          if [ -n "${{ inputs.downloader_code }}" ]; then
+            args+=(--downloader-code "${{ inputs.downloader_code }}")
+          fi
+          if [ -n "${{ inputs.extra_notes }}" ]; then
+            args+=(--extra-notes "${{ inputs.extra_notes }}")
+          fi
+          "${args[@]}"
