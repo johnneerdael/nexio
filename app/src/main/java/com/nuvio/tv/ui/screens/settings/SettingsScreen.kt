@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -66,6 +67,7 @@ internal enum class SettingsCategory {
     PLUGINS,
     INTEGRATION,
     PLAYBACK,
+    NETWORK,
     TRAKT,
     ABOUT,
     DEBUG
@@ -148,6 +150,13 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
+        category = SettingsCategory.NETWORK,
+        title = stringResource(R.string.settings_network),
+        icon = Icons.Default.NetworkCheck,
+        subtitle = stringResource(R.string.settings_network_subtitle),
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
         category = SettingsCategory.TRAKT,
         title = "Trakt",
         rawIconRes = R.raw.trakt_tv_glyph,
@@ -208,6 +217,7 @@ fun SettingsScreen(
                 SettingsCategory.LAYOUT to FocusRequester(),
                 SettingsCategory.INTEGRATION to FocusRequester(),
                 SettingsCategory.PLAYBACK to FocusRequester(),
+                SettingsCategory.NETWORK to FocusRequester(),
                 SettingsCategory.ABOUT to FocusRequester()
             )
     }
@@ -402,6 +412,13 @@ fun SettingsScreen(
                             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.ABOUT]
+                            } else {
+                                null
+                            }
+                        )
+                        SettingsCategory.NETWORK -> NetworkSettingsContent(
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.NETWORK]
                             } else {
                                 null
                             }
