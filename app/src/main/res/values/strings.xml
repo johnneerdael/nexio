@@ -193,6 +193,9 @@
     <string name="network_latency_label">Latency</string>
     <string name="network_download_label">Download</string>
     <string name="network_error_prefix">Error: %1$s</string>
+    <string name="network_connection_wifi">Wi-Fi</string>
+    <string name="network_connection_ethernet">Ethernet</string>
+    <string name="network_connection_offline">Offline</string>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_subtitle">Developer tools and feature flags.</string>
     <string name="settings_plugins_section_subtitle">Manage repositories, providers, and plugin states.</string>

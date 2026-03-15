@@ -2,6 +2,8 @@
 
 package com.nuvio.tv.ui.screens.settings
 
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -11,18 +13,24 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,12 +40,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.getSystemService
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -55,6 +68,49 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 private enum class NetworkTestState { Idle, TestingLatency, TestingDownload, Done, Error }
+
+private enum class ConnectionType { WiFi, Ethernet, Offline }
+
+private fun getConnectionType(context: android.content.Context): ConnectionType {
+    val cm = context.getSystemService<ConnectivityManager>() ?: return ConnectionType.Offline
+    val network = cm.activeNetwork ?: return ConnectionType.Offline
+    val caps = cm.getNetworkCapabilities(network) ?: return ConnectionType.Offline
+    return when {
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> ConnectionType.Ethernet
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> ConnectionType.WiFi
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> ConnectionType.WiFi // treat cellular as connected
+        else -> ConnectionType.Offline
+    }
+}
+
+@Composable
+private fun ConnectionStatusBadge(type: ConnectionType) {
+    val (icon, label, color) = when (type) {
+        ConnectionType.WiFi -> Triple(Icons.Default.Wifi, stringResource(R.string.network_connection_wifi), NuvioColors.Success)
+        ConnectionType.Ethernet -> Triple(Icons.Default.Wifi, stringResource(R.string.network_connection_ethernet), NuvioColors.Success)
+        ConnectionType.Offline -> Triple(Icons.Default.SignalWifiOff, stringResource(R.string.network_connection_offline), NuvioColors.Error)
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = color
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+            color = color
+        )
+    }
+}
 
 private suspend fun fetchFastComUrls(): List<String> = withContext(Dispatchers.IO) {
     // 1. Load fast.com page to find the app JS bundle URL
@@ -93,6 +149,8 @@ private suspend fun fetchFastComUrls(): List<String> = withContext(Dispatchers.I
 fun NetworkSettingsContent(
     initialFocusRequester: FocusRequester? = null
 ) {
+    val context = LocalContext.current
+    var connectionType by remember { mutableStateOf(getConnectionType(context)) }
     var testState by remember { mutableStateOf(NetworkTestState.Idle) }
     var latencyMs by remember { mutableStateOf<Long?>(null) }
     var downloadMbps by remember { mutableStateOf<Double?>(null) }
@@ -102,6 +160,7 @@ fun NetworkSettingsContent(
 
     fun runSpeedTest() {
         scope.launch {
+            connectionType = getConnectionType(context)
             testState = NetworkTestState.TestingLatency
             latencyMs = null
             downloadMbps = null
@@ -176,10 +235,18 @@ fun NetworkSettingsContent(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        SettingsDetailHeader(
-            title = stringResource(R.string.settings_network),
-            subtitle = stringResource(R.string.settings_network_subtitle)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            SettingsDetailHeader(
+                modifier = Modifier.weight(1f),
+                title = stringResource(R.string.settings_network),
+                subtitle = stringResource(R.string.settings_network_subtitle)
+            )
+            ConnectionStatusBadge(type = connectionType)
+        }
 
         SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
