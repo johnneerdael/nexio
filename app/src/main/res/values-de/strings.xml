@@ -999,7 +999,7 @@
     <string name="nav_search">Suchen</string>
     <string name="nav_library">Bibliothek</string>
     <string name="nav_addons">Addons</string>
-    <string name="nav_settings">Einstellungen</string>
+    <string name="nav_settings">Optionen</string>
     <string name="settings_rounded_ui">Abgerundete Benutzeroberfläche</string>
     <string name="cd_expand_sidebar">Seitenleiste erweitern</string>
 
