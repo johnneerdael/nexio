@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Divider
@@ -18,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -45,6 +48,7 @@ import com.nuvio.tv.ui.components.PosterCardDefaults
 import com.nuvio.tv.ui.components.PosterCardStyle
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.ui.theme.NuvioColors
 import kotlin.math.roundToInt
 
@@ -72,13 +76,28 @@ fun HomeScreen(
         )
     },
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = onContinueWatchingClick,
+    onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit = onContinueWatchingClick,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsStateWithLifecycle(
+        initialValue = false
+    )
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
     var hasEnteredCatalogContent by rememberSaveable { mutableStateOf(false) }
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
+
+    // Stable lambdas — captured via rememberUpdatedState so they never cause
+    // downstream recomposition when uiState changes.
+    val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
+    val latestPosterOptionsTarget by rememberUpdatedState(posterOptionsTarget)
+    val isCatalogItemWatched: (MetaPreview) -> Boolean = remember(Unit) {
+        { item -> latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true }
+    }
+    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember(Unit) {
+        { item, addonBaseUrl -> posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl) }
+    }
 
     LaunchedEffect(hasCatalogContent) {
         if (hasCatalogContent) {
@@ -187,13 +206,11 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                                onContinueWatchingPlayManually = onContinueWatchingPlayManually,
+                                showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                isCatalogItemWatched = { item ->
-                                    uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-                                },
-                                onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
-                                }
+                                isCatalogItemWatched = isCatalogItemWatched,
+                                onCatalogItemLongPress = onCatalogItemLongPress
                             )
 
                             HomeLayout.GRID -> GridHomeRoute(
@@ -203,13 +220,11 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                                onContinueWatchingPlayManually = onContinueWatchingPlayManually,
+                                showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                isCatalogItemWatched = { item ->
-                                    uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-                                },
-                                onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
-                                }
+                                isCatalogItemWatched = isCatalogItemWatched,
+                                onCatalogItemLongPress = onCatalogItemLongPress
                             )
 
                             HomeLayout.MODERN -> ModernHomeRoute(
@@ -218,16 +233,37 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
-                                isCatalogItemWatched = { item ->
-                                    uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-                                },
-                                onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    posterOptionsTarget = HomePosterOptionsTarget(item, addonBaseUrl)
-                                }
+                                onContinueWatchingPlayManually = onContinueWatchingPlayManually,
+                                showContinueWatchingManualPlayOption = effectiveAutoplayEnabled,
+                                isCatalogItemWatched = isCatalogItemWatched,
+                                onCatalogItemLongPress = onCatalogItemLongPress
                             )
                         }
                     }
                 }
+            }
+        }
+
+        val startupAuthNotice = uiState.startupAuthNotice
+        if (startupAuthNotice != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp)
+                    .background(
+                        color = Color(0xFF5A1C1C),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = when (startupAuthNotice) {
+                        StartupAuthNotice.NUVIO -> stringResource(R.string.auth_notice_nuvio_logged_out)
+                        StartupAuthNotice.TRAKT -> stringResource(R.string.auth_notice_trakt_logged_out)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioColors.TextPrimary
+                )
             }
         }
     }
@@ -287,6 +323,8 @@ private fun ClassicHomeRoute(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit,
+    showContinueWatchingManualPlayOption: Boolean,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
@@ -301,6 +339,8 @@ private fun ClassicHomeRoute(
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+        onContinueWatchingPlayManually = onContinueWatchingPlayManually,
+        showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
@@ -327,6 +367,8 @@ private fun GridHomeRoute(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit,
+    showContinueWatchingManualPlayOption: Boolean,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
@@ -339,6 +381,8 @@ private fun GridHomeRoute(
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+        onContinueWatchingPlayManually = onContinueWatchingPlayManually,
+        showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
@@ -361,10 +405,13 @@ private fun ModernHomeRoute(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingPlayManually: (ContinueWatchingItem) -> Unit,
+    showContinueWatchingManualPlayOption: Boolean,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
+    val enrichingItemId by viewModel.enrichingItemId.collectAsStateWithLifecycle()
     val requestTrailerPreview = remember(viewModel) {
         { itemId: String, title: String, releaseInfo: String?, apiType: String ->
             viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType)
@@ -385,22 +432,31 @@ private fun ModernHomeRoute(
             viewModel.saveFocusState(vi, vo, ri, ii, m)
         }
     }
+    val preloadAdjacentItem = remember(viewModel) {
+        { item: MetaPreview ->
+            viewModel.preloadAdjacentItem(item)
+        }
+    }
     ModernHomeContent(
         uiState = uiState,
         focusState = focusState,
+        enrichingItemId = enrichingItemId,
         trailerPreviewUrls = viewModel.trailerPreviewUrls,
         trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+        onContinueWatchingPlayManually = onContinueWatchingPlayManually,
+        showContinueWatchingManualPlayOption = showContinueWatchingManualPlayOption,
         onRequestTrailerPreview = requestTrailerPreview,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
-        onItemFocus = { item ->
-            viewModel.onItemFocus(item)
+        onItemFocus = remember(viewModel) {
+            { item -> viewModel.onItemFocus(item) }
         },
+        onPreloadAdjacentItem = preloadAdjacentItem,
         onSaveFocusState = saveModernFocusState
     )
 }

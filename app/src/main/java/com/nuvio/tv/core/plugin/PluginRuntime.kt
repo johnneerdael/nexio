@@ -6,6 +6,7 @@ import com.dokar.quickjs.binding.function
 import com.dokar.quickjs.quickJs
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.domain.model.LocalScraperResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -49,6 +50,7 @@ class PluginRuntime @Inject constructor() {
     private val gson: Gson = GsonBuilder().create()
 
     private val httpClient = OkHttpClient.Builder()
+        .dns(com.nuvio.tv.core.network.IPv4FirstDns())
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -574,7 +576,7 @@ class PluginRuntime @Inject constructor() {
             globalThis.SCRAPER_ID = "$scraperId";
             globalThis.SCRAPER_SETTINGS = $settingsJson;
             if (typeof TMDB_API_KEY === 'undefined') {
-                globalThis.TMDB_API_KEY = "1865f43a0549ca50d341dd9ab8b29f49";
+                globalThis.TMDB_API_KEY = "${BuildConfig.TMDB_API_KEY}";
             }
             if (typeof globalThis.global === 'undefined') {
                 globalThis.global = globalThis;

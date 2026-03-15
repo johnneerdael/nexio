@@ -76,6 +76,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import com.nuvio.tv.ui.util.localizeEpisodeTitle
 
 private const val EPISODE_CARD_CONTENT_TYPE = "episode_card"
 private const val EPISODE_SCROLL_REPEAT_THROTTLE_MS = 80L
@@ -200,7 +201,9 @@ fun EpisodesRow(
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
+    onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
     onToggleEpisodeWatched: (Video) -> Unit,
+    showManualPlayOption: Boolean = false,
     onMarkSeasonWatched: (Int) -> Unit = {},
     onMarkSeasonUnwatched: (Int) -> Unit = {},
     isSeasonFullyWatched: Boolean = false,
@@ -215,6 +218,7 @@ fun EpisodesRow(
     onEpisodeFocused: (episodeId: String) -> Unit = {},
     scrollToEpisodeId: String? = null
 ) {
+    val dedupedEpisodes = remember(episodes) { episodes.distinctBy { it.id } }
     val restoreTargetRequester = restoreEpisodeId?.let { episodeFocusRequesters[it] }
     var optionsEpisode by remember { mutableStateOf<Video?>(null) }
     val cardMetrics = rememberEpisodeCardMetrics()
@@ -222,7 +226,7 @@ fun EpisodesRow(
     val rowPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
     val lazyListState = rememberLazyListState(prefetchStrategy = rowPrefetchStrategy)
     var lastHorizontalKeyRepeatTime by remember { mutableStateOf(0L) }
-    val episodeIds = remember(episodes) { episodes.mapTo(mutableSetOf()) { it.id } }
+    val episodeIds = remember(dedupedEpisodes) { dedupedEpisodes.mapTo(mutableSetOf()) { it.id } }
     val context = LocalContext.current
     val imdbLogoRequest = remember(context) {
         ImageRequest.Builder(context)
@@ -235,15 +239,20 @@ fun EpisodesRow(
         episodeFocusRequesters.keys.retainAll(episodeIds)
     }
 
-    LaunchedEffect(restoreFocusToken, restoreEpisodeId, restoreTargetRequester, episodes) {
+    LaunchedEffect(restoreFocusToken, restoreEpisodeId, restoreTargetRequester, dedupedEpisodes) {
         if (restoreFocusToken <= 0 || restoreEpisodeId.isNullOrBlank()) return@LaunchedEffect
-        if (episodes.none { it.id == restoreEpisodeId }) return@LaunchedEffect
+        if (dedupedEpisodes.none { it.id == restoreEpisodeId }) return@LaunchedEffect
+        val index = dedupedEpisodes.indexOfFirst { it.id == restoreEpisodeId }
+        if (index >= 0) {
+            val offsetPx = with(density) { (cardMetrics.cardWidth * 2f / 3f - cardMetrics.itemSpacing).roundToPx() }
+            lazyListState.scrollToItem(index, scrollOffset = -offsetPx)
+        }
         restoreTargetRequester?.requestFocusAfterFrames()
     }
 
-    LaunchedEffect(scrollToEpisodeId, episodes) {
+    LaunchedEffect(scrollToEpisodeId, dedupedEpisodes) {
         if (scrollToEpisodeId.isNullOrBlank()) return@LaunchedEffect
-        val index = episodes.indexOfFirst { it.id == scrollToEpisodeId }
+        val index = dedupedEpisodes.indexOfFirst { it.id == scrollToEpisodeId }
         if (index < 0) return@LaunchedEffect
         val offsetPx = with(density) { (cardMetrics.cardWidth * 2f / 3f - cardMetrics.itemSpacing).roundToPx() }
         lazyListState.scrollToItem(index, scrollOffset = -offsetPx)
@@ -277,7 +286,7 @@ fun EpisodesRow(
         horizontalArrangement = Arrangement.spacedBy(cardMetrics.itemSpacing)
     ) {
         items(
-            items = episodes,
+            items = dedupedEpisodes,
             key = { it.id },
             contentType = { EPISODE_CARD_CONTENT_TYPE }
         ) { episode ->
@@ -320,7 +329,7 @@ fun EpisodesRow(
             }
         } ?: false
         val isPending = episodeWatchedPendingKeys.contains(episodePendingKey(selectedEpisode))
-        val firstEpisodeInSeason = episodes.minByOrNull { it.episode ?: Int.MAX_VALUE }
+        val firstEpisodeInSeason = dedupedEpisodes.minByOrNull { it.episode ?: Int.MAX_VALUE }
         val hasPreviousEpisodes = selectedEpisode.episode != null &&
             firstEpisodeInSeason?.episode != null &&
             selectedEpisode.episode > firstEpisodeInSeason.episode
@@ -336,6 +345,11 @@ fun EpisodesRow(
                 onEpisodeClick(selectedEpisode)
                 optionsEpisode = null
             },
+            onPlayManually = {
+                onEpisodeManualPlayClick(selectedEpisode)
+                optionsEpisode = null
+            },
+            showPlayManually = showManualPlayOption,
             onToggleWatched = {
                 onToggleEpisodeWatched(selectedEpisode)
                 optionsEpisode = null
@@ -392,6 +406,7 @@ private fun EpisodeCard(
     val showProgress = remember(progressPercent) { progressPercent >= 0.02f && progressPercent < 0.85f }
     val showCompletedBadge = isWatched
     val showNotStartedBadge = remember(showCompletedBadge, progressPercent) { !showCompletedBadge && progressPercent < 0.02f }
+    val isUnavailable = remember(episode.available) { episode.available == false }
     val cardBgColor = NuvioColors.BackgroundCard
     val isFocusedState = remember { mutableStateOf(false) }
     val cardCornerRadius = remember(cardMetrics.cornerRadius, density) {
@@ -465,6 +480,7 @@ private fun EpisodeCard(
     }
     val strCdWatched = stringResource(R.string.episodes_cd_watched)
     val strEpisode = stringResource(R.string.episodes_episode)
+    val strUnavailable = stringResource(R.string.episodes_unavailable)
     val episodeCode = remember(episode.episode, strEpisode) {
         val prefix = strEpisode.uppercase(Locale.getDefault())
         episode.episode?.let { number -> "$prefix $number" } ?: prefix
@@ -554,7 +570,7 @@ private fun EpisodeCard(
         ) {
             AsyncImage(
                 model = thumbnailRequest,
-                contentDescription = episode.title,
+                contentDescription = episode.title.localizeEpisodeTitle(context),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
@@ -600,7 +616,7 @@ private fun EpisodeCard(
                 }
 
                 Text(
-                    text = episode.title,
+                    text = episode.title.localizeEpisodeTitle(context),
                     style = titleStyle,
                     color = textPrimary,
                     maxLines = 2,
@@ -616,12 +632,21 @@ private fun EpisodeCard(
                     )
                 }
 
-                if (runtimeLabel != null || ratingLabel != null || formattedDate.isNotBlank()) {
+                if (isUnavailable || runtimeLabel != null || ratingLabel != null || formattedDate.isNotBlank()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (isUnavailable) {
+                            Text(
+                                text = strUnavailable,
+                                style = metaLabelStyle,
+                                color = Color(0xFFFFB74D),
+                                maxLines = 1
+                            )
+                        }
+
                         runtimeLabel?.let { runtime ->
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -723,6 +748,31 @@ private fun EpisodeCard(
                         modifier = Modifier.size(cardMetrics.statusIconSize)
                     )
                 }
+            }
+
+            if (isUnavailable) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            end = cardMetrics.statusBadgeInset,
+                            top = cardMetrics.statusBadgeInset
+                        )
+                        .background(
+                            color = Color(0xCC5D4037),
+                            shape = badgeShape
+                        )
+                        .padding(
+                            horizontal = cardMetrics.episodeBadgeHorizontalPadding,
+                            vertical = cardMetrics.episodeBadgeVerticalPadding
+                        )
+                ) {
+                    Text(
+                        text = strUnavailable.uppercase(Locale.getDefault()),
+                        style = episodeBadgeStyle,
+                        maxLines = 1
+                    )
+                }
             } else if (showNotStartedBadge) {
                 val dashEffect = remember { PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f) }
                 Canvas(
@@ -757,12 +807,15 @@ private fun EpisodeOptionsDialog(
     hasPreviousEpisodes: Boolean = false,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
+    onPlayManually: () -> Unit = {},
+    showPlayManually: Boolean = false,
     onToggleWatched: () -> Unit,
     onMarkSeasonWatched: () -> Unit = {},
     onMarkSeasonUnwatched: () -> Unit = {},
     onMarkPreviousEpisodesWatched: () -> Unit = {}
 ) {
     val primaryFocusRequester = remember { FocusRequester() }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         primaryFocusRequester.requestFocus()
@@ -770,7 +823,7 @@ private fun EpisodeOptionsDialog(
 
     NuvioDialog(
         onDismiss = onDismiss,
-        title = episode.title,
+        title = episode.title.localizeEpisodeTitle(context),
         subtitle = stringResource(R.string.episodes_dialog_subtitle)
     ) {
         Button(
@@ -820,6 +873,19 @@ private fun EpisodeOptionsDialog(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(stringResource(R.string.episodes_play))
+        }
+
+        if (showPlayManually) {
+            Button(
+                onClick = onPlayManually,
+                colors = ButtonDefaults.colors(
+                    containerColor = NuvioColors.BackgroundCard,
+                    contentColor = NuvioColors.TextPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.play_manually))
+            }
         }
     }
 }
