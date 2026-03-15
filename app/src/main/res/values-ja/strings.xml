@@ -697,8 +697,8 @@
     <string name="parental_violence">暴力</string>
     <string name="parental_profanity">不適切な言葉</string>
     <string name="parental_alcohol">飲酒・薬物</string>
-    <string name="parental_frightening">恐怖</string>
-    <string name="parental_severity_severe">強い</string>
+    <string name="parental_frightening">恐怖表現</string>
+    <string name="parental_severity_severe">激しい</string>
     <string name="parental_severity_moderate">中程度</string>
     <string name="parental_severity_mild">軽度</string>
     <string name="player_ends_at">%1$sに終了</string>
