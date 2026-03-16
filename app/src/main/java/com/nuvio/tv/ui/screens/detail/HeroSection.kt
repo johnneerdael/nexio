@@ -876,7 +876,30 @@ private fun formatMDBListRating(provider: String, rating: Double): String {
 }
 
 private fun formatRuntime(runtime: String): String {
-    val minutes = runtime.filter { it.isDigit() }.toIntOrNull() ?: return runtime
+    val trimmed = runtime.trim()
+    // Already in "Xh Ym" or "Xh" format
+    if (trimmed.contains('h') || trimmed.contains('m')) {
+        val hours = Regex("(\\d+)\\s*h").find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val mins = Regex("(\\d+)\\s*m").find(trimmed)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val total = hours * 60 + mins
+        if (total > 0) return if (total >= 60) {
+            val h = total / 60; val m = total % 60
+            if (m > 0) "${h}h ${m}m" else "${h}h"
+        } else "${total}m"
+    }
+    // "H:MM" or "HH:MM" format
+    if (trimmed.contains(':')) {
+        val parts = trimmed.split(':')
+        val hours = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val mins = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val total = hours * 60 + mins
+        if (total > 0) return if (total >= 60) {
+            val m = total % 60
+            if (m > 0) "${hours}h ${m}m" else "${hours}h"
+        } else "${total}m"
+    }
+    // Plain number (minutes)
+    val minutes = trimmed.filter { it.isDigit() }.toIntOrNull() ?: return runtime
     return if (minutes >= 60) {
         val hours = minutes / 60
         val mins = minutes % 60
