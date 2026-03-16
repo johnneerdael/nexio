@@ -182,6 +182,23 @@
     <string name="settings_playback_subtitle">Player, legendas e Autorreprodução.</string>
     <string name="settings_trakt_subtitle">Configurar conexão com o Trakt.</string>
     <string name="settings_about_subtitle">Versão e políticas.</string>
+    <string name="settings_network">Velocidade da rede</string>
+    <string name="settings_network_subtitle">Latência e diagnóstico de download</string>
+    <string name="settings_advanced">Avançado</string>
+    <string name="settings_advanced_subtitle">Executar diagnóstico de velocidade da rede</string>
+    <string name="network_speed_test_run">Executar teste de velocidade</string>
+    <string name="network_speed_test_running">Executando teste de velocidade</string>
+    <string name="network_speed_test_subtitle">Medir velocidade de download e latência</string>
+    <string name="network_testing_latency">Medindo latência</string>
+    <string name="network_testing_download">Medindo velocidade de download</string>
+    <string name="network_results_title">Resultados</string>
+    <string name="network_latency_label">Latência</string>
+    <string name="network_download_label">Download</string>
+    <string name="network_error_prefix">Erro: %1$s</string>
+    <string name="network_powered_by_fast">Fornecido por fast.com</string>
+    <string name="network_connection_wifi">Wi-Fi</string>
+    <string name="network_connection_ethernet">Ethernet</string>
+    <string name="network_connection_offline">Offline</string>
     <string name="settings_debug">Depuração</string>
     <string name="settings_debug_subtitle">Ferramentas de desenvolvedor e testes.</string>
     <string name="settings_plugins_section_subtitle">Gerenciar repositórios, provedores e extensões.</string>
@@ -1027,6 +1044,9 @@
     <string name="settings_rounded_ui">Interface Arredondada</string>
     <string name="cd_expand_sidebar">Expandir menu lateral</string>
 
+    <string name="update_checking">Verificando atualizações…</string>
+    <string name="update_download_complete">Download concluído. Pronto para instalar.</string>
+    <string name="update_up_to_date">O sistema está atualizado. Últimas alterações:</string>
     <string name="update_close">Fechar</string>
     <string name="update_open_settings">Abrir Ajustes</string>
     <string name="update_install">Instalar</string>
