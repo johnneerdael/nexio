@@ -465,8 +465,15 @@ private fun LeftContentSection(
                 }
                 if (runtime != null) {
                     Spacer(modifier = Modifier.height(4.dp))
+                    val runtimeText = if (runtime >= 60) {
+                        val hours = runtime / 60
+                        val mins = runtime % 60
+                        if (mins > 0) "${hours}h ${mins}m" else "${hours}h"
+                    } else {
+                        "${runtime}m"
+                    }
                     Text(
-                        text = "${runtime}m",
+                        text = runtimeText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = NuvioTheme.extendedColors.textSecondary,
                         textAlign = TextAlign.Center
