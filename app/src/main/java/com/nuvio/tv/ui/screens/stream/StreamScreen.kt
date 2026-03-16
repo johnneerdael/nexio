@@ -446,6 +446,7 @@ private fun LeftContentSection(
             // Show episode info or movie info
             if (isEpisode && season != null && episode != null) {
                 // Episode info
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "S$season E$episode",
                     style = MaterialTheme.typography.titleLarge,
@@ -481,6 +482,7 @@ private fun LeftContentSection(
                 }
             } else {
                 // Movie info - genres and year
+                Spacer(modifier = Modifier.height(8.dp))
                 if (infoText.isNotEmpty()) {
                     Text(
                         text = infoText,
