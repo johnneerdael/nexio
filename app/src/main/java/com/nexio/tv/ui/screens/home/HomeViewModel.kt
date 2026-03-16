@@ -1,15 +1,21 @@
 package com.nexio.tv.ui.screens.home
 
+import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -30,11 +36,14 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -60,7 +69,11 @@ class HomeViewModel @Inject constructor(
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
-    internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore
+    internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
+    internal val homeCatalogRefreshCoordinator: HomeCatalogRefreshCoordinator,
+    internal val debugSettingsDataStore: DebugSettingsDataStore,
+    internal val metadataDiskCacheStore: MetadataDiskCacheStore,
+    @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -68,7 +81,9 @@ class HomeViewModel @Inject constructor(
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
+        private const val STARTUP_CATALOG_LOAD_CONCURRENCY = 1
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
+        internal const val STARTUP_NETWORK_DEFERRAL_WINDOW_MS = 20_000L
         internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 750L
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
@@ -100,6 +115,7 @@ class HomeViewModel @Inject constructor(
     internal var currentHeroCatalogKeys: List<String> = emptyList()
     internal var catalogUpdateJob: Job? = null
     internal var hasRenderedFirstCatalog = false
+    internal val startupCatalogLoadSemaphore = Semaphore(STARTUP_CATALOG_LOAD_CONCURRENCY)
     internal val catalogLoadSemaphore = Semaphore(MAX_CATALOG_LOAD_CONCURRENCY)
     internal var pendingCatalogLoads = 0
     internal val activeCatalogLoadJobs = mutableSetOf<Job>()
@@ -160,8 +176,21 @@ class HomeViewModel @Inject constructor(
     internal var mdbListDiscoveryObserved: Boolean = false
     @Volatile
     internal var lastForegroundRefreshMs: Long = 0L
+    @Volatile
+    internal var startupPerfTelemetryEnabled: Boolean = false
+    @Volatile
+    internal var diskFirstHomeStartupEnabled: Boolean = false
+    @Volatile
+    internal var startupWindowOpenUntilMs: Long = 0L
+    @Volatile
+    internal var isStartupDeferredRefreshAllowed: Boolean = true
+    internal var startupDeferralWindowJob: Job? = null
+    internal var deferredStartupRefreshJob: Job? = null
 
     init {
+        observeStartupPerfTelemetry()
+        observeDiskFirstHomeStartupToggle()
+        observeLocaleChangesForMetadata()
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
         observeExternalMetaPrefetchPreference()
@@ -177,6 +206,42 @@ class HomeViewModel @Inject constructor(
         observeAccountSyncRefresh()
         loadContinueWatching()
         observeInstalledAddons()
+    }
+
+    private fun observeStartupPerfTelemetry() {
+        viewModelScope.launch {
+            debugSettingsDataStore.startupPerfTelemetryEnabled.collectLatest { enabled ->
+                startupPerfTelemetryEnabled = enabled
+            }
+        }
+    }
+
+    private fun observeDiskFirstHomeStartupToggle() {
+        viewModelScope.launch {
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.collectLatest { enabled ->
+                diskFirstHomeStartupEnabled = enabled
+                if (!enabled) {
+                    isStartupDeferredRefreshAllowed = true
+                    startupWindowOpenUntilMs = 0L
+                    startupDeferralWindowJob?.cancel()
+                    return@collectLatest
+                }
+                openStartupDeferralWindowIfNeeded("toggle_enabled")
+            }
+        }
+    }
+
+    private fun observeLocaleChangesForMetadata() {
+        viewModelScope.launch {
+            AppLocaleResolver.observeStoredLocaleTag(appContext)
+                .drop(1)
+                .collectLatest {
+                    metadataDiskCacheStore.bumpLanguageEpoch()
+                    metaRepository.clearCache()
+                    tmdbMetadataService.clearCache()
+                    logStartupPerf("metadata_language_epoch_bumped")
+                }
+        }
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
@@ -258,6 +323,48 @@ class HomeViewModel @Inject constructor(
     private fun loadMoreCatalogItems(catalogId: String, addonId: String, type: String) =
         loadMoreCatalogItemsPipeline(catalogId, addonId, type)
 
+    internal fun openStartupDeferralWindowIfNeeded(reason: String) {
+        if (!diskFirstHomeStartupEnabled) return
+        val now = SystemClock.elapsedRealtime()
+        if (startupWindowOpenUntilMs > now) return
+        startupWindowOpenUntilMs = now + STARTUP_NETWORK_DEFERRAL_WINDOW_MS
+        isStartupDeferredRefreshAllowed = false
+        logStartupPerf("disk_first_startup_window_open", "reason=$reason")
+        startupDeferralWindowJob?.cancel()
+        startupDeferralWindowJob = viewModelScope.launch {
+            delay(STARTUP_NETWORK_DEFERRAL_WINDOW_MS)
+            isStartupDeferredRefreshAllowed = true
+            logStartupPerf("disk_first_startup_window_closed")
+            runDeferredStartupRefreshIfNeeded("window_closed")
+        }
+    }
+
+    internal fun shouldDeferStartupNetworkWork(): Boolean {
+        if (!diskFirstHomeStartupEnabled) return false
+        return !isStartupDeferredRefreshAllowed && SystemClock.elapsedRealtime() < startupWindowOpenUntilMs
+    }
+
+    internal fun effectiveCatalogLoadConcurrency(): Int {
+        return if (shouldDeferStartupNetworkWork()) STARTUP_CATALOG_LOAD_CONCURRENCY else MAX_CATALOG_LOAD_CONCURRENCY
+    }
+
+    internal fun runDeferredStartupRefreshIfNeeded(reason: String) {
+        if (!diskFirstHomeStartupEnabled || shouldDeferStartupNetworkWork()) return
+        if (deferredStartupRefreshJob?.isActive == true) return
+        deferredStartupRefreshJob = viewModelScope.launch {
+            logStartupPerf("catalog_refresh_start", "reason=$reason")
+            onForegroundPipeline(forceDeferred = true)
+            runSerializedPostStartupRefresh()
+            logStartupPerf("catalog_refresh_end", "reason=$reason")
+        }
+    }
+
+    internal fun logStartupPerf(event: String, details: String? = null) {
+        if (!startupPerfTelemetryEnabled) return
+        val suffix = details?.let { " $it" }.orEmpty()
+        Log.i("StartupPerf", "t=${SystemClock.elapsedRealtime()}ms event=$event$suffix")
+    }
+
     internal fun scheduleUpdateCatalogRows() {
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
@@ -279,6 +386,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
+    private suspend fun runSerializedPostStartupRefresh() = runSerializedPostStartupRefreshPipeline()
 
     internal var posterStatusReconcileJob: Job? = null
 
@@ -353,6 +461,8 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         posterStatusReconcileJob?.cancel()
+        startupDeferralWindowJob?.cancel()
+        deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()
         homeSnapshotPersistJob?.cancel()
         pendingTmdbEnrichmentByItemId.clear()

@@ -6,6 +6,7 @@ import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
 import com.nexio.tv.core.sync.buildAddonRequestUrl
+import com.nexio.tv.data.local.CatalogDiskCacheStore
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.CatalogRow
@@ -23,7 +24,8 @@ import javax.inject.Singleton
 @Singleton
 class CatalogRepositoryImpl @Inject constructor(
     private val api: AddonApi,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val catalogDiskCacheStore: CatalogDiskCacheStore
 ) : CatalogRepository {
     companion object {
         private const val TAG = "CatalogRepository"
@@ -42,6 +44,32 @@ class CatalogRepositoryImpl @Inject constructor(
         skipStep: Int,
         extraArgs: Map<String, String>,
         supportsSkip: Boolean
+    ): Flow<NetworkResult<CatalogRow>> = getCatalogCachedFirst(
+        addonBaseUrl = addonBaseUrl,
+        addonId = addonId,
+        addonName = addonName,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        skip = skip,
+        skipStep = skipStep,
+        extraArgs = extraArgs,
+        supportsSkip = supportsSkip,
+        allowNetworkRefresh = true
+    )
+
+    override fun getCatalogCachedFirst(
+        addonBaseUrl: String,
+        addonId: String,
+        addonName: String,
+        catalogId: String,
+        catalogName: String,
+        type: String,
+        skip: Int,
+        skipStep: Int,
+        extraArgs: Map<String, String>,
+        supportsSkip: Boolean,
+        allowNetworkRefresh: Boolean
     ): Flow<NetworkResult<CatalogRow>> = flow {
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val providerCacheToken = if (activePosterProvider == null) {
@@ -60,64 +88,118 @@ class CatalogRepositoryImpl @Inject constructor(
             providerCacheToken = providerCacheToken
         )
 
-        // Emit cached data immediately if available
-        val cached = catalogCache[cacheKey]
-        if (cached != null) {
-            emit(NetworkResult.Success(cached))
+        val memoryCached = catalogCache[cacheKey]
+        val diskCached = if (memoryCached == null) {
+            catalogDiskCacheStore.read(cacheKey)?.catalogRow?.also { catalogCache[cacheKey] = it }
         } else {
-            emit(NetworkResult.Loading)
+            null
+        }
+        val cached = memoryCached ?: diskCached
+        cached?.let { emit(NetworkResult.Success(it)) } ?: emit(NetworkResult.Loading)
+
+        if (!allowNetworkRefresh) {
+            if (cached == null) {
+                emit(NetworkResult.Error("Catalog refresh deferred by startup gate"))
+            }
+            return@flow
         }
 
-        val url = buildCatalogUrl(addonBaseUrl, type, catalogId, skip, extraArgs)
-        Log.d(
-            TAG,
-            "Fetching catalog addonId=$addonId addonName=$addonName type=$type catalogId=$catalogId skip=$skip skipStep=$skipStep supportsSkip=$supportsSkip url=${sanitizeUrlForLogs(url)}"
+        val refreshed = fetchCatalogFromNetwork(
+            addonBaseUrl = addonBaseUrl,
+            addonId = addonId,
+            addonName = addonName,
+            catalogId = catalogId,
+            catalogName = catalogName,
+            type = type,
+            skip = skip,
+            skipStep = skipStep,
+            extraArgs = extraArgs,
+            supportsSkip = supportsSkip,
+            activePosterProvider = activePosterProvider
         )
 
-        when (val result = safeApiCall { api.getCatalog(url) }) {
-            is NetworkResult.Success -> {
-                val items = result.data.metas.map { meta ->
-                    posterRatingsUrlResolver.apply(meta.toDomain(), activePosterProvider)
-                }
-                Log.d(
-                    TAG,
-                    "Catalog fetch success addonId=$addonId type=$type catalogId=$catalogId items=${items.size}"
-                )
-
-                val catalogRow = CatalogRow(
-                    addonId = addonId,
-                    addonName = addonName,
-                    addonBaseUrl = addonBaseUrl,
-                    catalogId = catalogId,
-                    catalogName = catalogName,
-                    type = ContentType.fromString(type),
-                    rawType = type,
-                    items = items,
-                    isLoading = false,
-                    hasMore = supportsSkip && items.isNotEmpty(),
-                    currentPage = if (skipStep > 0) skip / skipStep else 0,
-                    supportsSkip = supportsSkip,
-                    skipStep = skipStep
-                )
+        when (refreshed) {
+            is Result.Success -> {
+                val catalogRow = refreshed.row
                 catalogCache[cacheKey] = catalogRow
-                // Only emit fresh data if it differs from cache
-                if (cached == null || cached.items != catalogRow.items) {
-                    emit(NetworkResult.Success(catalogRow))
-                }
+                catalogDiskCacheStore.write(
+                    cacheKey = cacheKey,
+                    row = catalogRow,
+                    catalogVersionHash = buildCatalogVersionHash(catalogRow)
+                )
+                if (cached == null || cached.items != catalogRow.items) emit(NetworkResult.Success(catalogRow))
             }
-            is NetworkResult.Error -> {
+
+            is Result.Failure -> {
+                val result = refreshed.error
                 Log.w(
                     TAG,
-                    "Catalog fetch failed addonId=$addonId type=$type catalogId=$catalogId code=${result.code} message=${result.message} url=${sanitizeUrlForLogs(url)}"
+                    "Catalog fetch failed addonId=$addonId type=$type catalogId=$catalogId code=${result.code} message=${result.message}"
                 )
-                // Only emit error if we had no cached data
-                if (cached == null) {
-                    emit(result)
-                }
+                if (cached == null) emit(result)
             }
-            NetworkResult.Loading -> { /* Already emitted */ }
         }
     }.flowOn(Dispatchers.IO)
+
+    override suspend fun refreshCatalogToDisk(
+        addonBaseUrl: String,
+        addonId: String,
+        addonName: String,
+        catalogId: String,
+        catalogName: String,
+        type: String,
+        skip: Int,
+        skipStep: Int,
+        extraArgs: Map<String, String>,
+        supportsSkip: Boolean
+    ): kotlin.Result<CatalogRow> {
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerCacheToken = if (activePosterProvider == null) {
+            "native"
+        } else {
+            "${activePosterProvider.provider.name}:${activePosterProvider.apiKey.hashCode()}"
+        }
+        val cacheKey = buildCacheKey(
+            addonBaseUrl = addonBaseUrl,
+            addonId = addonId,
+            type = type,
+            catalogId = catalogId,
+            skip = skip,
+            skipStep = skipStep,
+            extraArgs = extraArgs,
+            providerCacheToken = providerCacheToken
+        )
+
+        return when (
+            val refreshed = fetchCatalogFromNetwork(
+                addonBaseUrl = addonBaseUrl,
+                addonId = addonId,
+                addonName = addonName,
+                catalogId = catalogId,
+                catalogName = catalogName,
+                type = type,
+                skip = skip,
+                skipStep = skipStep,
+                extraArgs = extraArgs,
+                supportsSkip = supportsSkip,
+                activePosterProvider = activePosterProvider
+            )
+        ) {
+            is Result.Success -> {
+                catalogCache[cacheKey] = refreshed.row
+                catalogDiskCacheStore.write(
+                    cacheKey = cacheKey,
+                    row = refreshed.row,
+                    catalogVersionHash = buildCatalogVersionHash(refreshed.row)
+                )
+                kotlin.Result.success(refreshed.row)
+            }
+
+            is Result.Failure -> kotlin.Result.failure(
+                IllegalStateException(refreshed.error.message ?: "Catalog refresh failed")
+            )
+        }
+    }
 
     private fun buildCatalogUrl(
         baseUrl: String,
@@ -173,5 +255,82 @@ class CatalogRepositoryImpl @Inject constructor(
 
     override fun clearCache() {
         catalogCache.clear()
+    }
+
+    private suspend fun fetchCatalogFromNetwork(
+        addonBaseUrl: String,
+        addonId: String,
+        addonName: String,
+        catalogId: String,
+        catalogName: String,
+        type: String,
+        skip: Int,
+        skipStep: Int,
+        extraArgs: Map<String, String>,
+        supportsSkip: Boolean,
+        activePosterProvider: PosterRatingsUrlResolver.ActiveProvider?
+    ): Result {
+        val url = buildCatalogUrl(addonBaseUrl, type, catalogId, skip, extraArgs)
+        Log.d(
+            TAG,
+            "Fetching catalog addonId=$addonId addonName=$addonName type=$type catalogId=$catalogId skip=$skip skipStep=$skipStep supportsSkip=$supportsSkip url=${sanitizeUrlForLogs(url)}"
+        )
+        return when (val result = safeApiCall { api.getCatalog(url) }) {
+            is NetworkResult.Success -> {
+                val items = result.data.metas.map { meta ->
+                    posterRatingsUrlResolver.apply(meta.toDomain(), activePosterProvider)
+                }
+                Log.d(
+                    TAG,
+                    "Catalog fetch success addonId=$addonId type=$type catalogId=$catalogId items=${items.size}"
+                )
+                Result.Success(
+                    CatalogRow(
+                        addonId = addonId,
+                        addonName = addonName,
+                        addonBaseUrl = addonBaseUrl,
+                        catalogId = catalogId,
+                        catalogName = catalogName,
+                        type = ContentType.fromString(type),
+                        rawType = type,
+                        items = items,
+                        isLoading = false,
+                        hasMore = supportsSkip && items.isNotEmpty(),
+                        currentPage = if (skipStep > 0) skip / skipStep else 0,
+                        supportsSkip = supportsSkip,
+                        skipStep = skipStep
+                    )
+                )
+            }
+            is NetworkResult.Error -> Result.Failure(result)
+            NetworkResult.Loading -> Result.Failure(NetworkResult.Error("Catalog refresh unresolved"))
+        }
+    }
+
+    private fun buildCatalogVersionHash(row: CatalogRow): String {
+        return buildString {
+            append(row.addonId)
+            append('|')
+            append(row.apiType)
+            append('|')
+            append(row.catalogId)
+            append('|')
+            append(row.items.size)
+            row.items.forEach { item ->
+                append('|')
+                append(item.apiType)
+                append(':')
+                append(item.id)
+                append(':')
+                append(item.poster.orEmpty())
+                append(':')
+                append(item.background.orEmpty())
+            }
+        }.hashCode().toString()
+    }
+
+    private sealed interface Result {
+        data class Success(val row: CatalogRow) : Result
+        data class Failure(val error: NetworkResult.Error) : Result
     }
 }

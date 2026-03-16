@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
@@ -86,7 +87,8 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
 
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
-        traktDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+        val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
+        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
             traktDiscoveryObserved = true
             traktDiscoverySnapshot = snapshot
             scheduleUpdateCatalogRows()
@@ -100,7 +102,12 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             if (prefs == traktCatalogPreferences) return@collectLatest
             traktCatalogPreferences = prefs
             if (shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot)) {
-                traktDiscoveryService.ensureFresh(force = false)
+                if (shouldDeferStartupNetworkWork()) {
+                    startupRefreshPending = true
+                    logStartupPerf("catalog_refresh_deferred", "reason=trakt_pref_change")
+                } else {
+                    traktDiscoveryService.ensureFresh(force = false)
+                }
             }
             scheduleUpdateCatalogRows()
         }
@@ -109,7 +116,8 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
 
 internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
-        mdbListDiscoveryService.observeSnapshot().collectLatest { snapshot ->
+        val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
+        mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
             mdbListDiscoveryObserved = true
             mdbListDiscoverySnapshot = snapshot
             Log.d(
@@ -129,10 +137,15 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
                 if (settings.enabled && settings.apiKey.isNotBlank() &&
                     shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, mdbListDiscoverySnapshot)
                 ) {
-                    runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
-                        .onFailure { error ->
-                            Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
-                        }
+                    if (shouldDeferStartupNetworkWork()) {
+                        startupRefreshPending = true
+                        logStartupPerf("catalog_refresh_deferred", "reason=mdblist_settings_change")
+                    } else {
+                        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
+                            .onFailure { error ->
+                                Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
+                            }
+                    }
                 } else if (!settings.enabled || settings.apiKey.isBlank()) {
                     mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
                     scheduleUpdateCatalogRows()
@@ -147,7 +160,12 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
             if (prefs == mdbListCatalogPreferences) return@collectLatest
             mdbListCatalogPreferences = prefs
             if (shouldRefreshMDBListDiscoveryForState(prefs, mdbListDiscoverySnapshot)) {
-                mdbListDiscoveryService.ensureFresh(force = false)
+                if (shouldDeferStartupNetworkWork()) {
+                    startupRefreshPending = true
+                    logStartupPerf("catalog_refresh_deferred", "reason=mdblist_pref_change")
+                } else {
+                    mdbListDiscoveryService.ensureFresh(force = false)
+                }
             }
             scheduleUpdateCatalogRows()
         }
@@ -211,8 +229,144 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
             .collectLatest { addons ->
                 installedAddonsObserved = true
                 addonsCache = addons
+                if (diskFirstHomeStartupEnabled) {
+                    openStartupDeferralWindowIfNeeded("installed_addons")
+                }
                 loadAllCatalogsPipeline(addons)
             }
+    }
+}
+
+internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
+    if (!diskFirstHomeStartupEnabled) return
+    val beforeTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val beforeMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+
+    logStartupPerf(
+        "synthetic_refresh_start",
+        "trakt_items=${traktSnapshotItemKeys(beforeTraktSnapshot).size} mdb_items=${mdbSnapshotItemKeys(beforeMdbSnapshot).size}"
+    )
+
+    if (shouldRefreshTraktDiscoveryForState(traktCatalogPreferences, beforeTraktSnapshot)) {
+        runCatching { traktDiscoveryService.ensureFresh(force = false) }
+            .onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed synthetic Trakt refresh in serialized startup pipeline", error)
+            }
+    }
+    if (shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, beforeMdbSnapshot)) {
+        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
+            .onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed synthetic MDBList refresh in serialized startup pipeline", error)
+            }
+    }
+
+    val afterTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val afterMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
+    val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
+    val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
+    val mdbAfterKeys = mdbSnapshotItemKeys(afterMdbSnapshot)
+
+    logStartupPerf(
+        "synthetic_refresh_end",
+        "trakt_total=${traktAfterKeys.size} trakt_added=${(traktAfterKeys - traktBeforeKeys).size} trakt_retained=${(traktAfterKeys intersect traktBeforeKeys).size} " +
+            "mdb_total=${mdbAfterKeys.size} mdb_added=${(mdbAfterKeys - mdbBeforeKeys).size} mdb_retained=${(mdbAfterKeys intersect mdbBeforeKeys).size}"
+    )
+
+    val addons = addonsCache
+    val refreshedCatalogCount = homeCatalogRefreshCoordinator.refreshSerially(
+        addons = addons,
+        telemetryEnabled = startupPerfTelemetryEnabled,
+        isCatalogDisabled = { addon, catalog ->
+            isCatalogDisabled(
+                addonBaseUrl = addon.baseUrl,
+                addonId = addon.id,
+                type = catalog.apiType,
+                catalogId = catalog.id,
+                catalogName = catalog.name
+            )
+        },
+        getCurrentRow = { key -> catalogsMap[key] },
+        isItemReferencedElsewhere = { itemKey, sourceCatalogKey ->
+            catalogsMap.any { (catalogKey, row) ->
+                if (catalogKey == sourceCatalogKey) return@any false
+                row.items.any { "${it.apiType}:${it.id}" == itemKey }
+            }
+        },
+        onCatalogReady = { catalogKey, row, diff ->
+            catalogsMap[catalogKey] = row
+            if (diff.addedOrChanged.isNotEmpty()) {
+                logStartupPerf(
+                    "catalog_publish_ready",
+                    "catalogKey=$catalogKey items_added=${diff.addedOrChanged.size}"
+                )
+            }
+            scheduleUpdateCatalogRows()
+        },
+        onLog = { event, details -> logStartupPerf(event, details) }
+    )
+    if (refreshedCatalogCount == 0) {
+        logStartupPerf("catalog_refresh_noop", "reason=no_refreshable_addon_catalogs")
+    }
+
+    // Recompute rows before cleanup so synthetic rows are reflected in the active-key set.
+    runCatching { updateCatalogRowsPipeline() }
+
+    val activeHomeItemKeys = (_fullCatalogRows.value.asSequence() + catalogsMap.values.asSequence())
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
+    if (refreshedCatalogCount == 0 && activeHomeItemKeys.isNotEmpty()) {
+        val visibleItems = _fullCatalogRows.value
+            .asSequence()
+            .flatMap { row -> row.items.asSequence() }
+            .toList()
+        homeCatalogRefreshCoordinator.hydrateAndPrefetchVisibleItems(
+            items = visibleItems,
+            telemetryEnabled = startupPerfTelemetryEnabled,
+            onLog = { event, details -> logStartupPerf(event, details) }
+        )
+    }
+    if (activeHomeItemKeys.isEmpty()) {
+        logStartupPerf("metadata_cleanup_skipped", "reason=active_items_empty")
+    } else {
+        val removedCleanupUrls = metadataDiskCacheStore.removeMetaEntriesNotIn(
+            activeItemKeys = activeHomeItemKeys,
+            maxEntries = 800
+        )
+        homeCatalogRefreshCoordinator.evictCachedImageUrls(removedCleanupUrls)
+        logStartupPerf(
+            "metadata_cleanup_end",
+            "active_items=${activeHomeItemKeys.size} removed_image_urls=${removedCleanupUrls.size}"
+        )
+    }
+    startupRefreshPending = false
+}
+
+private fun traktSnapshotItemKeys(
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
+): Set<String> {
+    return buildSet {
+        snapshot.calendarItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.recommendationMovieItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.recommendationShowItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.trendingMovieItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.trendingShowItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.popularMovieItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.popularShowItems.forEach { add("${it.apiType}:${it.id}") }
+        snapshot.customListCatalogs.forEach { catalog ->
+            catalog.items.forEach { add("${it.apiType}:${it.id}") }
+        }
+    }
+}
+
+private fun mdbSnapshotItemKeys(
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+): Set<String> {
+    return buildSet {
+        snapshot.customListCatalogs.forEach { catalog ->
+            catalog.items.forEach { add("${it.apiType}:${it.id}") }
+        }
     }
 }
 
@@ -337,15 +491,16 @@ internal fun HomeViewModel.loadCatalogPipeline(
 ) {
     val loadJob = viewModelScope.launch {
         var hasCountedCompletion = false
-        catalogLoadSemaphore.withPermit {
-            if (generation != catalogLoadGeneration) return@withPermit
+        val withStartupGate = shouldDeferStartupNetworkWork()
+        suspend fun runCatalogLoad() {
+            if (generation != catalogLoadGeneration) return
             val supportsSkip = catalog.supportsExtra("skip")
             val skipStep = catalog.skipStep()
             Log.d(
                 HomeViewModel.TAG,
                 "Loading home catalog addonId=${addon.id} addonName=${addon.name} type=${catalog.apiType} catalogId=${catalog.id} catalogName=${catalog.name} supportsSkip=$supportsSkip skipStep=$skipStep"
             )
-            catalogRepository.getCatalog(
+            catalogRepository.getCatalogCachedFirst(
                 addonBaseUrl = addon.baseUrl,
                 addonId = addon.id,
                 addonName = addon.displayName,
@@ -354,7 +509,8 @@ internal fun HomeViewModel.loadCatalogPipeline(
                 type = catalog.apiType,
                 skip = 0,
                 skipStep = skipStep,
-                supportsSkip = supportsSkip
+                supportsSkip = supportsSkip,
+                allowNetworkRefresh = !shouldDeferStartupNetworkWork()
             ).collect { result ->
                 if (generation != catalogLoadGeneration) return@collect
                 when (result) {
@@ -373,6 +529,12 @@ internal fun HomeViewModel.loadCatalogPipeline(
                             HomeViewModel.TAG,
                             "Home catalog loaded addonId=${addon.id} type=${catalog.apiType} catalogId=${catalog.id} items=${result.data.items.size} pending=$pendingCatalogLoads"
                         )
+                        if (withStartupGate) {
+                            logStartupPerf(
+                                "catalog_cache_applied",
+                                "catalogKey=$key items=${result.data.items.size}"
+                            )
+                        }
                         if (pendingCatalogLoads == 0) {
                             catalogsLoadInProgress = false
                         }
@@ -396,6 +558,17 @@ internal fun HomeViewModel.loadCatalogPipeline(
                         /* Handled by individual row */
                     }
                 }
+            }
+        }
+        if (withStartupGate) {
+            startupCatalogLoadSemaphore.withPermit {
+                catalogLoadSemaphore.withPermit {
+                    runCatalogLoad()
+                }
+            }
+        } else {
+            catalogLoadSemaphore.withPermit {
+                runCatalogLoad()
             }
         }
     }

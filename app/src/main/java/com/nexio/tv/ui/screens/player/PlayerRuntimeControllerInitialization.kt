@@ -1258,11 +1258,6 @@ private class SubtitleOffsetRenderersFactory(
             eventListener,
             out
         )
-        if (experimentalFireOsIecPassthroughEnabled) {
-            out.removeAll { renderer ->
-                renderer is androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
-            }
-        }
     }
 }
 

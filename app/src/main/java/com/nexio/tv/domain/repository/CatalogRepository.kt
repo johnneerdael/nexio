@@ -18,5 +18,32 @@ interface CatalogRepository {
         supportsSkip: Boolean = false
     ): Flow<NetworkResult<CatalogRow>>
 
+    fun getCatalogCachedFirst(
+        addonBaseUrl: String,
+        addonId: String,
+        addonName: String,
+        catalogId: String,
+        catalogName: String,
+        type: String,
+        skip: Int = 0,
+        skipStep: Int = 100,
+        extraArgs: Map<String, String> = emptyMap(),
+        supportsSkip: Boolean = false,
+        allowNetworkRefresh: Boolean = true
+    ): Flow<NetworkResult<CatalogRow>>
+
+    suspend fun refreshCatalogToDisk(
+        addonBaseUrl: String,
+        addonId: String,
+        addonName: String,
+        catalogId: String,
+        catalogName: String,
+        type: String,
+        skip: Int = 0,
+        skipStep: Int = 100,
+        extraArgs: Map<String, String> = emptyMap(),
+        supportsSkip: Boolean = false
+    ): Result<CatalogRow>
+
     fun clearCache()
 }

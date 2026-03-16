@@ -1,6 +1,9 @@
 package com.nexio.tv.data.repository
 
+import android.os.SystemClock
+import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
@@ -25,6 +28,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -44,7 +48,8 @@ import javax.inject.Singleton
 class TraktLibraryService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
-    private val metaRepository: MetaRepository
+    private val metaRepository: MetaRepository,
+    private val debugSettingsDataStore: DebugSettingsDataStore
 ) {
     private data class LibraryMetadata(
         val name: String?,
@@ -75,9 +80,27 @@ class TraktLibraryService @Inject constructor(
     private var lastRefreshMs: Long = 0L
 
     private val cacheTtlMs = 60_000L
+    private val startupRefreshGateMs = 20_000L
     private val metadataHydrationLimit = 110
     private val listFetchConcurrency = 3
     private val metadataFetchSemaphore = Semaphore(5)
+    @Volatile
+    private var diskFirstHomeStartupEnabled: Boolean = false
+    @Volatile
+    private var startupRefreshGateUntilElapsedMs: Long = 0L
+    @Volatile
+    private var startupGateInitialized: Boolean = false
+
+    init {
+        scope.launch {
+            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+            applyStartupRefreshGate(enabled, "init")
+            startupGateInitialized = true
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.collectLatest { updated ->
+                applyStartupRefreshGate(updated, "toggle_change")
+            }
+        }
+    }
 
     fun observeListTabs(): Flow<List<LibraryListTab>> {
         return snapshotState
@@ -328,6 +351,11 @@ class TraktLibraryService @Inject constructor(
     }
 
     private suspend fun refresh(force: Boolean): Boolean {
+        ensureStartupGateInitialized()
+        if (!force && isStartupRefreshGated()) {
+            Log.d("TraktLibraryService", "refresh deferred by startup gate")
+            return false
+        }
         val now = System.currentTimeMillis()
         return refreshMutex.withLock {
             if (!force && now - lastRefreshMs <= cacheTtlMs && snapshotState.value.updatedAtMs > 0L) {
@@ -347,6 +375,29 @@ class TraktLibraryService @Inject constructor(
                 refreshingState.value = false
             }
         }
+    }
+
+    private suspend fun ensureStartupGateInitialized() {
+        if (startupGateInitialized) return
+        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+        applyStartupRefreshGate(enabled, "lazy_init")
+        startupGateInitialized = true
+    }
+
+    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
+        diskFirstHomeStartupEnabled = enabled
+        if (enabled) {
+            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
+            Log.d("TraktLibraryService", "Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
+        } else {
+            startupRefreshGateUntilElapsedMs = 0L
+            Log.d("TraktLibraryService", "Startup refresh gate disabled reason=$reason")
+        }
+    }
+
+    private fun isStartupRefreshGated(): Boolean {
+        if (!diskFirstHomeStartupEnabled) return false
+        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private suspend fun performOptimisticMutation(
@@ -898,7 +949,12 @@ class TraktLibraryService @Inject constructor(
         for (type in typeCandidates) {
             for (id in idCandidates) {
                 val result = withTimeoutOrNull(3500) {
-                    metaRepository.getMetaFromAllAddons(type = type, id = id)
+                    metaRepository.getMetaFromAllAddons(
+                        type = type,
+                        id = id,
+                        cacheOnDisk = false,
+                        origin = "library"
+                    )
                         .first { it !is NetworkResult.Loading }
                 } ?: continue
                 val meta = (result as? NetworkResult.Success)?.data ?: continue

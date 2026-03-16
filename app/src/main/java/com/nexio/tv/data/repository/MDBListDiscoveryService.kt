@@ -1,7 +1,9 @@
 package com.nexio.tv.data.repository
 
+import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -12,6 +14,7 @@ import com.nexio.tv.domain.model.PosterShape
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
@@ -57,7 +60,8 @@ class MDBListDiscoveryService @Inject constructor(
     private val mdbListApi: MDBListApi,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val snapshotStore: MDBListDiscoverySnapshotStore
+    private val snapshotStore: MDBListDiscoverySnapshotStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val snapshotState = MutableStateFlow(MDBListDiscoverySnapshot())
@@ -65,8 +69,15 @@ class MDBListDiscoveryService @Inject constructor(
     private var lastRefreshMs = 0L
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
+    private val startupRefreshGateMs = 20_000L
     @Volatile
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
+    @Volatile
+    private var diskFirstHomeStartupEnabled: Boolean = false
+    @Volatile
+    private var startupRefreshGateUntilElapsedMs: Long = 0L
+    @Volatile
+    private var startupGateInitialized: Boolean = false
 
     init {
         scope.launch {
@@ -75,20 +86,40 @@ class MDBListDiscoveryService @Inject constructor(
                 lastRefreshMs = persisted.updatedAtMs
             }
         }
+        scope.launch {
+            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+            applyStartupRefreshGate(enabled, "init")
+            startupGateInitialized = true
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.collect { updated ->
+                applyStartupRefreshGate(updated, "toggle_change")
+            }
+        }
     }
 
-    fun observeSnapshot(): Flow<MDBListDiscoverySnapshot> {
+    fun observeSnapshot(autoRefreshOnStart: Boolean = true): Flow<MDBListDiscoverySnapshot> {
         return snapshotState.onStart {
-            scope.launch {
-                runCatching { ensureFresh(force = false) }
-                    .onFailure { error ->
-                        Log.w("MDBListDiscovery", "Failed to refresh MDBList discovery snapshot", error)
+            if (autoRefreshOnStart) {
+                scope.launch {
+                    ensureStartupGateInitialized()
+                    if (isStartupRefreshGated()) {
+                        Log.d("MDBListDiscovery", "Auto-refresh deferred by startup gate")
+                        return@launch
                     }
+                    runCatching { ensureFresh(force = false) }
+                        .onFailure { error ->
+                            Log.w("MDBListDiscovery", "Failed to refresh MDBList discovery snapshot", error)
+                        }
+                }
             }
         }
     }
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
+        ensureStartupGateInitialized()
+        if (isStartupRefreshGated()) {
+            Log.d("MDBListDiscovery", "ensureFresh deferred by startup gate")
+            return@withContext
+        }
         val settings = mdbListSettingsDataStore.settings.first()
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val apiKey = settings.apiKey.trim()
@@ -341,6 +372,29 @@ class MDBListDiscoveryService @Inject constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private suspend fun ensureStartupGateInitialized() {
+        if (startupGateInitialized) return
+        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+        applyStartupRefreshGate(enabled, "lazy_init")
+        startupGateInitialized = true
+    }
+
+    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
+        diskFirstHomeStartupEnabled = enabled
+        if (enabled) {
+            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
+            Log.d("MDBListDiscovery", "Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
+        } else {
+            startupRefreshGateUntilElapsedMs = 0L
+            Log.d("MDBListDiscovery", "Startup refresh gate disabled reason=$reason")
+        }
+    }
+
+    private fun isStartupRefreshGated(): Boolean {
+        if (!diskFirstHomeStartupEnabled) return false
+        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private fun parseListOptions(array: JSONArray, isPersonal: Boolean): List<MDBListListOption> {

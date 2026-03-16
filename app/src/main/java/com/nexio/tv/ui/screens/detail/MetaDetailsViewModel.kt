@@ -91,6 +91,12 @@ class MetaDetailsViewModel @Inject constructor(
     private val itemId: String = savedStateHandle["itemId"] ?: ""
     private val itemType: String = savedStateHandle["itemType"] ?: ""
     private val preferredAddonBaseUrl: String? = savedStateHandle["addonBaseUrl"]
+    private val detailSource: String = (savedStateHandle["detailSource"] as? String)
+        ?.trim()
+        ?.lowercase()
+        .orEmpty()
+    private val shouldCacheDetailMetaOnDisk: Boolean = detailSource !in setOf("library", "search")
+    private val detailMetaOrigin: String = if (shouldCacheDetailMetaOnDisk) "detail" else "detail_$detailSource"
 
     private val _uiState = MutableStateFlow(MetaDetailsUiState())
     val uiState: StateFlow<MetaDetailsUiState> = _uiState.asStateFlow()
@@ -334,7 +340,12 @@ class MetaDetailsViewModel @Inject constructor(
 
             if (preferExternal) {
                 // 1) Try meta addons first
-                metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
+                metaRepository.getMetaFromAllAddons(
+                    type = itemType,
+                    id = metaLookupId,
+                    cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                    origin = detailMetaOrigin
+                ).collect { result ->
                     when (result) {
                         is NetworkResult.Success -> {
                             applyMetaWithEnrichment(result.data)
@@ -343,7 +354,13 @@ class MetaDetailsViewModel @Inject constructor(
                             // 2) Fallback: try originating addon if meta addons failed
                             val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
                             val preferredMeta: Meta? = preferred?.let { baseUrl ->
-                                when (val fallbackResult = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
+                                when (val fallbackResult = metaRepository.getMeta(
+                                    addonBaseUrl = baseUrl,
+                                    type = itemType,
+                                    id = metaLookupId,
+                                    cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                                    origin = detailMetaOrigin
+                                )
                                     .first { it !is NetworkResult.Loading }) {
                                     is NetworkResult.Success -> fallbackResult.data
                                     else -> null
@@ -378,7 +395,13 @@ class MetaDetailsViewModel @Inject constructor(
                 // Original: prefer catalog addon
                 val preferred = preferredAddonBaseUrl?.takeIf { it.isNotBlank() }
                 val preferredMeta: Meta? = preferred?.let { baseUrl ->
-                    when (val result = metaRepository.getMeta(addonBaseUrl = baseUrl, type = itemType, id = metaLookupId)
+                    when (val result = metaRepository.getMeta(
+                        addonBaseUrl = baseUrl,
+                        type = itemType,
+                        id = metaLookupId,
+                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                        origin = detailMetaOrigin
+                    )
                         .first { it !is NetworkResult.Loading }) {
                         is NetworkResult.Success -> result.data
                         else -> null
@@ -388,7 +411,12 @@ class MetaDetailsViewModel @Inject constructor(
                 if (preferredMeta != null) {
                     applyMetaWithEnrichment(preferredMeta)
                 } else {
-                    metaRepository.getMetaFromAllAddons(type = itemType, id = metaLookupId).collect { result ->
+                    metaRepository.getMetaFromAllAddons(
+                        type = itemType,
+                        id = metaLookupId,
+                        cacheOnDisk = shouldCacheDetailMetaOnDisk,
+                        origin = detailMetaOrigin
+                    ).collect { result ->
                         when (result) {
                             is NetworkResult.Success -> applyMetaWithEnrichment(result.data)
                             is NetworkResult.Error -> {

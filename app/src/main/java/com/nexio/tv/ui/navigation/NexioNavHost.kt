@@ -214,6 +214,11 @@ fun NexioNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("detailSource") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
                 navArgument("returnFocusSeason") {
                     type = NavType.StringType
                     nullable = true
@@ -690,7 +695,14 @@ fun NexioNavHost(
         composable(Screen.Search.route) {
             SearchScreen(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
-                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            detailSource = "search"
+                        )
+                    )
                 },
                 onNavigateToSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
@@ -702,7 +714,14 @@ fun NexioNavHost(
         composable(Screen.Discover.route) {
             DiscoverScreen(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
-                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                    navController.navigate(
+                        Screen.Detail.createRoute(
+                            itemId = itemId,
+                            itemType = itemType,
+                            addonBaseUrl = addonBaseUrl,
+                            detailSource = "search"
+                        )
+                    )
                 }
             )
         }
@@ -731,7 +750,12 @@ fun NexioNavHost(
                         )
                     } else {
                         navController.navigate(
-                            Screen.Detail.createRoute(entry.id, entry.type, entry.addonBaseUrl)
+                            Screen.Detail.createRoute(
+                                itemId = entry.id,
+                                itemType = entry.type,
+                                addonBaseUrl = entry.addonBaseUrl,
+                                detailSource = "library"
+                            )
                         )
                     }
                 }
