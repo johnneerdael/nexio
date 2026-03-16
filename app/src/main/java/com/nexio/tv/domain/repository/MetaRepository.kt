@@ -8,12 +8,16 @@ interface MetaRepository {
     fun getMeta(
         addonBaseUrl: String,
         type: String,
-        id: String
+        id: String,
+        cacheOnDisk: Boolean = true,
+        origin: String = "default"
     ): Flow<NetworkResult<Meta>>
     
     fun getMetaFromAllAddons(
         type: String,
-        id: String
+        id: String,
+        cacheOnDisk: Boolean = true,
+        origin: String = "default"
     ): Flow<NetworkResult<Meta>>
     
     fun clearCache()

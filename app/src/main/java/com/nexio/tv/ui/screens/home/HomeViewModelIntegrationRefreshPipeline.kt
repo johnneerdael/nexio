@@ -11,6 +11,14 @@ internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
     viewModelScope.launch {
         accountSyncRefreshNotifier.events.collect {
             startupRefreshPending = true
+            if (diskFirstHomeStartupEnabled) {
+                openStartupDeferralWindowIfNeeded("account_sync")
+            }
+
+            if (shouldDeferStartupNetworkWork()) {
+                logStartupPerf("catalog_refresh_deferred", "reason=account_sync")
+                return@collect
+            }
 
             if (shouldRefreshTraktDiscoveryForState(traktCatalogPreferences, traktDiscoverySnapshot)) {
                 traktDiscoveryRefreshInProgress = true
@@ -45,8 +53,12 @@ internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
     }
 }
 
-internal fun HomeViewModel.onForegroundPipeline() {
+internal fun HomeViewModel.onForegroundPipeline(forceDeferred: Boolean = false) {
     viewModelScope.launch {
+        if (diskFirstHomeStartupEnabled && !forceDeferred) {
+            openStartupDeferralWindowIfNeeded("home_foreground")
+        }
+
         val now = System.currentTimeMillis()
         if (now - lastForegroundRefreshMs < FOREGROUND_REFRESH_THROTTLE_MS) {
             return@launch
@@ -54,15 +66,20 @@ internal fun HomeViewModel.onForegroundPipeline() {
         lastForegroundRefreshMs = now
         startupRefreshPending = true
 
+        if (shouldDeferStartupNetworkWork() && !forceDeferred) {
+            logStartupPerf("catalog_refresh_deferred", "reason=foreground_window")
+            return@launch
+        }
+
         traktDiscoveryRefreshInProgress = true
-        runCatching { traktDiscoveryService.ensureFresh(force = true) }
+        runCatching { traktDiscoveryService.ensureFresh(force = !diskFirstHomeStartupEnabled) }
             .onFailure { error ->
                 Log.w(HomeViewModel.TAG, "Failed to refresh Trakt discovery on foreground", error)
             }
         traktDiscoveryRefreshInProgress = false
 
         mdbListDiscoveryRefreshInProgress = true
-        runCatching { mdbListDiscoveryService.ensureFresh(force = true) }
+        runCatching { mdbListDiscoveryService.ensureFresh(force = !diskFirstHomeStartupEnabled) }
             .onFailure { error ->
                 Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery on foreground", error)
             }

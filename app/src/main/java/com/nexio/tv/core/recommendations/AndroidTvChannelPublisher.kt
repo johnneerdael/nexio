@@ -102,7 +102,11 @@ class AndroidTvChannelPublisher @Inject constructor(
             }
 
             if (selectedRows.isEmpty()) {
-                clearOwnedChannelsLocked()
+                // During startup the home/feed pipeline can be temporarily empty while
+                // disk-first hydration is still in progress. Do not delete launcher channels
+                // in that transient state, otherwise Android TV will treat recreated channels
+                // as new and re-prompt for browsable approval on every cold boot.
+                Log.d(TAG, "Skipping channel mutation because selectedRows is empty for reason=$reason")
                 return
             }
 
@@ -113,9 +117,9 @@ class AndroidTvChannelPublisher @Inject constructor(
             var autoBrowsableChannelId: Long? = null
 
             prefs.selectedFeedKeys.forEach { key ->
-                val row = selectedByKey[key] ?: return@forEach
                 val providerId = channelProviderId(key)
                 activeProviderIds += providerId
+                val row = selectedByKey[key] ?: return@forEach
                 val existing = existingChannels[providerId]
                 val channelResult = upsertChannel(
                     option = row.option,

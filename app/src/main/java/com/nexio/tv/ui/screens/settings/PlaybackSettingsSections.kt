@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
@@ -142,10 +143,12 @@ internal fun PlaybackSettingsSections(
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
     streamDiagnosticsEnabled: Boolean,
     startupPerfTelemetryEnabled: Boolean,
+    diskFirstHomeStartupEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
     onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
     onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
+    onSetDiskFirstHomeStartupEnabled: (Boolean) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
@@ -491,6 +494,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_startup_perf_subtitle),
                     isChecked = startupPerfTelemetryEnabled,
                     onCheckedChange = onSetStartupPerfTelemetryEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_disk_first_home_startup") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Speed,
+                    title = stringResource(R.string.playback_logging_disk_first_home_startup_title),
+                    subtitle = stringResource(R.string.playback_logging_disk_first_home_startup_subtitle),
+                    isChecked = diskFirstHomeStartupEnabled,
+                    onCheckedChange = onSetDiskFirstHomeStartupEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

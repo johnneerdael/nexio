@@ -2,16 +2,19 @@ package com.nexio.tv.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.mapper.toDomain
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.AddonResource
+import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.R
@@ -29,7 +32,8 @@ class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
     private val addonRepository: AddonRepository,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore
 ) : MetaRepository {
     companion object {
         private const val TAG = "MetaRepository"
@@ -43,13 +47,31 @@ class MetaRepositoryImpl @Inject constructor(
     override fun getMeta(
         addonBaseUrl: String,
         type: String,
-        id: String
+        id: String,
+        cacheOnDisk: Boolean,
+        origin: String
     ): Flow<NetworkResult<Meta>> = flow {
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
-        val cacheKey = "$type:$id:${posterProviderCacheToken(activePosterProvider)}"
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        val cacheKey = "$type:$id:$providerToken"
         metaCache[cacheKey]?.let { cached ->
             emit(NetworkResult.Success(cached))
             return@flow
+        }
+        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+        val itemKey = "$type:$id"
+        if (cacheOnDisk) {
+            metadataDiskCacheStore.readMeta(
+                itemKey = itemKey,
+                languageTag = languageTag,
+                providerToken = providerToken
+            )?.let { cached ->
+                val safeCached = cached.sanitizeCastMembers()
+                metaCache[cacheKey] = safeCached
+                Log.d(TAG, "Meta disk cache hit origin=$origin itemKey=$itemKey")
+                emit(NetworkResult.Success(safeCached))
+                return@flow
+            }
         }
 
         emit(NetworkResult.Loading)
@@ -61,8 +83,20 @@ class MetaRepositoryImpl @Inject constructor(
                 val metaDto = result.data.meta
                 if (metaDto != null) {
                     val episodeLabel = context.getString(R.string.episodes_episode)
-                    val meta = posterRatingsUrlResolver.apply(metaDto.toDomain(episodeLabel), activePosterProvider)
+                    val meta = posterRatingsUrlResolver
+                        .apply(metaDto.toDomain(episodeLabel), activePosterProvider)
+                        .sanitizeCastMembers()
                     metaCache[cacheKey] = meta
+                    if (cacheOnDisk) {
+                        metadataDiskCacheStore.writeMeta(
+                            itemKey = itemKey,
+                            languageTag = languageTag,
+                            providerToken = providerToken,
+                            meta = meta
+                        )
+                    } else {
+                        Log.d(TAG, "Meta disk cache bypassed origin=$origin itemKey=$itemKey")
+                    }
                     emit(NetworkResult.Success(meta))
                 } else {
                     emit(NetworkResult.Error("Meta not found"))
@@ -75,13 +109,32 @@ class MetaRepositoryImpl @Inject constructor(
 
     override fun getMetaFromAllAddons(
         type: String,
-        id: String
+        id: String,
+        cacheOnDisk: Boolean,
+        origin: String
     ): Flow<NetworkResult<Meta>> = flow {
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
-        val cacheKey = "$type:$id:${posterProviderCacheToken(activePosterProvider)}"
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        val cacheKey = "$type:$id:$providerToken"
         addonMetaCache[cacheKey]?.let { cached ->
             emit(NetworkResult.Success(cached))
             return@flow
+        }
+        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+        val itemKey = "$type:$id"
+        if (cacheOnDisk) {
+            metadataDiskCacheStore.readMeta(
+                itemKey = itemKey,
+                languageTag = languageTag,
+                providerToken = providerToken
+            )?.let { cached ->
+                val safeCached = cached.sanitizeCastMembers()
+                addonMetaCache[cacheKey] = safeCached
+                metaCache[cacheKey] = safeCached
+                Log.d(TAG, "Meta disk cache hit origin=$origin itemKey=$itemKey")
+                emit(NetworkResult.Success(safeCached))
+                return@flow
+            }
         }
 
         emit(NetworkResult.Loading)
@@ -127,20 +180,34 @@ class MetaRepositoryImpl @Inject constructor(
             }
 
             for (addon in fallbackAddons) {
-                val url = buildMetaUrl(addon.baseUrl, requestedType, id)
-                when (val result = safeApiCall { api.getMeta(url) }) {
-                    is NetworkResult.Success -> {
-                        val metaDto = result.data.meta
-                        if (metaDto != null) {
-                            val episodeLabel = context.getString(R.string.episodes_episode)
-                            val meta = posterRatingsUrlResolver.apply(metaDto.toDomain(episodeLabel), activePosterProvider)
-                            addonMetaCache[cacheKey] = meta
-                            metaCache[cacheKey] = meta
-                            emit(NetworkResult.Success(meta))
-                            return@flow
+                for (candidateId in buildMetaIdCandidates(id)) {
+                    val url = buildMetaUrl(addon.baseUrl, requestedType, candidateId)
+                    when (val result = safeApiCall { api.getMeta(url) }) {
+                        is NetworkResult.Success -> {
+                            val metaDto = result.data.meta
+                            if (metaDto != null) {
+                                val episodeLabel = context.getString(R.string.episodes_episode)
+                                val meta = posterRatingsUrlResolver
+                                    .apply(metaDto.toDomain(episodeLabel), activePosterProvider)
+                                    .sanitizeCastMembers()
+                                addonMetaCache[cacheKey] = meta
+                                metaCache[cacheKey] = meta
+                                if (cacheOnDisk) {
+                                    metadataDiskCacheStore.writeMeta(
+                                        itemKey = itemKey,
+                                        languageTag = languageTag,
+                                        providerToken = providerToken,
+                                        meta = meta
+                                    )
+                                } else {
+                                    Log.d(TAG, "Meta disk cache bypassed origin=$origin itemKey=$itemKey")
+                                }
+                                emit(NetworkResult.Success(meta))
+                                return@flow
+                            }
                         }
+                        else -> { /* Try next addon/id candidate */ }
                     }
-                    else -> { /* Try next addon */ }
                 }
             }
 
@@ -150,38 +217,52 @@ class MetaRepositoryImpl @Inject constructor(
 
         // Try each candidate until we find meta.
         for ((addon, candidateType) in prioritizedCandidates) {
-            val url = buildMetaUrl(addon.baseUrl, candidateType, id)
-            Log.d(
-                TAG,
-                "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=${sanitizeUrlForLogs(url)}"
-            )
-            when (val result = safeApiCall { api.getMeta(url) }) {
-                is NetworkResult.Success -> {
-                    val metaDto = result.data.meta
-                    if (metaDto != null) {
-                        val episodeLabel = context.getString(R.string.episodes_episode)
-                        val meta = posterRatingsUrlResolver.apply(metaDto.toDomain(episodeLabel), activePosterProvider)
-                        addonMetaCache[cacheKey] = meta
-                        metaCache[cacheKey] = meta
+            for (candidateId in buildMetaIdCandidates(id)) {
+                val url = buildMetaUrl(addon.baseUrl, candidateType, candidateId)
+                Log.d(
+                    TAG,
+                    "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$candidateId url=${sanitizeUrlForLogs(url)}"
+                )
+                when (val result = safeApiCall { api.getMeta(url) }) {
+                    is NetworkResult.Success -> {
+                        val metaDto = result.data.meta
+                        if (metaDto != null) {
+                            val episodeLabel = context.getString(R.string.episodes_episode)
+                            val meta = posterRatingsUrlResolver
+                                .apply(metaDto.toDomain(episodeLabel), activePosterProvider)
+                                .sanitizeCastMembers()
+                            addonMetaCache[cacheKey] = meta
+                            metaCache[cacheKey] = meta
+                            if (cacheOnDisk) {
+                                metadataDiskCacheStore.writeMeta(
+                                    itemKey = itemKey,
+                                    languageTag = languageTag,
+                                    providerToken = providerToken,
+                                    meta = meta
+                                )
+                            } else {
+                                Log.d(TAG, "Meta disk cache bypassed origin=$origin itemKey=$itemKey")
+                            }
+                            Log.d(
+                                TAG,
+                                "Meta fetch success addonId=${addon.id} type=$candidateType id=$candidateId"
+                            )
+                            emit(NetworkResult.Success(meta))
+                            return@flow
+                        }
                         Log.d(
                             TAG,
-                            "Meta fetch success addonId=${addon.id} type=$candidateType id=$id"
+                            "Meta response was null addonId=${addon.id} type=$candidateType id=$candidateId"
                         )
-                        emit(NetworkResult.Success(meta))
-                        return@flow
                     }
-                    Log.d(
-                        TAG,
-                        "Meta response was null addonId=${addon.id} type=$candidateType id=$id"
-                    )
+                    is NetworkResult.Error -> {
+                        Log.w(
+                            TAG,
+                            "Meta fetch failed addonId=${addon.id} type=$candidateType id=$candidateId code=${result.code} message=${result.message}"
+                        )
+                    }
+                    NetworkResult.Loading -> { /* no-op */ }
                 }
-                is NetworkResult.Error -> {
-                    Log.w(
-                        TAG,
-                        "Meta fetch failed addonId=${addon.id} type=$candidateType id=$id code=${result.code} message=${result.message}"
-                    )
-                }
-                NetworkResult.Loading -> { /* no-op */ }
             }
         }
 
@@ -222,6 +303,27 @@ class MetaRepositoryImpl @Inject constructor(
         }
     }
 
+    private fun buildMetaIdCandidates(id: String): List<String> {
+        val trimmed = id.trim()
+        if (trimmed.isBlank()) return emptyList()
+        return buildList {
+            add(trimmed)
+            when {
+                trimmed.startsWith("tmdb:", ignoreCase = true) ||
+                    trimmed.startsWith("trakt:", ignoreCase = true) ||
+                    trimmed.startsWith("imdb:", ignoreCase = true) -> {
+                    val plain = trimmed.substringAfter(':').trim()
+                    if (plain.isNotEmpty()) add(plain)
+                }
+                trimmed.startsWith("tt", ignoreCase = true) -> add("imdb:$trimmed")
+                trimmed.toIntOrNull() != null -> {
+                    add("tmdb:$trimmed")
+                    add("trakt:$trimmed")
+                }
+            }
+        }.distinct()
+    }
+
     private fun encodePathSegment(value: String): String {
         return URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
@@ -231,6 +333,40 @@ class MetaRepositoryImpl @Inject constructor(
         addonMetaCache.clear()
     }
 
+    private fun Meta.sanitizeCastMembers(): Meta {
+        val safeMembers = (castMembers as List<*>)
+            .mapNotNull { raw ->
+                when (raw) {
+                    is MetaCastMember -> raw
+                    is Map<*, *> -> {
+                        val name = (raw["name"] as? String)?.trim().orEmpty()
+                        if (name.isBlank()) return@mapNotNull null
+                        MetaCastMember(
+                            name = name,
+                            character = (raw["character"] as? String)?.takeIf { it.isNotBlank() },
+                            photo = (raw["photo"] as? String)?.takeIf { it.isNotBlank() },
+                            tmdbId = when (val tmdbRaw = raw["tmdbId"]) {
+                                is Number -> tmdbRaw.toInt()
+                                is String -> tmdbRaw.toIntOrNull()
+                                else -> null
+                            }
+                        )
+                    }
+                    else -> null
+                }
+            }
+            .distinctBy { it.tmdbId ?: (it.name.lowercase() + "|" + (it.character ?: "")) }
+        val fallback = if (safeMembers.isNotEmpty()) {
+            safeMembers
+        } else {
+            (cast as List<*>).mapNotNull { raw ->
+                val trimmed = (raw as? String)?.trim().orEmpty()
+                if (trimmed.isBlank()) null else MetaCastMember(name = trimmed)
+            }
+        }
+        return copy(castMembers = fallback)
+    }
+
     private fun posterProviderCacheToken(
         activeProvider: PosterRatingsUrlResolver.ActiveProvider?
     ): String {
@@ -238,4 +374,3 @@ class MetaRepositoryImpl @Inject constructor(
         return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
     }
 }
-

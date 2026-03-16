@@ -1,8 +1,10 @@
 package com.nexio.tv.data.repository
 
+import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
@@ -67,7 +69,8 @@ class TraktProgressService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository,
-    private val traktSettingsDataStore: TraktSettingsDataStore
+    private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore
 ) {
     data class CalendarShowEntry(
         val contentId: String,
@@ -88,6 +91,7 @@ class TraktProgressService @Inject constructor(
 
     companion object {
         private const val TAG = "TraktProgressSvc"
+        private const val STARTUP_REFRESH_GATE_MS = 20_000L
     }
 
     private fun trace(message: String) {
@@ -199,11 +203,25 @@ class TraktProgressService @Inject constructor(
     private var consecutiveRefreshFailures = 0
     @Volatile
     private var continueWatchingWindowDays: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP
+    @Volatile
+    private var diskFirstHomeStartupEnabled: Boolean = false
+    @Volatile
+    private var startupRefreshGateUntilElapsedMs: Long = 0L
+    @Volatile
+    private var startupGateInitialized: Boolean = false
 
     init {
         scope.launch {
             traktSettingsDataStore.continueWatchingDaysCap.collectLatest { days ->
                 continueWatchingWindowDays = days
+            }
+        }
+        scope.launch {
+            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+            applyStartupRefreshGate(enabled, "init")
+            startupGateInitialized = true
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.collectLatest { updated ->
+                applyStartupRefreshGate(updated, "toggle_change")
             }
         }
         scope.launch {
@@ -230,6 +248,11 @@ class TraktProgressService @Inject constructor(
     }
 
     suspend fun refreshNow() {
+        ensureStartupGateInitialized()
+        if (isStartupRefreshGated()) {
+            trace("refreshNow: deferred by startup gate")
+            return
+        }
         val now = System.currentTimeMillis()
         forceRefreshUntilMs = now + 30_000L
         if (now - lastManualRefreshSignalMs < manualRefreshSignalThrottleMs) {
@@ -609,6 +632,11 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun refreshRemoteSnapshot() {
+        ensureStartupGateInitialized()
+        if (isStartupRefreshGated()) {
+            trace("refreshRemoteSnapshot: deferred by startup gate")
+            return
+        }
         if (!traktAuthService.isCircuitClosed()) {
             trace("refreshRemoteSnapshot: circuit breaker open, skipping")
             throw IOException("Trakt circuit breaker is open")
@@ -1364,6 +1392,29 @@ class TraktProgressService @Inject constructor(
         lastFastSyncRequestMs = now
         forceRefreshUntilMs = now + 30_000L
         refreshSignals.tryEmit(Unit)
+    }
+
+    private suspend fun ensureStartupGateInitialized() {
+        if (startupGateInitialized) return
+        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+        applyStartupRefreshGate(enabled, "lazy_init")
+        startupGateInitialized = true
+    }
+
+    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
+        diskFirstHomeStartupEnabled = enabled
+        if (enabled) {
+            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + STARTUP_REFRESH_GATE_MS
+            trace("startup refresh gate open (${STARTUP_REFRESH_GATE_MS}ms) reason=$reason")
+        } else {
+            startupRefreshGateUntilElapsedMs = 0L
+            trace("startup refresh gate disabled reason=$reason")
+        }
+    }
+
+    private fun isStartupRefreshGated(): Boolean {
+        if (!diskFirstHomeStartupEnabled) return false
+        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private fun hydrateMetadata(progressList: List<WatchProgress>) {

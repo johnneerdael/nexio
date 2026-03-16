@@ -1,7 +1,9 @@
 package com.nexio.tv.data.repository
 
+import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -25,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -84,7 +87,8 @@ class TraktDiscoveryService @Inject constructor(
     private val metaRepository: MetaRepository,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val snapshotStore: TraktDiscoverySnapshotStore
+    private val snapshotStore: TraktDiscoverySnapshotStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(TraktDiscoverySnapshot())
@@ -96,8 +100,15 @@ class TraktDiscoveryService @Inject constructor(
     private val minRefreshIntervalMs = 30_000L
     private val fallbackRefreshIntervalMs = 15 * 60_000L
     private val maxItemsPerRail = 20
+    private val startupRefreshGateMs = 20_000L
     @Volatile
     private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
+    @Volatile
+    private var diskFirstHomeStartupEnabled: Boolean = false
+    @Volatile
+    private var startupRefreshGateUntilElapsedMs: Long = 0L
+    @Volatile
+    private var startupGateInitialized: Boolean = false
 
     init {
         scope.launch {
@@ -105,6 +116,14 @@ class TraktDiscoveryService @Inject constructor(
                 rawSnapshotState.value = persisted
                 snapshotState.value = persisted
                 lastRefreshMs = persisted.updatedAtMs
+            }
+        }
+        scope.launch {
+            val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+            applyStartupRefreshGate(enabled, "init")
+            startupGateInitialized = true
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.collect { updated ->
+                applyStartupRefreshGate(updated, "toggle_change")
             }
         }
         scope.launch {
@@ -139,18 +158,30 @@ class TraktDiscoveryService @Inject constructor(
         }
     }
 
-    fun observeSnapshot(): Flow<TraktDiscoverySnapshot> {
+    fun observeSnapshot(autoRefreshOnStart: Boolean = true): Flow<TraktDiscoverySnapshot> {
         return snapshotState.onStart {
-            scope.launch {
-                runCatching { ensureFresh(force = false) }
-                    .onFailure { error ->
-                        Log.w("TraktDiscovery", "Failed to refresh Trakt discovery snapshot", error)
+            if (autoRefreshOnStart) {
+                scope.launch {
+                    ensureStartupGateInitialized()
+                    if (isStartupRefreshGated()) {
+                        Log.d("TraktDiscovery", "Auto-refresh deferred by startup gate")
+                        return@launch
                     }
+                    runCatching { ensureFresh(force = false) }
+                        .onFailure { error ->
+                            Log.w("TraktDiscovery", "Failed to refresh Trakt discovery snapshot", error)
+                        }
+                }
             }
         }
     }
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
+        ensureStartupGateInitialized()
+        if (isStartupRefreshGated()) {
+            Log.d("TraktDiscovery", "ensureFresh deferred by startup gate")
+            return@withContext
+        }
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) {
             rawSnapshotState.value = TraktDiscoverySnapshot()
             snapshotStore.clear()
@@ -265,6 +296,29 @@ class TraktDiscoveryService @Inject constructor(
             Log.w("TraktDiscoveryService", "Failed to hide recommendation remotely: ${error.message}")
         }
         traktSettingsDataStore.addDismissedRecommendationKey(ref.recommendationKey)
+    }
+
+    private suspend fun ensureStartupGateInitialized() {
+        if (startupGateInitialized) return
+        val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
+        applyStartupRefreshGate(enabled, "lazy_init")
+        startupGateInitialized = true
+    }
+
+    private fun applyStartupRefreshGate(enabled: Boolean, reason: String) {
+        diskFirstHomeStartupEnabled = enabled
+        if (enabled) {
+            startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
+            Log.d("TraktDiscovery", "Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
+        } else {
+            startupRefreshGateUntilElapsedMs = 0L
+            Log.d("TraktDiscovery", "Startup refresh gate disabled reason=$reason")
+        }
+    }
+
+    private fun isStartupRefreshGated(): Boolean {
+        if (!diskFirstHomeStartupEnabled) return false
+        return SystemClock.elapsedRealtime() < startupRefreshGateUntilElapsedMs
     }
 
     private suspend fun hasActivitiesChanged(): Boolean {

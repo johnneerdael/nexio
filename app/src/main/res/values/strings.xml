@@ -7,6 +7,7 @@
     <!-- HomeScreen -->
     <string name="home_no_addons">No addons installed. Add one to get started.</string>
     <string name="home_no_catalog_addons">No catalog addons installed. Install a catalog addon to see content.</string>
+    <string name="home_startup_loading_timeout">Home content is taking longer than expected to load. Please retry.</string>
     <string name="error_generic">An error occurred</string>
 
     <!-- ErrorState -->
@@ -223,6 +224,8 @@
     <string name="playback_logging_stream_subtitle">Emit detailed stream fetch timing and filtering diagnostics to logcat.</string>
     <string name="playback_logging_startup_perf_title">Enable Startup Frame Telemetry</string>
     <string name="playback_logging_startup_perf_subtitle">Emit startup milestone and slow-frame timing diagnostics to logcat for first-render profiling.</string>
+    <string name="playback_logging_disk_first_home_startup_title">Enable Disk-First Home Startup Mode</string>
+    <string name="playback_logging_disk_first_home_startup_subtitle">Defer heavy home refresh work for the first 20 seconds and prefer cached disk content on startup.</string>
     <string name="playback_afr_open">Open</string>
     <string name="playback_afr_closed">Closed</string>
     <string name="playback_afr_off">Off</string>

@@ -53,6 +53,7 @@ import com.nexio.tv.ui.components.PosterCardStyle
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.ui.theme.NexioColors
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private data class HomePosterOptionsTarget(
@@ -61,6 +62,8 @@ private data class HomePosterOptionsTarget(
     val statusKey: String,
     val recommendationRef: TraktRecommendationRef?
 )
+
+private const val HOME_STARTUP_CONTENT_TIMEOUT_MS = 5_000L
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -87,13 +90,30 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val activity = LocalContext.current as? android.app.Activity
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
-    var hasEnteredCatalogContent by rememberSaveable { mutableStateOf(false) }
+    val hasRenderableContent = hasCatalogContent ||
+        uiState.continueWatchingItems.isNotEmpty() ||
+        uiState.heroItems.isNotEmpty()
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
+    var startupContentGateTimedOut by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
+    val shouldArmStartupTimeout = uiState.isLoading && !hasRenderableContent && uiState.error == null
 
-    LaunchedEffect(hasCatalogContent) {
-        if (hasCatalogContent) {
-            hasEnteredCatalogContent = true
+    LaunchedEffect(shouldArmStartupTimeout) {
+        if (!shouldArmStartupTimeout) {
+            startupContentGateTimedOut = false
+            return@LaunchedEffect
+        }
+        startupContentGateTimedOut = false
+        delay(HOME_STARTUP_CONTENT_TIMEOUT_MS)
+        startupContentGateTimedOut = true
+    }
+
+    LaunchedEffect(startupContentGateTimedOut, hasRenderableContent) {
+        if (startupContentGateTimedOut && !hasRenderableContent) {
+            viewModel.logStartupPerf(
+                event = "home_startup_gate_timeout",
+                details = "timeoutMs=$HOME_STARTUP_CONTENT_TIMEOUT_MS"
+            )
         }
     }
 
@@ -135,18 +155,25 @@ fun HomeScreen(
             .fillMaxSize()
             .background(NexioColors.Background)
     ) {
-        val hasAnyContent = uiState.catalogRows.isNotEmpty() ||
-            uiState.continueWatchingItems.isNotEmpty() ||
-            uiState.heroItems.isNotEmpty()
-
         when {
-            uiState.isLoading && !hasAnyContent -> {
+            uiState.isLoading && !hasRenderableContent && !startupContentGateTimedOut -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     LoadingIndicator()
                 }
+            }
+
+            startupContentGateTimedOut && !hasRenderableContent && uiState.error == null -> {
+                ErrorState(
+                    message = stringResource(R.string.home_startup_loading_timeout),
+                    onRetry = {
+                        viewModel.logStartupPerf("home_startup_gate_retry")
+                        startupContentGateTimedOut = false
+                        viewModel.onEvent(HomeEvent.OnRetry)
+                    }
+                )
             }
 
             uiState.error == "No addons installed" && uiState.catalogRows.isEmpty() -> {
@@ -183,7 +210,9 @@ fun HomeScreen(
             }
 
             else -> {
-                val shouldShowLoadingGate = !hasEnteredCatalogContent && !hasCatalogContent
+                val shouldShowLoadingGate = !hasRenderableContent &&
+                    uiState.error == null &&
+                    !startupContentGateTimedOut
                 LaunchedEffect(shouldShowLoadingGate) {
                     if (shouldShowLoadingGate) {
                         showHomeContentWithAnimation = false

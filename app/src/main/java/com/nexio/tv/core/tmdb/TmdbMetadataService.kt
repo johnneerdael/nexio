@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbEpisode
@@ -39,7 +40,8 @@ class TmdbMetadataService @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val tmdbApi: TmdbApi,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val tmdbSettingsDataStore: TmdbSettingsDataStore
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore
 ) {
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
@@ -59,6 +61,14 @@ class TmdbMetadataService @Inject constructor(
             val providerToken = posterProviderCacheToken(activePosterProvider)
             val cacheKey = "$tmdbId:${contentType.name}:$normalizedLanguage:$providerToken"
             enrichmentCache[cacheKey]?.let { return@withContext it }
+            metadataDiskCacheStore.readTmdbEnrichment(
+                tmdbKey = "$tmdbId:${contentType.name}",
+                languageTag = normalizedLanguage,
+                providerToken = providerToken
+            )?.let { cached ->
+                enrichmentCache[cacheKey] = cached
+                return@withContext cached
+            }
             val apiKey = requireApiKey() ?: return@withContext null
 
             val numericId = tmdbId.toIntOrNull() ?: return@withContext null
@@ -311,6 +321,12 @@ class TmdbMetadataService @Inject constructor(
                     collectionName = collectionName
                 )
                 enrichmentCache[cacheKey] = enrichment
+                metadataDiskCacheStore.writeTmdbEnrichment(
+                    tmdbKey = "$tmdbId:${contentType.name}",
+                    languageTag = normalizedLanguage,
+                    providerToken = providerToken,
+                    enrichment = enrichment
+                )
                 enrichment
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch TMDB enrichment: ${e.message}", e)

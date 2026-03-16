@@ -209,6 +209,8 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var startupPerfTelemetryEnabled: Boolean = false
     @Volatile
+    private var diskFirstHomeStartupEnabled: Boolean = false
+    @Volatile
     private var startupPerfWindowOpen: Boolean = false
     private var startupWindowOpenedAtMs: Long = 0L
     private var startupDeferralGeneration: Long = 0L
@@ -260,6 +262,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
                 startupPerfTelemetryEnabled = enabled
+            }
+        }
+        lifecycleScope.launch {
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.collect { enabled ->
+                diskFirstHomeStartupEnabled = enabled
             }
         }
         lifecycleScope.launch {
@@ -581,6 +588,10 @@ class MainActivity : ComponentActivity() {
             logStartupPerf("channel_sync_request_end", "reason=app_start_deferred")
             maybeLaunchPendingBrowsableChannelRequest()
             launch {
+                if (diskFirstHomeStartupEnabled) {
+                    logStartupPerf("trakt_refresh_deferred", "reason=disk_first_startup_gate")
+                    return@launch
+                }
                 logStartupPerf("trakt_refresh_start")
                 runCatching { traktProgressService.refreshNow() }
                     .onFailure { error ->

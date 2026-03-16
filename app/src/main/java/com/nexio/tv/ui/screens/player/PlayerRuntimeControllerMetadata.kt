@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import com.nexio.tv.R
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -33,14 +34,42 @@ internal fun PlayerRuntimeController.fetchMetaDetails(id: String?, type: String?
 internal fun PlayerRuntimeController.applyMetaDetails(meta: Meta) {
     metaVideos = meta.videos
     val description = resolveDescription(meta)
+    val safeCastMembers = sanitizeCastMembers(meta)
 
     _uiState.update { state ->
         state.copy(
             description = description ?: state.description,
-            castMembers = if (meta.castMembers.isNotEmpty()) meta.castMembers else state.castMembers
+            castMembers = if (safeCastMembers.isNotEmpty()) safeCastMembers else state.castMembers
         )
     }
     recomputeNextEpisode(resetVisibility = false)
+}
+
+private fun sanitizeCastMembers(meta: Meta): List<MetaCastMember> {
+    val safeFromMembers = (meta.castMembers as List<*>).mapNotNull { raw ->
+        when (raw) {
+            is MetaCastMember -> raw
+            is Map<*, *> -> {
+                val name = (raw["name"] as? String)?.trim().orEmpty()
+                if (name.isBlank()) null else MetaCastMember(
+                    name = name,
+                    character = (raw["character"] as? String)?.takeIf { it.isNotBlank() },
+                    photo = (raw["photo"] as? String)?.takeIf { it.isNotBlank() },
+                    tmdbId = when (val tmdbRaw = raw["tmdbId"]) {
+                        is Number -> tmdbRaw.toInt()
+                        is String -> tmdbRaw.toIntOrNull()
+                        else -> null
+                    }
+                )
+            }
+            else -> null
+        }
+    }
+    if (safeFromMembers.isNotEmpty()) return safeFromMembers
+    return (meta.cast as List<*>).mapNotNull { raw ->
+        val name = (raw as? String)?.trim().orEmpty()
+        if (name.isBlank()) null else MetaCastMember(name = name)
+    }
 }
 
 internal fun PlayerRuntimeController.resolveDescription(meta: Meta): String? {

@@ -752,10 +752,32 @@ private fun MetaDetailsContent(
 
     // Pre-compute cast members to avoid recomputation in lazy scope
     val castMembersToShow = remember(meta.castMembers, meta.cast) {
-        if (meta.castMembers.isNotEmpty()) {
-            meta.castMembers
+        val safeCastMembers = (meta.castMembers as List<*>).mapNotNull { raw ->
+            when (raw) {
+                is MetaCastMember -> raw
+                is Map<*, *> -> {
+                    val name = (raw["name"] as? String)?.trim().orEmpty()
+                    if (name.isBlank()) null else MetaCastMember(
+                        name = name,
+                        character = (raw["character"] as? String)?.takeIf { it.isNotBlank() },
+                        photo = (raw["photo"] as? String)?.takeIf { it.isNotBlank() },
+                        tmdbId = when (val tmdbId = raw["tmdbId"]) {
+                            is Number -> tmdbId.toInt()
+                            is String -> tmdbId.toIntOrNull()
+                            else -> null
+                        }
+                    )
+                }
+                else -> null
+            }
+        }
+        if (safeCastMembers.isNotEmpty()) {
+            safeCastMembers
         } else {
-            meta.cast.map { name -> MetaCastMember(name = name) }
+            (meta.cast as List<*>).mapNotNull { raw ->
+                val name = (raw as? String)?.trim().orEmpty()
+                if (name.isBlank()) null else MetaCastMember(name = name)
+            }
         }
     }
 
