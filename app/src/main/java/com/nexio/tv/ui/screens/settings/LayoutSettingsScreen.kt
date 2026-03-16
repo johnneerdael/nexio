@@ -371,6 +371,19 @@ fun LayoutSettingsContent(
                         },
                         onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
                     )
+                    CompactToggleRow(
+                        title = stringResource(R.string.playback_logging_disk_first_home_startup_title),
+                        subtitle = stringResource(R.string.playback_logging_disk_first_home_startup_subtitle),
+                        checked = uiState.diskFirstHomeStartupEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetDiskFirstHomeStartupEnabled(
+                                    !uiState.diskFirstHomeStartupEnabled
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.HOME_CONTENT }
+                    )
                 }
             }
 

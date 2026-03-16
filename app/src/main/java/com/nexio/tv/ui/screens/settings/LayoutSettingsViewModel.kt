@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.repository.AddonRepository
@@ -36,7 +37,8 @@ data class LayoutSettingsUiState(
     val posterCardCornerRadiusDp: Int = 12,
     val blurUnwatchedEpisodes: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
-    val hideUnreleasedContent: Boolean = false
+    val hideUnreleasedContent: Boolean = false,
+    val diskFirstHomeStartupEnabled: Boolean = true
 )
 
 data class CatalogInfo(
@@ -64,12 +66,14 @@ sealed class LayoutSettingsEvent {
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetDiskFirstHomeStartupEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
 
 @HiltViewModel
 class LayoutSettingsViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository,
     private val metaRepository: com.nexio.tv.domain.repository.MetaRepository
 ) : ViewModel() {
@@ -187,6 +191,11 @@ class LayoutSettingsViewModel @Inject constructor(
                 updateUiStateIfChanged { it.copy(hideUnreleasedContent = enabled) }
             }
         }
+        viewModelScope.launch {
+            debugSettingsDataStore.diskFirstHomeStartupEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(diskFirstHomeStartupEnabled = enabled) }
+            }
+        }
         loadAvailableCatalogs()
     }
 
@@ -210,6 +219,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
+            is LayoutSettingsEvent.SetDiskFirstHomeStartupEnabled -> setDiskFirstHomeStartupEnabled(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
     }
@@ -344,6 +354,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.hideUnreleasedContent == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setHideUnreleasedContent(enabled)
+        }
+    }
+
+    private fun setDiskFirstHomeStartupEnabled(enabled: Boolean) {
+        if (_uiState.value.diskFirstHomeStartupEnabled == enabled) return
+        viewModelScope.launch {
+            debugSettingsDataStore.setDiskFirstHomeStartupEnabled(enabled)
         }
     }
 

@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VerticalAlignBottom
@@ -107,7 +106,6 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Image
 
@@ -134,7 +132,6 @@ fun PlaybackSettingsContent(
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
-    val diskFirstHomeStartupEnabled by viewModel.diskFirstHomeStartupEnabled.collectAsStateWithLifecycle(initialValue = false)
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
     var memoryUsageTrigger by remember { mutableStateOf(0) }
@@ -301,7 +298,6 @@ fun PlaybackSettingsContent(
                 },
                 streamDiagnosticsEnabled = streamDiagnosticsEnabled,
                 startupPerfTelemetryEnabled = startupPerfTelemetryEnabled,
-                diskFirstHomeStartupEnabled = diskFirstHomeStartupEnabled,
                 onSetFireOsIecVerboseLoggingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFireOsIecVerboseLoggingEnabled(enabled) }
                 },
@@ -313,9 +309,6 @@ fun PlaybackSettingsContent(
                 },
                 onSetStartupPerfTelemetryEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStartupPerfTelemetryEnabled(enabled) }
-                },
-                onSetDiskFirstHomeStartupEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setDiskFirstHomeStartupEnabled(enabled) }
                 },
                 onSetIecPackerMaxPcmChannelLayout = { layout ->
                     coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
