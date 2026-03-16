@@ -242,10 +242,16 @@ fun NetworkSettingsContent(
         ) {
             SettingsDetailHeader(
                 modifier = Modifier.weight(1f),
-                title = stringResource(R.string.settings_network),
-                subtitle = stringResource(R.string.settings_network_subtitle)
+                title = stringResource(R.string.settings_advanced),
+                subtitle = stringResource(R.string.settings_advanced_subtitle)
             )
-            ConnectionStatusBadge(type = connectionType)
+            AnimatedVisibility(
+                visible = testState != NetworkTestState.Idle,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                ConnectionStatusBadge(type = connectionType)
+            }
         }
 
         SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {

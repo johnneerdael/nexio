@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -67,7 +66,7 @@ internal enum class SettingsCategory {
     PLUGINS,
     INTEGRATION,
     PLAYBACK,
-    NETWORK,
+    ADVANCED,
     TRAKT,
     ABOUT,
     DEBUG
@@ -150,13 +149,6 @@ private fun rememberSettingsSectionSpecs() = listOf(
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
-        category = SettingsCategory.NETWORK,
-        title = stringResource(R.string.settings_network),
-        icon = Icons.Default.NetworkCheck,
-        subtitle = stringResource(R.string.settings_network_subtitle),
-        destination = SettingsSectionDestination.Inline
-    ),
-    SettingsSectionSpec(
         category = SettingsCategory.TRAKT,
         title = "Trakt",
         rawIconRes = R.raw.trakt_tv_glyph,
@@ -168,6 +160,13 @@ private fun rememberSettingsSectionSpecs() = listOf(
         title = stringResource(R.string.about_title),
         icon = Icons.Default.Info,
         subtitle = stringResource(R.string.settings_about_subtitle),
+        destination = SettingsSectionDestination.Inline
+    ),
+    SettingsSectionSpec(
+        category = SettingsCategory.ADVANCED,
+        title = stringResource(R.string.settings_advanced),
+        icon = Icons.Default.Build,
+        subtitle = stringResource(R.string.settings_advanced_subtitle),
         destination = SettingsSectionDestination.Inline
     ),
     SettingsSectionSpec(
@@ -217,7 +216,7 @@ fun SettingsScreen(
                 SettingsCategory.LAYOUT to FocusRequester(),
                 SettingsCategory.INTEGRATION to FocusRequester(),
                 SettingsCategory.PLAYBACK to FocusRequester(),
-                SettingsCategory.NETWORK to FocusRequester(),
+                SettingsCategory.ADVANCED to FocusRequester(),
                 SettingsCategory.ABOUT to FocusRequester()
             )
     }
@@ -394,6 +393,13 @@ fun SettingsScreen(
                                 null
                             }
                         )
+                        SettingsCategory.ADVANCED -> NetworkSettingsContent(
+                            initialFocusRequester = if (allowDetailAutofocus) {
+                                contentFocusRequesters[SettingsCategory.ADVANCED]
+                            } else {
+                                null
+                            }
+                        )
                         SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
                             selectedSection = integrationSection,
                             onSelectSection = { integrationSection = it },
@@ -412,13 +418,6 @@ fun SettingsScreen(
                             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.ABOUT]
-                            } else {
-                                null
-                            }
-                        )
-                        SettingsCategory.NETWORK -> NetworkSettingsContent(
-                            initialFocusRequester = if (allowDetailAutofocus) {
-                                contentFocusRequesters[SettingsCategory.NETWORK]
                             } else {
                                 null
                             }
