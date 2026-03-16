@@ -72,7 +72,7 @@ fun GridContinueWatchingSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 12.dp, start = 24.dp, end = 24.dp)
+                .padding(top = 24.dp, bottom = 12.dp)
         ) {
             Column {
                 Text(
@@ -91,7 +91,7 @@ fun GridContinueWatchingSection(
                         lastFocusedIndex else 0
                     focusRequesters.getOrNull(idx) ?: FocusRequester.Default
                 },
-            contentPadding = PaddingValues(horizontal = 24.dp),
+            contentPadding = PaddingValues(vertical = 0.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             itemsIndexed(
