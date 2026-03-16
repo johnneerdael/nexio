@@ -61,6 +61,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import android.util.Log
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.Video
@@ -572,8 +573,15 @@ private fun MetaInfoRow(
     val context = LocalContext.current
     val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
     val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
-    val yearText = remember(meta.releaseInfo) {
-        meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+    val yearText = remember(meta.releaseInfo, meta.released, meta.type) {
+        if (meta.type == ContentType.MOVIE) {
+            meta.released
+                ?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalDate() }.getOrNull() }
+                ?.let { java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()).format(it) }
+                ?: meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+        } else {
+            meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+        }
     }
     val imdbRating = if (hideImdbRating) null else meta.imdbRating
     val shouldShowImdbRating = imdbRating != null
