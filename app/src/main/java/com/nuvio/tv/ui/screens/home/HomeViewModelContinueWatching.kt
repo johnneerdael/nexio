@@ -42,11 +42,16 @@ private data class ContinueWatchingSettingsSnapshot(
     val showUnairedNextUp: Boolean
 )
 
-private data class NextUpArtworkFallback(
+private data class NextUpTmdbData(
     val thumbnail: String?,
     val backdrop: String?,
     val poster: String?,
-    val airDate: String?
+    val logo: String?,
+    val name: String?,
+    val episodeTitle: String?,
+    val airDate: String?,
+    val overview: String?,
+    val showDescription: String?
 )
 
 private data class NextUpResolution(
@@ -468,12 +473,15 @@ private suspend fun HomeViewModel.buildNextUpItem(
     val existingBackdrop = meta.backdropUrl.normalizeImageUrl()
     val existingLogo = meta.logo.normalizeImageUrl()
     val existingThumbnail = video.thumbnail.normalizeImageUrl()
-    val artworkFallback = if (
+    val tmdbData = if (
         existingThumbnail == null ||
         existingBackdrop == null ||
-        existingPoster == null
+        existingPoster == null ||
+        existingLogo == null ||
+        video.overview.isNullOrBlank() ||
+        video.title.isNullOrBlank()
     ) {
-        resolveNextUpArtworkFallback(
+        resolveNextUpTmdbData(
             progress = progress,
             meta = meta,
             season = nextSeason,
@@ -483,23 +491,23 @@ private suspend fun HomeViewModel.buildNextUpItem(
         null
     }
     val released = video.released?.trim()?.takeIf { it.isNotEmpty() }
-        ?: artworkFallback?.airDate
+        ?: tmdbData?.airDate
     val releaseDate = parseEpisodeReleaseDate(released)
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
     val hasAired = releaseDate?.let { !it.isAfter(todayLocal) } ?: true
     val info = NextUpInfo(
         contentId = progress.contentId,
         contentType = progress.contentType,
-        name = meta.name,
-        poster = existingPoster ?: artworkFallback?.poster,
-        backdrop = existingBackdrop ?: artworkFallback?.backdrop,
-        logo = existingLogo,
+        name = tmdbData?.name ?: meta.name,
+        poster = existingPoster ?: tmdbData?.poster,
+        backdrop = existingBackdrop ?: tmdbData?.backdrop,
+        logo = tmdbData?.logo ?: existingLogo,
         videoId = video.id,
         season = nextSeason,
         episode = nextEpisodeNumber,
-        episodeTitle = video.title,
-        episodeDescription = video.overview?.takeIf { it.isNotBlank() },
-        thumbnail = existingThumbnail ?: artworkFallback?.thumbnail,
+        episodeTitle = tmdbData?.episodeTitle ?: video.title,
+        episodeDescription = tmdbData?.overview ?: video.overview?.takeIf { it.isNotBlank() },
+        thumbnail = existingThumbnail ?: tmdbData?.thumbnail,
         released = released,
         hasAired = hasAired,
         airDateLabel = if (hasAired) {
@@ -740,12 +748,13 @@ private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
     }.getOrNull()
 }
 
-private suspend fun HomeViewModel.resolveNextUpArtworkFallback(
+private suspend fun HomeViewModel.resolveNextUpTmdbData(
     progress: WatchProgress,
     meta: Meta,
     season: Int,
     episode: Int
-): NextUpArtworkFallback? {
+): NextUpTmdbData? {
+    if (!currentTmdbSettings.enabled) return null
     val tmdbId = resolveTmdbIdForNextUp(progress, meta) ?: return null
     val language = currentTmdbSettings.language
 
@@ -766,18 +775,24 @@ private suspend fun HomeViewModel.resolveNextUpArtworkFallback(
         )
     }.getOrNull()
 
-    val fallback = NextUpArtworkFallback(
+    val fallback = NextUpTmdbData(
         thumbnail = episodeMeta?.thumbnail.normalizeImageUrl(),
         backdrop = showMeta?.backdrop.normalizeImageUrl(),
         poster = showMeta?.poster.normalizeImageUrl(),
-        airDate = episodeMeta?.airDate?.trim()?.takeIf { it.isNotEmpty() }
+        logo = showMeta?.logo.normalizeImageUrl(),
+        name = showMeta?.localizedTitle?.trim()?.takeIf { it.isNotEmpty() },
+        episodeTitle = episodeMeta?.title?.trim()?.takeIf { it.isNotEmpty() },
+        airDate = episodeMeta?.airDate?.trim()?.takeIf { it.isNotEmpty() },
+        overview = episodeMeta?.overview?.trim()?.takeIf { it.isNotEmpty() },
+        showDescription = showMeta?.description?.trim()?.takeIf { it.isNotEmpty() }
     )
 
     return if (
         fallback.thumbnail == null &&
         fallback.backdrop == null &&
         fallback.poster == null &&
-        fallback.airDate == null
+        fallback.airDate == null &&
+        fallback.overview == null
     ) {
         null
     } else {
