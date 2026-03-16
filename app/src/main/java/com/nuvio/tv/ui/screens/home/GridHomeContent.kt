@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.R
 import androidx.tv.material3.Border
@@ -212,7 +213,8 @@ fun GridHomeContent(
                                         item.apiType,
                                         ""
                                     )
-                                }
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -435,7 +437,7 @@ private fun SectionDivider(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 24.dp, bottom = 12.dp, start = 24.dp, end = 24.dp)
+            .padding(top = 24.dp, bottom = 12.dp)
     ) {
         Text(
             text = catalogName,
@@ -525,7 +527,8 @@ private fun SeeAllGridCard(
                 Text(
                     text = stringResource(R.string.action_see_all),
                     style = MaterialTheme.typography.titleSmall,
-                    color = NuvioColors.TextSecondary
+                    color = NuvioColors.TextSecondary,
+                    textAlign = TextAlign.Center
                 )
             }
         }
