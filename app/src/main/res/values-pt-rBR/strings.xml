@@ -7,6 +7,8 @@
     <!-- HomeScreen -->
     <string name="home_no_addons">Nenhum addon instalado. Adicione um para começar.</string>
     <string name="home_no_catalog_addons">Nenhum addon de catálogo instalado. Instale um para ver conteúdos.</string>
+    <string name="auth_notice_nuvio_logged_out">Você foi desconectado do Nuvio. Faça login novamente para continuar assistindo.</string>
+    <string name="auth_notice_trakt_logged_out">Você foi desconectado do Trakt. Reconecte-se para sincronizar seu histórico.</string>
     <string name="error_generic">Ocorreu um erro</string>
 
     <!-- ErrorState -->
@@ -39,7 +41,11 @@
     <string name="error_meta_tried_none">Addons consultados: %1$s. Nenhum forneceu informações para id=%2$s (tipo=%3$s).</string>
     <string name="error_meta_tried_generic">Addons consultados: %1$s. Não foi possível carregar informações para id=%2$s (tipo=%3$s).</string>
     <string name="error_meta_tried_issues">Addons consultados: %1$s. Falha ao carregar id=%2$s (tipo=%3$s). Erros: %4$s.</string>
-
+    <string name="error_stream_no_supported_addon">Nenhum addon instalado oferece suporte a streams para "%1$s".</string>
+    <string name="error_stream_tried_none">Addons de stream testados: %1$s. Nenhum deles retornou streams para id=%2$s (tipo=%3$s).</string>
+    <string name="errorstreamtried_generic">Addons de stream testados: %1$s. Não foi possível carregar streams para id=%2$s (tipo=%3$s).</string>
+    <string name="errorstreamtried_issues">Addons de stream testados: %1$s. Não foi possível carregar streams para id=%2$s (tipo=%3$s). Problemas: %4$s.</string>
+   
     <!-- ContinueWatchingSection -->
     <string name="continue_watching">Continuar assistindo</string>
     <string name="cw_upcoming">Em breve</string>
@@ -596,7 +602,13 @@
     <string name="debug_error_dialog_title">Erro de Reprodução</string>
     <string name="debug_error_dialog_subtitle">Ocorreu um erro durante a reprodução.\n\nErro: Erro de teste simulado - esta não é uma falha real. A fonte retornou HTTP 503 (Serviço Indisponível).</string>
     <string name="debug_dismiss">Fechar</string>
-
+    <string name="debug_section_library">Biblioteca</string>
+    <string name="debug_generate_library_title">Gerar itens da biblioteca</string>
+    <string name="debug_generate_library_subtitle">Adicionar filmes/séries aleatórios à biblioteca para testes</string>
+    <string name="debug_generate_library_placeholder">Número de itens</string>
+    <string name="debug_generate_library_button">Gerar</string>
+    <string name="debug_generating_library">Gerando…</string>
+    
     <!-- ProfileSettingsContent -->
     <string name="profile_title">Perfis</string>
     <string name="profile_subtitle">Gerencie os perfis desta conta.</string>
@@ -641,6 +653,9 @@
     <string name="addon_install_placeholder">https://exemplo.com</string>
     <string name="addon_installing">Instalando</string>
     <string name="addon_install_btn">Instalar</string>
+    <string name="addon_install_success">%1$s instalado</string>
+    <string name="addon_error_invalid_url">Insira uma URL de addon válida</string>
+    <string name="addon_error_invalid_scheme">A URL do addon deve começar com http ou https</string>
     <string name="addon_installed_section">Instalados</string>
     <string name="addon_empty">Nenhum addon instalado. Adicione um para começar.</string>
     <string name="addon_remove">Remover</string>
