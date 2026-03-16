@@ -32,7 +32,6 @@ class PlaybackSettingsViewModel @Inject constructor(
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
-    val diskFirstHomeStartupEnabled: Flow<Boolean> = debugSettingsDataStore.diskFirstHomeStartupEnabled
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons
             .filter { addon ->
@@ -152,10 +151,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStartupPerfTelemetryEnabled(enabled: Boolean) {
         debugSettingsDataStore.setStartupPerfTelemetryEnabled(enabled)
-    }
-
-    suspend fun setDiskFirstHomeStartupEnabled(enabled: Boolean) {
-        debugSettingsDataStore.setDiskFirstHomeStartupEnabled(enabled)
     }
 
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
