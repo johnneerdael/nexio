@@ -187,7 +187,7 @@ fun GridHomeContent(
                     false
                 },
             contentPadding = PaddingValues(
-                start = 24.dp,
+                start = 48.dp,
                 end = 24.dp,
                 top = topPadding,
                 bottom = 32.dp

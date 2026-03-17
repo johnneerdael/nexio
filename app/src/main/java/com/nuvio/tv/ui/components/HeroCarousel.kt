@@ -91,7 +91,6 @@ fun HeroCarousel(
         }
     }
 
-    val gridHorizontalPadding = 24.dp
     Box(
         modifier = modifier
             .then(
