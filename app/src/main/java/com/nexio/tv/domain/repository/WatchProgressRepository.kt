@@ -68,4 +68,9 @@ interface WatchProgressRepository {
      * Clear all watch progress
      */
     suspend fun clearAll()
+
+    /**
+     * Clear hydrated localized metadata so it can rebuild for the current app language.
+     */
+    fun invalidateLocalizedMetadata()
 }

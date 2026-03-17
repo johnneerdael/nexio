@@ -126,28 +126,15 @@ internal fun LazyListScope.autoPlaySettingsItems(
         )
     }
 
-    item(key = "streams_group_across_addons") {
+    item(key = "streams_deduplicate_grouped") {
         ToggleSettingsItem(
-            icon = Icons.Default.ViewAgenda,
-            title = stringResource(R.string.streams_group_across_addons_title),
-            subtitle = stringResource(R.string.streams_group_across_addons_sub),
-            isChecked = playerSettings.groupStreamsAcrossAddonsEnabled,
-            onCheckedChange = onSetGroupStreamsAcrossAddonsEnabled,
+            icon = Icons.Default.ContentCopy,
+            title = stringResource(R.string.streams_deduplicate_grouped_title),
+            subtitle = stringResource(R.string.streams_deduplicate_grouped_sub),
+            isChecked = playerSettings.deduplicateGroupedStreamsEnabled,
+            onCheckedChange = onSetDeduplicateGroupedStreamsEnabled,
             onFocused = onItemFocused
         )
-    }
-
-    if (playerSettings.groupStreamsAcrossAddonsEnabled) {
-        item(key = "streams_deduplicate_grouped") {
-            ToggleSettingsItem(
-                icon = Icons.Default.ContentCopy,
-                title = stringResource(R.string.streams_deduplicate_grouped_title),
-                subtitle = stringResource(R.string.streams_deduplicate_grouped_sub),
-                isChecked = playerSettings.deduplicateGroupedStreamsEnabled,
-                onCheckedChange = onSetDeduplicateGroupedStreamsEnabled,
-                onFocused = onItemFocused
-            )
-        }
     }
 
     item(key = "streams_filter_dv5_webdl") {

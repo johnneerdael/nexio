@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
@@ -21,6 +22,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val PREFS_NAME = "metadata_disk_cache_v1"
         private const val META_PREFIX = "meta::"
         private const val TMDB_PREFIX = "tmdb::"
+        private const val HOME_REF_PREFIX = "home_ref::"
         private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
     }
 
@@ -174,6 +176,106 @@ class MetadataDiskCacheStore @Inject constructor(
                     (root?.get("languageEpoch")?.asInt ?: -1) == currentEpoch
                 }
         }.getOrDefault(false)
+    }
+
+    fun replaceHomeFeedReferences(feedKey: String, itemKeys: Set<String>) {
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val payload = JsonObject().apply {
+                add("items", gson.toJsonTree(itemKeys.toList().sorted()))
+                addProperty("updatedAtMs", System.currentTimeMillis())
+            }
+            prefs.edit().putString("$HOME_REF_PREFIX$feedKey", gson.toJson(payload)).apply()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to update home feed references for $feedKey", error)
+        }
+    }
+
+    fun readHomeReferencedItemKeys(): Set<String> {
+        return runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.all.entries
+                .asSequence()
+                .filter { (key, _) -> key.startsWith(HOME_REF_PREFIX) }
+                .flatMap { (_, value) ->
+                    val payload = (value as? String).orEmpty()
+                    val root = gson.fromJson(payload, JsonObject::class.java)
+                    val type = object : TypeToken<List<String>>() {}.type
+                    val items = gson.fromJson<List<String>>(root?.get("items"), type).orEmpty()
+                    items.asSequence()
+                }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
+        }.getOrDefault(emptySet())
+    }
+
+    fun removeHomeUnreferencedMetaEntries(maxEntries: Int = 400): List<String> {
+        val activeItemKeys = readHomeReferencedItemKeys()
+        val removedImageUrls = mutableListOf<String>()
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            var removedCount = 0
+            prefs.all.entries
+                .asSequence()
+                .filter { (key, _) -> key.startsWith(META_PREFIX) }
+                .forEach { (key, value) ->
+                    if (removedCount >= maxEntries) return@forEach
+                    val remainder = key.removePrefix(META_PREFIX)
+                    val itemKey = remainder.substringBefore("::")
+                    if (itemKey in activeItemKeys) return@forEach
+                    val payload = (value as? String).orEmpty()
+                    val root = gson.fromJson(payload, JsonObject::class.java)
+                    val meta = runCatching { decodeMetaSafely(root ?: JsonObject()) }.getOrNull()
+                    meta?.poster?.let(removedImageUrls::add)
+                    meta?.background?.let(removedImageUrls::add)
+                    meta?.logo?.let(removedImageUrls::add)
+                    editor.remove(key)
+                    removedCount += 1
+                }
+            editor.apply()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to remove home-unreferenced metadata entries", error)
+        }
+        return removedImageUrls.distinct()
+    }
+
+    fun removeEntriesFromStaleEpochs(maxEntries: Int = 800): List<String> {
+        val currentEpoch = currentLanguageEpoch()
+        val removedImageUrls = mutableListOf<String>()
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            var removedCount = 0
+            prefs.all.entries
+                .asSequence()
+                .filter { (key, _) -> key.startsWith(META_PREFIX) || key.startsWith(TMDB_PREFIX) }
+                .forEach { (key, value) ->
+                    if (removedCount >= maxEntries) return@forEach
+                    val payload = (value as? String).orEmpty()
+                    val root = gson.fromJson(payload, JsonObject::class.java) ?: return@forEach
+                    val epoch = root.get("languageEpoch")?.asInt ?: return@forEach
+                    if (epoch == currentEpoch) return@forEach
+                    if (key.startsWith(META_PREFIX)) {
+                        val meta = runCatching { decodeMetaSafely(root) }.getOrNull()
+                        meta?.poster?.let(removedImageUrls::add)
+                        meta?.background?.let(removedImageUrls::add)
+                        meta?.logo?.let(removedImageUrls::add)
+                    } else {
+                        val enrichment = runCatching { decodeTmdbEnrichmentSafely(root) }.getOrNull()
+                        enrichment?.poster?.let(removedImageUrls::add)
+                        enrichment?.backdrop?.let(removedImageUrls::add)
+                        enrichment?.logo?.let(removedImageUrls::add)
+                    }
+                    editor.remove(key)
+                    removedCount += 1
+                }
+            editor.apply()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to remove stale epoch metadata entries", error)
+        }
+        return removedImageUrls.distinct()
     }
 
     private fun buildMetaKey(itemKey: String, languageTag: String, providerToken: String): String {

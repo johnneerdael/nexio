@@ -1,7 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -48,36 +49,35 @@ import com.nexio.tv.ui.theme.NexioColors
 @Composable
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
-    heroBackdropAlpha: Float,
+    enrichmentActive: Boolean,
     modifier: Modifier,
     requestWidthPx: Int,
     requestHeightPx: Int
 ) {
     val localContext = LocalContext.current
+    var stableBackdrop by remember { mutableStateOf(heroBackdrop) }
+    LaunchedEffect(heroBackdrop, enrichmentActive) {
+        if (!enrichmentActive) {
+            stableBackdrop = heroBackdrop
+        }
+    }
     Box(modifier = modifier) {
-        Crossfade(
-            targetState = heroBackdrop,
+        val imageModel = remember(localContext, stableBackdrop, requestWidthPx, requestHeightPx) {
+            ImageRequest.Builder(localContext)
+                .data(stableBackdrop)
+                .crossfade(true)
+                .size(width = requestWidthPx, height = requestHeightPx)
+                .build()
+        }
+        AsyncImage(
+            model = imageModel,
+            contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = heroBackdropAlpha },
-            animationSpec = tween(durationMillis = 350),
-            label = "modernHeroBackground"
-        ) { imageUrl ->
-            val imageModel = remember(localContext, imageUrl, requestWidthPx, requestHeightPx) {
-                ImageRequest.Builder(localContext)
-                    .data(imageUrl)
-                    .crossfade(false)
-                    .size(width = requestWidthPx, height = requestHeightPx)
-                    .build()
-            }
-            AsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.TopEnd
-            )
-        }
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.TopEnd
+        )
     }
 }
 
@@ -88,6 +88,7 @@ internal fun ModernHeroGradientLayer(
 ) {
     Box(
         modifier = modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithCache {
                 val leftBlendSolidWidth = size.width * 0.018f
                 val horizontalGradientStartX = leftBlendSolidWidth
@@ -135,12 +136,19 @@ internal fun ModernHeroGradientLayer(
 @Composable
 internal fun HeroTitleBlock(
     preview: HeroPreview?,
+    enrichmentActive: Boolean = false,
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
+    var stablePreview by remember { mutableStateOf(preview) }
+    LaunchedEffect(preview, enrichmentActive) {
+        if (!enrichmentActive) {
+            stablePreview = preview
+        }
+    }
     val fadeDuration = 220
     AnimatedContent(
-        targetState = preview,
+        targetState = stablePreview,
         transitionSpec = {
             fadeIn(tween(fadeDuration)) togetherWith fadeOut(tween(fadeDuration)) using null
         },

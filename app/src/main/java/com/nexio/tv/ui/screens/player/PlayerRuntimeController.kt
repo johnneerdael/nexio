@@ -29,6 +29,7 @@ import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import androidx.media3.session.MediaSession
+import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,7 @@ class PlayerRuntimeController(
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
+    internal val playbackIdleGateState: PlaybackIdleGateState,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -113,6 +115,7 @@ class PlayerRuntimeController(
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
 
     fun stopAndRelease() {
+        beginPlayerExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
         mediaSourceFactory.clearVodCache()
@@ -239,6 +242,9 @@ class PlayerRuntimeController(
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
+    internal var isExitInProgress: Boolean = false
+    internal var activePlaybackSessionId: Long = 0L
+    internal var nextPlaybackSessionId: Long = 1L
 
     internal var lastBufferLogTimeMs: Long = 0L
     internal var lastVodTelemetryRefreshTimeMs: Long = 0L
@@ -325,6 +331,7 @@ class PlayerRuntimeController(
     }
 
     init {
+        playbackIdleGateState.onPlayerSessionStarted()
         refreshScrobbleItem()
         mediaSourceFactory.warmupVodCacheAsync()
         if (!navigationArgs.startFromBeginning) {
@@ -340,9 +347,14 @@ class PlayerRuntimeController(
     
 
     fun onCleared() {
+        beginPlayerExit()
         releasePlayer()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()
         sourceChipErrorDismissJob?.cancel()
+    }
+
+    internal fun beginPlayerExit() {
+        isExitInProgress = true
     }
 }

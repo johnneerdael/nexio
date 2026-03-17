@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
@@ -1235,6 +1236,9 @@ private fun MetaDetailsContent(
                     } else {
                         availablePeopleTabs.first()
                     }
+                    val hasItemsBelow = meta.networks.isNotEmpty() || meta.productionCompanies.isNotEmpty()
+                    var castSectionHeightPx by remember { mutableIntStateOf(0) }
+                    val castSectionHeight = with(LocalDensity.current) { castSectionHeightPx.toDp() }
 
                     Crossfade(
                         targetState = visiblePeopleSection,
@@ -1261,7 +1265,8 @@ private fun MetaDetailsContent(
                                                 member.character.equals("Writer", ignoreCase = true)
                                             onNavigateToCastDetail(id, member.name, preferCrew)
                                         }
-                                    }
+                                    },
+                                    modifier = Modifier.onSizeChanged { castSectionHeightPx = it.height }
                                 )
                             }
 
@@ -1324,7 +1329,8 @@ private fun MetaDetailsContent(
                                     } else {
                                         seasonDownFocusRequester ?: selectedSeasonFocusRequester
                                     },
-                                    firstItemFocusRequester = ratingsContentFocusRequester
+                                    firstItemFocusRequester = ratingsContentFocusRequester,
+                                    modifier = Modifier.heightIn(min = if (!hasItemsBelow) castSectionHeight else 0.dp)
                                 )
                             }
                         }

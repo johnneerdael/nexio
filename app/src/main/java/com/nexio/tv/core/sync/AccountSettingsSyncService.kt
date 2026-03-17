@@ -387,7 +387,7 @@ class AccountSettingsSyncService @Inject constructor(
                     streamReuseLastLinkEnabled = player.streamReuseLastLinkEnabled,
                     streamReuseLastLinkCacheHours = player.streamReuseLastLinkCacheHours,
                     uniformStreamFormattingEnabled = player.uniformStreamFormattingEnabled,
-                    groupStreamsAcrossAddonsEnabled = player.groupStreamsAcrossAddonsEnabled,
+                    groupStreamsAcrossAddonsEnabled = true,
                     deduplicateGroupedStreamsEnabled = player.deduplicateGroupedStreamsEnabled,
                     filterEpisodeMismatchStreamsEnabled = player.filterEpisodeMismatchStreamsEnabled,
                     filterMovieYearMismatchStreamsEnabled = player.filterMovieYearMismatchStreamsEnabled,
@@ -527,7 +527,7 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setStreamReuseLastLinkEnabled(settings.playback.streamSelection.streamReuseLastLinkEnabled)
         playerSettingsDataStore.setStreamReuseLastLinkCacheHours(settings.playback.streamSelection.streamReuseLastLinkCacheHours)
         playerSettingsDataStore.setUniformStreamFormattingEnabled(settings.playback.streamSelection.uniformStreamFormattingEnabled)
-        playerSettingsDataStore.setGroupStreamsAcrossAddonsEnabled(settings.playback.streamSelection.groupStreamsAcrossAddonsEnabled)
+        playerSettingsDataStore.setGroupStreamsAcrossAddonsEnabled(true)
         playerSettingsDataStore.setDeduplicateGroupedStreamsEnabled(settings.playback.streamSelection.deduplicateGroupedStreamsEnabled)
         playerSettingsDataStore.setFilterEpisodeMismatchStreamsEnabled(settings.playback.streamSelection.filterEpisodeMismatchStreamsEnabled)
         playerSettingsDataStore.setFilterMovieYearMismatchStreamsEnabled(settings.playback.streamSelection.filterMovieYearMismatchStreamsEnabled)

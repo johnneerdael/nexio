@@ -94,6 +94,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun invalidateLocalizedMetadata() {
+        metadataState.value = emptyMap()
+        metadataScope.launch {
+            metadataMutex.withLock {
+                inFlightMetadataKeys.clear()
+            }
+        }
+    }
+
     private suspend fun fetchContentMetadata(
         contentId: String,
         contentType: String

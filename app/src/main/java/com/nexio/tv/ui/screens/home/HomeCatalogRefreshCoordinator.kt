@@ -6,13 +6,18 @@ import coil.annotation.ExperimentalCoilApi
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.applyTo
+import com.nexio.tv.domain.model.mergeFallback
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,7 +39,7 @@ internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPr
     val addedOrChanged = newItems.filter { item ->
         val key = "${item.apiType}:${item.id}"
         val previous = oldByKey[key] ?: return@filter true
-        previous.poster != item.poster || previous.background != item.background || previous.logo != item.logo
+        previous != item
     }
     val removed = oldItems.filter { item ->
         val key = "${item.apiType}:${item.id}"
@@ -54,6 +59,81 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     @ApplicationContext private val appContext: Context
 ) {
     private val refreshMutex = Mutex()
+
+    internal suspend fun hydrateAndPrefetchRows(
+        rows: List<CatalogRow>,
+        existingRowsByKey: Map<String, CatalogRow> = emptyMap(),
+        telemetryEnabled: Boolean,
+        onLog: (String, String?) -> Unit
+    ): List<CatalogRow> {
+        if (rows.isEmpty()) return rows
+        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
+        val hydratedRows = rows.map { row ->
+            val rowKey = homeCatalogGlobalKey(row)
+            val oldItems = existingRowsByKey[rowKey]?.items.orEmpty()
+            val diff = diffCatalogItems(oldItems = oldItems, newItems = row.items)
+            val changedKeys = diff.addedOrChanged
+                .asSequence()
+                .map { "${it.apiType}:${it.id}" }
+                .toHashSet()
+            val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
+
+            val hydratedItems = row.items.map { item ->
+                val itemKey = "${item.apiType}:${item.id}"
+                val persistedFallback = oldItemsByKey[itemKey]
+                if (itemKey !in changedKeys && persistedFallback != null) {
+                    return@map persistedFallback
+                }
+                val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
+                    itemKey = itemKey,
+                    languageTag = languageTag
+                )
+                if (hasCachedMetadata) {
+                    if (telemetryEnabled) {
+                        onLog("item_metadata_cached", "catalogKey=$rowKey itemKey=$itemKey")
+                    }
+                } else if (telemetryEnabled) {
+                    onLog("item_metadata_fetch", "catalogKey=$rowKey itemKey=$itemKey")
+                }
+                val result = runCatching {
+                    metaRepository.getMetaFromAllAddons(
+                        type = item.apiType,
+                        id = item.id,
+                        cacheOnDisk = true,
+                        origin = "home_synthetic_refresh"
+                    ).first { networkResult -> networkResult !is NetworkResult.Loading }
+                }.getOrNull()
+                val externalMeta =
+                    (result as? NetworkResult.Success<*>)?.data as? Meta
+                mergePersistedHomeDisplayMetadata(
+                    currentItem = item,
+                    persistedFallback = persistedFallback,
+                    externalMeta = externalMeta
+                )
+            }
+            row.copy(items = hydratedItems)
+        }
+
+        val flattenedItems = hydratedRows.flatMap { it.items }
+        val imageTelemetry = buildImagePrefetchTelemetry(flattenedItems)
+        onLog(
+            "image_prefetch_start",
+            "catalogKey=synthetic_home items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
+        )
+        if (telemetryEnabled) {
+            imageTelemetry.itemEvents.forEach { itemEvent ->
+                onLog(itemEvent.first, "catalogKey=synthetic_home ${itemEvent.second}")
+            }
+        }
+        prefetchImageUrls(imageTelemetry.urlsToFetch)
+        onLog(
+            "image_prefetch_end",
+            "catalogKey=synthetic_home fetched_urls=${imageTelemetry.urlsToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
+                "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
+        )
+
+        return hydratedRows
+    }
 
     internal suspend fun refreshSerially(
         addons: List<Addon>,
@@ -111,9 +191,14 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                             .asSequence()
                             .map { "${it.apiType}:${it.id}" }
                             .toHashSet()
+                        val oldItemsByKey = oldItems.associateBy { "${it.apiType}:${it.id}" }
                         onLog("metadata_hydrate_start", "catalogKey=$catalogKey items=${refreshed.items.size}")
-                        refreshed.items.forEach { item ->
+                        val hydratedItems = refreshed.items.map { item ->
                             val itemKey = "${item.apiType}:${item.id}"
+                            val persistedFallback = oldItemsByKey[itemKey]
+                            if (itemKey !in changedKeys && persistedFallback != null) {
+                                return@map persistedFallback
+                            }
                             val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
                                 itemKey = itemKey,
                                 languageTag = languageTag
@@ -123,19 +208,17 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 if (telemetryEnabled) {
                                     onLog("item_metadata_cached", "catalogKey=$catalogKey itemKey=$itemKey")
                                 }
-                                return@forEach
-                            }
-                            if (itemKey !in changedKeys) {
+                            } else if (itemKey !in changedKeys) {
                                 metadataRetainedMissingCount += 1
                                 metadataFetchedRetainedCount += 1
                             } else {
                                 metadataFetchedNewCount += 1
+                                metadataFetchCount += 1
+                                if (telemetryEnabled) {
+                                    onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
+                                }
                             }
-                            metadataFetchCount += 1
-                            if (telemetryEnabled) {
-                                onLog("item_metadata_fetch", "catalogKey=$catalogKey itemKey=$itemKey")
-                            }
-                            runCatching {
+                            val result = runCatching {
                                 metaRepository.getMetaFromAllAddons(
                                     type = item.apiType,
                                     id = item.id,
@@ -143,15 +226,23 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                     origin = "home_catalog_refresh"
                                 )
                                     .first { result -> result !is com.nexio.tv.core.network.NetworkResult.Loading }
-                            }
+                            }.getOrNull()
+                            val externalMeta =
+                                (result as? com.nexio.tv.core.network.NetworkResult.Success<*>)?.data as? Meta
+                            mergePersistedHomeDisplayMetadata(
+                                currentItem = item,
+                                persistedFallback = persistedFallback,
+                                externalMeta = externalMeta
+                            )
                         }
+                        val refreshedHydrated = refreshed.copy(items = hydratedItems)
                         onLog(
                             "metadata_hydrate_end",
-                            "catalogKey=$catalogKey total=${refreshed.items.size} cached=$metadataCachedCount fetched=$metadataFetchCount " +
+                            "catalogKey=$catalogKey total=${refreshedHydrated.items.size} cached=$metadataCachedCount fetched=$metadataFetchCount " +
                                 "fetched_new=$metadataFetchedNewCount fetched_retained_missing=$metadataFetchedRetainedCount retained_missing=$metadataRetainedMissingCount"
                         )
 
-                        val imageTelemetry = buildImagePrefetchTelemetry(refreshed.items)
+                        val imageTelemetry = buildImagePrefetchTelemetry(refreshedHydrated.items)
                         onLog(
                             "image_prefetch_start",
                             "catalogKey=$catalogKey items=${imageTelemetry.itemsConsidered} urls_total=${imageTelemetry.totalUrls} urls_cached=${imageTelemetry.cachedUrls} urls_missing=${imageTelemetry.missingUrls}"
@@ -177,7 +268,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                             }
                         }
 
-                        onCatalogReady(catalogKey, refreshed, diff)
+                        onCatalogReady(catalogKey, refreshedHydrated, diff)
                         onLog("catalog_publish_ready", "catalogKey=$catalogKey")
                     }
             }
@@ -347,4 +438,14 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             }
         }
     }
+}
+
+internal fun mergePersistedHomeDisplayMetadata(
+    currentItem: MetaPreview,
+    persistedFallback: MetaPreview?,
+    externalMeta: Meta?
+): MetaPreview {
+    val mergedMetadata = (externalMeta?.toHomeDisplayMetadata() ?: currentItem.toHomeDisplayMetadata())
+        .mergeFallback(persistedFallback?.toHomeDisplayMetadata())
+    return mergedMetadata.applyTo(currentItem)
 }

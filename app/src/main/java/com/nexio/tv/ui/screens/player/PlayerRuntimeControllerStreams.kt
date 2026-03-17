@@ -293,7 +293,7 @@ private fun com.nexio.tv.domain.model.Addon.supportsStreamResourceForChip(type: 
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
     return StreamFeatureFlags(
         uniformFormattingEnabled = uniformStreamFormattingEnabled,
-        groupAcrossAddonsEnabled = groupStreamsAcrossAddonsEnabled,
+        groupAcrossAddonsEnabled = true,
         deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
         filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled,
         filterEpisodeMismatchStreamsEnabled = filterEpisodeMismatchStreamsEnabled,

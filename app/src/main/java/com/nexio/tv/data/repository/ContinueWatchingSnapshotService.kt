@@ -1,10 +1,18 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.domain.model.mergeFallback
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,8 +25,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -28,6 +38,7 @@ import javax.inject.Singleton
 data class ContinueWatchingSnapshot(
     val movieProgressItems: List<WatchProgress> = emptyList(),
     val nextUpItems: List<TraktProgressService.CalendarShowEntry> = emptyList(),
+    val displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap(),
     val updatedAtMs: Long = 0L
 )
 
@@ -38,6 +49,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val traktProgressService: TraktProgressService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val metaRepository: MetaRepository,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val snapshotStore: ContinueWatchingSnapshotStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -88,6 +101,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         if (hasSeenAuthenticatedSession) {
                             rawSnapshotState.value = ContinueWatchingSnapshot()
                             snapshotStore.clear()
+                            metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
                             lastRefreshRequestMs = 0L
                         }
                         hasSeenAuthenticatedSession = false
@@ -157,6 +171,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
         persistRawSnapshot(updated)
     }
 
+    fun invalidateLocalizedMetadata() {
+        traktProgressService.invalidateLocalizedMetadata()
+        snapshotStore.clear()
+        metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
+        rawSnapshotState.value = rawSnapshotState.value.copy(displayMetadataByItemKey = emptyMap())
+        snapshotState.value = snapshotState.value.copy(displayMetadataByItemKey = emptyMap())
+    }
+
     private fun buildRawSnapshot(
         allProgress: List<WatchProgress>,
         calendarEntries: List<TraktProgressService.CalendarShowEntry>
@@ -201,10 +223,19 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.firstAiredMs }
             .distinctBy { it.contentId }
+        val activeItemKeys = buildSet {
+            movieItems.forEach { progress ->
+                add(homeDisplayItemKey(progress.contentType, progress.contentId))
+            }
+            nextUpItems.forEach { entry ->
+                add(homeDisplayItemKey(entry.contentType, entry.contentId))
+            }
+        }
         val updatedAtMs = if (snapshot.updatedAtMs > 0L) snapshot.updatedAtMs else System.currentTimeMillis()
         return ContinueWatchingSnapshot(
             movieProgressItems = movieItems,
             nextUpItems = nextUpItems,
+            displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs
         )
     }
@@ -230,12 +261,141 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun persistRawSnapshot(snapshot: ContinueWatchingSnapshot) {
         val normalized = sanitizeSnapshot(snapshot)
-        rawSnapshotState.value = normalized
-        snapshotStore.write(normalized)
-        lastRefreshRequestMs = normalized.updatedAtMs
+        val hydrated = hydrateSnapshotMetadata(
+            snapshot = normalized,
+            fallbackMetadata = rawSnapshotState.value.displayMetadataByItemKey
+        )
+        val referencedItemKeys = buildSet {
+            hydrated.movieProgressItems.forEach { progress ->
+                add(homeDisplayItemKey(progress.contentType, progress.contentId))
+            }
+            hydrated.nextUpItems.forEach { entry ->
+                add(homeDisplayItemKey(entry.contentType, entry.contentId))
+            }
+        }
+        rawSnapshotState.value = hydrated
+        snapshotStore.write(hydrated)
+        metadataDiskCacheStore.replaceHomeFeedReferences(
+            feedKey = "continue_watching",
+            itemKeys = referencedItemKeys
+        )
+        metadataDiskCacheStore.removeHomeUnreferencedMetaEntries()
+        lastRefreshRequestMs = hydrated.updatedAtMs
     }
 
     private fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
         persistRawSnapshot(snapshot)
+    }
+
+    private fun hydrateSnapshotMetadata(
+        snapshot: ContinueWatchingSnapshot,
+        fallbackMetadata: Map<String, HomeDisplayMetadata>
+    ): ContinueWatchingSnapshot {
+        val itemKeys = linkedMapOf<String, Pair<String, String>>()
+        snapshot.movieProgressItems.forEach { progress ->
+            itemKeys[homeDisplayItemKey(progress.contentType, progress.contentId)] =
+                progress.contentType to progress.contentId
+        }
+        snapshot.nextUpItems.forEach { entry ->
+            itemKeys[homeDisplayItemKey(entry.contentType, entry.contentId)] =
+                entry.contentType to entry.contentId
+        }
+        if (itemKeys.isEmpty()) {
+            return snapshot.copy(displayMetadataByItemKey = emptyMap())
+        }
+
+        val hydratedMetadata = linkedMapOf<String, HomeDisplayMetadata>()
+        itemKeys.forEach { (itemKey, typeAndId) ->
+            val (contentType, contentId) = typeAndId
+            val fetched = fetchHomeDisplayMetadata(
+                contentType = contentType,
+                contentId = contentId,
+                snapshot = snapshot
+            )
+            val merged = fetched?.mergeFallback(fallbackMetadata[itemKey]) ?: fallbackMetadata[itemKey]
+            if (merged != null) {
+                hydratedMetadata[itemKey] = merged
+            }
+        }
+
+        return snapshot.copy(displayMetadataByItemKey = hydratedMetadata)
+    }
+
+    private fun fetchHomeDisplayMetadata(
+        contentType: String,
+        contentId: String,
+        snapshot: ContinueWatchingSnapshot
+    ): HomeDisplayMetadata? {
+        val typeCandidates = buildList {
+            val normalized = contentType.trim().lowercase()
+            if (normalized.isNotBlank()) add(normalized)
+            if (normalized == "tv") add("series")
+            if (normalized == "series") add("tv")
+            if (normalized != "movie") add("movie")
+        }.distinct()
+        val idCandidates = buildList {
+            val trimmed = contentId.trim()
+            add(trimmed)
+            if (trimmed.startsWith("tmdb:")) add(trimmed.substringAfter(':'))
+            if (trimmed.startsWith("trakt:")) add(trimmed.substringAfter(':'))
+            if (trimmed.startsWith("tt", ignoreCase = true)) add("imdb:$trimmed")
+        }.distinct()
+
+        typeCandidates.forEach { type ->
+            idCandidates.forEach { id ->
+                val result = runCatching {
+                    metaRepository.getMetaFromAllAddons(
+                        type = type,
+                        id = id,
+                        cacheOnDisk = true,
+                        origin = "continue_watching_snapshot"
+                    )
+                }.getOrNull() ?: return@forEach
+                val resolved = runCatching {
+                    runBlocking {
+                        result.first { it !is NetworkResult.Loading }
+                    }
+                }.getOrNull()
+                val meta = (resolved as? NetworkResult.Success<*>)?.data as? Meta ?: return@forEach
+                return buildHomeDisplayMetadata(
+                    meta = meta,
+                    contentType = type,
+                    contentId = contentId,
+                    snapshot = snapshot
+                )
+            }
+        }
+        return null
+    }
+
+    private fun buildHomeDisplayMetadata(
+        meta: Meta,
+        contentType: String,
+        contentId: String,
+        snapshot: ContinueWatchingSnapshot
+    ): HomeDisplayMetadata {
+        val episodeMetadata = if (contentType.equals("series", ignoreCase = true) || contentType.equals("tv", ignoreCase = true)) {
+            val progressEntry = snapshot.movieProgressItems.firstOrNull {
+                it.contentId == contentId && it.season != null && it.episode != null
+            }
+            val nextUpEntry = snapshot.nextUpItems.firstOrNull { it.contentId == contentId }
+            val season = progressEntry?.season ?: nextUpEntry?.season
+            val episode = progressEntry?.episode ?: nextUpEntry?.episode
+            if (season != null && episode != null) {
+                meta.videos.firstOrNull { it.season == season && it.episode == episode }
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+
+        val metaDisplay = meta.toHomeDisplayMetadata()
+        return metaDisplay.copy(
+            description = episodeMetadata?.overview ?: metaDisplay.description,
+            runtime = episodeMetadata?.runtime?.let { "${it}m" } ?: metaDisplay.runtime,
+            poster = metaDisplay.poster,
+            backdrop = metaDisplay.backdrop ?: episodeMetadata?.thumbnail
+        )
     }
 }

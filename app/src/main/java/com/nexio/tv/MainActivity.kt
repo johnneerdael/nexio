@@ -3,6 +3,8 @@ package com.nexio.tv
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
+import android.view.KeyEvent
 import android.os.SystemClock
 import android.os.Bundle
 import android.util.Log
@@ -30,6 +32,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -56,12 +59,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -87,16 +92,28 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.media3.common.C
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import androidx.tvprovider.media.tv.TvContractCompat
 import androidx.tv.material3.DrawerValue
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -115,6 +132,7 @@ import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
+import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
@@ -124,6 +142,10 @@ import com.nexio.tv.ui.navigation.NexioNavHost
 import com.nexio.tv.ui.navigation.Screen
 import com.nexio.tv.ui.components.NexioScrollDefaults
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
+import com.nexio.tv.ui.screensaver.IdleScreensaverController
+import com.nexio.tv.ui.screensaver.IdleScreensaverOverlay
+import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
+import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import com.nexio.tv.updater.UpdateViewModel
@@ -148,10 +170,13 @@ import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.DrawerItem
 import com.nexio.tv.ModernSidebarBlurPanel
-import androidx.lifecycle.Lifecycle
 import kotlin.coroutines.resume
 
 val LocalSidebarExpanded = compositionLocalOf { false }
+val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
+private const val STARTUP_SPLASH_FIRST_FRAME_TIMEOUT_MS = 1_000L
+private const val STARTUP_SPLASH_LAST_FRAME_HOLD_MS = 150L
+private const val STARTUP_SPLASH_HARD_TIMEOUT_MS = 12_000L
 
 private data class MainUiPrefs(
     val theme: AppTheme = AppTheme.WHITE,
@@ -171,6 +196,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
         private const val STARTUP_PERF_WINDOW_MS = 12_000L
         private const val STARTUP_DEFERRED_WORK_MIN_DELAY_MS = 2_000L
+        private const val IDLE_SCREENSAVER_TIMEOUT_MS = 2L * 60 * 1000L
         private const val BROWSABLE_REQUEST_COOLDOWN_MS = 24L * 60 * 60 * 1000
     }
 
@@ -201,6 +227,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var debugSettingsDataStore: DebugSettingsDataStore
 
+    @Inject
+    lateinit var idleScreensaverRepository: IdleScreensaverRepository
+
+    @Inject
+    lateinit var idleScreensaverController: IdleScreensaverController
+
+    @Inject
+    lateinit var playbackIdleGateState: PlaybackIdleGateState
+
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
     private val pendingFeedNavigation = mutableStateOf<RecommendationFeedNavigation?>(null)
@@ -217,6 +252,7 @@ class MainActivity : ComponentActivity() {
     private var deferredStartupWorkJob: Job? = null
     private var deferredBrowsableRequestJob: Job? = null
     private var startupPerfWindowJob: Job? = null
+    private var idleScreensaverColdBootRefreshPending: Boolean = false
     private val channelBrowsableLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -258,6 +294,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        idleScreensaverColdBootRefreshPending = savedInstanceState == null
         handleRecommendationIntent(intent)
         lifecycleScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
@@ -379,6 +416,16 @@ class MainActivity : ComponentActivity() {
                     val currentRoute = navBackStackEntry?.destination?.route
                     val pendingRecommendation by pendingRecommendationNavigation
                     val pendingFeed by pendingFeedNavigation
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    val rootView = LocalView.current
+                    var startupSplashDismissed by rememberSaveable { mutableStateOf(false) }
+                    var startupSplashReadyToPlay by remember { mutableStateOf(false) }
+                    val showStartupSplash = !startupSplashDismissed
+                    val idleScreensaverSlides by idleScreensaverRepository.slides.collectAsState()
+                    val idleScreensaverVisible by idleScreensaverController.isVisible.collectAsState()
+                    val idleScreensaverSessionId by idleScreensaverController.sessionId.collectAsState()
+                    val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
+                    val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -398,12 +445,59 @@ class MainActivity : ComponentActivity() {
                         pendingFeedNavigation.value = null
                     }
 
+                    val idleScreensaverEligible = remember(
+                        currentRoute,
+                        showStartupSplash,
+                        playbackIdleSnapshot
+                    ) {
+                        isIdleScreensaverEligibleRoute(
+                            currentRoute = currentRoute,
+                            playbackIdleSnapshot = playbackIdleSnapshot
+                        ) && !showStartupSplash
+                    }
+
+                    LaunchedEffect(idleScreensaverEligible, idleScreensaverVisible) {
+                        if (!idleScreensaverEligible && idleScreensaverVisible) {
+                            idleScreensaverController.dismiss()
+                        }
+                    }
+
+                    LaunchedEffect(
+                        idleScreensaverEligible,
+                        idleScreensaverVisible,
+                        idleScreensaverSlides,
+                        idleLastInteractionAtMs
+                    ) {
+                        if (!idleScreensaverEligible || idleScreensaverVisible || idleScreensaverSlides.isEmpty()) {
+                            return@LaunchedEffect
+                        }
+                        val elapsed = (SystemClock.elapsedRealtime() - idleLastInteractionAtMs).coerceAtLeast(0L)
+                        val remainingDelayMs = (IDLE_SCREENSAVER_TIMEOUT_MS - elapsed).coerceAtLeast(0L)
+                        delay(remainingDelayMs)
+                        if (idleScreensaverEligible && !idleScreensaverVisible && idleScreensaverSlides.isNotEmpty()) {
+                            idleScreensaverController.show()
+                        }
+                    }
+
                     val view = LocalView.current
                     LaunchedEffect(currentRoute) {
                         val holder = PerformanceMetricsState.getHolderForHierarchy(view)
                         if (currentRoute != null) {
                             holder.state?.putState("Screen", currentRoute)
                         }
+                    }
+
+                    LaunchedEffect(showStartupSplash, lifecycleOwner, rootView) {
+                        if (!showStartupSplash) return@LaunchedEffect
+                        startupSplashReadyToPlay = false
+                        while (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                            withFrameNanos { }
+                        }
+                        while (!rootView.isAttachedToWindow) {
+                            withFrameNanos { }
+                        }
+                        repeat(2) { withFrameNanos { } }
+                        startupSplashReadyToPlay = true
                     }
 
                     val rootRoutes = remember {
@@ -461,48 +555,82 @@ class MainActivity : ComponentActivity() {
                     }?.route
                     val selectedDrawerItem = drawerItems.firstOrNull { it.route == selectedDrawerRoute } ?: drawerItems.first()
 
-                    if (modernSidebarEnabled) {
-                        ModernSidebarScaffold(
-                            navController = navController,
-                            startDestination = startDestination,
-                            currentRoute = currentRoute,
-                            rootRoutes = rootRoutes,
-                            drawerItems = drawerItems,
-                            selectedDrawerRoute = selectedDrawerRoute,
-                            selectedDrawerItem = selectedDrawerItem,
-                            sidebarCollapsed = sidebarCollapsed,
-                            modernSidebarBlurEnabled = modernSidebarBlurEnabled,
-                            hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
-                            onExitApp = {
-                                finishAffinity()
-                                finishAndRemoveTask()
-                            }
-                        )
-                    } else {
-                        LegacySidebarScaffold(
-                            navController = navController,
-                            startDestination = startDestination,
-                            currentRoute = currentRoute,
-                            rootRoutes = rootRoutes,
-                            drawerItems = drawerItems,
-                            selectedDrawerRoute = selectedDrawerRoute,
-                            sidebarCollapsed = sidebarCollapsed,
-                            hideBuiltInHeaders = false,
-                            onExitApp = {
-                                finishAffinity()
-                                finishAndRemoveTask()
-                            }
-                        )
-                    }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (modernSidebarEnabled) {
+                            ModernSidebarScaffold(
+                                navController = navController,
+                                startDestination = startDestination,
+                                currentRoute = currentRoute,
+                                rootRoutes = rootRoutes,
+                                drawerItems = drawerItems,
+                                selectedDrawerRoute = selectedDrawerRoute,
+                                selectedDrawerItem = selectedDrawerItem,
+                                sidebarCollapsed = sidebarCollapsed,
+                                modernSidebarBlurEnabled = modernSidebarBlurEnabled,
+                                hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
+                                onExitApp = {
+                                    finishAffinity()
+                                    finishAndRemoveTask()
+                                }
+                            )
+                        } else {
+                            LegacySidebarScaffold(
+                                navController = navController,
+                                startDestination = startDestination,
+                                currentRoute = currentRoute,
+                                rootRoutes = rootRoutes,
+                                drawerItems = drawerItems,
+                                selectedDrawerRoute = selectedDrawerRoute,
+                                sidebarCollapsed = sidebarCollapsed,
+                                hideBuiltInHeaders = false,
+                                onExitApp = {
+                                    finishAffinity()
+                                    finishAndRemoveTask()
+                                }
+                            )
+                        }
 
-                    UpdatePromptDialog(
-                        state = updateState,
-                        onDismiss = { updateViewModel.dismissDialog() },
-                        onDownload = { updateViewModel.downloadUpdate() },
-                        onInstall = { updateViewModel.installUpdateOrRequestPermission() },
-                        onIgnore = { updateViewModel.ignoreThisVersion() },
-                        onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
-                    )
+                        UpdatePromptDialog(
+                            state = updateState,
+                            onDismiss = { updateViewModel.dismissDialog() },
+                            onDownload = { updateViewModel.downloadUpdate() },
+                            onInstall = { updateViewModel.installUpdateOrRequestPermission() },
+                            onIgnore = { updateViewModel.ignoreThisVersion() },
+                            onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
+                        )
+
+                        if (idleScreensaverVisible && idleScreensaverSlides.isNotEmpty()) {
+                            IdleScreensaverOverlay(
+                                slides = idleScreensaverSlides,
+                                sessionId = idleScreensaverSessionId,
+                                onDismiss = { idleScreensaverController.dismiss() },
+                                onOpenSlide = { slide ->
+                                    idleScreensaverController.dismiss()
+                                    navController.navigate(
+                                        Screen.Detail.createRoute(
+                                            itemId = slide.itemId,
+                                            itemType = slide.itemType,
+                                            addonBaseUrl = slide.addonBaseUrl
+                                        )
+                                    )
+                                }
+                            )
+                        }
+
+                        if (showStartupSplash) {
+                            if (startupSplashReadyToPlay) {
+                                StartupSplashOverlay(
+                                    onFinished = { startupSplashDismissed = true }
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black)
+                                )
+                            }
+                        }
+                    }
                 }
             }
             }
@@ -531,6 +659,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleRecommendationIntent(intent)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            idleScreensaverController.registerInteraction()
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onPause() {
@@ -600,6 +735,14 @@ class MainActivity : ComponentActivity() {
                     }
                     .onSuccess {
                         logStartupPerf("trakt_refresh_end")
+                    }
+            }
+            launch {
+                if (!idleScreensaverColdBootRefreshPending) return@launch
+                idleScreensaverColdBootRefreshPending = false
+                runCatching { idleScreensaverRepository.refreshOnColdBoot() }
+                    .onFailure { error ->
+                        Log.w("MainActivity", "Deferred idle screensaver refresh failed", error)
                     }
             }
             logStartupPerf("deferred_startup_end")
@@ -751,6 +894,166 @@ private data class RecommendationFeedNavigation(
     val feedKey: String
 )
 
+private fun isIdleScreensaverEligibleRoute(
+    currentRoute: String?,
+    playbackIdleSnapshot: PlaybackIdleGateSnapshot
+): Boolean {
+    val route = currentRoute ?: return false
+    if (
+        route == Screen.AuthSignIn.route ||
+        route == Screen.AuthQrSignIn.route ||
+        route == Screen.LayoutSelection.route ||
+        route == Screen.SyncCodeGenerate.route ||
+        route == Screen.SyncCodeClaim.route
+    ) {
+        return false
+    }
+    if (route == Screen.Player.route) {
+        return playbackIdleSnapshot.hasActiveSession && playbackIdleSnapshot.isPausedByUser
+    }
+    return true
+}
+
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+private fun StartupSplashOverlay(
+    onFinished: () -> Unit
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val focusRequester = remember { FocusRequester() }
+    var playbackEnded by remember { mutableStateOf(false) }
+    var firstFrameRendered by remember { mutableStateOf(false) }
+    var finishDispatched by remember { mutableStateOf(false) }
+    val splashUri = remember(context) {
+        Uri.parse("android.resource://${context.packageName}/${R.raw.splash_screen}")
+    }
+    val player = remember(context, splashUri) {
+        ExoPlayer.Builder(context)
+            .setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
+            .build()
+            .apply {
+                repeatMode = Player.REPEAT_MODE_OFF
+                volume = 1f
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    true
+                )
+                setMediaItem(MediaItem.fromUri(splashUri))
+                prepare()
+                playWhenReady = true
+            }
+    }
+
+    DisposableEffect(lifecycleOwner, player) {
+        val splashListener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    playbackEnded = true
+                }
+            }
+
+            override fun onRenderedFirstFrame() {
+                firstFrameRendered = true
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                if (finishDispatched) return
+                finishDispatched = true
+                onFinished()
+            }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    if (!playbackEnded && !finishDispatched) {
+                        player.playWhenReady = true
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP -> player.pause()
+                Lifecycle.Event.ON_DESTROY -> {
+                    runCatching { player.stop() }
+                    runCatching { player.clearMediaItems() }
+                    runCatching { player.release() }
+                }
+                else -> Unit
+            }
+        }
+        player.addListener(splashListener)
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            runCatching { player.removeListener(splashListener) }
+            runCatching { lifecycleOwner.lifecycle.removeObserver(observer) }
+            runCatching { player.stop() }
+            runCatching { player.clearMediaItems() }
+            runCatching { player.release() }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        runCatching { focusRequester.requestFocus() }
+    }
+
+    LaunchedEffect(firstFrameRendered) {
+        if (firstFrameRendered || finishDispatched) return@LaunchedEffect
+        delay(STARTUP_SPLASH_FIRST_FRAME_TIMEOUT_MS)
+        if (!firstFrameRendered && !finishDispatched) {
+            finishDispatched = true
+            onFinished()
+        }
+    }
+
+    LaunchedEffect(playbackEnded) {
+        if (!playbackEnded || finishDispatched) return@LaunchedEffect
+        finishDispatched = true
+        delay(STARTUP_SPLASH_LAST_FRAME_HOLD_MS)
+        onFinished()
+    }
+
+    LaunchedEffect(Unit) {
+        delay(STARTUP_SPLASH_HARD_TIMEOUT_MS)
+        if (!finishDispatched) {
+            finishDispatched = true
+            onFinished()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { true }
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = player
+                    useController = false
+                    keepScreenOn = true
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                    setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (!firstFrameRendered) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun LegacySidebarScaffold(
@@ -778,6 +1081,7 @@ private fun LegacySidebarScaffold(
     val openDrawerWidth = 216.dp
 
     val focusManager = LocalFocusManager.current
+    val contentFocusRequester = remember { FocusRequester() }
     var pendingContentFocusTransfer by remember { mutableStateOf(false) }
     var pendingSidebarFocusRequest by remember { mutableStateOf(false) }
 
@@ -795,7 +1099,7 @@ private fun LegacySidebarScaffold(
             return@LaunchedEffect
         }
         repeat(2) { withFrameNanos { } }
-        focusManager.moveFocus(FocusDirection.Right)
+        runCatching { contentFocusRequester.requestFocus() }
         pendingContentFocusTransfer = false
     }
 
@@ -888,7 +1192,11 @@ private fun LegacySidebarScaffold(
             }
         }
     ) {
-        val contentStartPadding = if (showSidebar) closedDrawerWidth else 0.dp
+        val contentStartPadding by animateDpAsState(
+            targetValue = if (showSidebar) closedDrawerWidth else 0.dp,
+            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+            label = "legacySidebarContentPadding"
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -913,7 +1221,8 @@ private fun LegacySidebarScaffold(
                 }
         ) {
             CompositionLocalProvider(
-                LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open)
+                LocalSidebarExpanded provides (drawerState.currentValue == DrawerValue.Open),
+                LocalContentFocusRequester provides contentFocusRequester
             ) {
                 NexioNavHost(
                     navController = navController,
@@ -1013,6 +1322,7 @@ private fun ModernSidebarScaffold(
     val openSidebarWidth = 262.dp
 
     val focusManager = LocalFocusManager.current
+    val contentFocusRequester = remember { FocusRequester() }
     val drawerItemFocusRequesters = remember(drawerItems) {
         drawerItems.associate { item -> item.route to FocusRequester() }
     }
@@ -1180,7 +1490,7 @@ private fun ModernSidebarScaffold(
             return@LaunchedEffect
         }
         repeat(2) { withFrameNanos { } }
-        focusManager.moveFocus(FocusDirection.Right)
+        runCatching { contentFocusRequester.requestFocus() }
         pendingContentFocusTransfer = false
     }
 
@@ -1252,7 +1562,8 @@ private fun ModernSidebarScaffold(
                 }
         ) {
             CompositionLocalProvider(
-                LocalSidebarExpanded provides isSidebarExpanded
+                LocalSidebarExpanded provides isSidebarExpanded,
+                LocalContentFocusRequester provides contentFocusRequester
             ) {
                 NexioNavHost(
                     navController = navController,
@@ -1352,7 +1663,7 @@ private fun ModernSidebarScaffold(
                         .align(Alignment.TopStart)
                         .offset {
                             IntOffset(
-                                (40.dp + sidebarSlideX + sidebarDeflateOffsetX).roundToPx(),
+                                14.dp.roundToPx(),
                                 (16.dp + sidebarDeflateOffsetY).roundToPx()
                             )
                         }
