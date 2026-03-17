@@ -65,10 +65,10 @@ internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
     }
 }
 
-internal fun PlayerRuntimeController.rememberSameSeriesAudioSelection(trackIndex: Int) {
+internal fun PlayerRuntimeController.rememberAudioSelection(trackIndex: Int) {
     val selectedTrack = _uiState.value.audioTracks.getOrNull(trackIndex) ?: return
-    sameSeriesTrackSelectionPreference =
-        (sameSeriesTrackSelectionPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
+    rememberedTrackPreference =
+        (rememberedTrackPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
             .copy(
                 audio = PlayerRuntimeController.RememberedTrackSelection(
                     language = selectedTrack.language,
@@ -185,10 +185,10 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
     }
 }
 
-internal fun PlayerRuntimeController.rememberSameSeriesInternalSubtitleSelection(trackIndex: Int) {
+internal fun PlayerRuntimeController.rememberInternalSubtitleSelection(trackIndex: Int) {
     val selectedTrack = _uiState.value.subtitleTracks.getOrNull(trackIndex) ?: return
-    sameSeriesTrackSelectionPreference =
-        (sameSeriesTrackSelectionPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
+    rememberedTrackPreference =
+        (rememberedTrackPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
             .copy(
                 subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Internal(
                     track = PlayerRuntimeController.RememberedTrackSelection(
@@ -210,9 +210,9 @@ internal fun PlayerRuntimeController.disableSubtitles() {
     }
 }
 
-internal fun PlayerRuntimeController.rememberSameSeriesSubtitleDisabled() {
-    sameSeriesTrackSelectionPreference =
-        (sameSeriesTrackSelectionPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
+internal fun PlayerRuntimeController.rememberSubtitleDisabled() {
+    rememberedTrackPreference =
+        (rememberedTrackPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
             .copy(subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Disabled)
     persistTrackPreference()
 }
@@ -317,9 +317,9 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
     }
 }
 
-internal fun PlayerRuntimeController.rememberSameSeriesAddonSubtitleSelection(subtitle: Subtitle) {
-    sameSeriesTrackSelectionPreference =
-        (sameSeriesTrackSelectionPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
+internal fun PlayerRuntimeController.rememberAddonSubtitleSelection(subtitle: Subtitle) {
+    rememberedTrackPreference =
+        (rememberedTrackPreference ?: PlayerRuntimeController.EpisodeTrackSelectionPreference())
             .copy(
                 subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Addon(
                     id = subtitle.id,
@@ -332,7 +332,7 @@ internal fun PlayerRuntimeController.rememberSameSeriesAddonSubtitleSelection(su
 
 internal fun PlayerRuntimeController.persistTrackPreference() {
     val id = contentId ?: return
-    val pref = sameSeriesTrackSelectionPreference ?: return
+    val pref = rememberedTrackPreference ?: return
     val audio = pref.audio
     val subtitle = pref.subtitle
     val persisted = com.nuvio.tv.data.local.PersistedTrackPreference(

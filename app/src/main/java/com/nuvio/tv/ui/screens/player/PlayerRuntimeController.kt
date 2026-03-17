@@ -210,8 +210,8 @@ class PlayerRuntimeController(
     internal var pendingAddonSubtitleLanguage: String? = null
     internal var pendingAddonSubtitleTrackId: String? = null
     internal var pendingAudioSelectionAfterSubtitleRefresh: PendingAudioSelection? = null
-    internal var sameSeriesTrackSelectionPreference: EpisodeTrackSelectionPreference? = null
-    internal var pendingSameSeriesTrackSelectionRestore: EpisodeTrackSelectionPreference? = null
+    internal var rememberedTrackPreference: EpisodeTrackSelectionPreference? = null
+    internal var pendingTrackPreferenceRestore: EpisodeTrackSelectionPreference? = null
     internal var attachedAddonSubtitleKeys: Set<String> = emptySet()
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false

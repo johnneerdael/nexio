@@ -607,11 +607,11 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
         headers = newHeaders
     )
     persistSelectedStreamForReuse(stream = stream, url = url, headers = newHeaders)
-    pendingSameSeriesTrackSelectionRestore = sameSeriesTrackSelectionPreference
+    pendingTrackPreferenceRestore = rememberedTrackPreference
     contentId?.let { id ->
         scope.launch {
             trackPreferenceDataStore.load(id)?.toEpisodeTrackSelectionPreference()
-                ?.let { pendingSameSeriesTrackSelectionRestore = it }
+                ?.let { pendingTrackPreferenceRestore = it }
         }
     }
     hasRetriedCurrentStreamAfter416 = false

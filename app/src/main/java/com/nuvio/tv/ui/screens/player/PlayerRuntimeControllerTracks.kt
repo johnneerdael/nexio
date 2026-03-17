@@ -388,7 +388,7 @@ internal fun PlayerRuntimeController.restorePendingSameSeriesTrackSelection(
     audioTracks: List<TrackInfo>,
     subtitleTracks: List<TrackInfo>
 ) {
-    val pending = pendingSameSeriesTrackSelectionRestore ?: return
+    val pending = pendingTrackPreferenceRestore ?: return
     var updatedPending = pending
     var updatedSubtitleIndex: Int? = null
     var updatedAddonSubtitle: com.nuvio.tv.domain.model.Subtitle? = null
@@ -448,7 +448,7 @@ internal fun PlayerRuntimeController.restorePendingSameSeriesTrackSelection(
             selectedAddonSubtitle = updatedAddonSubtitle ?: if (updatedSubtitleIndex != null) null else state.selectedAddonSubtitle
         )
     }
-    pendingSameSeriesTrackSelectionRestore =
+    pendingTrackPreferenceRestore =
         updatedPending.takeUnless { it.audio == null && it.subtitle == null }
 }
 

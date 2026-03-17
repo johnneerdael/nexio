@@ -12,9 +12,9 @@ internal fun PlayerRuntimeController.preparePlaybackBeforeStart(
     playbackPreparationJob = scope.launch {
         warmTraktEpisodeMappingForCurrentPlayback()
         refreshScrobbleItem()
-        if (pendingSameSeriesTrackSelectionRestore == null) {
+        if (pendingTrackPreferenceRestore == null) {
             contentId?.let { id ->
-                pendingSameSeriesTrackSelectionRestore =
+                pendingTrackPreferenceRestore =
                     trackPreferenceDataStore.load(id)?.toEpisodeTrackSelectionPreference()
             }
         }
