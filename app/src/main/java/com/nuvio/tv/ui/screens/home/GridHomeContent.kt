@@ -476,7 +476,7 @@ private fun StickyCategoryHeader(
         modifier = modifier
             .fillMaxWidth()
             .background(headerGradient)
-            .padding(start = 24.dp, top = 12.dp, bottom = 12.dp)
+            .padding(horizontal = 48.dp, vertical = 12.dp)
     ) {
         Text(
             text = sectionName,

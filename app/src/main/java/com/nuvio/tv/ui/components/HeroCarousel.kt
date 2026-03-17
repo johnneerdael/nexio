@@ -138,7 +138,7 @@ fun HeroCarousel(
             label = "heroSlide"
         ) { index ->
             val item = items.getOrNull(index) ?: return@Crossfade
-            HeroCarouselSlide(item = item, compactPadding = fullWidth != Dp.Unspecified)
+            HeroCarouselSlide(item = item)
         }
 
         // Indicator dots — pre-compute colors + shape to avoid reallocation per dot
@@ -182,8 +182,7 @@ fun HeroCarousel(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun HeroCarouselSlide(
-    item: MetaPreview,
-    compactPadding: Boolean = false
+    item: MetaPreview
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -268,7 +267,7 @@ private fun HeroCarouselSlide(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = if (compactPadding) 24.dp else 48.dp, bottom = 48.dp, end = 48.dp)
+                .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
                 .fillMaxWidth(0.5f)
         ) {
             // Title logo or text title
