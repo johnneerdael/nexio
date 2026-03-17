@@ -101,7 +101,7 @@ fun GridContinueWatchingSection(
                         lastFocusedIndex else 0
                     focusRequesters.getOrNull(idx) ?: FocusRequester.Default
                 },
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 0.dp),
+            contentPadding = PaddingValues(horizontal = 36.dp, vertical = 0.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             itemsIndexed(
