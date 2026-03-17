@@ -5,7 +5,7 @@ import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.core.player.StreamAutoPlaySelector
 import com.nuvio.tv.data.local.StreamAutoPlayMode
 import com.nuvio.tv.data.local.StreamAutoPlaySource
-import com.nuvio.tv.data.local.toEpisodeTrackSelectionPreference
+import com.nuvio.tv.data.local.toTrackPreference
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import com.nuvio.tv.domain.model.Video
@@ -610,7 +610,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     pendingTrackPreferenceRestore = rememberedTrackPreference
     contentId?.let { id ->
         scope.launch {
-            trackPreferenceDataStore.load(id)?.toEpisodeTrackSelectionPreference()
+            trackPreferenceDataStore.load(id)?.toTrackPreference()
                 ?.let { pendingTrackPreferenceRestore = it }
         }
     }
