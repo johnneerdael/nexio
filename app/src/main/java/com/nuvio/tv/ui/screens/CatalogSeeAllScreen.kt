@@ -180,7 +180,7 @@ fun CatalogSeeAllScreen(
                     columns = GridCells.Adaptive(minSize = posterCardStyle.width),
                     contentPadding = PaddingValues(
                         start = 48.dp,
-                        end = 48.dp,
+                        end = 24.dp,
                         top = 12.dp,
                         bottom = if (catalogRow.isLoading) 80.dp else 32.dp
                     ),
