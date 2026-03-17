@@ -17,6 +17,7 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         logo = logo,
         description = description,
         releaseInfo = releaseInfo,
+        runtime = runtime,
         imdbRating = imdbRating?.toFloatOrNull(),
         genres = genres ?: emptyList(),
         trailerYtIds = trailerStreams?.mapNotNull { it.ytId?.takeIf { id -> id.isNotBlank() } } ?: emptyList()

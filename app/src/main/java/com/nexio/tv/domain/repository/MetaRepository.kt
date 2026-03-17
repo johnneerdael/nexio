@@ -10,6 +10,7 @@ interface MetaRepository {
         type: String,
         id: String,
         cacheOnDisk: Boolean = true,
+        writeToDisk: Boolean = true,
         origin: String = "default"
     ): Flow<NetworkResult<Meta>>
     
@@ -17,6 +18,7 @@ interface MetaRepository {
         type: String,
         id: String,
         cacheOnDisk: Boolean = true,
+        writeToDisk: Boolean = true,
         origin: String = "default"
     ): Flow<NetworkResult<Meta>>
     

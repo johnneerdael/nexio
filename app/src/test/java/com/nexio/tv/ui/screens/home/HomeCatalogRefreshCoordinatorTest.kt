@@ -45,6 +45,21 @@ class HomeCatalogRefreshCoordinatorTest {
         assertEquals("b", diff.removed.first().id)
     }
 
+    @Test
+    fun `diffCatalogItems marks metadata only changes as addedOrChanged`() {
+        val oldItems = listOf(
+            preview(id = "a", poster = "posterA").copy(description = "old", runtime = "90m")
+        )
+        val newItems = listOf(
+            preview(id = "a", poster = "posterA").copy(description = "new", runtime = "95m")
+        )
+
+        val diff = diffCatalogItems(oldItems, newItems)
+
+        assertEquals(1, diff.addedOrChanged.size)
+        assertEquals("a", diff.addedOrChanged.first().id)
+    }
+
     private fun preview(id: String, poster: String?): MetaPreview {
         return MetaPreview(
             id = id,
@@ -62,4 +77,3 @@ class HomeCatalogRefreshCoordinatorTest {
         )
     }
 }
-

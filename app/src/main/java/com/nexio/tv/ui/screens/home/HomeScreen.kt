@@ -16,9 +16,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -97,6 +99,22 @@ fun HomeScreen(
     var startupContentGateTimedOut by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     val shouldArmStartupTimeout = uiState.isLoading && !hasRenderableContent && uiState.error == null
+    val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
+    val latestTraktRecommendationRefs by rememberUpdatedState(uiState.traktRecommendationRefs)
+    val isCatalogItemWatched: (MetaPreview) -> Boolean = remember(Unit) {
+        { item -> latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true }
+    }
+    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember(Unit) {
+        { item, addonBaseUrl ->
+            val statusKey = homeItemStatusKey(item.id, item.apiType)
+            posterOptionsTarget = HomePosterOptionsTarget(
+                item = item,
+                addonBaseUrl = addonBaseUrl,
+                statusKey = statusKey,
+                recommendationRef = latestTraktRecommendationRefs[statusKey]
+            )
+        }
+    }
 
     LaunchedEffect(shouldArmStartupTimeout) {
         if (!shouldArmStartupTimeout) {
@@ -247,18 +265,8 @@ fun HomeScreen(
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                isCatalogItemWatched = { item ->
-                                    uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-                                },
-                                onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    val statusKey = homeItemStatusKey(item.id, item.apiType)
-                                    posterOptionsTarget = HomePosterOptionsTarget(
-                                        item = item,
-                                        addonBaseUrl = addonBaseUrl,
-                                        statusKey = statusKey,
-                                        recommendationRef = uiState.traktRecommendationRefs[statusKey]
-                                    )
-                                }
+                                isCatalogItemWatched = isCatalogItemWatched,
+                                onCatalogItemLongPress = onCatalogItemLongPress
                             )
 
                             HomeLayout.GRID -> GridHomeRoute(
@@ -269,18 +277,8 @@ fun HomeScreen(
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
-                                isCatalogItemWatched = { item ->
-                                    uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-                                },
-                                onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    val statusKey = homeItemStatusKey(item.id, item.apiType)
-                                    posterOptionsTarget = HomePosterOptionsTarget(
-                                        item = item,
-                                        addonBaseUrl = addonBaseUrl,
-                                        statusKey = statusKey,
-                                        recommendationRef = uiState.traktRecommendationRefs[statusKey]
-                                    )
-                                }
+                                isCatalogItemWatched = isCatalogItemWatched,
+                                onCatalogItemLongPress = onCatalogItemLongPress
                             )
 
                             HomeLayout.MODERN -> ModernHomeRoute(
@@ -289,18 +287,8 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
-                                isCatalogItemWatched = { item ->
-                                    uiState.movieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-                                },
-                                onCatalogItemLongPress = { item, addonBaseUrl ->
-                                    val statusKey = homeItemStatusKey(item.id, item.apiType)
-                                    posterOptionsTarget = HomePosterOptionsTarget(
-                                        item = item,
-                                        addonBaseUrl = addonBaseUrl,
-                                        statusKey = statusKey,
-                                        recommendationRef = uiState.traktRecommendationRefs[statusKey]
-                                    )
-                                }
+                                isCatalogItemWatched = isCatalogItemWatched,
+                                onCatalogItemLongPress = onCatalogItemLongPress
                             )
                         }
                     }
@@ -466,7 +454,35 @@ private fun ModernHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
-    val enrichingItemId by viewModel.enrichingItemId.collectAsStateWithLifecycle()
+    val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
+    val modernContentState = remember(
+        uiState.catalogRows,
+        uiState.continueWatchingItems,
+        uiState.modernLandscapePostersEnabled,
+        uiState.catalogTypeSuffixEnabled,
+        uiState.focusedPosterBackdropExpandEnabled,
+        uiState.focusedPosterBackdropExpandDelaySeconds,
+        uiState.posterCardWidthDp,
+        uiState.posterCardHeightDp,
+        uiState.posterCardCornerRadiusDp,
+        uiState.posterLabelsEnabled
+    ) {
+        ModernHomeContentState(
+            catalogRows = uiState.catalogRows,
+            continueWatchingItems = uiState.continueWatchingItems,
+            modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
+            catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
+            focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
+            focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
+            posterCardWidthDp = uiState.posterCardWidthDp,
+            posterCardHeightDp = uiState.posterCardHeightDp,
+            posterCardCornerRadiusDp = uiState.posterCardCornerRadiusDp,
+            posterLabelsEnabled = uiState.posterLabelsEnabled
+        )
+    }
+    val preloadAdjacentItem = remember(viewModel) {
+        { item: MetaPreview -> viewModel.preloadAdjacentItem(item) }
+    }
     val loadMoreCatalog = remember(viewModel) {
         { catalogId: String, addonId: String, type: String ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
@@ -502,9 +518,9 @@ private fun ModernHomeRoute(
         }
     }
     ModernHomeContent(
-        uiState = uiState,
+        contentState = modernContentState,
         focusState = focusState,
-        enrichingItemId = enrichingItemId,
+        enrichingItemIdState = enrichingItemIdState,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
@@ -515,9 +531,8 @@ private fun ModernHomeRoute(
         onManageListsContinueWatching = manageListsContinueWatching,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
-        onItemFocus = { item ->
-            viewModel.onItemFocus(item)
-        },
+        onItemFocus = remember(viewModel) { { item -> viewModel.onItemFocus(item) } },
+        onPreloadAdjacentItem = preloadAdjacentItem,
         onSaveFocusState = saveModernFocusState
     )
 }

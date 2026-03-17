@@ -16,6 +16,8 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
+import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -47,6 +49,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
 import java.util.Collections
 import javax.inject.Inject
 
@@ -73,6 +76,7 @@ class HomeViewModel @Inject constructor(
     internal val homeCatalogRefreshCoordinator: HomeCatalogRefreshCoordinator,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val metadataDiskCacheStore: MetadataDiskCacheStore,
+    internal val syntheticHomeCatalogStore: SyntheticHomeCatalogStore,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -87,6 +91,7 @@ class HomeViewModel @Inject constructor(
         internal const val HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS = 750L
         internal const val FOCUS_ENRICHMENT_BATCH_WINDOW_MS = 75L
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
+        internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
     }
 
@@ -143,6 +148,8 @@ class HomeViewModel @Inject constructor(
     internal var mdbListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
         com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
+    internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
@@ -150,6 +157,8 @@ class HomeViewModel @Inject constructor(
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var externalMetaPrefetchJob: Job? = null
     internal var pendingExternalMetaPrefetchItemId: String? = null
+    internal var adjacentItemPrefetchJob: Job? = null
+    internal var pendingAdjacentPrefetchItemId: String? = null
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
@@ -186,11 +195,13 @@ class HomeViewModel @Inject constructor(
     internal var isStartupDeferredRefreshAllowed: Boolean = true
     internal var startupDeferralWindowJob: Job? = null
     internal var deferredStartupRefreshJob: Job? = null
+    internal val syntheticCatalogStoreMutex = Mutex()
 
     init {
         observeStartupPerfTelemetry()
         observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
+        restorePersistedSyntheticCatalogRows()
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
         observeExternalMetaPrefetchPreference()
@@ -237,8 +248,18 @@ class HomeViewModel @Inject constructor(
                 .drop(1)
                 .collectLatest {
                     metadataDiskCacheStore.bumpLanguageEpoch()
+                    val removedImageUrls = metadataDiskCacheStore.removeEntriesFromStaleEpochs()
+                    homeCatalogRefreshCoordinator.evictCachedImageUrls(removedImageUrls)
                     metaRepository.clearCache()
                     tmdbMetadataService.clearCache()
+                    homeCatalogSnapshotStore.clear()
+                    syntheticHomeCatalogStore.clear()
+                    inMemoryHomeSnapshot = null
+                    pendingHomeSnapshotPersist = null
+                    persistedTraktSyntheticGroups = emptyList()
+                    persistedMDBListSyntheticGroups = emptyList()
+                    watchProgressRepository.invalidateLocalizedMetadata()
+                    continueWatchingSnapshotService.invalidateLocalizedMetadata()
                     logStartupPerf("metadata_language_epoch_bumped")
                 }
         }
@@ -249,6 +270,7 @@ class HomeViewModel @Inject constructor(
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
 
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
+    fun preloadAdjacentItem(item: MetaPreview) = preloadAdjacentItemPipeline(item)
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 
@@ -269,6 +291,8 @@ class HomeViewModel @Inject constructor(
     private fun observeAccountSyncRefresh() = observeAccountSyncRefreshPipeline()
 
     fun onForeground() = onForegroundPipeline()
+
+    private fun restorePersistedSyntheticCatalogRows() = restorePersistedSyntheticCatalogRowsPipeline()
 
     private fun restorePersistedCatalogSnapshot() = restorePersistedCatalogSnapshotPipeline()
 
@@ -350,6 +374,11 @@ class HomeViewModel @Inject constructor(
 
     internal fun runDeferredStartupRefreshIfNeeded(reason: String) {
         if (!diskFirstHomeStartupEnabled || shouldDeferStartupNetworkWork()) return
+        runSerializedHomeRefreshIfNeeded(reason)
+    }
+
+    internal fun runSerializedHomeRefreshIfNeeded(reason: String) {
+        if (shouldDeferStartupNetworkWork()) return
         if (deferredStartupRefreshJob?.isActive == true) return
         deferredStartupRefreshJob = viewModelScope.launch {
             logStartupPerf("catalog_refresh_start", "reason=$reason")

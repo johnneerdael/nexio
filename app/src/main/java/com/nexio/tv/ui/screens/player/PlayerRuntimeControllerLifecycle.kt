@@ -7,6 +7,8 @@ import androidx.media3.common.C
 internal fun PlayerRuntimeController.releasePlayer() {
     flushPlaybackSnapshotForSwitchOrExit()
     mediaSourceFactory.stopVodWarmAhead()
+    activePlaybackSessionId = 0L
+    playbackIdleGateState.onPlayerSessionEnded()
 
     notifyAudioSessionUpdate(false)
 

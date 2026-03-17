@@ -214,12 +214,12 @@ data class PlayerSettings(
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
-    val uniformStreamFormattingEnabled: Boolean = false,
-    val groupStreamsAcrossAddonsEnabled: Boolean = false,
-    val deduplicateGroupedStreamsEnabled: Boolean = false,
+    val uniformStreamFormattingEnabled: Boolean = true,
+    val groupStreamsAcrossAddonsEnabled: Boolean = true,
+    val deduplicateGroupedStreamsEnabled: Boolean = true,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
-    val filterEpisodeMismatchStreamsEnabled: Boolean = false,
-    val filterMovieYearMismatchStreamsEnabled: Boolean = false,
+    val filterEpisodeMismatchStreamsEnabled: Boolean = true,
+    val filterMovieYearMismatchStreamsEnabled: Boolean = true,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
     // Networking
     val vodCacheSizeMode: VodCacheSizeMode = DEFAULT_VOD_CACHE_SIZE_MODE,
@@ -428,6 +428,8 @@ class PlayerSettingsDataStore @Inject constructor(
         booleanPreferencesKey("migration_load_control_defaults_retuned_done")
     private val migrationLoadControlMinBufferRetunedDoneKey =
         booleanPreferencesKey("migration_load_control_min_buffer_retuned_done")
+    private val migrationStreamSelectionDefaultsEnabledKey =
+        booleanPreferencesKey("migration_stream_selection_defaults_enabled")
 
     init {
         ioScope.launch {
@@ -505,6 +507,19 @@ class PlayerSettingsDataStore @Inject constructor(
                     }
 
                     prefs[migrationLoadControlMinBufferRetunedDoneKey] = true
+                }
+
+                val streamSelectionDefaultsEnabled =
+                    prefs[migrationStreamSelectionDefaultsEnabledKey] ?: false
+                if (!streamSelectionDefaultsEnabled) {
+                    prefs[uniformStreamFormattingEnabledKey] = true
+                    prefs[groupStreamsAcrossAddonsEnabledKey] = true
+                    prefs[deduplicateGroupedStreamsEnabledKey] = true
+                    prefs[filterEpisodeMismatchStreamsEnabledKey] = true
+                    prefs[filterMovieYearMismatchStreamsEnabledKey] = true
+                    prefs[migrationStreamSelectionDefaultsEnabledKey] = true
+                } else if (prefs[groupStreamsAcrossAddonsEnabledKey] != true) {
+                    prefs[groupStreamsAcrossAddonsEnabledKey] = true
                 }
 
                 val min = prefs[minBufferMsKey]
@@ -678,12 +693,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
-                uniformStreamFormattingEnabled = prefs[uniformStreamFormattingEnabledKey] ?: false,
-                groupStreamsAcrossAddonsEnabled = prefs[groupStreamsAcrossAddonsEnabledKey] ?: false,
-                deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: false,
+                uniformStreamFormattingEnabled = prefs[uniformStreamFormattingEnabledKey] ?: true,
+                groupStreamsAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: true,
                 filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
-                filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: false,
-                filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: false,
+                filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
+                filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
                 vodCacheSizeMode = parseVodCacheSizeMode(prefs[vodCacheSizeModeKey]),
                 vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
@@ -933,10 +948,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setGroupStreamsAcrossAddonsEnabled(enabled: Boolean) {
         store().edit { prefs ->
-            prefs[groupStreamsAcrossAddonsEnabledKey] = enabled
-            if (!enabled) {
-                prefs[deduplicateGroupedStreamsEnabledKey] = false
-            }
+            prefs[groupStreamsAcrossAddonsEnabledKey] = true
         }
     }
 

@@ -277,6 +277,72 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     }
 }
 
+internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
+    if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
+        return
+    }
+    if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
+    if (pendingTmdbEnrichItemId == item.id || pendingAdjacentPrefetchItemId == item.id) return
+
+    pendingAdjacentPrefetchItemId = item.id
+    adjacentItemPrefetchJob?.cancel()
+    adjacentItemPrefetchJob = viewModelScope.launch {
+        delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
+        if (pendingAdjacentPrefetchItemId != item.id) return@launch
+        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return@launch
+
+        try {
+            var tmdbEnriched = false
+            if (currentTmdbSettings.isActive) {
+                val tmdbId = withContext(Dispatchers.IO) {
+                    runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
+                }
+                val enrichment = if (tmdbId != null) {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            tmdbMetadataService.fetchEnrichment(
+                                tmdbId = tmdbId,
+                                contentType = item.type
+                            )
+                        }.getOrNull()
+                    }
+                } else {
+                    null
+                }
+                if (enrichment != null) {
+                    prefetchedTmdbIds.add(item.id)
+                    prefetchedExternalMetaIds.add(item.id)
+                    updateCatalogItemWithTmdb(item.id, enrichment)
+                    tmdbEnriched = true
+                }
+            }
+
+            if (!tmdbEnriched &&
+                externalMetaPrefetchEnabled &&
+                item.id !in prefetchedExternalMetaIds &&
+                externalMetaPrefetchInFlightIds.add(item.id)
+            ) {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        metaRepository.getMetaFromAllAddons(item.apiType, item.id)
+                            .first { it is NetworkResult.Success || it is NetworkResult.Error }
+                    }
+                    if (result is NetworkResult.Success) {
+                        prefetchedExternalMetaIds.add(item.id)
+                        updateCatalogItemWithMeta(item.id, result.data)
+                    }
+                } finally {
+                    externalMetaPrefetchInFlightIds.remove(item.id)
+                }
+            }
+        } finally {
+            if (pendingAdjacentPrefetchItemId == item.id) {
+                pendingAdjacentPrefetchItemId = null
+            }
+        }
+    }
+}
+
 private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: TmdbEnrichment) {
     pendingTmdbEnrichmentByItemId[itemId] = enrichment
     scheduleMetadataEnrichmentFlushPipeline()

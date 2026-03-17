@@ -14,6 +14,7 @@ data class MetaPreview(
     val logo: String?,
     val description: String?,
     val releaseInfo: String?,
+    val runtime: String? = null,
     val imdbRating: Float?,
     val genres: List<String>,
     val trailerYtIds: List<String> = emptyList()

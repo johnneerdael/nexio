@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.data.repository.TraktRecommendationRef
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -51,6 +52,7 @@ sealed class ContinueWatchingItem {
     @Immutable
     data class InProgress(
         val progress: WatchProgress,
+        val displayMetadata: HomeDisplayMetadata? = null,
         val episodeDescription: String? = null,
         val episodeThumbnail: String? = null,
         val episodeImdbRating: Float? = null,
@@ -70,6 +72,7 @@ data class NextUpInfo(
     val poster: String?,
     val backdrop: String?,
     val logo: String?,
+    val displayMetadata: HomeDisplayMetadata? = null,
     val videoId: String,
     val season: Int,
     val episode: Int,

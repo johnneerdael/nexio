@@ -473,10 +473,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnPlayPause -> {
             if (backendIsPlaying()) {
                 userPausedManually = true
+                playbackIdleGateState.onUserPauseStateChanged(isPausedByUser = true)
                 backendPause()
                 schedulePauseOverlay()
             } else {
                 userPausedManually = false
+                playbackIdleGateState.onUserPauseStateChanged(isPausedByUser = false)
                 cancelPauseOverlay()
                 backendPlay()
             }

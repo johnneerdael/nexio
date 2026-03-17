@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import com.nexio.tv.core.util.filterReleasedItems
 import kotlinx.coroutines.withContext
@@ -85,13 +87,32 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     }
 }
 
+internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
+    viewModelScope.launch(Dispatchers.IO) {
+        val snapshot = syntheticHomeCatalogStore.read() ?: return@launch
+        val hasRestoredGroups =
+            snapshot.traktGroups.isNotEmpty() || snapshot.mdbListGroups.isNotEmpty()
+        withContext(Dispatchers.Main.immediate) {
+            persistedTraktSyntheticGroups = snapshot.traktGroups
+            persistedMDBListSyntheticGroups = snapshot.mdbListGroups
+            if (hasRestoredGroups) {
+                scheduleUpdateCatalogRows()
+            }
+        }
+    }
+}
+
 internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            if (traktDiscoveryObserved && snapshot == traktDiscoverySnapshot) return@collectLatest
             traktDiscoveryObserved = true
             traktDiscoverySnapshot = snapshot
-            scheduleUpdateCatalogRows()
+            startupRefreshPending = true
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("trakt_discovery")
+            }
         }
     }
 }
@@ -109,7 +130,10 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
                     traktDiscoveryService.ensureFresh(force = false)
                 }
             }
-            scheduleUpdateCatalogRows()
+            startupRefreshPending = true
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("trakt_pref_change")
+            }
         }
     }
 }
@@ -118,13 +142,17 @@ internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            if (mdbListDiscoveryObserved && snapshot == mdbListDiscoverySnapshot) return@collectLatest
             mdbListDiscoveryObserved = true
             mdbListDiscoverySnapshot = snapshot
             Log.d(
                 HomeViewModel.TAG,
                 "MDBList snapshot personal=${snapshot.personalLists.size} top=${snapshot.topLists.size} custom=${snapshot.customListCatalogs.size}"
             )
-            scheduleUpdateCatalogRows()
+            startupRefreshPending = true
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("mdblist_discovery")
+            }
         }
     }
 }
@@ -148,7 +176,10 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
                     }
                 } else if (!settings.enabled || settings.apiKey.isBlank()) {
                     mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
-                    scheduleUpdateCatalogRows()
+                    startupRefreshPending = true
+                    if (!shouldDeferStartupNetworkWork()) {
+                        runSerializedHomeRefreshIfNeeded("mdblist_settings_disabled")
+                    }
                 }
             }
     }
@@ -167,7 +198,10 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
                     mdbListDiscoveryService.ensureFresh(force = false)
                 }
             }
-            scheduleUpdateCatalogRows()
+            startupRefreshPending = true
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("mdblist_pref_change")
+            }
         }
     }
 }
@@ -238,7 +272,6 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
 }
 
 internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
-    if (!diskFirstHomeStartupEnabled) return
     val beforeTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val beforeMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
 
@@ -266,12 +299,24 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
     val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
     val mdbAfterKeys = mdbSnapshotItemKeys(afterMdbSnapshot)
+    traktDiscoverySnapshot = afterTraktSnapshot
+    mdbListDiscoverySnapshot = afterMdbSnapshot
 
     logStartupPerf(
         "synthetic_refresh_end",
         "trakt_total=${traktAfterKeys.size} trakt_added=${(traktAfterKeys - traktBeforeKeys).size} trakt_retained=${(traktAfterKeys intersect traktBeforeKeys).size} " +
             "mdb_total=${mdbAfterKeys.size} mdb_added=${(mdbAfterKeys - mdbBeforeKeys).size} mdb_retained=${(mdbAfterKeys intersect mdbBeforeKeys).size}"
     )
+
+    logStartupPerf("synthetic_refresh_step_start", "source=trakt")
+    renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
+    reloadPersistedSyntheticCatalogRowsPipeline()
+    logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
+
+    logStartupPerf("synthetic_refresh_step_start", "source=mdblist")
+    renewMDBListSyntheticSnapshotPipeline(afterMdbSnapshot)
+    reloadPersistedSyntheticCatalogRowsPipeline()
+    logStartupPerf("synthetic_refresh_step_end", "source=mdblist rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}")
 
     val addons = addonsCache
     val refreshedCatalogCount = homeCatalogRefreshCoordinator.refreshSerially(
@@ -312,11 +357,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     // Recompute rows before cleanup so synthetic rows are reflected in the active-key set.
     runCatching { updateCatalogRowsPipeline() }
 
-    val activeHomeItemKeys = (_fullCatalogRows.value.asSequence() + catalogsMap.values.asSequence())
+    val activeCatalogItemKeys = (_fullCatalogRows.value.asSequence() + catalogsMap.values.asSequence())
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
-    if (refreshedCatalogCount == 0 && activeHomeItemKeys.isNotEmpty()) {
+    if (refreshedCatalogCount == 0 && activeCatalogItemKeys.isNotEmpty()) {
         val visibleItems = _fullCatalogRows.value
             .asSequence()
             .flatMap { row -> row.items.asSequence() }
@@ -327,17 +372,27 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
             onLog = { event, details -> logStartupPerf(event, details) }
         )
     }
-    if (activeHomeItemKeys.isEmpty()) {
+    val activeContinueWatchingItemKeys = _uiState.value.continueWatchingItems
+        .map { item -> "${item.contentType()}:${item.contentId()}" }
+        .toSet()
+    if (activeCatalogItemKeys.isEmpty() && activeContinueWatchingItemKeys.isEmpty()) {
         logStartupPerf("metadata_cleanup_skipped", "reason=active_items_empty")
     } else {
-        val removedCleanupUrls = metadataDiskCacheStore.removeMetaEntriesNotIn(
-            activeItemKeys = activeHomeItemKeys,
+        metadataDiskCacheStore.replaceHomeFeedReferences(
+            feedKey = "home_catalog_snapshot",
+            itemKeys = activeCatalogItemKeys
+        )
+        metadataDiskCacheStore.replaceHomeFeedReferences(
+            feedKey = "continue_watching",
+            itemKeys = activeContinueWatchingItemKeys
+        )
+        val removedCleanupUrls = metadataDiskCacheStore.removeHomeUnreferencedMetaEntries(
             maxEntries = 800
         )
         homeCatalogRefreshCoordinator.evictCachedImageUrls(removedCleanupUrls)
         logStartupPerf(
             "metadata_cleanup_end",
-            "active_items=${activeHomeItemKeys.size} removed_image_urls=${removedCleanupUrls.size}"
+            "active_items=${activeCatalogItemKeys.size + activeContinueWatchingItemKeys.size} removed_image_urls=${removedCleanupUrls.size}"
         )
     }
     startupRefreshPending = false
@@ -367,6 +422,129 @@ private fun mdbSnapshotItemKeys(
         snapshot.customListCatalogs.forEach { catalog ->
             catalog.items.forEach { add("${it.apiType}:${it.id}") }
         }
+    }
+}
+
+internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline() {
+    val snapshot = withContext(Dispatchers.IO) {
+        syntheticHomeCatalogStore.read() ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot()
+    }
+    withContext(Dispatchers.Main.immediate) {
+        persistedTraktSyntheticGroups = snapshot.traktGroups
+        persistedMDBListSyntheticGroups = snapshot.mdbListGroups
+        scheduleUpdateCatalogRows()
+    }
+}
+
+internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
+) {
+    val traktUpNextItems = _uiState.value.continueWatchingItems
+        .filterIsInstance<ContinueWatchingItem.NextUp>()
+        .take(20)
+        .map { nextUpToMetaPreview(it) }
+    val traktPrefsSnapshot = traktCatalogPreferences
+    val telemetryEnabled = startupPerfTelemetryEnabled
+
+    syntheticCatalogStoreMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val existingSnapshot = syntheticHomeCatalogStore.read()
+                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
+                    traktGroups = persistedTraktSyntheticGroups,
+                    mdbListGroups = persistedMDBListSyntheticGroups
+                )
+            val liveGroups = buildSyntheticTraktRows(
+                prefs = traktPrefsSnapshot,
+                upNextItems = traktUpNextItems,
+                snapshot = snapshot
+            )
+            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.mdbListGroups)
+                .flatMap { it.rows }
+                .associateBy(::homeCatalogGlobalKey)
+            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
+                rows = liveGroups.flatMap { it.rows },
+                existingRowsByKey = existingRowsByKey,
+                telemetryEnabled = telemetryEnabled,
+                onLog = { event, details -> logStartupPerf(event, details) }
+            )
+            val renewedTraktGroups = liveGroups
+                .replaceRows(hydratedRows)
+                .toPersistedSyntheticCatalogGroups()
+            val renewedSnapshot = existingSnapshot.copy(traktGroups = renewedTraktGroups)
+            if (renewedSnapshot == existingSnapshot) {
+                return@withContext
+            }
+            syntheticHomeCatalogStore.write(renewedSnapshot)
+        }
+    }
+}
+
+internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+) {
+    val mdbPrefsSnapshot = mdbListCatalogPreferences
+    val telemetryEnabled = startupPerfTelemetryEnabled
+
+    syntheticCatalogStoreMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val existingSnapshot = syntheticHomeCatalogStore.read()
+                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
+                    traktGroups = persistedTraktSyntheticGroups,
+                    mdbListGroups = persistedMDBListSyntheticGroups
+                )
+            val liveGroups = buildSyntheticMDBListRows(
+                prefs = mdbPrefsSnapshot,
+                snapshot = snapshot
+            )
+            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.mdbListGroups)
+                .flatMap { it.rows }
+                .associateBy(::homeCatalogGlobalKey)
+            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
+                rows = liveGroups.flatMap { it.rows },
+                existingRowsByKey = existingRowsByKey,
+                telemetryEnabled = telemetryEnabled,
+                onLog = { event, details -> logStartupPerf(event, details) }
+            )
+            val renewedMDBListGroups = liveGroups
+                .replaceRows(hydratedRows)
+                .toPersistedSyntheticCatalogGroups()
+            val renewedSnapshot = existingSnapshot.copy(mdbListGroups = renewedMDBListGroups)
+            if (renewedSnapshot == existingSnapshot) {
+                return@withContext
+            }
+            syntheticHomeCatalogStore.write(renewedSnapshot)
+        }
+    }
+}
+
+private fun List<SyntheticCatalogOrderGroup>.replaceRows(
+    hydratedRows: List<CatalogRow>
+): List<SyntheticCatalogOrderGroup> {
+    val hydratedByKey = hydratedRows.associateBy(::homeCatalogGlobalKey)
+    return map { group ->
+        group.copy(
+            rows = group.rows.map { row ->
+                hydratedByKey[homeCatalogGlobalKey(row)] ?: row
+            }
+        )
+    }
+}
+
+private fun List<SyntheticCatalogOrderGroup>.toPersistedSyntheticCatalogGroups(): List<PersistedSyntheticCatalogGroup> {
+    return map { group ->
+        PersistedSyntheticCatalogGroup(
+            orderKey = group.orderKey,
+            rows = group.rows
+        )
+    }
+}
+
+private fun List<PersistedSyntheticCatalogGroup>.toSyntheticCatalogOrderGroups(): List<SyntheticCatalogOrderGroup> {
+    return map { group ->
+        SyntheticCatalogOrderGroup(
+            orderKey = group.orderKey,
+            rows = group.rows
+        )
     }
 }
 
@@ -653,7 +831,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             traktDiscoveryRefreshInProgress ||
             mdbListDiscoveryRefreshInProgress
     val refreshInProgress = startupRefreshPending || activeRefreshInProgress
-
     val computationSignature = withContext(Dispatchers.Default) {
         buildCatalogComputationSignature(
             orderedKeys = orderedKeys,
@@ -665,8 +842,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             continueWatchingItems = continueWatchingItems,
             traktSnapshot = traktSnapshot,
             traktPrefs = traktPrefs,
+            persistedTraktSyntheticGroups = persistedTraktSyntheticGroups,
             mdbListSnapshot = mdbListSnapshot,
             mdbListPrefs = mdbListPrefs,
+            persistedMDBListSyntheticGroups = persistedMDBListSyntheticGroups,
             startupHydrationPending = startupHydrationPending,
             refreshInProgress = refreshInProgress,
             hasPersistedCatalogSnapshot = hasPersistedCatalogSnapshot,
@@ -679,19 +858,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     lastCatalogComputationSignature = computationSignature
 
     val updateResult = withContext(Dispatchers.Default) {
-        val traktUpNextItems = continueWatchingItems
-            .filterIsInstance<ContinueWatchingItem.NextUp>()
-            .take(20)
-            .map { nextUpToMetaPreview(it) }
-        val syntheticTraktGroups = buildSyntheticTraktRows(
-            prefs = traktPrefs,
-            upNextItems = traktUpNextItems,
-            snapshot = traktSnapshot
-        )
-        val syntheticMDBListGroups = buildSyntheticMDBListRows(
-            prefs = mdbListPrefs,
-            snapshot = mdbListSnapshot
-        )
+        val syntheticTraktGroups = persistedTraktSyntheticGroups.toSyntheticCatalogOrderGroups()
+        val syntheticMDBListGroups = persistedMDBListSyntheticGroups.toSyntheticCatalogOrderGroups()
         val rawRowsByKey = orderedKeys
             .mapNotNull { key ->
                 catalogSnapshot[key]?.let { row ->
@@ -776,11 +944,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             .asSequence()
             .flatMap { row -> row.items.asSequence() }
             .filter { item -> item.hasHeroArtwork() }
+            .shuffled()
             .take(7)
             .toList()
         val fallbackHeroItemsFromSelectedCatalogs = selectedHeroRows
             .asSequence()
             .flatMap { row -> row.items.asSequence() }
+            .shuffled()
             .take(7)
             .toList()
 
@@ -788,6 +958,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             .asSequence()
             .flatMap { it.items.asSequence() }
             .filter { it.hasHeroArtwork() }
+            .shuffled()
             .take(7)
             .toList()
 
@@ -991,6 +1162,17 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         if (homeSnapshotPersistGeneration != persistGeneration) return@launch
         val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
         homeCatalogSnapshotStore.write(latestSnapshot)
+        val referencedItemKeys = latestSnapshot.fullCatalogRows
+            .asSequence()
+            .flatMap { row -> row.items.asSequence() }
+            .map { item -> "${item.apiType}:${item.id}" }
+            .toSet()
+        metadataDiskCacheStore.replaceHomeFeedReferences(
+            feedKey = "home_catalog_snapshot",
+            itemKeys = referencedItemKeys
+        )
+        val removedImageUrls = metadataDiskCacheStore.removeHomeUnreferencedMetaEntries(maxEntries = 800)
+        homeCatalogRefreshCoordinator.evictCachedImageUrls(removedImageUrls)
         withContext(Dispatchers.Main.immediate) {
             if (homeSnapshotPersistGeneration == persistGeneration) {
                 pendingHomeSnapshotPersist = null
@@ -1009,8 +1191,10 @@ private fun buildCatalogComputationSignature(
     continueWatchingItems: List<ContinueWatchingItem>,
     traktSnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
     traktPrefs: TraktCatalogPreferences,
+    persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
     mdbListSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
     mdbListPrefs: MDBListCatalogPreferences,
+    persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
     startupHydrationPending: Boolean,
     refreshInProgress: Boolean,
     hasPersistedCatalogSnapshot: Boolean,
@@ -1028,8 +1212,10 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + continueWatchingItems.hashCode()
     signature = (signature * 31) + traktSnapshot.hashCode()
     signature = (signature * 31) + traktPrefs.hashCode()
+    signature = (signature * 31) + persistedTraktSyntheticGroups.hashCode()
     signature = (signature * 31) + mdbListSnapshot.hashCode()
     signature = (signature * 31) + mdbListPrefs.hashCode()
+    signature = (signature * 31) + persistedMDBListSyntheticGroups.hashCode()
     signature = (signature * 31) + startupHydrationPending.hashCode()
     signature = (signature * 31) + refreshInProgress.hashCode()
     signature = (signature * 31) + hasPersistedCatalogSnapshot.hashCode()
@@ -1427,8 +1613,9 @@ private fun MDBListCustomCatalog.toCatalogRow(): CatalogRow? {
     )
 }
 
-private fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPreview {
+internal fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPreview {
     val info = nextUp.info
+    val displayMetadata = info.displayMetadata
     val episodeSuffix = buildString {
         append("S")
         append(info.season)
@@ -1443,15 +1630,15 @@ private fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPrevie
         id = info.contentId,
         type = ContentType.SERIES,
         rawType = info.contentType,
-        name = "${info.name} • $episodeSuffix",
-        poster = info.poster ?: info.thumbnail,
+        name = "${displayMetadata?.title ?: info.name} • $episodeSuffix",
+        poster = displayMetadata?.poster ?: info.poster ?: info.thumbnail,
         posterShape = PosterShape.LANDSCAPE,
-        background = info.backdrop ?: info.thumbnail,
-        logo = info.logo,
-        description = info.episodeDescription,
-        releaseInfo = info.releaseInfo ?: info.released,
-        imdbRating = info.imdbRating,
-        genres = info.genres
+        background = displayMetadata?.backdrop ?: info.backdrop ?: info.thumbnail,
+        logo = displayMetadata?.logo ?: info.logo,
+        description = info.episodeDescription ?: displayMetadata?.description,
+        releaseInfo = displayMetadata?.releaseInfo ?: info.releaseInfo ?: info.released,
+        imdbRating = info.imdbRating ?: displayMetadata?.imdbRating,
+        genres = info.genres.ifEmpty { displayMetadata?.genres.orEmpty() }
     )
 }
 

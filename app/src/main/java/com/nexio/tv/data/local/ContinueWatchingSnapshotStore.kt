@@ -8,19 +8,22 @@ import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ContinueWatchingSnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore
 ) {
 
     companion object {
         private const val TAG = "ContinueWatchingStore"
         private const val PREFS_NAME = "continue_watching_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
+        private const val SCHEMA_VERSION = 2
     }
 
     private val gson = Gson()
@@ -40,8 +43,11 @@ class ContinueWatchingSnapshotStore @Inject constructor(
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
+                addProperty("schemaVersion", SCHEMA_VERSION)
+                addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
                 add("movieProgressItems", gson.toJsonTree(snapshot.movieProgressItems))
                 add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
+                add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
             prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
@@ -61,15 +67,25 @@ class ContinueWatchingSnapshotStore @Inject constructor(
 
     private fun decode(raw: String): ContinueWatchingSnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+        val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
+        if (schemaVersion in 1 until SCHEMA_VERSION) {
+            return null
+        }
+        val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
+        if (schemaVersion >= SCHEMA_VERSION && languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
+            return null
+        }
         val canonical = ContinueWatchingSnapshot(
             movieProgressItems = decodeArray(root, "movieProgressItems"),
             nextUpItems = decodeNextUpItems(root, "nextUpItems"),
+            displayMetadataByItemKey = decodeDisplayMetadata(root, "displayMetadataByItemKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
         if (
             canonical.updatedAtMs > 0L ||
             canonical.movieProgressItems.isNotEmpty() ||
-            canonical.nextUpItems.isNotEmpty()
+            canonical.nextUpItems.isNotEmpty() ||
+            canonical.displayMetadataByItemKey.isNotEmpty()
         ) {
             return canonical
         }
@@ -141,6 +157,15 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             gson.fromJson<List<TraktProgressService.CalendarShowEntry>>(array, legacyType).orEmpty()
         }.getOrDefault(emptyList())
         return legacy.mapNotNull(::normalizeNextUpEntry)
+    }
+
+    private fun decodeDisplayMetadata(
+        root: JsonObject,
+        key: String
+    ): Map<String, HomeDisplayMetadata> {
+        val obj = root.getAsJsonObject(key) ?: return emptyMap()
+        val type = object : TypeToken<Map<String, HomeDisplayMetadata>>() {}.type
+        return gson.fromJson<Map<String, HomeDisplayMetadata>>(obj, type) ?: emptyMap()
     }
 
     private fun decodeNextUpItemObject(

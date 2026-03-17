@@ -337,6 +337,37 @@ class TraktProgressService @Inject constructor(
         optimisticProgress.value = emptyMap()
     }
 
+    fun invalidateLocalizedMetadata() {
+        metadataState.value = emptyMap()
+        scope.launch {
+            metadataMutex.withLock {
+                inFlightMetadataKeys.clear()
+            }
+            hydrateMetadata(
+                progressList = remoteProgress.value + myShowsCalendar.value.map { entry ->
+                    WatchProgress(
+                        contentId = entry.contentId,
+                        contentType = entry.contentType,
+                        name = entry.name,
+                        poster = entry.poster,
+                        backdrop = entry.backdrop,
+                        logo = entry.logo,
+                        videoId = entry.videoId,
+                        season = entry.season,
+                        episode = entry.episode,
+                        episodeTitle = entry.episodeTitle,
+                        position = 0L,
+                        duration = 0L,
+                        lastWatched = entry.firstAiredMs,
+                        source = WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS,
+                        traktShowId = entry.traktShowId,
+                        traktEpisodeId = entry.traktEpisodeId
+                    )
+                }
+            )
+        }
+    }
+
     fun observeAllProgress(): Flow<List<WatchProgress>> {
         return combine(
             remoteProgress,

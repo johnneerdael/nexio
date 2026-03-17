@@ -4,7 +4,9 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.TraktScrobbleItem
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.model.homeDisplayItemKey
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -21,25 +23,41 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
         continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
             val items = buildList {
                 snapshot.movieProgressItems.forEach { progress ->
-                    add(ContinueWatchingItem.InProgress(progress = progress))
+                    val displayMetadata = snapshot.displayMetadataByItemKey[
+                        homeDisplayItemKey(progress.contentType, progress.contentId)
+                    ]
+                    add(
+                        ContinueWatchingItem.InProgress(
+                            progress = progress,
+                            displayMetadata = displayMetadata,
+                            episodeDescription = displayMetadata?.description,
+                            episodeImdbRating = displayMetadata?.imdbRating,
+                            genres = displayMetadata?.genres.orEmpty(),
+                            releaseInfo = displayMetadata?.releaseInfo
+                        )
+                    )
                 }
                 snapshot.nextUpItems.forEach { entry ->
                     val releaseDate = parseEpisodeReleaseDate(entry.firstAired)
                     val hasAired = releaseDate?.let { !it.isAfter(LocalDate.now(ZoneId.systemDefault())) } ?: true
+                    val displayMetadata = snapshot.displayMetadataByItemKey[
+                        homeDisplayItemKey(entry.contentType, entry.contentId)
+                    ]
                     add(
                         ContinueWatchingItem.NextUp(
                             NextUpInfo(
                                 contentId = entry.contentId,
                                 contentType = entry.contentType,
-                                name = entry.name,
-                                poster = entry.poster,
-                                backdrop = entry.backdrop,
-                                logo = entry.logo,
+                                name = displayMetadata?.title ?: entry.name,
+                                poster = displayMetadata?.poster ?: entry.poster,
+                                backdrop = displayMetadata?.backdrop ?: entry.backdrop,
+                                logo = displayMetadata?.logo ?: entry.logo,
+                                displayMetadata = displayMetadata,
                                 videoId = entry.videoId,
                                 season = entry.season,
                                 episode = entry.episode,
                                 episodeTitle = entry.episodeTitle,
-                                episodeDescription = null,
+                                episodeDescription = displayMetadata?.description,
                                 thumbnail = null,
                                 released = entry.firstAired,
                                 hasAired = hasAired,
@@ -47,9 +65,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     ?.takeIf { !hasAired }
                                     ?.let(::formatEpisodeAirDateLabel),
                                 lastWatched = entry.firstAiredMs,
-                                imdbRating = null,
-                                genres = emptyList(),
-                                releaseInfo = null
+                                imdbRating = displayMetadata?.imdbRating,
+                                genres = displayMetadata?.genres.orEmpty(),
+                                releaseInfo = displayMetadata?.releaseInfo
                             )
                         )
                     )

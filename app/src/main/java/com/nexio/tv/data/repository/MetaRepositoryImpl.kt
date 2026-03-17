@@ -49,6 +49,7 @@ class MetaRepositoryImpl @Inject constructor(
         type: String,
         id: String,
         cacheOnDisk: Boolean,
+        writeToDisk: Boolean,
         origin: String
     ): Flow<NetworkResult<Meta>> = flow {
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
@@ -87,7 +88,7 @@ class MetaRepositoryImpl @Inject constructor(
                         .apply(metaDto.toDomain(episodeLabel), activePosterProvider)
                         .sanitizeCastMembers()
                     metaCache[cacheKey] = meta
-                    if (cacheOnDisk) {
+                    if (cacheOnDisk && writeToDisk) {
                         metadataDiskCacheStore.writeMeta(
                             itemKey = itemKey,
                             languageTag = languageTag,
@@ -111,6 +112,7 @@ class MetaRepositoryImpl @Inject constructor(
         type: String,
         id: String,
         cacheOnDisk: Boolean,
+        writeToDisk: Boolean,
         origin: String
     ): Flow<NetworkResult<Meta>> = flow {
         val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
@@ -192,7 +194,7 @@ class MetaRepositoryImpl @Inject constructor(
                                     .sanitizeCastMembers()
                                 addonMetaCache[cacheKey] = meta
                                 metaCache[cacheKey] = meta
-                                if (cacheOnDisk) {
+                                if (cacheOnDisk && writeToDisk) {
                                     metadataDiskCacheStore.writeMeta(
                                         itemKey = itemKey,
                                         languageTag = languageTag,
@@ -233,7 +235,7 @@ class MetaRepositoryImpl @Inject constructor(
                                 .sanitizeCastMembers()
                             addonMetaCache[cacheKey] = meta
                             metaCache[cacheKey] = meta
-                            if (cacheOnDisk) {
+                            if (cacheOnDisk && writeToDisk) {
                                 metadataDiskCacheStore.writeMeta(
                                     itemKey = itemKey,
                                     languageTag = languageTag,

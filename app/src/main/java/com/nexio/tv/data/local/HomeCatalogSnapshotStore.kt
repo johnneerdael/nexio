@@ -13,13 +13,15 @@ import javax.inject.Singleton
 
 @Singleton
 class HomeCatalogSnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore
 ) {
 
     companion object {
         private const val TAG = "HomeCatalogSnapshot"
         private const val PREFS_NAME = "home_catalog_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
+        private const val SCHEMA_VERSION = 2
     }
 
     private val gson = Gson()
@@ -45,6 +47,8 @@ class HomeCatalogSnapshotStore @Inject constructor(
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
+                addProperty("schemaVersion", SCHEMA_VERSION)
+                addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
                 add("catalogRows", gson.toJsonTree(snapshot.catalogRows))
                 add("fullCatalogRows", gson.toJsonTree(snapshot.fullCatalogRows))
                 add("heroItems", gson.toJsonTree(snapshot.heroItems))
@@ -66,6 +70,14 @@ class HomeCatalogSnapshotStore @Inject constructor(
 
     private fun decodeSnapshot(raw: String): Snapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+        val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
+        if (schemaVersion in 1 until SCHEMA_VERSION) {
+            return null
+        }
+        val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
+        if (schemaVersion >= SCHEMA_VERSION && languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
+            return null
+        }
         val canonical = Snapshot(
             catalogRows = decodeArray<CatalogRow>(root, "catalogRows"),
             fullCatalogRows = decodeArray<CatalogRow>(root, "fullCatalogRows"),

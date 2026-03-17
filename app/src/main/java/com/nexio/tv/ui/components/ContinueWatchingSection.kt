@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -124,7 +125,7 @@ fun ContinueWatchingSection(
             )
         }
 
-        val restoreRequester = remember(lastFocusedIndex, focusRequesters) {
+        val restoreRequester = remember(lastFocusedIndex, focusRequesters.size) {
             val idx = if (lastFocusedIndex >= 0 && lastFocusedIndex < focusRequesters.size) {
                 lastFocusedIndex
             } else {
@@ -239,12 +240,13 @@ fun ContinueWatchingCard(
     cardWidth: Dp = 288.dp,
     imageHeight: Dp = 162.dp
 ) {
-    var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
 
-    val progress = (item as? ContinueWatchingItem.InProgress)?.progress
-    val nextUp = (item as? ContinueWatchingItem.NextUp)?.info
-    val episodeStr = progress?.episodeDisplayString ?: nextUp?.let { "S${it.season}E${it.episode}" }
+    val progress = remember(item) { (item as? ContinueWatchingItem.InProgress)?.progress }
+    val nextUp = remember(item) { (item as? ContinueWatchingItem.NextUp)?.info }
+    val episodeStr = remember(progress, nextUp) {
+        progress?.episodeDisplayString ?: nextUp?.let { "S${it.season}E${it.episode}" }
+    }
     val strAirsDate = stringResource(R.string.cw_airs_date, nextUp?.airDateLabel ?: "")
     val strUpcoming = stringResource(R.string.cw_upcoming)
     val strNextUp = stringResource(R.string.cw_next_up)
@@ -268,29 +270,36 @@ fun ContinueWatchingCard(
             }
         }
     }
-    val badgeText = remainingText ?: nextUpBadgeText ?: strNextUp
-    val progressFraction = progress?.progressPercentage ?: 0f
-    val imageModel = when {
-        nextUp != null && !nextUp.hasAired -> firstNonBlank(
-            nextUp.backdrop,
-            nextUp.poster,
-            nextUp.thumbnail,
-            progress?.backdrop,
-            progress?.poster
-        )
-        else -> firstNonBlank(
-            nextUp?.thumbnail,
-            progress?.backdrop,
-            progress?.poster,
-            nextUp?.backdrop,
-            nextUp?.poster
-        )
+    val badgeText = remember(remainingText, nextUpBadgeText, strNextUp) {
+        remainingText ?: nextUpBadgeText ?: strNextUp
     }
-    val titleText = progress?.name ?: nextUp?.name.orEmpty()
-    val episodeTitle = when {
-        progress != null -> progress.episodeTitle
-        nextUp != null && !nextUp.hasAired -> nextUp.episodeTitle ?: nextUp.airDateLabel?.let { stringResource(R.string.cw_airs_date, it) }
-        else -> nextUp?.episodeTitle
+    val progressFraction = remember(progress) { progress?.progressPercentage ?: 0f }
+    val imageModel = remember(nextUp, progress) {
+        when {
+            nextUp != null && !nextUp.hasAired -> firstNonBlank(
+                nextUp.backdrop,
+                nextUp.poster,
+                nextUp.thumbnail,
+                progress?.backdrop,
+                progress?.poster
+            )
+            else -> firstNonBlank(
+                nextUp?.thumbnail,
+                progress?.backdrop,
+                progress?.poster,
+                nextUp?.backdrop,
+                nextUp?.poster
+            )
+        }
+    }
+    val titleText = remember(progress, nextUp) { progress?.name ?: nextUp?.name.orEmpty() }
+    val strAirsDateForEpisode = nextUp?.airDateLabel?.let { stringResource(R.string.cw_airs_date, it) }
+    val episodeTitle = remember(progress, nextUp, strAirsDateForEpisode) {
+        when {
+            progress != null -> progress.episodeTitle
+            nextUp != null && !nextUp.hasAired -> nextUp.episodeTitle ?: strAirsDateForEpisode
+            else -> nextUp?.episodeTitle
+        }
     }
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -310,16 +319,6 @@ fun ContinueWatchingCard(
     }
 
     val bgColor = NexioColors.Background
-    val overlayBrush = remember(bgColor) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.0f to Color.Transparent,
-                0.5f to Color.Transparent,
-                0.8f to bgColor.copy(alpha = 0.7f),
-                1.0f to bgColor.copy(alpha = 0.95f)
-            )
-        )
-    }
     val badgeBackground = remember(bgColor) { bgColor.copy(alpha = 0.8f) }
 
     Card(
@@ -332,7 +331,6 @@ fun ContinueWatchingCard(
         },
         modifier = modifier
             .width(cardWidth)
-            .onFocusChanged { isFocused = it.isFocused }
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (native.action == AndroidKeyEvent.ACTION_DOWN) {
@@ -365,7 +363,7 @@ fun ContinueWatchingCard(
                 shape = CwCardShape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        scale = CardDefaults.scale(focusedScale = 1f)
     ) {
         Column {
             // Thumbnail with progress overlay
@@ -391,7 +389,19 @@ fun ContinueWatchingCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(overlayBrush)
+                        .drawWithCache {
+                            val gradient = Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to Color.Transparent,
+                                    0.5f to Color.Transparent,
+                                    0.8f to bgColor.copy(alpha = 0.7f),
+                                    1.0f to bgColor.copy(alpha = 0.95f)
+                                ),
+                                startY = 0f,
+                                endY = size.height
+                            )
+                            onDrawBehind { drawRect(gradient) }
+                        }
                 )
 
                 // Content info at bottom

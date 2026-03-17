@@ -44,8 +44,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -308,15 +310,7 @@ private fun StreamBackdrop(
     isLoading: Boolean
 ) {
     val context = LocalContext.current
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val density = androidx.compose.ui.platform.LocalDensity.current
     val backgroundColor = NexioColors.Background
-    val widthPx = remember(configuration, density) {
-        with(density) { configuration.screenWidthDp.dp.roundToPx() }.coerceAtLeast(1)
-    }
-    val heightPx = remember(configuration, density) {
-        with(density) { configuration.screenHeightDp.dp.roundToPx() }.coerceAtLeast(1)
-    }
     val backdropModel = remember(context, backdrop) {
         backdrop?.let { image ->
             ImageRequest.Builder(context)
@@ -330,57 +324,6 @@ private fun StreamBackdrop(
         animationSpec = tween(500),
         label = "backdrop_alpha"
     )
-    val leftGradientBitmap = remember(backgroundColor, widthPx) {
-        val transparent = backgroundColor.copy(alpha = 0f).toArgb()
-        val bmp = android.graphics.Bitmap.createBitmap(widthPx, 2, android.graphics.Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bmp)
-        val shader = android.graphics.LinearGradient(
-            0f, 0f, widthPx * 0.65f, 0f,
-            intArrayOf(
-                backgroundColor.toArgb(),
-                backgroundColor.copy(alpha = 0.92f).toArgb(),
-                backgroundColor.copy(alpha = 0.78f).toArgb(),
-                backgroundColor.copy(alpha = 0.58f).toArgb(),
-                backgroundColor.copy(alpha = 0.36f).toArgb(),
-                backgroundColor.copy(alpha = 0.16f).toArgb(),
-                backgroundColor.copy(alpha = 0.05f).toArgb(),
-                transparent
-            ),
-            floatArrayOf(0f, 0.12f, 0.26f, 0.44f, 0.62f, 0.78f, 0.90f, 1f),
-            android.graphics.Shader.TileMode.CLAMP
-        )
-        canvas.drawRect(0f, 0f, widthPx.toFloat(), 2f, android.graphics.Paint().apply {
-            this.shader = shader
-            isDither = true
-        })
-        bmp.asImageBitmap()
-    }
-    val rightGradientBitmap = remember(backgroundColor, heightPx) {
-        val transparent = backgroundColor.copy(alpha = 0f).toArgb()
-        val bmp = android.graphics.Bitmap.createBitmap(2, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bmp)
-        val startX = widthPx * 0.35f
-        val shader = android.graphics.LinearGradient(
-            startX, 0f, widthPx.toFloat(), 0f,
-            intArrayOf(
-                transparent,
-                backgroundColor.copy(alpha = 0.05f).toArgb(),
-                backgroundColor.copy(alpha = 0.16f).toArgb(),
-                backgroundColor.copy(alpha = 0.36f).toArgb(),
-                backgroundColor.copy(alpha = 0.58f).toArgb(),
-                backgroundColor.copy(alpha = 0.78f).toArgb(),
-                backgroundColor.copy(alpha = 0.92f).toArgb(),
-                backgroundColor.toArgb()
-            ),
-            floatArrayOf(0f, 0.10f, 0.22f, 0.38f, 0.56f, 0.74f, 0.88f, 1f),
-            android.graphics.Shader.TileMode.CLAMP
-        )
-        canvas.drawRect(0f, 0f, 2f, heightPx.toFloat(), android.graphics.Paint().apply {
-            this.shader = shader
-            isDither = true
-        })
-        bmp.asImageBitmap()
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Backdrop image
@@ -396,21 +339,69 @@ private fun StreamBackdrop(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .drawWithCache {
-                    onDrawBehind {
-                        drawRect(color = backgroundColor.copy(alpha = alpha), size = size)
-                        drawImage(
-                            leftGradientBitmap,
-                            dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())
-                        )
-                        drawImage(
-                            rightGradientBitmap,
-                            dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())
-                        )
-                    }
-                }
+                .background(NexioColors.Background.copy(alpha = alpha))
+        )
+
+        StreamGradientLayer(
+            bgColor = backgroundColor,
+            modifier = Modifier.fillMaxSize()
         )
     }
+}
+
+@Composable
+private fun StreamGradientLayer(
+    bgColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithCache {
+                val leftGradient = Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0.0f to bgColor,
+                        0.12f to bgColor.copy(alpha = 0.92f),
+                        0.26f to bgColor.copy(alpha = 0.78f),
+                        0.44f to bgColor.copy(alpha = 0.58f),
+                        0.62f to bgColor.copy(alpha = 0.36f),
+                        0.78f to bgColor.copy(alpha = 0.16f),
+                        0.90f to bgColor.copy(alpha = 0.05f),
+                        1.0f to Color.Transparent
+                    ),
+                    startX = 0f,
+                    endX = size.width * 0.65f
+                )
+                val radialGradient = Brush.radialGradient(
+                    colorStops = arrayOf(
+                        0.0f to bgColor.copy(alpha = 0.22f),
+                        0.55f to bgColor.copy(alpha = 0.12f),
+                        1.0f to Color.Transparent
+                    ),
+                    center = Offset(0f, size.height / 2f),
+                    radius = size.height
+                )
+                val rightGradient = Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0.0f to Color.Transparent,
+                        0.10f to bgColor.copy(alpha = 0.05f),
+                        0.22f to bgColor.copy(alpha = 0.16f),
+                        0.38f to bgColor.copy(alpha = 0.36f),
+                        0.56f to bgColor.copy(alpha = 0.58f),
+                        0.74f to bgColor.copy(alpha = 0.78f),
+                        0.88f to bgColor.copy(alpha = 0.92f),
+                        1.0f to bgColor
+                    ),
+                    startX = size.width * 0.35f,
+                    endX = size.width
+                )
+                onDrawBehind {
+                    drawRect(brush = leftGradient)
+                    drawRect(brush = radialGradient)
+                    drawRect(brush = rightGradient)
+                }
+            }
+    )
 }
 
 @Composable
@@ -459,13 +450,13 @@ private fun LeftContentSection(
                     contentScale = ContentScale.Fit,
                     alignment = Alignment.Center
                 )
+                Spacer(modifier = Modifier.height(10.dp))
             } else {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.displaySmall,
                     color = NexioColors.TextPrimary,
                     maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
                 )
             }
@@ -492,8 +483,15 @@ private fun LeftContentSection(
                 }
                 if (runtime != null) {
                     Spacer(modifier = Modifier.height(4.dp))
+                    val runtimeText = if (runtime >= 60) {
+                        val hours = runtime / 60
+                        val mins = runtime % 60
+                        if (mins > 0) "${hours}h ${mins}m" else "${hours}h"
+                    } else {
+                        "${runtime}m"
+                    }
                     Text(
-                        text = "${runtime}m",
+                        text = runtimeText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = NexioTheme.extendedColors.textSecondary,
                         textAlign = TextAlign.Center
@@ -506,8 +504,6 @@ private fun LeftContentSection(
                         text = infoText,
                         style = MaterialTheme.typography.bodyLarge,
                         color = NexioTheme.extendedColors.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center
                     )
                 }
