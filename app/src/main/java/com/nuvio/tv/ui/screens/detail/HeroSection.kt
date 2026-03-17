@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import java.util.Locale
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -781,14 +782,15 @@ private fun CombinedMetaBadge(
 }
 
 private fun normalizeCountryLabel(raw: String): String {
+    val displayLocale = Locale.getDefault()
     return raw
         .split(",")
         .joinToString(", ") { part ->
-            val trimmed = part.trim()
-            if (trimmed.matches(Regex("[A-Za-z]{2,3}"))) {
-                trimmed.uppercase()
+            val code = part.trim()
+            if (code.matches(Regex("[A-Za-z]{2}"))) {
+                Locale("", code).getDisplayCountry(displayLocale).takeIf { it.isNotBlank() } ?: code
             } else {
-                trimmed
+                code
             }
         }
 }
