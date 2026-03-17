@@ -89,7 +89,7 @@ class PlayerRuntimeController(
         ) : RememberedSubtitleSelection()
     }
 
-    internal data class EpisodeTrackSelectionPreference(
+    internal data class TrackPreference(
         val audio: RememberedTrackSelection? = null,
         val subtitle: RememberedSubtitleSelection? = null
     )
@@ -210,8 +210,8 @@ class PlayerRuntimeController(
     internal var pendingAddonSubtitleLanguage: String? = null
     internal var pendingAddonSubtitleTrackId: String? = null
     internal var pendingAudioSelectionAfterSubtitleRefresh: PendingAudioSelection? = null
-    internal var rememberedTrackPreference: EpisodeTrackSelectionPreference? = null
-    internal var pendingTrackPreferenceRestore: EpisodeTrackSelectionPreference? = null
+    internal var rememberedTrackPreference: TrackPreference? = null
+    internal var pendingTrackPreferenceRestore: TrackPreference? = null
     internal var attachedAddonSubtitleKeys: Set<String> = emptySet()
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false

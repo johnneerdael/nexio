@@ -81,7 +81,7 @@ data class PersistedTrackPreference(
     val audioTrackId: String?
 )
 
-internal fun PersistedTrackPreference.toTrackPreference(): com.nuvio.tv.ui.screens.player.PlayerRuntimeController.EpisodeTrackSelectionPreference? {
+internal fun PersistedTrackPreference.toTrackPreference(): com.nuvio.tv.ui.screens.player.PlayerRuntimeController.TrackPreference? {
     val audio = if (audioLanguage != null || audioName != null || audioTrackId != null) {
         com.nuvio.tv.ui.screens.player.PlayerRuntimeController.RememberedTrackSelection(
             language = audioLanguage,
@@ -108,7 +108,7 @@ internal fun PersistedTrackPreference.toTrackPreference(): com.nuvio.tv.ui.scree
     }
 
     if (audio == null && subtitle == null) return null
-    return com.nuvio.tv.ui.screens.player.PlayerRuntimeController.EpisodeTrackSelectionPreference(
+    return com.nuvio.tv.ui.screens.player.PlayerRuntimeController.TrackPreference(
         audio = audio,
         subtitle = subtitle
     )
