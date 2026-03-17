@@ -383,6 +383,9 @@ private fun HeroTitleContent(
                             maxLines = 1
                         )
                     }
+                    if (!runtimeText.isNullOrBlank() && !yearText.isNullOrBlank()) {
+                        HeroMetaDivider(metaScale)
+                    }
                     if (!yearText.isNullOrBlank()) {
                         Text(
                             text = yearText,
