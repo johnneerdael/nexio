@@ -45,7 +45,7 @@ class MDBListDiscoverySnapshotStore @Inject constructor(
                 add("customListCatalogs", gson.toJsonTree(snapshot.customListCatalogs))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist MDBList discovery snapshot", error)
         }
@@ -54,7 +54,7 @@ class MDBListDiscoverySnapshotStore @Inject constructor(
     fun clear() {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).apply()
+            prefs.edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear MDBList discovery snapshot", error)
         }

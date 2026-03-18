@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.sync.addonCatalogDisableKey
 import com.nexio.tv.core.sync.normalizePublicAddonBaseUrl
+import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -74,6 +76,104 @@ internal fun HomeViewModel.rebuildCatalogOrder(addons: List<Addon>) {
 
     catalogOrder.clear()
     catalogOrder.addAll(mergedOrder)
+}
+
+internal fun buildExpectedConfiguredHomeOrderKeys(
+    addons: List<Addon>,
+    disabledHomeCatalogKeys: Set<String>,
+    traktPrefs: TraktCatalogPreferences,
+    mdbPrefs: MDBListCatalogPreferences,
+    mdbSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+): List<String> {
+    val traktKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
+    val mdbKeys = buildExpectedConfiguredMDBListOrderKeys(mdbPrefs, mdbSnapshot)
+    val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
+    return (traktKeys + mdbKeys + addonKeys).distinct()
+}
+
+internal fun buildExpectedConfiguredTraktOrderKeys(
+    prefs: TraktCatalogPreferences
+): List<String> {
+    val orderedEnabledBuiltIns = prefs.catalogOrder.filter { it in prefs.enabledCatalogs }
+    val remainingEnabledBuiltIns = prefs.enabledCatalogs.filterNot { it in orderedEnabledBuiltIns }
+    val orderedCustomKeys = prefs.selectedPopularListKeys.sorted()
+    return (orderedEnabledBuiltIns + remainingEnabledBuiltIns + orderedCustomKeys).distinct()
+}
+
+internal fun buildExpectedConfiguredMDBListOrderKeys(
+    prefs: MDBListCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+): List<String> {
+    val enabledPersonalKeys = snapshot.personalLists
+        .map { it.key }
+        .filter { prefs.isPersonalListEnabled(it) }
+    val selectedTopKeys = prefs.selectedTopListKeys.toList()
+    val availableKeys = (enabledPersonalKeys + selectedTopKeys).distinct()
+    if (availableKeys.isEmpty()) return emptyList()
+    val orderedKnown = prefs.catalogOrder.filter { key ->
+        availableKeys.any { canonicalSyntheticCatalogOrderKey(it) == canonicalSyntheticCatalogOrderKey(key) }
+    }
+    val remaining = availableKeys.filterNot { available ->
+        orderedKnown.any { canonicalSyntheticCatalogOrderKey(it) == canonicalSyntheticCatalogOrderKey(available) }
+    }
+    return (orderedKnown + remaining).distinct()
+}
+
+internal fun buildExpectedConfiguredAddonOrderKeys(
+    addons: List<Addon>,
+    disabledHomeCatalogKeys: Set<String>
+): List<String> {
+    return buildList {
+        addons.forEach { addon ->
+            addon.catalogs
+                .filterNot { catalog ->
+                    catalog.isSearchOnlyCatalog() ||
+                        addonCatalogDisableKey(
+                            normalizePublicAddonBaseUrl(addon.baseUrl),
+                            catalog.apiType,
+                            catalog.id,
+                            catalog.name
+                        ) in disabledHomeCatalogKeys ||
+                        "${addon.id}_${catalog.apiType}_${catalog.id}" in disabledHomeCatalogKeys
+                }
+                .forEach { catalog ->
+                    add("${addon.id}_${catalog.apiType}_${catalog.id}")
+                }
+        }
+    }.distinct()
+}
+
+internal fun isConfiguredHomeSnapshotComplete(
+    snapshotOrderedGroupKeys: List<String>,
+    expectedConfiguredOrderKeys: List<String>
+): Boolean {
+    if (expectedConfiguredOrderKeys.isEmpty()) return snapshotOrderedGroupKeys.isEmpty()
+    val available = snapshotOrderedGroupKeys.toSet()
+    return expectedConfiguredOrderKeys.all { it in available }
+}
+
+internal fun areConfiguredHomeSourceCachesReady(
+    addonExpectedOrderKeys: List<String>,
+    availableAddonOrderKeys: Set<String>,
+    traktExpectedOrderKeys: List<String>,
+    traktPrefs: TraktCatalogPreferences,
+    traktSnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    mdbExpectedOrderKeys: List<String>,
+    mdbPrefs: MDBListCatalogPreferences,
+    mdbSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+): Boolean {
+    val addonsReady = addonExpectedOrderKeys.all { it in availableAddonOrderKeys }
+    val traktReady = if (traktExpectedOrderKeys.isEmpty()) {
+        true
+    } else {
+        !shouldRefreshTraktDiscoveryForState(traktPrefs, traktSnapshot)
+    }
+    val mdbReady = if (mdbExpectedOrderKeys.isEmpty()) {
+        true
+    } else {
+        !shouldRefreshMDBListDiscoveryForState(mdbPrefs, mdbSnapshot)
+    }
+    return addonsReady && traktReady && mdbReady
 }
 
 internal fun resolveHomeOrderedKey(rawKey: String, availableKeys: Set<String>): String? {

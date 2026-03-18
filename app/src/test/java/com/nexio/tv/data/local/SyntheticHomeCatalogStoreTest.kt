@@ -9,6 +9,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -44,6 +45,31 @@ class SyntheticHomeCatalogStoreTest {
 
         epoch = 8
         assertNull(store.read())
+    }
+
+    @Test
+    fun `write persists canonical group keys`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "synthetic_home_catalogs")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 7
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+
+        store.write(
+            SyntheticHomeCatalogStore.Snapshot(
+                traktGroups = listOf(
+                    PersistedSyntheticCatalogGroup(
+                        orderKey = "trakt_trending_movies",
+                        rows = listOf(sampleRow("trakt", "trending_movies"))
+                    )
+                )
+            )
+        )
+
+        val raw = prefs.getString("snapshot", null).orEmpty()
+        assertTrue(raw.contains("\"orderKey\":\"trakt_trending_movies\""))
+        assertTrue(raw.contains("\"rows\""))
+        assertTrue(raw.contains("\"traktGroups\""))
     }
 
     private fun sampleRow(addonId: String, catalogId: String): CatalogRow {
