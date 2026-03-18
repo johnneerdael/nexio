@@ -165,6 +165,9 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 internal fun PlayerRuntimeController.rememberInternalSubtitleSelection(trackIndex: Int) {
     val selectedTrack = _uiState.value.subtitleTracks.getOrNull(trackIndex) ?: return
     persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(
@@ -190,6 +193,9 @@ internal fun PlayerRuntimeController.disableSubtitles() {
 
 internal fun PlayerRuntimeController.rememberSubtitleDisabled() {
     persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Disabled)
@@ -298,6 +304,9 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
 
 internal fun PlayerRuntimeController.rememberAddonSubtitleSelection(subtitle: Subtitle) {
     persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(

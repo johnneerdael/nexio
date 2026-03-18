@@ -397,11 +397,13 @@ internal fun PlayerRuntimeController.applyPersistedTrackPreference(
             if (!alreadyDisabled) {
                 Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: subtitle disabled (re-applying)")
                 autoSubtitleSelected = true
+                subtitleDisabledByPersistedPreference = true
                 disableSubtitles()
                 updatedSubtitleIndex = -1
             } else {
                 Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: subtitle already disabled, clearing")
                 autoSubtitleSelected = true
+                subtitleDisabledByPersistedPreference = true
                 updatedSubtitleIndex = -1
                 updatedPending = updatedPending.copy(subtitle = null)
             }
@@ -446,6 +448,8 @@ internal fun PlayerRuntimeController.applyPersistedTrackPreference(
                     "Restoring same-series addon subtitle lang=${addonMatch.lang} id=${addonMatch.id}"
                 )
                 autoSubtitleSelected = true
+                subtitleAddonRestoredByPersistedPreference = true
+                pendingRestoredAddonSubtitle = addonMatch
                 selectAddonSubtitle(addonMatch)
                 updatedAddonSubtitle = addonMatch
                 updatedPending = updatedPending.copy(subtitle = null)
