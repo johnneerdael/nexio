@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -283,6 +284,7 @@ fun IdleScreensaverOverlay(
                 .align(Alignment.BottomStart)
                 .fillMaxWidth(0.52f)
                 .padding(start = 56.dp, end = 24.dp, bottom = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             currentSlide.logoUrl?.let { logoUrl ->
@@ -303,6 +305,7 @@ fun IdleScreensaverOverlay(
                 fontSize = 42.sp,
                 fontWeight = FontWeight.Bold,
                 lineHeight = 46.sp,
+                textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -368,7 +371,6 @@ private fun ScreensaverPrimaryMetaLine(
     if (metaSegments.isEmpty()) return
 
     androidx.compose.foundation.layout.Row(
-        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
