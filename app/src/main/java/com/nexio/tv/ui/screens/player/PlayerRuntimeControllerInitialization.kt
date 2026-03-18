@@ -74,10 +74,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
         return
     }
 
-    val sessionId = nextPlaybackSessionId++
-    activePlaybackSessionId = sessionId
-    isExitInProgress = false
-
     scope.launch {
         try {
             autoSubtitleSelected = false
@@ -595,16 +591,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         _uiState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
                             userPausedManually = false
-                            playbackIdleGateState.onUserPauseStateChanged(isPausedByUser = false)
                             cancelPauseOverlay()
                             startProgressUpdates()
                             startWatchProgressSaving()
                             scheduleHideControls()
                             emitScrobbleStart()
                         } else {
-                            playbackIdleGateState.onUserPauseStateChanged(
-                                isPausedByUser = userPausedManually
-                            )
                             if (userPausedManually) {
                                 schedulePauseOverlay()
                             } else {
@@ -686,18 +678,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        if (shouldSuppressPlayerError(sessionId)) {
-                            Log.i(
-                                PlayerRuntimeController.TAG,
-                                "Suppressing stale playback error during teardown " +
-                                    "sessionId=$sessionId " +
-                                    "activeSessionId=$activePlaybackSessionId " +
-                                    "exitInProgress=$isExitInProgress " +
-                                    "host=${currentStreamUrl.safeHost()} " +
-                                    "message=${error.message ?: "unknown"}"
-                            )
-                            return
-                        }
                         cancelFirstFrameWatchdog()
                         if (error.isVc1DecoderFailure() &&
                             !isVc1SoftwareFallbackActiveForCurrentPlayback
@@ -1366,10 +1346,6 @@ private fun PlaybackException.isMediaPeriodHolderStateCrash(): Boolean {
     return details.contains("mediaperiodholder", ignoreCase = true) &&
         details.contains(".info", ignoreCase = true) &&
         details.contains("null", ignoreCase = true)
-}
-
-private fun PlayerRuntimeController.shouldSuppressPlayerError(sessionId: Long): Boolean {
-    return isExitInProgress || sessionId != activePlaybackSessionId
 }
 
 private fun String.safeHost(): String {

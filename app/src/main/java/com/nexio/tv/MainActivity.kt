@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.util.Log
 import android.app.Activity
 import android.view.Choreographer
+import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalView
 import androidx.metrics.performance.JankStats
@@ -459,6 +460,17 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(idleScreensaverEligible, idleScreensaverVisible) {
                         if (!idleScreensaverEligible && idleScreensaverVisible) {
                             idleScreensaverController.dismiss()
+                        }
+                    }
+
+                    DisposableEffect(idleScreensaverVisible) {
+                        if (idleScreensaverVisible) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                        onDispose {
+                            if (idleScreensaverVisible) {
+                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            }
                         }
                     }
 
