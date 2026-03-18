@@ -11,6 +11,7 @@ data class HomeDisplayMetadata(
     val releaseInfo: String? = null,
     val runtime: String? = null,
     val imdbRating: Float? = null,
+    val tomatoesRating: Double? = null,
     val poster: String? = null,
     val backdrop: String? = null
 )
@@ -24,6 +25,7 @@ fun MetaPreview.toHomeDisplayMetadata(): HomeDisplayMetadata {
         releaseInfo = releaseInfo,
         runtime = runtime,
         imdbRating = imdbRating,
+        tomatoesRating = tomatoesRating,
         poster = poster,
         backdrop = background
     )
@@ -38,6 +40,7 @@ fun Meta.toHomeDisplayMetadata(): HomeDisplayMetadata {
         releaseInfo = releaseInfo,
         runtime = runtime,
         imdbRating = imdbRating,
+        tomatoesRating = null,
         poster = poster,
         backdrop = background
     )
@@ -52,6 +55,7 @@ fun HomeDisplayMetadata.applyTo(base: MetaPreview): MetaPreview {
         releaseInfo = releaseInfo ?: base.releaseInfo,
         runtime = runtime ?: base.runtime,
         imdbRating = imdbRating ?: base.imdbRating,
+        tomatoesRating = tomatoesRating ?: base.tomatoesRating,
         poster = poster ?: base.poster,
         background = backdrop ?: base.background
     )
@@ -67,6 +71,7 @@ fun HomeDisplayMetadata.mergeFallback(fallback: HomeDisplayMetadata?): HomeDispl
         releaseInfo = releaseInfo ?: fallback.releaseInfo,
         runtime = runtime ?: fallback.runtime,
         imdbRating = imdbRating ?: fallback.imdbRating,
+        tomatoesRating = tomatoesRating ?: fallback.tomatoesRating,
         poster = poster ?: fallback.poster,
         backdrop = backdrop ?: fallback.backdrop
     )

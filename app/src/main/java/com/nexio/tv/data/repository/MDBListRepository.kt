@@ -9,6 +9,11 @@ import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.MDBListRatingsResult
 import com.nexio.tv.domain.model.MDBListSettings
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaLink
+import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.Video
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -103,6 +108,19 @@ class MDBListRepository @Inject constructor(
         }
 
         return deferred.await()
+    }
+
+    suspend fun enrichPreview(preview: MetaPreview): MetaPreview {
+        if (preview.tomatoesRating != null) return preview
+        val result = getRatingsForMeta(
+            meta = preview.toRatingsMeta(),
+            fallbackItemId = preview.id,
+            fallbackItemType = preview.apiType
+        ) ?: return preview
+
+        return preview.copy(
+            tomatoesRating = result.ratings.tomatoes ?: preview.tomatoesRating
+        )
     }
 
     private suspend fun fetchRatings(
@@ -231,5 +249,36 @@ class MDBListRepository @Inject constructor(
             "series", "tv", "show", "tvshow" -> "show"
             else -> "movie"
         }
+    }
+
+    private fun MetaPreview.toRatingsMeta(): Meta {
+        return Meta(
+            id = id,
+            type = type,
+            rawType = rawType,
+            name = name,
+            poster = poster,
+            posterShape = posterShape,
+            background = background,
+            logo = logo,
+            description = description,
+            releaseInfo = releaseInfo,
+            imdbRating = imdbRating,
+            genres = genres,
+            runtime = runtime,
+            director = emptyList(),
+            writer = emptyList(),
+            cast = emptyList(),
+            castMembers = emptyList(),
+            videos = emptyList<Video>(),
+            productionCompanies = emptyList<MetaCompany>(),
+            networks = emptyList<MetaCompany>(),
+            ageRating = null,
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList<MetaLink>(),
+            trailerYtIds = trailerYtIds
+        )
     }
 }

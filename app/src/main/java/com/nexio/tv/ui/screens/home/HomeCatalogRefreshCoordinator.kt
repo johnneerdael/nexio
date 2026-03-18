@@ -8,6 +8,7 @@ import coil.request.ImageRequest
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -55,6 +56,7 @@ internal fun diffCatalogItems(oldItems: List<MetaPreview>, newItems: List<MetaPr
 class HomeCatalogRefreshCoordinator @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val metaRepository: MetaRepository,
+    private val mdbListRepository: MDBListRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     @ApplicationContext private val appContext: Context
 ) {
@@ -81,8 +83,12 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
             val hydratedItems = row.items.map { item ->
                 val itemKey = "${item.apiType}:${item.id}"
                 val persistedFallback = oldItemsByKey[itemKey]
-                if (itemKey !in changedKeys && persistedFallback != null) {
-                    return@map persistedFallback
+                if (shouldReusePersistedHomeItem(
+                        itemChanged = itemKey in changedKeys,
+                        persistedFallback = persistedFallback
+                    )
+                ) {
+                    return@map persistedFallback!!
                 }
                 val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
                     itemKey = itemKey,
@@ -105,11 +111,12 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 }.getOrNull()
                 val externalMeta =
                     (result as? NetworkResult.Success<*>)?.data as? Meta
-                mergePersistedHomeDisplayMetadata(
+                val merged = mergePersistedHomeDisplayMetadata(
                     currentItem = item,
                     persistedFallback = persistedFallback,
                     externalMeta = externalMeta
                 )
+                mdbListRepository.enrichPreview(merged)
             }
             row.copy(items = hydratedItems)
         }
@@ -196,8 +203,12 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                         val hydratedItems = refreshed.items.map { item ->
                             val itemKey = "${item.apiType}:${item.id}"
                             val persistedFallback = oldItemsByKey[itemKey]
-                            if (itemKey !in changedKeys && persistedFallback != null) {
-                                return@map persistedFallback
+                            if (shouldReusePersistedHomeItem(
+                                    itemChanged = itemKey in changedKeys,
+                                    persistedFallback = persistedFallback
+                                )
+                            ) {
+                                return@map persistedFallback!!
                             }
                             val hasCachedMetadata = metadataDiskCacheStore.hasCurrentMetaForItem(
                                 itemKey = itemKey,
@@ -229,11 +240,12 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                             }.getOrNull()
                             val externalMeta =
                                 (result as? com.nexio.tv.core.network.NetworkResult.Success<*>)?.data as? Meta
-                            mergePersistedHomeDisplayMetadata(
+                            val merged = mergePersistedHomeDisplayMetadata(
                                 currentItem = item,
                                 persistedFallback = persistedFallback,
                                 externalMeta = externalMeta
                             )
+                            mdbListRepository.enrichPreview(merged)
                         }
                         val refreshedHydrated = refreshed.copy(items = hydratedItems)
                         onLog(
@@ -448,4 +460,11 @@ internal fun mergePersistedHomeDisplayMetadata(
     val mergedMetadata = (externalMeta?.toHomeDisplayMetadata() ?: currentItem.toHomeDisplayMetadata())
         .mergeFallback(persistedFallback?.toHomeDisplayMetadata())
     return mergedMetadata.applyTo(currentItem)
+}
+
+internal fun shouldReusePersistedHomeItem(
+    itemChanged: Boolean,
+    persistedFallback: MetaPreview?
+): Boolean {
+    return !itemChanged && persistedFallback?.tomatoesRating != null
 }

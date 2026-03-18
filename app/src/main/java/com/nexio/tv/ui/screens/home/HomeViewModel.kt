@@ -24,6 +24,7 @@ import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -73,6 +74,7 @@ class HomeViewModel @Inject constructor(
     internal val traktScrobbleService: TraktScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
+    internal val mdbListRepository: MDBListRepository,
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
@@ -145,6 +147,8 @@ class HomeViewModel @Inject constructor(
     internal var homeSnapshotPersistGeneration: Long = 0L
     internal val pendingTmdbEnrichmentByItemId = linkedMapOf<String, TmdbEnrichment>()
     internal val pendingMetaEnrichmentByItemId = linkedMapOf<String, Meta>()
+    internal val pendingTomatoesEnrichmentByItemId = linkedMapOf<String, Double>()
+    internal val syntheticTomatoesOverridesByItemId = linkedMapOf<String, Double>()
     internal var metadataEnrichmentFlushJob: Job? = null
     internal var currentTmdbSettings: TmdbSettings = TmdbSettings()
     internal var traktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
@@ -164,6 +168,9 @@ class HomeViewModel @Inject constructor(
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal val prefetchedTomatoesIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal val tomatoesEnrichmentInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal var pendingFocusedItemForEnrichment: MetaPreview? = null
     internal var externalMetaPrefetchJob: Job? = null
     internal var pendingExternalMetaPrefetchItemId: String? = null
     internal var adjacentItemPrefetchJob: Job? = null
@@ -420,6 +427,7 @@ class HomeViewModel @Inject constructor(
                 Log.d(TAG, "Serialized home refresh end reason=$currentReason")
                 nextReason = pendingSerializedHomeRefreshReason
             }
+            runDeferredFocusedItemEnrichmentIfReady()
         }
     }
 

@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import android.util.Log
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -45,6 +46,8 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nexio.tv.ui.theme.NexioColors
+
+private const val MODERN_HOME_HERO_LOG_TAG = "ModernHomeHero"
 
 @Composable
 internal fun ModernHeroMediaLayer(
@@ -140,15 +143,15 @@ internal fun HeroTitleBlock(
     portraitMode: Boolean,
     modifier: Modifier = Modifier
 ) {
-    var stablePreview by remember { mutableStateOf(preview) }
     LaunchedEffect(preview, enrichmentActive) {
-        if (!enrichmentActive) {
-            stablePreview = preview
-        }
+        Log.d(
+            MODERN_HOME_HERO_LOG_TAG,
+            "HeroTitleBlock title=${preview?.title} imdb=${preview?.imdbText} tomatoes=${preview?.tomatoesText} enrichmentActive=$enrichmentActive"
+        )
     }
     val fadeDuration = 220
     AnimatedContent(
-        targetState = stablePreview,
+        targetState = preview,
         transitionSpec = {
             fadeIn(tween(fadeDuration)) togetherWith fadeOut(tween(fadeDuration)) using null
         },
@@ -192,6 +195,12 @@ private fun HeroTitleContent(
     val imdbLogoModel = remember(context) {
         ImageRequest.Builder(context)
             .data(com.nexio.tv.R.raw.imdb_logo_2016)
+            .decoderFactory(SvgDecoder.Factory())
+            .build()
+    }
+    val tomatoesLogoModel = remember(context) {
+        ImageRequest.Builder(context)
+            .data(com.nexio.tv.R.raw.mdblist_tomatoes)
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
@@ -269,8 +278,9 @@ private fun HeroTitleContent(
 
             val yearText = preview.yearText
             val imdbText = preview.imdbText
-            val hasYearOrImdb = !yearText.isNullOrBlank() || !imdbText.isNullOrBlank()
-            if (hasYearOrImdb) {
+            val tomatoesText = preview.tomatoesText
+            val hasRatingsMeta = !yearText.isNullOrBlank() || !imdbText.isNullOrBlank() || !tomatoesText.isNullOrBlank()
+            if (hasRatingsMeta) {
                 if (hasLeadingMeta) {
                     HeroMetaDivider(metaScale)
                 }
@@ -299,6 +309,25 @@ private fun HeroTitleContent(
                             )
                             Text(
                                 text = imdbText,
+                                style = labelMedium,
+                                color = NexioColors.TextSecondary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    if (!tomatoesText.isNullOrBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(imdbMetaSpacing)
+                        ) {
+                            AsyncImage(
+                                model = tomatoesLogoModel,
+                                contentDescription = "Rotten Tomatoes",
+                                modifier = Modifier.size(30.dp * metaScale),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = tomatoesText,
                                 style = labelMedium,
                                 color = NexioColors.TextSecondary,
                                 maxLines = 1
