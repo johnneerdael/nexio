@@ -328,7 +328,8 @@ internal fun PlayerRuntimeController.findMatchingTrackIndex(
 
     val exactNameIndex = if (!targetName.isNullOrBlank()) {
         tracks.indexOfFirst { track ->
-            normalizeTrackMatchValue(track.name) == targetName
+            normalizeTrackMatchValue(track.name) == targetName &&
+                (targetLang.isNullOrBlank() || normalizeTrackMatchValue(track.language) == targetLang)
         }
     } else {
         -1
@@ -337,7 +338,8 @@ internal fun PlayerRuntimeController.findMatchingTrackIndex(
 
     val nameContainsIndex = if (!targetName.isNullOrBlank()) {
         tracks.indexOfFirst { track ->
-            normalizeTrackMatchValue(track.name)?.contains(targetName) == true
+            normalizeTrackMatchValue(track.name)?.contains(targetName) == true &&
+                (targetLang.isNullOrBlank() || normalizeTrackMatchValue(track.language) == targetLang)
         }
     } else {
         -1
