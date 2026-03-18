@@ -48,6 +48,7 @@ class PlayerRuntimeController(
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nuvio.tv.data.local.LayoutPreferenceDataStore,
     internal val watchedItemsPreferences: com.nuvio.tv.data.local.WatchedItemsPreferences,
+    internal val trackPreferenceDataStore: com.nuvio.tv.data.local.TrackPreferenceDataStore,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -88,7 +89,7 @@ class PlayerRuntimeController(
         ) : RememberedSubtitleSelection()
     }
 
-    internal data class EpisodeTrackSelectionPreference(
+    internal data class TrackPreference(
         val audio: RememberedTrackSelection? = null,
         val subtitle: RememberedSubtitleSelection? = null
     )
@@ -209,8 +210,8 @@ class PlayerRuntimeController(
     internal var pendingAddonSubtitleLanguage: String? = null
     internal var pendingAddonSubtitleTrackId: String? = null
     internal var pendingAudioSelectionAfterSubtitleRefresh: PendingAudioSelection? = null
-    internal var sameSeriesTrackSelectionPreference: EpisodeTrackSelectionPreference? = null
-    internal var pendingSameSeriesTrackSelectionRestore: EpisodeTrackSelectionPreference? = null
+    internal var rememberedTrackPreference: TrackPreference? = null
+    internal var pendingTrackPreferenceRestore: TrackPreference? = null
     internal var attachedAddonSubtitleKeys: Set<String> = emptySet()
     internal var hasScannedTextTracksOnce: Boolean = false
     internal var streamReuseLastLinkEnabled: Boolean = false
