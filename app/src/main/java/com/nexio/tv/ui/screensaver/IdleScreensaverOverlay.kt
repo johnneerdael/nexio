@@ -16,12 +16,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,6 +65,7 @@ private const val SCREENSAVER_MOTION_DURATION_MS = 20_000
 private const val SCREENSAVER_CROSSFADE_MS = 1_000
 private const val SCREENSAVER_SLIDE_ADVANCE_MS = 15_000
 private const val SCREENSAVER_PRELOAD_LEAD_MS = 5_000L
+private const val SCREENSAVER_OPEN_GUARD_MS = 180L
 private const val SCREENSAVER_START_SCALE = 1.05f
 private const val SCREENSAVER_END_SCALE = 1.145f
 private const val SCREENSAVER_TRANSLATE_X_FRACTION = 0.045f
@@ -90,7 +89,8 @@ fun IdleScreensaverOverlay(
     if (sessionSlides.isEmpty()) return
 
     var currentIndex by remember(sessionId) { mutableIntStateOf(0) }
-    var motionPresetIndex by remember(sessionId) { mutableIntStateOf(0) }
+    var activeSlotIndex by remember(sessionId) { mutableIntStateOf(0) }
+    var nextMotionPresetIndex by remember(sessionId) { mutableIntStateOf(1) }
     var viewportSize by remember(sessionId) { mutableStateOf(IntSize.Zero) }
     val isLowPowerDevice = remember(context) { context.isLowPowerScreensaverDevice() }
     val decodeSize = remember(viewportSize, isLowPowerDevice) {
@@ -99,30 +99,24 @@ fun IdleScreensaverOverlay(
             lowPower = isLowPowerDevice
         )
     }
-    var activeLayer by remember(sessionId, sessionSlides) {
-        mutableStateOf(
+    val backgroundLayers = remember(sessionId, sessionSlides) {
+        listOf(
             ScreensaverBackgroundLayer(
                 slide = sessionSlides.first(),
-                instanceId = 0,
                 motion = screensaverMotionPresetFor(0),
                 initialAlpha = 1f
+            ),
+            ScreensaverBackgroundLayer(
+                slide = sessionSlides.getOrElse(1.coerceAtMost(sessionSlides.lastIndex)) { sessionSlides.first() },
+                motion = screensaverMotionPresetFor(1),
+                initialAlpha = 0f
             )
         )
     }
-    var preloadedLayer by remember(sessionId, sessionSlides) {
-        mutableStateOf(
-            sessionSlides.getOrNull(1 % sessionSlides.size)?.let { nextSlide ->
-                ScreensaverBackgroundLayer(
-                    slide = nextSlide,
-                    instanceId = 1,
-                    motion = screensaverMotionPresetFor(1),
-                    initialAlpha = 0f
-                )
-            }
-        )
-    }
-    var fadingLayer by remember(sessionId) { mutableStateOf<ScreensaverBackgroundLayer?>(null) }
+    val activeLayer = backgroundLayers[activeSlotIndex]
+    val hiddenLayer = backgroundLayers[1 - activeSlotIndex]
     val currentSlide = activeLayer.slide
+    var pendingOpenSlide by remember(sessionId) { mutableStateOf<IdleScreensaverSlide?>(null) }
     val imdbModel = remember(context) {
         ImageRequest.Builder(context)
             .data(R.raw.imdb_logo_2016)
@@ -134,19 +128,27 @@ fun IdleScreensaverOverlay(
         runCatching { focusRequester.requestFocus() }
     }
 
-    LaunchedEffect(sessionId, activeLayer.instanceId) {
+    LaunchedEffect(pendingOpenSlide) {
+        val slide = pendingOpenSlide ?: return@LaunchedEffect
+        delay(SCREENSAVER_OPEN_GUARD_MS)
+        onOpenSlide(slide)
+    }
+
+    LaunchedEffect(sessionId, sessionSlides, currentIndex, activeSlotIndex, decodeSize) {
+        val visibleLayer = backgroundLayers[activeSlotIndex]
+        visibleLayer.frozenProgress = null
         coroutineScope {
             launch {
-                if (activeLayer.alpha.value < 1f) {
-                    activeLayer.alpha.animateTo(
+                if (visibleLayer.alpha.value < 1f) {
+                    visibleLayer.alpha.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(durationMillis = SCREENSAVER_CROSSFADE_MS)
                     )
                 }
             }
             launch {
-                if (!activeLayer.progress.isRunning && activeLayer.progress.value < 1f) {
-                    activeLayer.progress.animateTo(
+                if (!visibleLayer.progress.isRunning && visibleLayer.progress.value < 1f) {
+                    visibleLayer.progress.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(
                             durationMillis = SCREENSAVER_MOTION_DURATION_MS,
@@ -156,65 +158,55 @@ fun IdleScreensaverOverlay(
                 }
             }
         }
-    }
+        if (sessionSlides.size <= 1) return@LaunchedEffect
+        val nextIndex = (currentIndex + 1) % sessionSlides.size
+        prepareScreensaverLayer(
+            layer = hiddenLayer,
+            slide = sessionSlides[nextIndex],
+            motion = screensaverMotionPresetFor(nextMotionPresetIndex)
+        )
+        preloadScreensaverSlide(
+            context = context,
+            slide = hiddenLayer.slide,
+            decodeSize = decodeSize
+        )
 
-    LaunchedEffect(sessionId, preloadedLayer?.instanceId) {
-        val layer = preloadedLayer ?: return@LaunchedEffect
+        delay(SCREENSAVER_SLIDE_ADVANCE_MS.toLong())
+
+        val outgoingLayer = backgroundLayers[activeSlotIndex]
+        val incomingLayer = backgroundLayers[1 - activeSlotIndex]
+        outgoingLayer.progress.stop()
+        outgoingLayer.frozenProgress = outgoingLayer.progress.value
+
+        incomingLayer.alpha.snapTo(0f)
+        incomingLayer.progress.snapTo(0f)
+        incomingLayer.frozenProgress = null
+        launch {
+            incomingLayer.progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = SCREENSAVER_MOTION_DURATION_MS,
+                    easing = ScreensaverMotionEasing
+                )
+            )
+        }
         coroutineScope {
             launch {
-                preloadScreensaverSlide(
-                    context = context,
-                    slide = layer.slide,
-                    decodeSize = decodeSize
+                outgoingLayer.alpha.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = SCREENSAVER_CROSSFADE_MS)
+                )
+            }
+            launch {
+                incomingLayer.alpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = SCREENSAVER_CROSSFADE_MS)
                 )
             }
         }
-    }
-
-    LaunchedEffect(sessionId, fadingLayer?.instanceId) {
-        val layer = fadingLayer ?: return@LaunchedEffect
-        layer.alpha.animateTo(
-            targetValue = 0f,
-            animationSpec = tween(durationMillis = SCREENSAVER_CROSSFADE_MS)
-        )
-        if (fadingLayer?.instanceId == layer.instanceId) {
-            fadingLayer = null
-        }
-    }
-
-    LaunchedEffect(sessionId, sessionSlides, currentIndex, activeLayer.instanceId, preloadedLayer?.instanceId) {
-        if (sessionSlides.size <= 1) return@LaunchedEffect
-        val waitBeforeFadeMs = (SCREENSAVER_SLIDE_ADVANCE_MS.toLong() - SCREENSAVER_PRELOAD_LEAD_MS).coerceAtLeast(0L)
-        if (waitBeforeFadeMs > 0L) {
-            delay(waitBeforeFadeMs)
-        }
-        if (preloadedLayer == null) {
-            val nextIndex = (currentIndex + 1) % sessionSlides.size
-            motionPresetIndex += 1
-            preloadedLayer = ScreensaverBackgroundLayer(
-                slide = sessionSlides[nextIndex],
-                instanceId = activeLayer.instanceId + 1,
-                motion = screensaverMotionPresetFor(motionPresetIndex),
-                initialAlpha = 0f
-            )
-        }
-        delay(SCREENSAVER_PRELOAD_LEAD_MS)
-        val nextIndex = (currentIndex + 1) % sessionSlides.size
-        val outgoingLayer = activeLayer
-        val incomingLayer = preloadedLayer ?: return@LaunchedEffect
-        outgoingLayer.progress.stop()
-        outgoingLayer.frozenProgress = outgoingLayer.progress.value
-        fadingLayer = outgoingLayer
         currentIndex = nextIndex
-        activeLayer = incomingLayer
-        motionPresetIndex += 1
-        val bufferedIndex = (nextIndex + 1) % sessionSlides.size
-        preloadedLayer = ScreensaverBackgroundLayer(
-            slide = sessionSlides[bufferedIndex],
-            instanceId = incomingLayer.instanceId + 1,
-            motion = screensaverMotionPresetFor(motionPresetIndex),
-            initialAlpha = 0f
-        )
+        activeSlotIndex = 1 - activeSlotIndex
+        nextMotionPresetIndex += 1
     }
 
     Box(
@@ -225,12 +217,13 @@ fun IdleScreensaverOverlay(
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { keyEvent ->
+                if (pendingOpenSlide != null) return@onPreviewKeyEvent true
                 if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
                 when (keyEvent.key) {
                     Key.Enter,
                     Key.DirectionCenter,
                     Key.NumPadEnter -> {
-                        onOpenSlide(currentSlide)
+                        pendingOpenSlide = currentSlide
                         true
                     }
 
@@ -241,7 +234,7 @@ fun IdleScreensaverOverlay(
                 }
             }
     ) {
-        fadingLayer?.let { layer ->
+        backgroundLayers.forEach { layer ->
             ScreensaverBackgroundImage(
                 layer = layer,
                 context = context,
@@ -249,20 +242,6 @@ fun IdleScreensaverOverlay(
                 modifier = Modifier.matchParentSize()
             )
         }
-        preloadedLayer?.let { layer ->
-            ScreensaverBackgroundImage(
-                layer = layer,
-                context = context,
-                decodeSize = decodeSize,
-                modifier = Modifier.matchParentSize()
-            )
-        }
-        ScreensaverBackgroundImage(
-            layer = activeLayer,
-            context = context,
-            decodeSize = decodeSize,
-            modifier = Modifier.matchParentSize()
-        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -338,14 +317,14 @@ private fun ScreensaverBackgroundImage(
     decodeSize: Size,
     modifier: Modifier = Modifier
 ) {
-    var size by remember(layer.instanceId) { mutableStateOf(IntSize.Zero) }
+    var size by remember(layer.slide.backgroundUrl) { mutableStateOf(IntSize.Zero) }
     val progress = layer.frozenProgress ?: layer.progress.value
     val translationX = size.width * layer.motion.translateXFraction * progress
     val translationY = size.height * layer.motion.translateYFraction * progress
     val scale = SCREENSAVER_START_SCALE + ((SCREENSAVER_END_SCALE - SCREENSAVER_START_SCALE) * progress)
 
     AsyncImage(
-        model = remember(layer.instanceId, layer.slide.backgroundUrl, decodeSize) {
+        model = remember(layer.slide.backgroundUrl, decodeSize) {
             buildScreensaverImageRequest(
                 context = context,
                 url = layer.slide.backgroundUrl,
@@ -388,7 +367,7 @@ private fun ScreensaverPrimaryMetaLine(
     if (!shouldShowAnything) return
 
     androidx.compose.foundation.layout.Row(
-        modifier = Modifier.wrapContentWidth(unbounded = true),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -472,14 +451,29 @@ private fun formatScreensaverRuntime(runtime: String): String {
 }
 
 private class ScreensaverBackgroundLayer(
-    val slide: IdleScreensaverSlide,
-    val instanceId: Int,
-    val motion: ScreensaverMotionPreset,
+    slide: IdleScreensaverSlide,
+    motion: ScreensaverMotionPreset,
     initialAlpha: Float
 ) {
+    var slide by mutableStateOf(slide)
+    var motion by mutableStateOf(motion)
     val progress = Animatable(0f)
     val alpha = Animatable(initialAlpha)
     var frozenProgress by mutableStateOf<Float?>(null)
+}
+
+private suspend fun prepareScreensaverLayer(
+    layer: ScreensaverBackgroundLayer,
+    slide: IdleScreensaverSlide,
+    motion: ScreensaverMotionPreset
+) {
+    layer.progress.stop()
+    layer.alpha.stop()
+    layer.slide = slide
+    layer.motion = motion
+    layer.frozenProgress = null
+    layer.progress.snapTo(0f)
+    layer.alpha.snapTo(0f)
 }
 
 private data class ScreensaverMotionPreset(

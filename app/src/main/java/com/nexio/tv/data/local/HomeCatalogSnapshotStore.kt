@@ -29,7 +29,8 @@ class HomeCatalogSnapshotStore @Inject constructor(
     data class Snapshot(
         val catalogRows: List<CatalogRow>,
         val fullCatalogRows: List<CatalogRow>,
-        val heroItems: List<MetaPreview>
+        val heroItems: List<MetaPreview>,
+        val orderedGroupKeys: List<String> = emptyList()
     )
 
     fun read(): Snapshot? {
@@ -52,8 +53,9 @@ class HomeCatalogSnapshotStore @Inject constructor(
                 add("catalogRows", gson.toJsonTree(snapshot.catalogRows))
                 add("fullCatalogRows", gson.toJsonTree(snapshot.fullCatalogRows))
                 add("heroItems", gson.toJsonTree(snapshot.heroItems))
+                add("orderedGroupKeys", gson.toJsonTree(snapshot.orderedGroupKeys))
             }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist home snapshot", error)
         }
@@ -62,7 +64,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
     fun clear() {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).apply()
+            prefs.edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear home snapshot", error)
         }
@@ -81,7 +83,8 @@ class HomeCatalogSnapshotStore @Inject constructor(
         val canonical = Snapshot(
             catalogRows = decodeArray<CatalogRow>(root, "catalogRows"),
             fullCatalogRows = decodeArray<CatalogRow>(root, "fullCatalogRows"),
-            heroItems = decodeArray<MetaPreview>(root, "heroItems")
+            heroItems = decodeArray<MetaPreview>(root, "heroItems"),
+            orderedGroupKeys = decodeArray<String>(root, "orderedGroupKeys")
         )
         if (canonical.catalogRows.isNotEmpty() || canonical.fullCatalogRows.isNotEmpty() || canonical.heroItems.isNotEmpty()) {
             return canonical
@@ -119,7 +122,8 @@ class HomeCatalogSnapshotStore @Inject constructor(
         return Snapshot(
             catalogRows = sanitizedCatalogRows,
             fullCatalogRows = sanitizedFullCatalogRows,
-            heroItems = sanitizedHeroItems
+            heroItems = sanitizedHeroItems,
+            orderedGroupKeys = orderedGroupKeys.distinct()
         )
     }
 

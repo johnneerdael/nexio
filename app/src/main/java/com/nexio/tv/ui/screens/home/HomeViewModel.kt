@@ -14,12 +14,14 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
@@ -65,6 +67,8 @@ class HomeViewModel @Inject constructor(
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    internal val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore,
+    internal val mdbListDiscoverySnapshotStore: MDBListDiscoverySnapshotStore,
     internal val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
@@ -135,6 +139,7 @@ class HomeViewModel @Inject constructor(
     )
     internal val truncatedRowCache = mutableMapOf<String, TruncatedRowCacheEntry>()
     internal var inMemoryHomeSnapshot: HomeCatalogSnapshotStore.Snapshot? = null
+    internal var pendingRestoredCatalogSnapshot: HomeCatalogSnapshotStore.Snapshot? = null
     internal var homeSnapshotPersistJob: Job? = null
     internal var pendingHomeSnapshotPersist: HomeCatalogSnapshotStore.Snapshot? = null
     internal var homeSnapshotPersistGeneration: Long = 0L
@@ -144,8 +149,12 @@ class HomeViewModel @Inject constructor(
     internal var currentTmdbSettings: TmdbSettings = TmdbSettings()
     internal var traktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    internal var persistedTraktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
+        com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     internal var traktCatalogPreferences: TraktCatalogPreferences = TraktCatalogPreferences()
     internal var mdbListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
+        com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+    internal var persistedMDBListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
         com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
@@ -193,14 +202,21 @@ class HomeViewModel @Inject constructor(
     internal var startupWindowOpenUntilMs: Long = 0L
     @Volatile
     internal var isStartupDeferredRefreshAllowed: Boolean = true
+    @Volatile
+    internal var startupDeferralCompleted: Boolean = false
     internal var startupDeferralWindowJob: Job? = null
     internal var deferredStartupRefreshJob: Job? = null
+    internal var pendingSerializedHomeRefreshReason: String? = null
     internal val syntheticCatalogStoreMutex = Mutex()
+    internal val catalogRowsComputationMutex = Mutex()
+    @Volatile
+    internal var syntheticSnapshotBatchActive: Boolean = false
 
     init {
         observeStartupPerfTelemetry()
         observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
+        restorePersistedDiscoverySnapshots()
         restorePersistedSyntheticCatalogRows()
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
@@ -233,10 +249,12 @@ class HomeViewModel @Inject constructor(
                 diskFirstHomeStartupEnabled = enabled
                 if (!enabled) {
                     isStartupDeferredRefreshAllowed = true
+                    startupDeferralCompleted = false
                     startupWindowOpenUntilMs = 0L
                     startupDeferralWindowJob?.cancel()
                     return@collectLatest
                 }
+                startupDeferralCompleted = false
                 openStartupDeferralWindowIfNeeded("toggle_enabled")
             }
         }
@@ -255,6 +273,7 @@ class HomeViewModel @Inject constructor(
                     homeCatalogSnapshotStore.clear()
                     syntheticHomeCatalogStore.clear()
                     inMemoryHomeSnapshot = null
+                    pendingRestoredCatalogSnapshot = null
                     pendingHomeSnapshotPersist = null
                     persistedTraktSyntheticGroups = emptyList()
                     persistedMDBListSyntheticGroups = emptyList()
@@ -293,6 +312,8 @@ class HomeViewModel @Inject constructor(
     fun onForeground() = onForegroundPipeline()
 
     private fun restorePersistedSyntheticCatalogRows() = restorePersistedSyntheticCatalogRowsPipeline()
+
+    private fun restorePersistedDiscoverySnapshots() = restorePersistedDiscoverySnapshotsPipeline()
 
     private fun restorePersistedCatalogSnapshot() = restorePersistedCatalogSnapshotPipeline()
 
@@ -349,6 +370,7 @@ class HomeViewModel @Inject constructor(
 
     internal fun openStartupDeferralWindowIfNeeded(reason: String) {
         if (!diskFirstHomeStartupEnabled) return
+        if (startupDeferralCompleted) return
         val now = SystemClock.elapsedRealtime()
         if (startupWindowOpenUntilMs > now) return
         startupWindowOpenUntilMs = now + STARTUP_NETWORK_DEFERRAL_WINDOW_MS
@@ -358,6 +380,7 @@ class HomeViewModel @Inject constructor(
         startupDeferralWindowJob = viewModelScope.launch {
             delay(STARTUP_NETWORK_DEFERRAL_WINDOW_MS)
             isStartupDeferredRefreshAllowed = true
+            startupDeferralCompleted = true
             logStartupPerf("disk_first_startup_window_closed")
             runDeferredStartupRefreshIfNeeded("window_closed")
         }
@@ -379,13 +402,37 @@ class HomeViewModel @Inject constructor(
 
     internal fun runSerializedHomeRefreshIfNeeded(reason: String) {
         if (shouldDeferStartupNetworkWork()) return
-        if (deferredStartupRefreshJob?.isActive == true) return
-        deferredStartupRefreshJob = viewModelScope.launch {
-            logStartupPerf("catalog_refresh_start", "reason=$reason")
-            onForegroundPipeline(forceDeferred = true)
-            runSerializedPostStartupRefresh()
-            logStartupPerf("catalog_refresh_end", "reason=$reason")
+        if (deferredStartupRefreshJob?.isActive == true) {
+            Log.d(TAG, "Serialized home refresh already running; queueing reason=$reason")
+            pendingSerializedHomeRefreshReason = reason
+            return
         }
+        deferredStartupRefreshJob = viewModelScope.launch {
+            var nextReason: String? = reason
+            while (nextReason != null) {
+                val currentReason = nextReason
+                pendingSerializedHomeRefreshReason = null
+                startupRefreshPending = true
+                Log.d(TAG, "Serialized home refresh start reason=$currentReason")
+                logStartupPerf("catalog_refresh_start", "reason=$currentReason")
+                runSerializedPostStartupRefresh()
+                logStartupPerf("catalog_refresh_end", "reason=$currentReason")
+                Log.d(TAG, "Serialized home refresh end reason=$currentReason")
+                nextReason = pendingSerializedHomeRefreshReason
+            }
+        }
+    }
+
+    internal fun shouldSuppressIncrementalHomeSnapshotPublish(): Boolean {
+        if (!diskFirstHomeStartupEnabled) return false
+        if (!hasPersistedCatalogSnapshot) return false
+        val hasVisibleContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
+            _uiState.value.heroItems.isNotEmpty()
+        if (!hasVisibleContent) return false
+        return restoredCatalogSnapshotActive ||
+            startupRefreshPending ||
+            syntheticSnapshotBatchActive ||
+            deferredStartupRefreshJob?.isActive == true
     }
 
     internal fun logStartupPerf(event: String, details: String? = null) {
@@ -395,6 +442,9 @@ class HomeViewModel @Inject constructor(
     }
 
     internal fun scheduleUpdateCatalogRows() {
+        if (shouldSuppressIncrementalHomeSnapshotPublish()) {
+            return
+        }
         catalogUpdateJob?.cancel()
         catalogUpdateJob = viewModelScope.launch {
             val debounceMs = when {

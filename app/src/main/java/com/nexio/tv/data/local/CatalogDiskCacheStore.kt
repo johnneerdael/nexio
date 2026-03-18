@@ -52,7 +52,7 @@ class CatalogDiskCacheStore @Inject constructor(
                 addProperty("catalogVersionHash", catalogVersionHash)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
-            prefs.edit().putString(prefKey(cacheKey), gson.toJson(payload)).apply()
+            prefs.edit().putString(prefKey(cacheKey), gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to write catalog cache entry", error)
         }
@@ -61,7 +61,7 @@ class CatalogDiskCacheStore @Inject constructor(
     fun remove(cacheKey: String) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(prefKey(cacheKey)).apply()
+            prefs.edit().remove(prefKey(cacheKey)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to remove catalog cache entry", error)
         }
@@ -71,4 +71,3 @@ class CatalogDiskCacheStore @Inject constructor(
         return "$ENTRY_PREFIX$cacheKey"
     }
 }
-

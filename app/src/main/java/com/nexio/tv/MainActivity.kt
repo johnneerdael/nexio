@@ -174,7 +174,7 @@ import kotlin.coroutines.resume
 
 val LocalSidebarExpanded = compositionLocalOf { false }
 val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
-private const val STARTUP_SPLASH_FIRST_FRAME_TIMEOUT_MS = 1_000L
+private const val STARTUP_SPLASH_FIRST_FRAME_TIMEOUT_MS = 4_000L
 private const val STARTUP_SPLASH_LAST_FRAME_HOLD_MS = 150L
 private const val STARTUP_SPLASH_HARD_TIMEOUT_MS = 12_000L
 

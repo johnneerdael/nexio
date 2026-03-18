@@ -53,10 +53,10 @@ class SyntheticHomeCatalogStore @Inject constructor(
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
-                add("traktGroups", gson.toJsonTree(snapshot.traktGroups))
-                add("mdbListGroups", gson.toJsonTree(snapshot.mdbListGroups))
+                add("traktGroups", encodeGroups(snapshot.traktGroups))
+                add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
             }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist synthetic home catalogs", error)
         }
@@ -65,7 +65,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
     fun clear() {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).apply()
+            prefs.edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear synthetic home catalogs", error)
         }
@@ -91,6 +91,23 @@ class SyntheticHomeCatalogStore @Inject constructor(
         return array
             ?.mapNotNull(::decodeGroup)
             .orEmpty()
+    }
+
+    private fun encodeGroups(groups: List<PersistedSyntheticCatalogGroup>): JsonArray {
+        return JsonArray().apply {
+            groups.forEach { group ->
+                add(
+                    JsonObject().apply {
+                        addProperty("orderKey", group.orderKey)
+                        add("rows", JsonArray().apply {
+                            group.rows.forEach { row ->
+                                add(gson.toJsonTree(row))
+                            }
+                        })
+                    }
+                )
+            }
+        }
     }
 
     private fun decodeGroup(element: JsonElement): PersistedSyntheticCatalogGroup? {

@@ -61,8 +61,8 @@ android {
         applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "0.23"
+        versionCode = 42
+        versionName = "0.24"
 
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
         buildConfigField("String", "REAL_DEBRID_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "REAL_DEBRID_CLIENT_ID")}\"")

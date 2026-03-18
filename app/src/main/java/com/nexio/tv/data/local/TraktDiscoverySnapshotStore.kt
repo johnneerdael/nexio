@@ -54,7 +54,7 @@ class TraktDiscoverySnapshotStore @Inject constructor(
                 add("recommendationRefsByStatusKey", gson.toJsonTree(snapshot.recommendationRefsByStatusKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).apply()
+            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist Trakt discovery snapshot", error)
         }
@@ -63,7 +63,7 @@ class TraktDiscoverySnapshotStore @Inject constructor(
     fun clear() {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).apply()
+            prefs.edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear Trakt discovery snapshot", error)
         }
