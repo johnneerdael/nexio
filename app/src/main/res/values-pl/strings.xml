@@ -850,6 +850,9 @@
     <string name="cast_detail_error">Coś poszło nie tak</string>
     <string name="cast_detail_retry">Ponów</string>
     <string name="cast_detail_filmography">Filmografia</string>
+    <string name="cast_detail_born">Urodziny: %1$s</string>
+    <string name="cast_detail_born_died">Urodziny: %1$s — †%2$s</string>
+    <string name="cast_detail_age">%1$d lat</string>
 
     <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">z %1$s</string>
