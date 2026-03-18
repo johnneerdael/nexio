@@ -5,6 +5,7 @@
 
 package com.nexio.tv.ui.screens.home
 
+import android.util.Log
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -104,6 +105,7 @@ import java.util.concurrent.atomic.AtomicLong
 private const val KEY_REPEAT_THROTTLE_MS = 80L
 private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
 private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
+private const val MODERN_HOME_CONTENT_LOG_TAG = "ModernHomeContent"
 
 @Composable
 internal fun ModernHomeContent(
@@ -328,6 +330,7 @@ internal fun ModernHomeContent(
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var pendingRowFocusNonce by remember { mutableIntStateOf(0) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
+    var displayedHeroItemKey by remember { mutableStateOf<String?>(null) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     val lastFocusedContinueWatchingIndexRef = remember { AtomicInteger(-1) }
@@ -402,6 +405,8 @@ internal fun ModernHomeContent(
             focusedItemByRow[resolvedRow.key] = resolvedIndex
             heroItem = resolvedRow.items.getOrNull(resolvedIndex)?.heroPreview
                 ?: resolvedRow.items.firstOrNull()?.heroPreview
+            displayedHeroItemKey = resolvedRow.items.getOrNull(resolvedIndex)?.key
+                ?: resolvedRow.items.firstOrNull()?.key
             pendingRowFocusKey = resolvedRow.key
             pendingRowFocusIndex = resolvedIndex
             pendingRowFocusNonce++
@@ -422,6 +427,8 @@ internal fun ModernHomeContent(
         focusedItemByRow[resolvedActive.key] = resolvedIndex
         heroItem = resolvedActive.items.getOrNull(resolvedIndex)?.heroPreview
             ?: resolvedActive.items.firstOrNull()?.heroPreview
+        displayedHeroItemKey = resolvedActive.items.getOrNull(resolvedIndex)?.key
+            ?: resolvedActive.items.firstOrNull()?.key
         if (!focusState.hasSavedFocus && (!hadActiveRow || existingActive == null)) {
             pendingRowFocusKey = resolvedActive.key
             pendingRowFocusIndex = resolvedIndex
@@ -470,6 +477,12 @@ internal fun ModernHomeContent(
         val row = activeRow ?: return@remember null
         row.items.getOrNull(clampedActiveItemIndex)?.key ?: row.items.firstOrNull()?.key
     }
+    val activeHeroPreviewKey = remember(activeRow, clampedActiveItemIndex) {
+        val row = activeRow ?: return@remember null
+        heroPreviewContentKey(
+            row.items.getOrNull(clampedActiveItemIndex) ?: row.items.firstOrNull()
+        )
+    }
     val latestHeroRow by rememberUpdatedState(activeRow)
     val latestHeroIndex by rememberUpdatedState(clampedActiveItemIndex)
     LaunchedEffect(activeHeroItemKey, isVerticalRowsScrolling) {
@@ -482,9 +495,16 @@ internal fun ModernHomeContent(
         val row = latestHeroRow ?: return@LaunchedEffect
         val latestKey = row.items.getOrNull(latestHeroIndex)?.key ?: row.items.firstOrNull()?.key
         if (latestKey != targetHeroKey) return@LaunchedEffect
-        val latestHero =
-            row.items.getOrNull(latestHeroIndex)?.heroPreview ?: row.items.firstOrNull()?.heroPreview
+        val latestHero = resolveActiveHeroPreview(row, latestHeroIndex)
         if (latestHero != null && heroItem != latestHero) {
+            displayedHeroItemKey = latestKey
+            heroItem = latestHero
+        }
+    }
+    LaunchedEffect(activeHeroPreviewKey, isVerticalRowsScrolling) {
+        if (isVerticalRowsScrolling) return@LaunchedEffect
+        val latestHero = resolveActiveHeroPreview(latestHeroRow, latestHeroIndex) ?: return@LaunchedEffect
+        if (heroItem != latestHero) {
             heroItem = latestHero
         }
     }
@@ -536,8 +556,15 @@ internal fun ModernHomeContent(
             activeRow?.items?.getOrNull(clampedActiveItemIndex)
         }
         val activeItemId = activeCarouselItem?.metaPreview?.id
-        val resolvedHero = heroItem
-            ?: activeRow?.items?.firstOrNull()?.heroPreview
+        val liveActiveHeroPreview = remember(activeRow, clampedActiveItemIndex) {
+            resolveActiveHeroPreview(activeRow, clampedActiveItemIndex)
+        }
+        val resolvedHero = resolveDisplayedHeroPreview(
+            displayedHeroItemKey = displayedHeroItemKey,
+            activeHeroItemKey = activeHeroItemKey,
+            displayedHeroPreview = heroItem,
+            liveActiveHeroPreview = liveActiveHeroPreview
+        )
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
                 item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
@@ -809,6 +836,12 @@ private fun ModernHeroSection(
 ) {
     val enrichingItemId = enrichingItemIdState.value
     val enrichmentActive = activeItemId != null && activeItemId == enrichingItemId
+    LaunchedEffect(preview, activeItemId, enrichingItemId, enrichmentActive) {
+        Log.d(
+            MODERN_HOME_CONTENT_LOG_TAG,
+            "ModernHeroSection activeItemId=$activeItemId enrichingItemId=$enrichingItemId enrichmentActive=$enrichmentActive title=${preview?.title} imdb=${preview?.imdbText} tomatoes=${preview?.tomatoesText}"
+        )
+    }
     ModernHeroMediaLayer(
         heroBackdrop = heroBackdrop,
         enrichmentActive = enrichmentActive,

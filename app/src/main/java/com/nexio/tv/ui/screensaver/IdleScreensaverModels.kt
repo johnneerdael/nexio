@@ -14,5 +14,6 @@ data class IdleScreensaverSlide(
     val description: String?,
     val releaseInfo: String?,
     val runtime: String?,
-    val imdbRating: Float?
+    val imdbRating: Float?,
+    val tomatoesRating: Double? = null
 )

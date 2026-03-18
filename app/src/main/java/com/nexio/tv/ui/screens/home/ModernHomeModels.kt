@@ -8,8 +8,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.toHomeDisplayMetadata
 
 internal val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
@@ -34,6 +36,7 @@ internal data class HeroPreview(
     val contentTypeText: String?,
     val yearText: String?,
     val imdbText: String?,
+    val tomatoesText: String?,
     val genres: List<String>,
     val poster: String?,
     val backdrop: String?,
@@ -147,6 +150,77 @@ internal data class CachedCarouselItem(
     val carouselItem: ModernCarouselItem
 )
 
+internal fun heroPreviewContentKey(item: ModernCarouselItem?): String? {
+    val currentItem = item ?: return null
+    val preview = currentItem.heroPreview
+    return buildString {
+        append(currentItem.key)
+        append('|')
+        append(preview.title)
+        append('|')
+        append(preview.logo)
+        append('|')
+        append(preview.description)
+        append('|')
+        append(preview.contentTypeText)
+        append('|')
+        append(preview.yearText)
+        append('|')
+        append(preview.imdbText)
+        append('|')
+        append(preview.tomatoesText)
+        append('|')
+        append(preview.genres.joinToString(","))
+        append('|')
+        append(preview.poster)
+        append('|')
+        append(preview.backdrop)
+        append('|')
+        append(preview.imageUrl)
+    }
+}
+
+internal fun resolveActiveHeroPreview(
+    row: HeroCarouselRow?,
+    itemIndex: Int
+): HeroPreview? {
+    val currentRow = row ?: return null
+    return currentRow.items.getOrNull(itemIndex)?.heroPreview ?: currentRow.items.firstOrNull()?.heroPreview
+}
+
+internal fun resolveDisplayedHeroPreview(
+    displayedHeroItemKey: String?,
+    activeHeroItemKey: String?,
+    displayedHeroPreview: HeroPreview?,
+    liveActiveHeroPreview: HeroPreview?
+): HeroPreview? {
+    return if (displayedHeroItemKey != null && displayedHeroItemKey == activeHeroItemKey) {
+        liveActiveHeroPreview ?: displayedHeroPreview
+    } else {
+        displayedHeroPreview ?: liveActiveHeroPreview
+    }
+}
+
+internal fun applyTomatoesToContinueWatchingItem(
+    item: ContinueWatchingItem,
+    tomatoesRating: Double
+): ContinueWatchingItem {
+    return when (item) {
+        is ContinueWatchingItem.InProgress -> {
+            item.copy(
+                displayMetadata = item.displayMetadata().copy(tomatoesRating = tomatoesRating)
+            )
+        }
+        is ContinueWatchingItem.NextUp -> {
+            item.copy(
+                info = item.info.copy(
+                    displayMetadata = item.displayMetadata().copy(tomatoesRating = tomatoesRating)
+                )
+            )
+        }
+    }
+}
+
 
 internal fun buildContinueWatchingItem(
     item: ContinueWatchingItem,
@@ -176,6 +250,7 @@ internal fun buildContinueWatchingItem(
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
                 imdbText = (item.episodeImdbRating ?: displayMetadata.imdbRating)
                     ?.let { String.format("%.1f", it) },
+                tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.genres.ifEmpty { displayMetadata.genres },
                 poster = displayMetadata.poster ?: item.progress.poster,
                 backdrop = displayMetadata.backdrop ?: item.progress.backdrop,
@@ -211,6 +286,7 @@ internal fun buildContinueWatchingItem(
                 yearText = extractYear(displayMetadata.releaseInfo ?: item.info.releaseInfo),
                 imdbText = (item.info.imdbRating ?: displayMetadata.imdbRating)
                     ?.let { String.format("%.1f", it) },
+                tomatoesText = displayMetadata.tomatoesRating?.let(::formatPreviewTomatoesRating),
                 genres = item.info.genres.ifEmpty { displayMetadata.genres },
                 poster = displayMetadata.poster ?: item.info.poster,
                 backdrop = displayMetadata.backdrop ?: item.info.backdrop,
@@ -319,7 +395,31 @@ internal fun buildContinueWatchingItem(
         },
         imageUrl = imageUrl,
         heroPreview = heroPreview.copy(imageUrl = imageUrl ?: heroPreview.imageUrl),
-        payload = ModernPayload.ContinueWatching(item)
+        payload = ModernPayload.ContinueWatching(item),
+        metaPreview = when (item) {
+            is ContinueWatchingItem.InProgress -> continueWatchingInProgressToMetaPreview(item)
+            is ContinueWatchingItem.NextUp -> nextUpToMetaPreview(item)
+        }
+    )
+}
+
+internal fun continueWatchingInProgressToMetaPreview(item: ContinueWatchingItem.InProgress): MetaPreview {
+    val displayMetadata = item.displayMetadata()
+    val contentType = if (isSeriesType(item.progress.contentType)) ContentType.SERIES else ContentType.MOVIE
+    return MetaPreview(
+        id = item.progress.contentId,
+        type = contentType,
+        rawType = item.progress.contentType,
+        name = displayMetadata.title ?: item.progress.name,
+        poster = displayMetadata.poster ?: item.progress.poster,
+        posterShape = PosterShape.LANDSCAPE,
+        background = displayMetadata.backdrop ?: item.progress.backdrop,
+        logo = displayMetadata.logo ?: item.progress.logo,
+        description = displayMetadata.description ?: item.progress.episodeTitle,
+        releaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
+        imdbRating = item.episodeImdbRating ?: displayMetadata.imdbRating,
+        tomatoesRating = displayMetadata.tomatoesRating,
+        genres = item.genres.ifEmpty { displayMetadata.genres }
     )
 }
 
@@ -337,6 +437,7 @@ internal fun buildCatalogItem(
         contentTypeText = item.apiType.replaceFirstChar { ch -> ch.uppercase() },
         yearText = extractYear(displayMetadata.releaseInfo ?: item.releaseInfo),
         imdbText = (displayMetadata.imdbRating ?: item.imdbRating)?.let { String.format("%.1f", it) },
+        tomatoesText = (displayMetadata.tomatoesRating ?: item.tomatoesRating)?.let(::formatPreviewTomatoesRating),
         genres = displayMetadata.genres.ifEmpty { item.genres }.take(3),
         poster = displayMetadata.poster ?: item.poster,
         backdrop = displayMetadata.backdrop ?: item.background,
@@ -379,6 +480,7 @@ internal fun ContinueWatchingItem.displayMetadata(): HomeDisplayMetadata {
             genres = genres,
             releaseInfo = releaseInfo,
             imdbRating = episodeImdbRating,
+            tomatoesRating = displayMetadata?.tomatoesRating,
             poster = progress.poster,
             backdrop = progress.backdrop
         )
@@ -390,6 +492,7 @@ internal fun ContinueWatchingItem.displayMetadata(): HomeDisplayMetadata {
             genres = info.genres,
             releaseInfo = info.releaseInfo ?: info.released,
             imdbRating = info.imdbRating,
+            tomatoesRating = info.displayMetadata?.tomatoesRating,
             poster = info.poster ?: info.thumbnail,
             backdrop = info.backdrop ?: info.thumbnail
         )
@@ -427,6 +530,10 @@ internal fun catalogRowTitle(
 
 internal fun CatalogRow.key(): String {
     return "${addonId}_${apiType}_${catalogId}"
+}
+
+private fun formatPreviewTomatoesRating(rating: Double): String {
+    return if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
 }
 
 internal fun isSeriesType(type: String?): Boolean {

@@ -60,6 +60,30 @@ class HomeCatalogRefreshCoordinatorTest {
         assertEquals("a", diff.addedOrChanged.first().id)
     }
 
+    @Test
+    fun `shouldReusePersistedHomeItem only reuses unchanged rows with tomatoes persisted`() {
+        assertTrue(
+            shouldReusePersistedHomeItem(
+                itemChanged = false,
+                persistedFallback = preview(id = "a", poster = "posterA").copy(tomatoesRating = 71.0)
+            )
+        )
+        assertEquals(
+            false,
+            shouldReusePersistedHomeItem(
+                itemChanged = false,
+                persistedFallback = preview(id = "a", poster = "posterA")
+            )
+        )
+        assertEquals(
+            false,
+            shouldReusePersistedHomeItem(
+                itemChanged = true,
+                persistedFallback = preview(id = "a", poster = "posterA").copy(tomatoesRating = 71.0)
+            )
+        )
+    }
+
     private fun preview(id: String, poster: String?): MetaPreview {
         return MetaPreview(
             id = id,

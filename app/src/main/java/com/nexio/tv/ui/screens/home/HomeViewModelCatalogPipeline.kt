@@ -144,15 +144,23 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
         )
         withContext(Dispatchers.Main.immediate) {
             if (traktSnapshot != null) {
-                persistedTraktDiscoverySnapshot = traktSnapshot
+                val hydratedTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
+                    traktSnapshot,
+                    syntheticTomatoesOverridesByItemId
+                )
+                persistedTraktDiscoverySnapshot = hydratedTraktSnapshot
                 if (traktDiscoverySnapshot.updatedAtMs <= 0L) {
-                    traktDiscoverySnapshot = traktSnapshot
+                    traktDiscoverySnapshot = hydratedTraktSnapshot
                 }
             }
             if (mdbSnapshot != null) {
-                persistedMDBListDiscoverySnapshot = mdbSnapshot
+                val hydratedMdbSnapshot = applyTomatoesOverridesToMDBListSnapshot(
+                    mdbSnapshot,
+                    syntheticTomatoesOverridesByItemId
+                )
+                persistedMDBListDiscoverySnapshot = hydratedMdbSnapshot
                 if (mdbListDiscoverySnapshot.updatedAtMs <= 0L) {
-                    mdbListDiscoverySnapshot = mdbSnapshot
+                    mdbListDiscoverySnapshot = hydratedMdbSnapshot
                 }
             }
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_discovery_snapshots")
@@ -164,10 +172,14 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
-            if (traktDiscoveryObserved && snapshot == traktDiscoverySnapshot) return@collectLatest
+            val hydratedSnapshot = applyTomatoesOverridesToTraktSnapshot(
+                snapshot,
+                syntheticTomatoesOverridesByItemId
+            )
+            if (traktDiscoveryObserved && hydratedSnapshot == traktDiscoverySnapshot) return@collectLatest
             traktDiscoveryObserved = true
-            traktDiscoverySnapshot = snapshot
-            persistedTraktDiscoverySnapshot = snapshot
+            traktDiscoverySnapshot = hydratedSnapshot
+            persistedTraktDiscoverySnapshot = hydratedSnapshot
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_discovery")
             if (!shouldDeferStartupNetworkWork()) {
@@ -203,13 +215,17 @@ internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
-            if (mdbListDiscoveryObserved && snapshot == mdbListDiscoverySnapshot) return@collectLatest
+            val hydratedSnapshot = applyTomatoesOverridesToMDBListSnapshot(
+                snapshot,
+                syntheticTomatoesOverridesByItemId
+            )
+            if (mdbListDiscoveryObserved && hydratedSnapshot == mdbListDiscoverySnapshot) return@collectLatest
             mdbListDiscoveryObserved = true
-            mdbListDiscoverySnapshot = snapshot
-            persistedMDBListDiscoverySnapshot = snapshot
+            mdbListDiscoverySnapshot = hydratedSnapshot
+            persistedMDBListDiscoverySnapshot = hydratedSnapshot
             Log.d(
                 HomeViewModel.TAG,
-                "MDBList snapshot personal=${snapshot.personalLists.size} top=${snapshot.topLists.size} custom=${snapshot.customListCatalogs.size}"
+                "MDBList snapshot personal=${hydratedSnapshot.personalLists.size} top=${hydratedSnapshot.topLists.size} custom=${hydratedSnapshot.customListCatalogs.size}"
             )
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_mdblist_discovery")
@@ -373,12 +389,22 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
 
     val afterTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val afterMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val hydratedAfterTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
+        afterTraktSnapshot,
+        syntheticTomatoesOverridesByItemId
+    )
+    val hydratedAfterMdbSnapshot = applyTomatoesOverridesToMDBListSnapshot(
+        afterMdbSnapshot,
+        syntheticTomatoesOverridesByItemId
+    )
     val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
-    val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
+    val traktAfterKeys = traktSnapshotItemKeys(hydratedAfterTraktSnapshot)
     val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
-    val mdbAfterKeys = mdbSnapshotItemKeys(afterMdbSnapshot)
-    traktDiscoverySnapshot = afterTraktSnapshot
-    mdbListDiscoverySnapshot = afterMdbSnapshot
+    val mdbAfterKeys = mdbSnapshotItemKeys(hydratedAfterMdbSnapshot)
+    traktDiscoverySnapshot = hydratedAfterTraktSnapshot
+    persistedTraktDiscoverySnapshot = hydratedAfterTraktSnapshot
+    mdbListDiscoverySnapshot = hydratedAfterMdbSnapshot
+    persistedMDBListDiscoverySnapshot = hydratedAfterMdbSnapshot
 
     logStartupPerf(
         "synthetic_refresh_end",
@@ -390,7 +416,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     try {
         Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=trakt_snapshot")
         logStartupPerf("synthetic_refresh_step_start", "source=trakt")
-        renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
+        renewTraktSyntheticSnapshotPipeline(hydratedAfterTraktSnapshot)
         logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
         Log.d(
             HomeViewModel.TAG,
@@ -399,7 +425,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
 
         Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=mdblist_snapshot")
         logStartupPerf("synthetic_refresh_step_start", "source=mdblist")
-        renewMDBListSyntheticSnapshotPipeline(afterMdbSnapshot)
+        renewMDBListSyntheticSnapshotPipeline(hydratedAfterMdbSnapshot)
         logStartupPerf("synthetic_refresh_step_end", "source=mdblist rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}")
         Log.d(
             HomeViewModel.TAG,
@@ -720,6 +746,8 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     pendingExternalMetaPrefetchItemId = null
     prefetchedExternalMetaIds.clear()
     externalMetaPrefetchInFlightIds.clear()
+    prefetchedTomatoesIds.clear()
+    tomatoesEnrichmentInFlightIds.clear()
     prefetchedTmdbIds.clear()
     tmdbEnrichFocusJob?.cancel()
     pendingTmdbEnrichItemId = null
@@ -1969,6 +1997,7 @@ internal fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPrevi
         description = info.episodeDescription ?: displayMetadata?.description,
         releaseInfo = displayMetadata?.releaseInfo ?: info.releaseInfo ?: info.released,
         imdbRating = info.imdbRating ?: displayMetadata?.imdbRating,
+        tomatoesRating = displayMetadata?.tomatoesRating,
         genres = info.genres.ifEmpty { displayMetadata?.genres.orEmpty() }
     )
 }

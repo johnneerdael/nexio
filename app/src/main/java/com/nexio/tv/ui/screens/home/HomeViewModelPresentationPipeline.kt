@@ -189,10 +189,18 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
 }
 
 internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
-    if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
+    if (isFocusEnrichmentBlocked(
+            startupRefreshPending = startupRefreshPending,
+            catalogsLoadInProgress = catalogsLoadInProgress,
+            traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
+            mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress
+        )
+    ) {
+        pendingFocusedItemForEnrichment = item
         return
     }
-    if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
+    pendingFocusedItemForEnrichment = null
+    if (isFocusedPreviewEnrichmentComplete(item.id)) return
     if (pendingTmdbEnrichItemId == item.id) return
 
     if (_enrichingItemId.value != null && _enrichingItemId.value != item.id) {
@@ -214,7 +222,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             }
             return@launch
         }
-        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) {
+        if (isFocusedPreviewEnrichmentComplete(item.id)) {
             if (_enrichingItemId.value == item.id) {
                 setEnrichingItemId(null)
             }
@@ -277,11 +285,24 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
     }
 }
 
+internal fun HomeViewModel.runDeferredFocusedItemEnrichmentIfReady() {
+    pendingFocusedItemForEnrichment = consumeDeferredFocusedItemEnrichment(
+        pendingItem = pendingFocusedItemForEnrichment,
+        startupRefreshPending = startupRefreshPending,
+        catalogsLoadInProgress = catalogsLoadInProgress,
+        traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
+        mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress,
+        onReady = { item ->
+            onItemFocusPipeline(item)
+        }
+    )
+}
+
 internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
         return
     }
-    if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return
+    if (isFocusedPreviewEnrichmentComplete(item.id)) return
     if (pendingTmdbEnrichItemId == item.id || pendingAdjacentPrefetchItemId == item.id) return
 
     pendingAdjacentPrefetchItemId = item.id
@@ -289,7 +310,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     adjacentItemPrefetchJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
         if (pendingAdjacentPrefetchItemId != item.id) return@launch
-        if (item.id in prefetchedTmdbIds || item.id in prefetchedExternalMetaIds) return@launch
+        if (isFocusedPreviewEnrichmentComplete(item.id)) return@launch
 
         try {
             var tmdbEnriched = false
@@ -362,7 +383,9 @@ private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
 }
 
 private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
-    if (pendingTmdbEnrichmentByItemId.isEmpty() && pendingMetaEnrichmentByItemId.isEmpty()) {
+    if (pendingTmdbEnrichmentByItemId.isEmpty() &&
+        pendingMetaEnrichmentByItemId.isEmpty()
+    ) {
         return
     }
     val tmdbByItemId = pendingTmdbEnrichmentByItemId.toMap()
@@ -489,6 +512,143 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
             }
         }.awaitAll()
     }
+}
+
+internal fun isFocusEnrichmentBlocked(
+    startupRefreshPending: Boolean,
+    catalogsLoadInProgress: Boolean,
+    traktDiscoveryRefreshInProgress: Boolean,
+    mdbListDiscoveryRefreshInProgress: Boolean
+): Boolean {
+    return startupRefreshPending ||
+        catalogsLoadInProgress ||
+        traktDiscoveryRefreshInProgress ||
+        mdbListDiscoveryRefreshInProgress
+}
+
+internal fun consumeDeferredFocusedItemEnrichment(
+    pendingItem: MetaPreview?,
+    startupRefreshPending: Boolean,
+    catalogsLoadInProgress: Boolean,
+    traktDiscoveryRefreshInProgress: Boolean,
+    mdbListDiscoveryRefreshInProgress: Boolean,
+    onReady: (MetaPreview) -> Unit
+): MetaPreview? {
+    val item = pendingItem ?: return null
+    if (isFocusEnrichmentBlocked(
+            startupRefreshPending = startupRefreshPending,
+            catalogsLoadInProgress = catalogsLoadInProgress,
+            traktDiscoveryRefreshInProgress = traktDiscoveryRefreshInProgress,
+            mdbListDiscoveryRefreshInProgress = mdbListDiscoveryRefreshInProgress
+        )
+    ) {
+        return item
+    }
+    onReady(item)
+    return null
+}
+
+internal fun applyTomatoesToTraktSnapshot(
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    itemId: String,
+    tomatoesRating: Double
+): com.nexio.tv.data.repository.TraktDiscoverySnapshot {
+    var changed = false
+
+    fun updateItems(items: List<MetaPreview>): List<MetaPreview> {
+        var updatedItems: MutableList<MetaPreview>? = null
+        items.forEachIndexed { index, item ->
+            if (item.id != itemId || item.tomatoesRating == tomatoesRating) return@forEachIndexed
+            val nextItems = updatedItems ?: items.toMutableList().also { updatedItems = it }
+            nextItems[index] = item.copy(tomatoesRating = tomatoesRating)
+        }
+        val result = updatedItems?.toList() ?: items
+        if (result !== items) {
+            changed = true
+        }
+        return result
+    }
+
+    fun updateCustomCatalogs(
+        catalogs: List<com.nexio.tv.data.repository.TraktCustomListCatalog>
+    ): List<com.nexio.tv.data.repository.TraktCustomListCatalog> {
+        var updatedCatalogs: MutableList<com.nexio.tv.data.repository.TraktCustomListCatalog>? = null
+        catalogs.forEachIndexed { index, catalog ->
+            val updatedItems = updateItems(catalog.items)
+            if (updatedItems === catalog.items) return@forEachIndexed
+            val nextCatalogs = updatedCatalogs ?: catalogs.toMutableList().also { updatedCatalogs = it }
+            nextCatalogs[index] = catalog.copy(items = updatedItems)
+        }
+        return updatedCatalogs?.toList() ?: catalogs
+    }
+
+    val updatedSnapshot = snapshot.copy(
+        calendarItems = updateItems(snapshot.calendarItems),
+        recommendationMovieItems = updateItems(snapshot.recommendationMovieItems),
+        recommendationShowItems = updateItems(snapshot.recommendationShowItems),
+        trendingMovieItems = updateItems(snapshot.trendingMovieItems),
+        trendingShowItems = updateItems(snapshot.trendingShowItems),
+        popularMovieItems = updateItems(snapshot.popularMovieItems),
+        popularShowItems = updateItems(snapshot.popularShowItems),
+        customListCatalogs = updateCustomCatalogs(snapshot.customListCatalogs)
+    )
+    return if (changed) updatedSnapshot else snapshot
+}
+
+internal fun applyTomatoesOverridesToTraktSnapshot(
+    snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
+    tomatoesByItemId: Map<String, Double>
+): com.nexio.tv.data.repository.TraktDiscoverySnapshot {
+    return tomatoesByItemId.entries.fold(snapshot) { current, (itemId, tomatoesRating) ->
+        applyTomatoesToTraktSnapshot(current, itemId, tomatoesRating)
+    }
+}
+
+private fun applyTomatoesToMDBListSnapshot(
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
+    itemId: String,
+    tomatoesRating: Double
+): com.nexio.tv.data.repository.MDBListDiscoverySnapshot {
+    var changed = false
+
+    val updatedCatalogs = snapshot.customListCatalogs.map { catalog ->
+        var catalogChanged = false
+        val updatedItems = catalog.items.map { item ->
+            if (item.id != itemId || item.tomatoesRating == tomatoesRating) {
+                item
+            } else {
+                catalogChanged = true
+                item.copy(tomatoesRating = tomatoesRating)
+            }
+        }
+        if (catalogChanged) {
+            changed = true
+            catalog.copy(items = updatedItems)
+        } else {
+            catalog
+        }
+    }
+
+    return if (changed) {
+        snapshot.copy(customListCatalogs = updatedCatalogs)
+    } else {
+        snapshot
+    }
+}
+
+internal fun applyTomatoesOverridesToMDBListSnapshot(
+    snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
+    tomatoesByItemId: Map<String, Double>
+): com.nexio.tv.data.repository.MDBListDiscoverySnapshot {
+    return tomatoesByItemId.entries.fold(snapshot) { current, (itemId, tomatoesRating) ->
+        applyTomatoesToMDBListSnapshot(current, itemId, tomatoesRating)
+    }
+}
+
+private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(itemId: String): Boolean {
+    return (!currentTmdbSettings.isActive && !externalMetaPrefetchEnabled) ||
+        itemId in prefetchedTmdbIds ||
+        itemId in prefetchedExternalMetaIds
 }
 
 internal fun HomeViewModel.replaceGridHeroItemsPipeline(

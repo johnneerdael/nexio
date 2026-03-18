@@ -66,6 +66,8 @@ private const val SCREENSAVER_CROSSFADE_MS = 1_000
 private const val SCREENSAVER_SLIDE_ADVANCE_MS = 15_000
 private const val SCREENSAVER_PRELOAD_LEAD_MS = 5_000L
 private const val SCREENSAVER_OPEN_GUARD_MS = 180L
+private const val SCREENSAVER_DETAILS_PROMPT_VISIBLE_MS = 5_000L
+private const val SCREENSAVER_DETAILS_PROMPT_FADE_MS = 1_500
 private const val SCREENSAVER_START_SCALE = 1.05f
 private const val SCREENSAVER_END_SCALE = 1.145f
 private const val SCREENSAVER_TRANSLATE_X_FRACTION = 0.045f
@@ -123,6 +125,13 @@ fun IdleScreensaverOverlay(
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
+    val tomatoesModel = remember(context) {
+        ImageRequest.Builder(context)
+            .data(R.raw.mdblist_tomatoes)
+            .decoderFactory(SvgDecoder.Factory())
+            .build()
+    }
+    val detailsPromptAlpha = remember(sessionId) { Animatable(1f) }
 
     LaunchedEffect(sessionId) {
         runCatching { focusRequester.requestFocus() }
@@ -132,6 +141,16 @@ fun IdleScreensaverOverlay(
         val slide = pendingOpenSlide ?: return@LaunchedEffect
         delay(SCREENSAVER_OPEN_GUARD_MS)
         onOpenSlide(slide)
+    }
+
+    LaunchedEffect(sessionId, currentSlide.itemId, activeSlotIndex) {
+        detailsPromptAlpha.stop()
+        detailsPromptAlpha.snapTo(1f)
+        delay(SCREENSAVER_DETAILS_PROMPT_VISIBLE_MS)
+        detailsPromptAlpha.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(durationMillis = SCREENSAVER_DETAILS_PROMPT_FADE_MS)
+        )
     }
 
     LaunchedEffect(sessionId, sessionSlides, currentIndex, activeSlotIndex, decodeSize) {
@@ -287,24 +306,16 @@ fun IdleScreensaverOverlay(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            currentSlide.description?.let { description ->
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NexioColors.TextPrimary,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
             ScreensaverPrimaryMetaLine(
                 slide = currentSlide,
-                imdbModel = imdbModel
+                imdbModel = imdbModel,
+                tomatoesModel = tomatoesModel
             )
             Text(
                 text = "Press OK for details",
                 color = NexioColors.TextSecondary,
-                fontSize = 17.sp
+                fontSize = 17.sp,
+                modifier = Modifier.graphicsLayer { alpha = detailsPromptAlpha.value }
             )
         }
     }
@@ -350,83 +361,114 @@ private fun ScreensaverBackgroundImage(
 @Composable
 private fun ScreensaverPrimaryMetaLine(
     slide: IdleScreensaverSlide,
-    imdbModel: ImageRequest
+    imdbModel: ImageRequest,
+    tomatoesModel: ImageRequest
 ) {
-    val genresText = remember(slide.genres) {
-        slide.genres.joinToString(" • ")
-    }
-    val runtimeText = remember(slide.runtime) {
-        slide.runtime?.let(::formatScreensaverRuntime)
-    }
-    val yearText = remember(slide.releaseInfo) {
-        Regex("""\b(19|20)\d{2}\b""").find(slide.releaseInfo.orEmpty())?.value
-            ?: slide.releaseInfo?.substringBefore('-')?.trim()?.ifBlank { null }
-            ?: slide.releaseInfo?.trim()
-    }
-    val shouldShowAnything = slide.genres.isNotEmpty() || !runtimeText.isNullOrBlank() || !yearText.isNullOrBlank() || slide.imdbRating != null
-    if (!shouldShowAnything) return
+    val metaSegments = remember(slide) { buildScreensaverPrimaryMetaSegments(slide) }
+    if (metaSegments.isEmpty()) return
 
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (slide.genres.isNotEmpty()) {
-            Text(
-                text = genresText,
-                style = MaterialTheme.typography.labelLarge,
-                color = NexioTheme.extendedColors.textSecondary,
-                maxLines = 1,
-                softWrap = false
-            )
-            ScreensaverMetaDivider()
-        }
-
-        runtimeText?.let { text ->
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                color = NexioTheme.extendedColors.textSecondary,
-                maxLines = 1,
-                softWrap = false
-            )
-            ScreensaverMetaDivider()
-        }
-
-        if (!yearText.isNullOrBlank()) {
-            Text(
-                text = yearText,
-                style = MaterialTheme.typography.labelLarge,
-                color = NexioTheme.extendedColors.textSecondary,
-                maxLines = 1,
-                softWrap = false
-            )
-            if (slide.imdbRating != null) {
-                ScreensaverMetaDivider()
+        metaSegments.forEach { segment ->
+            when (segment) {
+                is ScreensaverPrimaryMetaSegment.Divider -> ScreensaverMetaDivider()
+                is ScreensaverPrimaryMetaSegment.Genres -> {
+                    Text(
+                        text = segment.text,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = NexioTheme.extendedColors.textSecondary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+                is ScreensaverPrimaryMetaSegment.Rating -> {
+                    ScreensaverRatingBadge(
+                        model = if (segment.kind == ScreensaverPrimaryMetaSegment.Rating.Kind.IMDB) {
+                            imdbModel
+                        } else {
+                            tomatoesModel
+                        },
+                        contentDescription = if (segment.kind == ScreensaverPrimaryMetaSegment.Rating.Kind.IMDB) {
+                            "IMDb"
+                        } else {
+                            "Rotten Tomatoes"
+                        },
+                        text = segment.text
+                    )
+                }
             }
         }
+    }
+}
 
+internal sealed interface ScreensaverPrimaryMetaSegment {
+    data class Genres(val text: String) : ScreensaverPrimaryMetaSegment
+    data class Rating(val kind: Kind, val text: String) : ScreensaverPrimaryMetaSegment {
+        enum class Kind {
+            IMDB,
+            TOMATOES
+        }
+    }
+
+    data object Divider : ScreensaverPrimaryMetaSegment
+}
+
+internal fun buildScreensaverPrimaryMetaSegments(slide: IdleScreensaverSlide): List<ScreensaverPrimaryMetaSegment> {
+    val segments = mutableListOf<ScreensaverPrimaryMetaSegment>()
+    if (slide.genres.isNotEmpty()) {
+        segments += ScreensaverPrimaryMetaSegment.Genres(slide.genres.joinToString(" • "))
+    }
+    val ratingSegments = buildList {
         slide.imdbRating?.let { rating ->
-            androidx.compose.foundation.layout.Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = imdbModel,
-                    contentDescription = "IMDb",
-                    modifier = Modifier.size(30.dp),
-                    contentScale = ContentScale.Fit
+            add(
+                ScreensaverPrimaryMetaSegment.Rating(
+                    kind = ScreensaverPrimaryMetaSegment.Rating.Kind.IMDB,
+                    text = String.format("%.1f", rating)
                 )
-                val ratingText = remember(rating) { String.format("%.1f", rating) }
-                Text(
-                    text = ratingText,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = NexioTheme.extendedColors.textSecondary,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
+            )
         }
+        slide.tomatoesRating?.let { rating ->
+            add(
+                ScreensaverPrimaryMetaSegment.Rating(
+                    kind = ScreensaverPrimaryMetaSegment.Rating.Kind.TOMATOES,
+                    text = formatScreensaverAggregateRating(rating)
+                )
+            )
+        }
+    }
+    if (segments.isNotEmpty() && ratingSegments.isNotEmpty()) {
+        segments += ScreensaverPrimaryMetaSegment.Divider
+    }
+    segments += ratingSegments
+    return segments
+}
+
+@Composable
+private fun ScreensaverRatingBadge(
+    model: ImageRequest,
+    contentDescription: String,
+    text: String
+) {
+    androidx.compose.foundation.layout.Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(30.dp),
+            contentScale = ContentScale.Fit
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = NexioTheme.extendedColors.textSecondary,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
@@ -439,15 +481,8 @@ private fun ScreensaverMetaDivider() {
     )
 }
 
-private fun formatScreensaverRuntime(runtime: String): String {
-    val minutes = runtime.filter { it.isDigit() }.toIntOrNull() ?: return runtime
-    return if (minutes >= 60) {
-        val hours = minutes / 60
-        val mins = minutes % 60
-        if (mins > 0) "${hours}h ${mins}m" else "${hours}h"
-    } else {
-        "${minutes}m"
-    }
+private fun formatScreensaverAggregateRating(rating: Double): String {
+    return if (rating % 1.0 == 0.0) rating.toInt().toString() else String.format("%.1f", rating)
 }
 
 private class ScreensaverBackgroundLayer(
