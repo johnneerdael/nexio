@@ -425,7 +425,10 @@ internal fun PlayerRuntimeController.applyPersistedTrackPreference(
         is PlayerRuntimeController.RememberedSubtitleSelection.Addon -> {
             val state = _uiState.value
             val addonMatch = state.addonSubtitles.firstOrNull { subtitle ->
-                subtitle.id == subtitleSelection.id && subtitle.url == subtitleSelection.url
+                subtitle.addonName == subtitleSelection.addonName && subtitle.id == subtitleSelection.id
+            } ?: state.addonSubtitles.firstOrNull { subtitle ->
+                subtitle.addonName == subtitleSelection.addonName &&
+                    PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, subtitleSelection.language)
             } ?: state.addonSubtitles.firstOrNull { subtitle ->
                 PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, subtitleSelection.language)
             }

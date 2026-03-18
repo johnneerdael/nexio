@@ -304,7 +304,8 @@ internal fun PlayerRuntimeController.rememberAddonSubtitleSelection(subtitle: Su
                 subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Addon(
                     id = subtitle.id,
                     url = subtitle.url,
-                    language = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+                    language = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang),
+                    addonName = subtitle.addonName
                 )
             )
     persistTrackPreference()
@@ -331,6 +332,7 @@ internal fun PlayerRuntimeController.persistTrackPreference() {
         subtitleTrackId = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Internal)?.track?.trackId,
         addonSubtitleId = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Addon)?.id,
         addonSubtitleUrl = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Addon)?.url,
+        addonSubtitleAddonName = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Addon)?.addonName,
         audioLanguage = audio?.language,
         audioName = audio?.name,
         audioTrackId = audio?.trackId

@@ -85,7 +85,8 @@ class PlayerRuntimeController(
         data class Addon(
             val id: String,
             val url: String,
-            val language: String
+            val language: String,
+            val addonName: String
         ) : RememberedSubtitleSelection()
     }
 
