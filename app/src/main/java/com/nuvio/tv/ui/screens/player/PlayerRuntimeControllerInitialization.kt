@@ -323,10 +323,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             }
                             stopProgressUpdates()
                             stopWatchProgressSaving()
-                            if (playbackState != Player.STATE_BUFFERING) {
-                                emitStopScrobbleForCurrentProgress()
-                            }
-                            
+                            emitStopScrobbleForCurrentProgress()
                             saveWatchProgress()
                         }
                     }
@@ -577,6 +574,27 @@ private class SubtitleOffsetRenderersFactory(
             .build()
     }
 
+    override fun buildVideoRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: androidx.media3.exoplayer.mediacodec.MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        eventHandler: android.os.Handler,
+        eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long,
+        out: ArrayList<Renderer>
+    ) {
+        val startIndex = out.size
+        super.buildVideoRenderers(
+            context, extensionRendererMode, mediaCodecSelector,
+            enableDecoderFallback, eventHandler, eventListener,
+            allowedVideoJoiningTimeMs, out
+        )
+        for (index in startIndex until out.size) {
+            out[index] = DvTolerantVideoRenderer(out[index])
+        }
+    }
+
     override fun buildTextRenderers(
         context: Context,
         output: TextOutput,
@@ -589,6 +607,40 @@ private class SubtitleOffsetRenderersFactory(
         for (index in startIndex until out.size) {
             out[index] = SubtitleOffsetRenderer(out[index], subtitleDelayUsProvider)
         }
+    }
+}
+
+/**
+ * Wraps a video renderer to tolerate brief decoder stalls from hardware DV decoders
+ * (e.g. OMX.realtek.video.dvhe.st.decoder) that produce frames with out-of-order timestamps.
+ *
+ * Without this, ExoPlayer rapidly toggles STATE_READY ↔ STATE_BUFFERING every 100-200ms
+ * because the video renderer reports "not ready" during micro-stalls.
+ *
+ * This wrapper overrides [isReady] to return true if a frame was rendered within the last
+ * [TOLERANCE_MS], giving the decoder time to catch up without triggering a state transition.
+ */
+private class DvTolerantVideoRenderer(
+    delegate: Renderer
+) : ForwardingRenderer(delegate) {
+
+    companion object {
+        private const val TOLERANCE_MS = 500L
+    }
+
+    @Volatile
+    private var lastRenderTimeNs: Long = 0L
+
+    override fun render(positionUs: Long, elapsedRealtimeUs: Long) {
+        lastRenderTimeNs = System.nanoTime()
+        super.render(positionUs, elapsedRealtimeUs)
+    }
+
+    override fun isReady(): Boolean {
+        if (super.isReady()) return true
+        if (lastRenderTimeNs == 0L) return false
+        val elapsedMs = (System.nanoTime() - lastRenderTimeNs) / 1_000_000
+        return elapsedMs < TOLERANCE_MS
     }
 }
 
