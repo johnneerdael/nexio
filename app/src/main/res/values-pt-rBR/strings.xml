@@ -969,6 +969,9 @@
     <string name="cast_detail_error">Algo deu errado</string>
     <string name="cast_detail_retry">Tentar novamente</string>
     <string name="cast_detail_filmography">Filmografia</string>
+    <string name="cast_detail_born">Nascido: %1$s</string>
+    <string name="cast_detail_born_died">Nascido: %1$s — †%2$s</string>
+    <string name="cast_detail_age">idade %1$d</string>
 
     <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">de %1$s</string>
