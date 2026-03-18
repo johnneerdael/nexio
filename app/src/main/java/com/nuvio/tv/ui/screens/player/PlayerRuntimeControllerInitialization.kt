@@ -564,6 +564,11 @@ private class SubtitleOffsetRenderersFactory(
     private val gainAudioProcessor: GainAudioProcessor
 ) : DefaultRenderersFactory(context) {
 
+    override fun getCodecAdapterFactory():
+        androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory {
+        return DvUnlimitedInputAdapterFactory(super.getCodecAdapterFactory())
+    }
+
     override fun buildAudioSink(
         context: Context,
         enableFloatOutput: Boolean,
@@ -612,16 +617,7 @@ private class SubtitleOffsetRenderersFactory(
     }
 }
 
-/**
- * Wraps a video renderer to tolerate brief decoder stalls from hardware DV decoders
- * (e.g. OMX.realtek.video.dvhe.st.decoder) that produce frames with out-of-order timestamps.
- *
- * Without this, ExoPlayer rapidly toggles STATE_READY ↔ STATE_BUFFERING every 100-200ms
- * because the video renderer reports "not ready" during micro-stalls.
- *
- * This wrapper overrides [isReady] to return true if a frame was rendered within the last
- * [TOLERANCE_MS], giving the decoder time to catch up without triggering a state transition.
- */
+
 private class DvTolerantVideoRenderer(
     delegate: Renderer
 ) : ForwardingRenderer(delegate) {
@@ -656,5 +652,26 @@ private class SubtitleOffsetRenderer(
         val adjustedPositionUs = (positionUs - offset).coerceAtLeast(0L)
         
         super.render(adjustedPositionUs, elapsedRealtimeUs)
+    }
+}
+
+
+private class DvUnlimitedInputAdapterFactory(
+    private val delegate: androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory
+) : androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Factory {
+
+    override fun createAdapter(
+        configuration: androidx.media3.exoplayer.mediacodec.MediaCodecAdapter.Configuration
+    ): androidx.media3.exoplayer.mediacodec.MediaCodecAdapter {
+        val codecName = configuration.codecInfo.name
+        if (codecName.contains("dvhe", ignoreCase = true) ||
+            codecName.contains("dvav", ignoreCase = true) ||
+            codecName.contains("dav1", ignoreCase = true)) {
+            configuration.mediaFormat.setInteger(
+                android.media.MediaFormat.KEY_MAX_INPUT_SIZE, 0
+            )
+            Log.d("DvAdapterFactory", "Set KEY_MAX_INPUT_SIZE=0 for DV decoder: $codecName")
+        }
+        return delegate.createAdapter(configuration)
     }
 }
