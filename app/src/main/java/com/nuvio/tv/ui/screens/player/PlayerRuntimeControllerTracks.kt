@@ -369,20 +369,24 @@ internal fun PlayerRuntimeController.applyPersistedTrackPreference(
     var updatedAddonSubtitle: com.nuvio.tv.domain.model.Subtitle? = null
 
     pending.audio?.let { audioSelection ->
-        val index = findMatchingTrackIndex(audioTracks, audioSelection)
-        if (index >= 0) {
-            val alreadySelected = audioTracks.getOrNull(index)?.isSelected == true
-            if (!alreadySelected) {
-                Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio index=$index lang=${audioTracks[index].language} name=${audioTracks[index].name}")
-                selectAudioTrack(index)
-                _uiState.update { it.copy(selectedAudioTrackIndex = index) }
+        if (audioTracks.isEmpty()) {
+            Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio deferred (no tracks yet)")
+        } else {
+            val index = findMatchingTrackIndex(audioTracks, audioSelection)
+            if (index >= 0) {
+                val alreadySelected = audioTracks.getOrNull(index)?.isSelected == true
+                if (!alreadySelected) {
+                    Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio index=$index lang=${audioTracks[index].language} name=${audioTracks[index].name}")
+                    selectAudioTrack(index)
+                    _uiState.update { it.copy(selectedAudioTrackIndex = index) }
+                } else {
+                    Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio index=$index already selected, clearing")
+                    updatedPending = updatedPending.copy(audio = null)
+                }
             } else {
-                Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio index=$index already selected, clearing")
+                Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio no match for lang=${audioSelection.language} name=${audioSelection.name}, clearing")
                 updatedPending = updatedPending.copy(audio = null)
             }
-        } else {
-            Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: audio no match for lang=${audioSelection.language} name=${audioSelection.name}, clearing")
-            updatedPending = updatedPending.copy(audio = null)
         }
     }
 
@@ -403,23 +407,27 @@ internal fun PlayerRuntimeController.applyPersistedTrackPreference(
             }
         }
         is PlayerRuntimeController.RememberedSubtitleSelection.Internal -> {
-            val index = findMatchingTrackIndex(subtitleTracks, subtitleSelection.track)
-            if (index >= 0) {
-                val alreadySelected = subtitleTracks.getOrNull(index)?.isSelected == true
-                if (!alreadySelected) {
-                    Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle index=$index (re-applying)")
-                    autoSubtitleSelected = true
-                    selectSubtitleTrack(index)
-                    updatedSubtitleIndex = index
+            if (subtitleTracks.isEmpty()) {
+                Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle deferred (no tracks yet)")
+            } else {
+                val index = findMatchingTrackIndex(subtitleTracks, subtitleSelection.track)
+                if (index >= 0) {
+                    val alreadySelected = subtitleTracks.getOrNull(index)?.isSelected == true
+                    if (!alreadySelected) {
+                        Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle index=$index (re-applying)")
+                        autoSubtitleSelected = true
+                        selectSubtitleTrack(index)
+                        updatedSubtitleIndex = index
+                    } else {
+                        Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle index=$index already selected, clearing")
+                        autoSubtitleSelected = true
+                        updatedSubtitleIndex = index
+                        updatedPending = updatedPending.copy(subtitle = null)
+                    }
                 } else {
-                    Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle index=$index already selected, clearing")
-                    autoSubtitleSelected = true
-                    updatedSubtitleIndex = index
+                    Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle no match, clearing")
                     updatedPending = updatedPending.copy(subtitle = null)
                 }
-            } else {
-                Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle no match, clearing")
-                updatedPending = updatedPending.copy(subtitle = null)
             }
         }
         is PlayerRuntimeController.RememberedSubtitleSelection.Addon -> {
