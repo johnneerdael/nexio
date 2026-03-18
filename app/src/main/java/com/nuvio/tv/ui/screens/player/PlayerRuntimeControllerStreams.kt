@@ -340,6 +340,9 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     )
     persistSelectedStreamForReuse(stream = stream, url = url, headers = newHeaders)
     hasRetriedCurrentStreamAfter416 = false
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     lastSavedPosition = 0L
 
     _uiState.update {
@@ -607,13 +610,10 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
         headers = newHeaders
     )
     persistSelectedStreamForReuse(stream = stream, url = url, headers = newHeaders)
-    pendingTrackPreferenceRestore = rememberedTrackPreference
-    contentId?.let { id ->
-        scope.launch {
-            trackPreferenceDataStore.load(id)?.toTrackPreference()
-                ?.let { pendingTrackPreferenceRestore = it }
-        }
-    }
+    persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     hasRetriedCurrentStreamAfter416 = false
     currentVideoId = targetVideo?.id ?: _uiState.value.episodeStreamsForVideoId ?: currentVideoId
     currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason

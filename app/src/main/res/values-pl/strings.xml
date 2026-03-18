@@ -970,4 +970,10 @@
     <string name="watchlist_added">Dodano do listy</string>
     <string name="watchlist_removed">Usunięto z listy</string>
     <string name="account_sync_restart_note">Synchronizacja nie jest natychmiastowa na aktywnych urządzeniach. Uruchom ponownie to urządzenie po zalogowaniu lub aby pobrać zmiany wprowadzone gdzie indziej.</string>
+    <string name="audio_mix_label">Wzmocnienie (PCM)</string>
+    <string name="audio_mix_persist_on">Zachowaj między sesjami: WŁ</string>
+    <string name="audio_mix_persist_off">Zachowaj między sesjami: WYŁ</string>
+    <string name="audio_mix_range">Zakres: %1$d dB do %2$d dB</string>
+    <string name="audio_mix_range_saved">Zakres: %1$d dB do %2$d dB (zapisano)</string>
+    <string name="audio_mix_unavailable">Wzmocnienie nie jest dostępne na tym urządzeniu</string>
 </resources>

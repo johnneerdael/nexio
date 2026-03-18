@@ -55,7 +55,6 @@ internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
                             .buildUpon()
                             .setOverrideForType(override)
                             .build()
-                        persistRememberedLinkAudioSelection(trackIndex)
                         return
                     }
                     currentAudioIndex++
@@ -67,6 +66,7 @@ internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
 
 internal fun PlayerRuntimeController.rememberAudioSelection(trackIndex: Int) {
     val selectedTrack = _uiState.value.audioTracks.getOrNull(trackIndex) ?: return
+    persistedTrackPreference = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(
@@ -77,29 +77,6 @@ internal fun PlayerRuntimeController.rememberAudioSelection(trackIndex: Int) {
                 )
             )
     persistTrackPreference()
-}
-
-internal fun PlayerRuntimeController.persistRememberedLinkAudioSelection(trackIndex: Int) {
-    if (!streamReuseLastLinkEnabled) return
-
-    val key = streamCacheKey ?: return
-    val url = currentStreamUrl.takeIf { it.isNotBlank() } ?: return
-    val streamName = _uiState.value.currentStreamName?.takeIf { it.isNotBlank() } ?: title
-    val selectedTrack = _uiState.value.audioTracks.getOrNull(trackIndex)
-
-    scope.launch {
-        streamLinkCacheDataStore.save(
-            contentKey = key,
-            url = url,
-            streamName = streamName,
-            headers = currentHeaders,
-            rememberedAudioLanguage = selectedTrack?.language,
-            rememberedAudioName = selectedTrack?.name,
-            filename = currentFilename,
-            videoHash = currentVideoHash,
-            videoSize = currentVideoSize
-        )
-    }
 }
 
 internal fun PlayerRuntimeController.applyAddonSubtitleOverride(addonTrackId: String): Boolean {
@@ -187,6 +164,10 @@ internal fun PlayerRuntimeController.selectSubtitleTrack(trackIndex: Int) {
 
 internal fun PlayerRuntimeController.rememberInternalSubtitleSelection(trackIndex: Int) {
     val selectedTrack = _uiState.value.subtitleTracks.getOrNull(trackIndex) ?: return
+    persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(
@@ -211,6 +192,10 @@ internal fun PlayerRuntimeController.disableSubtitles() {
 }
 
 internal fun PlayerRuntimeController.rememberSubtitleDisabled() {
+    persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Disabled)
@@ -318,13 +303,18 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
 }
 
 internal fun PlayerRuntimeController.rememberAddonSubtitleSelection(subtitle: Subtitle) {
+    persistedTrackPreference = null
+    subtitleDisabledByPersistedPreference = false
+    subtitleAddonRestoredByPersistedPreference = false
+    pendingRestoredAddonSubtitle = null
     rememberedTrackPreference =
         (rememberedTrackPreference ?: PlayerRuntimeController.TrackPreference())
             .copy(
                 subtitle = PlayerRuntimeController.RememberedSubtitleSelection.Addon(
                     id = subtitle.id,
                     url = subtitle.url,
-                    language = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+                    language = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang),
+                    addonName = subtitle.addonName
                 )
             )
     persistTrackPreference()
@@ -351,6 +341,7 @@ internal fun PlayerRuntimeController.persistTrackPreference() {
         subtitleTrackId = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Internal)?.track?.trackId,
         addonSubtitleId = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Addon)?.id,
         addonSubtitleUrl = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Addon)?.url,
+        addonSubtitleAddonName = (subtitle as? PlayerRuntimeController.RememberedSubtitleSelection.Addon)?.addonName,
         audioLanguage = audio?.language,
         audioName = audio?.name,
         audioTrackId = audio?.trackId
