@@ -578,6 +578,7 @@ private class SubtitleOffsetRenderersFactory(
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessors(arrayOf(gainAudioProcessor))
+            .setAudioTrackBufferSizeProvider(FormatAwareAudioTrackBufferProvider())
             .build()
     }
 
