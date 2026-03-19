@@ -140,16 +140,9 @@ class TmdbMetadataService @Inject constructor(
                 val collectionId = details?.belongsToCollection?.id
                 val collectionName = details?.belongsToCollection?.name
 
-                val logoPath = images?.logos
-                    ?.sortedWith(
-                        compareByDescending<com.nuvio.tv.data.remote.api.TmdbImage> {
-                            it.iso6391 == normalizedLanguage.substringBefore("-")
-                        }
-                            .thenByDescending { it.iso6391 == "en" }
-                            .thenByDescending { it.iso6391 == null }
-                    )
-                    ?.firstOrNull()
-                    ?.filePath
+                val logoPath = images?.logos?.let {
+                    selectBestLocalizedImagePath(it, normalizedLanguage)
+                }
 
                 val logo = buildImageUrl(logoPath, size = "w500")
 
