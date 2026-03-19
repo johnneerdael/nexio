@@ -1,11 +1,14 @@
 package com.nexio.tv.debug.passthrough
 
+import java.io.InputStream
+
 object TransportValidationSessionFactory {
 
     fun createSession(
         manifest: TransportValidationManifest,
         sampleId: String,
-        referenceBytes: ByteArray,
+        referenceInputStream: InputStream,
+        referenceBurstLimit: Int,
     ): TransportValidationSessionSnapshot {
         val sample = manifest.samples.first { it.id == sampleId }
         return TransportValidationSessionSnapshot(
@@ -13,7 +16,8 @@ object TransportValidationSessionFactory {
             sample = sample,
             referenceBursts = TransportValidationReferenceParser.parseReferenceBursts(
                 sample = sample,
-                bytes = referenceBytes
+                inputStream = referenceInputStream,
+                maxBursts = referenceBurstLimit
             )
         )
     }

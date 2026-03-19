@@ -893,6 +893,10 @@ class MainActivity : ComponentActivity() {
                     ?.trim()
                     .orEmpty()
                 if (sampleId.isNotEmpty() && title.isNotEmpty() && assetPath.isNotEmpty()) {
+                    Log.i(
+                        "TransportValidation",
+                        "MainActivity received start command sampleId=$sampleId assetPath=$assetPath"
+                    )
                     pendingTransportValidationNavigation.value = TransportValidationPlaybackNavigation(
                         sampleId = sampleId,
                         title = title,
@@ -901,6 +905,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             TRANSPORT_VALIDATION_COMMAND_STOP -> {
+                Log.i("TransportValidation", "MainActivity received stop command")
                 pendingTransportValidationStop.value = true
             }
         }

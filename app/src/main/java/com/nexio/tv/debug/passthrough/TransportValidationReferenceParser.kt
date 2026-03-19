@@ -1,5 +1,6 @@
 package com.nexio.tv.debug.passthrough
 
+import java.io.InputStream
 import java.security.MessageDigest
 
 object TransportValidationReferenceParser {
@@ -7,6 +8,7 @@ object TransportValidationReferenceParser {
     fun parseReferenceBursts(
         sample: TransportValidationSample,
         bytes: ByteArray,
+        maxBursts: Int? = null,
     ): List<TransportValidationBurstRecord> {
         if (bytes.size < IEC_PREAMBLE_BYTES) {
             return emptyList()
@@ -16,7 +18,9 @@ object TransportValidationReferenceParser {
         return buildList {
             var offset = 0
             var burstIndex = 0
-            while (offset + IEC_PREAMBLE_BYTES <= bytes.size) {
+            while (offset + IEC_PREAMBLE_BYTES <= bytes.size &&
+                (maxBursts == null || burstIndex < maxBursts)
+            ) {
                 val currentBurstSize = minOf(burstSizeBytes, bytes.size - offset)
                 if (currentBurstSize < IEC_PREAMBLE_BYTES) {
                     break
@@ -25,6 +29,33 @@ object TransportValidationReferenceParser {
                 add(parseBurst(sample, burstBytes, burstIndex, TIME_UNSET))
                 offset += currentBurstSize
                 burstIndex += 1
+            }
+        }
+    }
+
+    fun parseReferenceBursts(
+        sample: TransportValidationSample,
+        inputStream: InputStream,
+        maxBursts: Int,
+    ): List<TransportValidationBurstRecord> {
+        if (maxBursts <= 0) {
+            return emptyList()
+        }
+        val burstSizeBytes = bundledReferenceBurstSize(sample.codecFamily)
+        val burstBuffer = ByteArray(burstSizeBytes)
+        return buildList {
+            var burstIndex = 0
+            while (burstIndex < maxBursts) {
+                val bytesRead = inputStream.readBurstInto(burstBuffer, burstSizeBytes)
+                if (bytesRead < IEC_PREAMBLE_BYTES) {
+                    break
+                }
+                val burstBytes = burstBuffer.copyOfRange(0, bytesRead)
+                add(parseBurst(sample, burstBytes, burstIndex, TIME_UNSET))
+                burstIndex += 1
+                if (bytesRead < burstSizeBytes) {
+                    break
+                }
             }
         }
     }
@@ -161,6 +192,21 @@ object TransportValidationReferenceParser {
         return buildString(digest.size * 2) {
             digest.forEach { append("%02x".format(it)) }
         }
+    }
+
+    private fun InputStream.readBurstInto(
+        buffer: ByteArray,
+        burstSizeBytes: Int,
+    ): Int {
+        var totalRead = 0
+        while (totalRead < burstSizeBytes) {
+            val read = read(buffer, totalRead, burstSizeBytes - totalRead)
+            if (read <= 0) {
+                break
+            }
+            totalRead += read
+        }
+        return totalRead
     }
 
     private const val IEC_PREAMBLE_BYTES = 8
