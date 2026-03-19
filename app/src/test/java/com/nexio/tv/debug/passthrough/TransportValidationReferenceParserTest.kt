@@ -47,16 +47,35 @@ class TransportValidationReferenceParserTest {
     fun `parse TrueHD MAT reference bursts from bundled golden asset`() {
         val sample = sample("truehd")
 
-        val bursts = TransportValidationReferenceParser.parseReferenceBursts(
-            sample = sample,
-            bytes = assetFile(sample.referenceAssetPath).readBytes()
-        )
+        val bursts =
+            assetFile(sample.referenceAssetPath).inputStream().use { inputStream ->
+                TransportValidationReferenceParser.parseReferenceBursts(
+                    sample = sample,
+                    inputStream = inputStream,
+                    maxBursts = 2,
+                )
+            }
 
         assertTrue(bursts.size >= 2)
         assertEquals(61440, bursts[0].burstSizeBytes)
         assertEquals(0x16, bursts[0].normalizedPc)
         assertEquals(61424, bursts[0].pd)
         assertEquals(61440, bursts[1].burstSizeBytes)
+    }
+
+    @Test
+    fun `parse bounded number of reference bursts from byte array`() {
+        val sample = sample("ac3")
+
+        val bursts = TransportValidationReferenceParser.parseReferenceBursts(
+            sample = sample,
+            bytes = assetFile(sample.referenceAssetPath).readBytes(),
+            maxBursts = 1,
+        )
+
+        assertEquals(1, bursts.size)
+        assertEquals(0, bursts[0].burstIndex)
+        assertEquals(6144, bursts[0].burstSizeBytes)
     }
 
     @Test

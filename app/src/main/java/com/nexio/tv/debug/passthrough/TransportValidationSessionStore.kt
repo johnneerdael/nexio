@@ -22,21 +22,55 @@ class TransportValidationSessionStore @Inject constructor(
     private var currentSession: TransportValidationSessionSnapshot? = null
 
     fun startSession(sampleId: String): TransportValidationSessionSnapshot? {
-        val manifest = runCatching { manifestLoader.loadFromAssets(context.assets) }.getOrNull() ?: return null
-        val sample = manifest.samples.firstOrNull { it.id == sampleId } ?: return null
-        val referenceBytes = runCatching {
-            context.assets.open(sample.referenceAssetPath).use { it.readBytes() }
-        }.getOrNull() ?: return null
-        val session = TransportValidationSessionFactory.createSession(
-            manifest = manifest,
-            sampleId = sample.id,
-            referenceBytes = referenceBytes
+        Log.i(TAG, "startSession begin sampleId=$sampleId")
+        val manifest = runCatching { manifestLoader.loadFromAssets(context.assets) }.getOrNull() ?: run {
+            Log.w(TAG, "Failed to load transport validation manifest")
+            return null
+        }
+        Log.i(TAG, "startSession manifest loaded version=${manifest.version} sampleCount=${manifest.samples.size}")
+        val sample = manifest.samples.firstOrNull { it.id == sampleId } ?: run {
+            Log.w(TAG, "Transport validation sample not found sampleId=$sampleId")
+            return null
+        }
+        Log.i(
+            TAG,
+            "startSession sample resolved sampleId=${sample.id} codec=${sample.codecFamily} referenceAsset=${sample.referenceAssetPath}"
         )
         val settings = runBlocking { settingsStore.transportValidationSettings.first() }
+        Log.i(
+            TAG,
+            "startSession settings captureMode=${settings.captureMode} comparisonMode=${settings.comparisonMode} captureBurstCount=${settings.captureBurstCount} binaryDumps=${settings.binaryDumpsEnabled}"
+        )
+        val session =
+            runCatching {
+                Log.i(
+                    TAG,
+                    "startSession parsing reference sampleId=${sample.id} referenceAsset=${sample.referenceAssetPath} referenceBurstLimit=${referenceBurstLimit(settings)}"
+                )
+                context.assets.open(sample.referenceAssetPath).use { inputStream ->
+                    TransportValidationSessionFactory.createSession(
+                        manifest = manifest,
+                        sampleId = sample.id,
+                        referenceInputStream = inputStream,
+                        referenceBurstLimit = referenceBurstLimit(settings),
+                    )
+                }
+            }.getOrNull() ?: run {
+                Log.w(
+                    TAG,
+                    "Failed to create transport validation session sampleId=${sample.id} referenceAsset=${sample.referenceAssetPath}"
+                )
+                return null
+            }
+        Log.i(TAG, "startSession parsed reference sampleId=${sample.id} referenceBurstCount=${session.referenceBursts.size}")
         TransportValidationRuntime.beginSession(
             sample.id,
             sample.codecFamily.name,
-            runtimeBurstLimit(settings, session.referenceBursts.size)
+            runtimeBurstLimit(sample, settings, session.referenceBursts.size)
+        )
+        Log.i(
+            TAG,
+            "Started transport validation session sampleId=${sample.id} referenceBurstCount=${session.referenceBursts.size} runtimeBurstLimit=${runtimeBurstLimit(sample, settings, session.referenceBursts.size)}"
         )
         currentSession = session
         return session
@@ -118,12 +152,16 @@ class TransportValidationSessionStore @Inject constructor(
     }
 
     fun clearSession() {
+        Log.i(TAG, "Clearing transport validation session")
         currentSession = null
         TransportValidationRuntime.clearSession()
     }
 
     fun exportCurrentSession(): File? {
-        val session = snapshot() ?: return null
+        val session = snapshot() ?: run {
+            Log.w(TAG, "Export requested without an active transport validation session snapshot")
+            return null
+        }
         val settings = runBlocking { settingsStore.transportValidationSettings.first() }
         val outputFile = TransportValidationDiagnosticsExporter.exportBundle(
             session = session,
@@ -138,6 +176,8 @@ class TransportValidationSessionStore @Inject constructor(
         private const val TAG = "TransportValidation"
         private const val EXPORT_DIRECTORY_NAME = "transport-validation"
         private const val IEC_PREAMBLE_BYTES = 8
+        private const val REFERENCE_BURST_WINDOW_UNTIL_FAILURE = 64
+        private const val TRUEHD_RUNTIME_BURST_MULTIPLIER = 8
     }
 
     private fun mapRuntimeBurst(
@@ -184,13 +224,32 @@ class TransportValidationSessionStore @Inject constructor(
         )
 
     private fun runtimeBurstLimit(
+        sample: TransportValidationSample,
         settings: TransportValidationSettings,
         referenceBurstCount: Int,
     ): Int =
         when (settings.captureMode) {
             TransportValidationCaptureMode.PREAMBLE_ONLY,
             TransportValidationCaptureMode.FIRST_N_BURSTS -> maxOf(1, settings.captureBurstCount)
-            TransportValidationCaptureMode.UNTIL_FAILURE -> maxOf(referenceBurstCount, 64)
+            TransportValidationCaptureMode.UNTIL_FAILURE ->
+                maxOf(referenceBurstCount, REFERENCE_BURST_WINDOW_UNTIL_FAILURE)
+        }.let { baseLimit ->
+            if (sample.codecFamily == TransportValidationCodecFamily.TRUEHD) {
+                // TrueHD MAT output aggregates many smaller access units, so the live runtime
+                // needs a wider input capture window than the requested packed-burst count.
+                maxOf(baseLimit, baseLimit * TRUEHD_RUNTIME_BURST_MULTIPLIER)
+            } else {
+                baseLimit
+            }
+        }
+
+    private fun referenceBurstLimit(
+        settings: TransportValidationSettings,
+    ): Int =
+        when (settings.captureMode) {
+            TransportValidationCaptureMode.PREAMBLE_ONLY,
+            TransportValidationCaptureMode.FIRST_N_BURSTS -> maxOf(1, settings.captureBurstCount)
+            TransportValidationCaptureMode.UNTIL_FAILURE -> REFERENCE_BURST_WINDOW_UNTIL_FAILURE
         }
 
     private fun trimToFailureIfNeeded(

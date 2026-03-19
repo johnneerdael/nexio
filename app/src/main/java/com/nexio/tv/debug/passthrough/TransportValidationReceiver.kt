@@ -10,6 +10,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -37,7 +38,9 @@ class TransportValidationReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         receiverScope.launch {
             try {
-                when (intent.getStringExtra(EXTRA_ACTION)?.trim()?.lowercase()) {
+                val action = intent.getStringExtra(EXTRA_ACTION)?.trim()?.lowercase()
+                Log.i(TAG, "Received passthrough validation action=$action")
+                when (action) {
                     "enable" -> settingsStore.setTransportValidationEnabled(true)
                     "disable" -> settingsStore.setTransportValidationEnabled(false)
                     "sample" -> {
@@ -52,17 +55,41 @@ class TransportValidationReceiver : BroadcastReceiver() {
                                 settingsStore.setTransportValidationCaptureBurstCount(count)
                             }
                     }
+                    "dumps" -> {
+                        val enabled = intent.getBooleanExtra(EXTRA_ENABLED, false)
+                        settingsStore.setTransportValidationBinaryDumpsEnabled(enabled)
+                        Log.i(TAG, "Binary dumps enabled=$enabled")
+                    }
                     "start" -> {
-                        val sampleId = intent.getStringExtra(EXTRA_SAMPLE_NAME)?.trim().orEmpty()
-                        if (sampleId.isNotEmpty()) {
-                            settingsStore.setTransportValidationSelectedSampleId(sampleId)
-                            playbackLauncher.launchSelectedSample(sampleId)
+                        val requestedSampleId = intent.getStringExtra(EXTRA_SAMPLE_NAME)?.trim()
+                        Log.i(TAG, "Start action requestedSampleId=${requestedSampleId ?: "null"}")
+                        val selectedSampleId =
+                            settingsStore.transportValidationSettings.first().selectedSampleId
+                        Log.i(TAG, "Start action selectedSampleId=${selectedSampleId ?: "null"}")
+                        val sampleId = requestedSampleId?.takeIf { it.isNotEmpty() } ?: selectedSampleId
+                        if (sampleId.isNullOrEmpty()) {
+                            Log.w(TAG, "Start action ignored because no sample is selected")
+                        } else {
+                            if (requestedSampleId != sampleId) {
+                                settingsStore.setTransportValidationSelectedSampleId(sampleId)
+                                Log.i(TAG, "Start action refreshed selected sampleId=$sampleId")
+                            }
+                            Log.i(TAG, "Start action launching sampleId=$sampleId")
+                            val started = playbackLauncher.launchSelectedSample(sampleId)
+                            Log.i(TAG, "Start action sampleId=$sampleId started=$started")
                         }
                     }
-                    "stop" -> playbackLauncher.stopPlayback()
+                    "stop" -> {
+                        playbackLauncher.stopPlayback()
+                        Log.i(TAG, "Stop action dispatched")
+                    }
                     "export" -> {
                         settingsStore.incrementTransportValidationExportRequestCount()
-                        sessionStore.exportCurrentSession()
+                        val outputFile = sessionStore.exportCurrentSession()
+                        Log.i(
+                            TAG,
+                            "Export action result=${outputFile?.absolutePath ?: "null"}"
+                        )
                     }
                     "clear" -> {
                         settingsStore.setTransportValidationSelectedSampleId(null)
@@ -76,6 +103,7 @@ class TransportValidationReceiver : BroadcastReceiver() {
                         )
                         settingsStore.setTransportValidationCaptureBurstCount(8)
                         sessionStore.clearSession()
+                        Log.i(TAG, "Clear action completed")
                     }
                     else -> {
                         Log.w(TAG, "Ignored unsupported passthrough validation action")
@@ -93,6 +121,7 @@ class TransportValidationReceiver : BroadcastReceiver() {
         const val EXTRA_ACTION = "action"
         const val EXTRA_SAMPLE_NAME = "name"
         const val EXTRA_BURST_COUNT = "bursts"
+        const val EXTRA_ENABLED = "enabled"
 
         private const val TAG = "TransportValidationReceiver"
     }
