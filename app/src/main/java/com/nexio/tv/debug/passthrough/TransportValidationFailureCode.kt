@@ -1,0 +1,11 @@
+package com.nexio.tv.debug.passthrough
+
+enum class TransportValidationFailureCode {
+    PREAMBLE_MISMATCH,
+    BURST_ALIGNMENT_FAILED,
+    FULL_BURST_MISMATCH,
+    PACKER_TO_AUDIOTRACK_MUTATION,
+    TRUEHD_MAT_INVALID,
+    DTSHD_CORE_ONLY_FALLBACK,
+    EAC3_AGGREGATION_MISMATCH,
+}

@@ -1,0 +1,7 @@
+assets/*.thd filter=lfs diff=lfs merge=lfs -text
+assets/*.ac3 filter=lfs diff=lfs merge=lfs -text
+assets/*.eac3 filter=lfs diff=lfs merge=lfs -text
+assets/*.vob filter=lfs diff=lfs merge=lfs -text
+assets/*.mkv filter=lfs diff=lfs merge=lfs -text
+assets/*.spdif filter=lfs diff=lfs merge=lfs -text
+assets/*.dts filter=lfs diff=lfs merge=lfs -text

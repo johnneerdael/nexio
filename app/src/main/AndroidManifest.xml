@@ -54,6 +54,15 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".debug.passthrough.TransportValidationReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
