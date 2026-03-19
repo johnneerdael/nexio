@@ -52,6 +52,35 @@ val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI
 val useMedia3Source = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "USE_MEDIA3_SOURCE")
 )
+val transportValidationAssetFiles = listOf(
+    "transport_validation_manifest.json",
+    "dolbydigital.ac3",
+    "dolbydigital.mkv",
+    "dolbydigital.spdif",
+    "dolbydigitalplus.eac3",
+    "dolbydigitalplus.mkv",
+    "dolbydigitalplus.spdif",
+    "dts.dts",
+    "dts.vob",
+    "dts.spdif",
+    "dtshd.dts",
+    "dtshd.mkv",
+    "dtshd.spdif",
+    "dtsx.dts",
+    "dtsx.mkv",
+    "dtsx.spdif",
+    "truehd.thd",
+    "truehd.mkv",
+    "truehd.spdif"
+)
+val debugTransportValidationAssetsDir =
+    layout.buildDirectory.dir("generated/assets/transportValidation/debug")
+val copyDebugTransportValidationAssets = tasks.register<Copy>("copyDebugTransportValidationAssets") {
+    from(rootProject.file("assets")) {
+        include(transportValidationAssetFiles)
+    }
+    into(debugTransportValidationAssetsDir)
+}
 
 android {
     namespace = "com.nexio.tv"
@@ -178,6 +207,9 @@ android {
             )
             assets.srcDirs("src/main/assets")
         }
+        getByName("debug") {
+            assets.srcDir(debugTransportValidationAssetsDir)
+        }
     }
 
     packaging {
@@ -193,6 +225,10 @@ android {
             )
         }
     }
+}
+
+tasks.matching { it.name == "mergeDebugAssets" }.configureEach {
+    dependsOn(copyDebugTransportValidationAssets)
 }
 
 androidComponents {

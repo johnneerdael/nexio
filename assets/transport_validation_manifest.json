@@ -1,0 +1,151 @@
+{
+  "version": "2026.03.19",
+  "samples": [
+    {
+      "id": "ac3",
+      "displayName": "Dolby Digital (AC-3)",
+      "codecFamily": "AC3",
+      "sourceAssetPath": "dolbydigital.mkv",
+      "elementaryAssetPath": "dolbydigital.ac3",
+      "referenceAssetPath": "dolbydigital.spdif",
+      "expectedPc": 1,
+      "pdRule": "EXACT_REFERENCE_MATCH",
+      "expectedBurstModel": "IEC_BURST",
+      "expectedRouteTuple": {
+        "encoding": "IEC61937",
+        "sampleRate": 48000,
+        "channelMask": "stereo"
+      },
+      "assetChecksums": {
+        "sourceAssetPath": "78671b2a269056920afa2e4e7a0392f44741f04bae32eae27a49d61d19f280b4",
+        "elementaryAssetPath": "a11856451ed8b40e084cb5737fea1f52c8eaf1fd999698cebee912014ab09926",
+        "referenceAssetPath": "4fafb9bee56ed16b3849449736549e99191f49263c40ddddc81751d9c327fcf6"
+      },
+      "notes": [
+        "AC-3 transport reference generated through FFmpeg SPDIF muxing"
+      ]
+    },
+    {
+      "id": "eac3",
+      "displayName": "Dolby Digital Plus (E-AC-3)",
+      "codecFamily": "E_AC3",
+      "sourceAssetPath": "dolbydigitalplus.mkv",
+      "elementaryAssetPath": "dolbydigitalplus.eac3",
+      "referenceAssetPath": "dolbydigitalplus.spdif",
+      "expectedPc": 21,
+      "pdRule": "AGGREGATED_PAYLOAD_BYTES",
+      "expectedBurstModel": "IEC_BURST",
+      "expectedRouteTuple": {
+        "encoding": "IEC61937",
+        "sampleRate": 192000,
+        "channelMask": "stereo"
+      },
+      "assetChecksums": {
+        "sourceAssetPath": "9da5f3cc431a3c9cbca5e4a0da6c63e089517752c5e8ac0d4dafa27496ab4aeb",
+        "elementaryAssetPath": "b8a41e9842b4650e34b64e825af354c241ad0e539fd460e0a1b8e344247618cd",
+        "referenceAssetPath": "74bd344a9bc4454f28d759010f0f681ff596e96b7047b7f04d56564ecd15346b"
+      },
+      "notes": [
+        "E-AC-3 transport is validated at the E-AC-3 layer",
+        "E-AC-3 JOC still validates as E-AC-3 transport"
+      ]
+    },
+    {
+      "id": "dts",
+      "displayName": "DTS Core",
+      "codecFamily": "DTS_CORE",
+      "sourceAssetPath": "dts.vob",
+      "elementaryAssetPath": "dts.dts",
+      "referenceAssetPath": "dts.spdif",
+      "expectedPc": 11,
+      "pdRule": "EXACT_REFERENCE_MATCH",
+      "expectedBurstModel": "IEC_BURST",
+      "expectedRouteTuple": {
+        "encoding": "IEC61937",
+        "sampleRate": 48000,
+        "channelMask": "stereo"
+      },
+      "assetChecksums": {
+        "sourceAssetPath": "8dbe9fc08fd6ace54e165b2d9ce88f8abf032c3a3717e9a0e28873789e85d1d0",
+        "elementaryAssetPath": "28ac1a457708dd780a728eade4ff34d7284c9632a6be4e057b9de523290694e1",
+        "referenceAssetPath": "8986ec02dfe37ed51db31dcec3b3f0b6caa26a402a5f6c151020015e2647ec0f"
+      },
+      "notes": [
+        "DTS core sample should never be flagged as DTS-HD fallback"
+      ]
+    },
+    {
+      "id": "dtshd",
+      "displayName": "DTS-HD MA / DTS:X",
+      "codecFamily": "DTS_HD",
+      "sourceAssetPath": "dtshd.mkv",
+      "elementaryAssetPath": "dtshd.dts",
+      "referenceAssetPath": "dtshd.spdif",
+      "expectedPc": 17,
+      "pdRule": "EXACT_REFERENCE_MATCH",
+      "expectedBurstModel": "IEC_BURST",
+      "expectedRouteTuple": {
+        "encoding": "IEC61937",
+        "sampleRate": 192000,
+        "channelMask": "7.1"
+      },
+      "assetChecksums": {
+        "sourceAssetPath": "b64042a4101356ef56a061a16a437f08ae97f9efbe36066a8e19cbdde8e067f6",
+        "elementaryAssetPath": "9f18dde82da90be361b09f068700b26844cd3689e6b4b3291955f3659612d1d1",
+        "referenceAssetPath": "8fd6474ad15ab7853247d2dc0a281f0064cd51027e28057a0f3581fa0895117a"
+      },
+      "notes": [
+        "DTS-HD must not silently fall back to core"
+      ]
+    },
+    {
+      "id": "dtsx",
+      "displayName": "DTS:X",
+      "codecFamily": "DTS_X",
+      "sourceAssetPath": "dtsx.mkv",
+      "elementaryAssetPath": "dtsx.dts",
+      "referenceAssetPath": "dtsx.spdif",
+      "expectedPc": 17,
+      "pdRule": "EXACT_REFERENCE_MATCH",
+      "expectedBurstModel": "IEC_BURST",
+      "expectedRouteTuple": {
+        "encoding": "IEC61937",
+        "sampleRate": 192000,
+        "channelMask": "7.1"
+      },
+      "assetChecksums": {
+        "sourceAssetPath": "c5313dbe1ba9e7fe2502caaa42139ec30083f18be650c8bfc332eaae87838893",
+        "elementaryAssetPath": "718cb0dc98f67dcf6f04778fb64ff8862fc625bb782353a6ff9d828fb05fbd69",
+        "referenceAssetPath": "98aea85323c08576f6a2aa1c362fede6f51bee0074e943ca65ee80eb159f1e05"
+      },
+      "notes": [
+        "DTS:X must keep the DTS-HD transport wrapper and subtype model"
+      ]
+    },
+    {
+      "id": "truehd",
+      "displayName": "Dolby TrueHD",
+      "codecFamily": "TRUEHD",
+      "sourceAssetPath": "truehd.mkv",
+      "elementaryAssetPath": "truehd.thd",
+      "referenceAssetPath": "truehd.spdif",
+      "expectedPc": 22,
+      "pdRule": "TRUEHD_MAT",
+      "expectedBurstModel": "MAT",
+      "expectedRouteTuple": {
+        "encoding": "IEC61937",
+        "sampleRate": 192000,
+        "channelMask": "7.1"
+      },
+      "assetChecksums": {
+        "sourceAssetPath": "821b521ab61b0acaea32dd42eda1c7fcc895bf2dcab1340a2b793f32c2f891da",
+        "elementaryAssetPath": "542cf80dcc3d3ac3c38a3dc9082785007be31df87c577c213c593c7c2bccf157",
+        "referenceAssetPath": "3e8692d6360ce98f0d8f8108f254d383a9fa62485c45e1a99c5df0f3edcfbf93"
+      },
+      "notes": [
+        "TrueHD MAT expected",
+        "SPDIF golden reference is the transport source of truth for burst comparison"
+      ]
+    }
+  ]
+}

@@ -36,7 +36,7 @@ internal data class PlayerNavigationArgs(
             }
 
             return PlayerNavigationArgs(
-                streamUrl = savedStateHandle.get<String>("streamUrl") ?: "",
+                streamUrl = decodedOrNull("streamUrl") ?: "",
                 title = decodedOrNull("title") ?: "",
                 streamName = decodedOrNull("streamName"),
                 year = decodedOrNull("year"),

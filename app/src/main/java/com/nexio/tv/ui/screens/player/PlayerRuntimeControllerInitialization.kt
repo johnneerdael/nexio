@@ -27,6 +27,8 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.kodi.KodiNativeAudioSink
+import androidx.media3.exoplayer.audio.kodi.KodiTrueHdEntryAudioSink
+import androidx.media3.exoplayer.audio.kodi.KodiTrueHdNativeAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
@@ -1197,11 +1199,23 @@ private class SubtitleOffsetRenderersFactory(
         enableAudioOutputPlaybackParams: Boolean
     ): AudioSink {
         if (experimentalFireOsIecPassthroughEnabled) {
-            return KodiNativeAudioSink(
-                DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
-                    .build()
+            fun createBaselineKodiSink(): KodiNativeAudioSink =
+                KodiNativeAudioSink(
+                    DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                        .build()
+                )
+            fun createTrueHdKodiSink(): KodiTrueHdNativeAudioSink =
+                KodiTrueHdNativeAudioSink(
+                    DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                        .build()
+                )
+            return KodiTrueHdEntryAudioSink(
+                createBaselineKodiSink(),
+                createTrueHdKodiSink()
             )
         }
         if (!safeAudioModeEnabled) {

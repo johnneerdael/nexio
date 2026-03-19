@@ -152,8 +152,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
         activeReadBytePosition.set(0L)
-        val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
-            ParallelRangeDataSource.Factory(
+        val progressiveUpstreamFactory: DataSource.Factory = when {
+            !usesHttpUpstream(url) -> baseDataSourceFactory
+            useParallelConnections && !isHls && !isDash -> ParallelRangeDataSource.Factory(
                 okHttpFactory,
                 parallelConnectionCount,
                 parallelChunkSizeMb.toLong() * 1024L * 1024L,
@@ -167,8 +168,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     }
                 }
             )
-        } else {
-            okHttpFactory
+            else -> okHttpFactory
         }
         val useVodCache = ENABLE_VOD_CACHE &&
             vodCacheSizeMode == VodCacheSizeMode.ON &&
@@ -840,10 +840,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             .setFlags(flags)
     }
 
-    private fun shouldUseVodCache(url: String): Boolean {
-        val scheme = Uri.parse(url).scheme?.lowercase()
-        return scheme == "https" || scheme == "http"
-    }
+    private fun shouldUseVodCache(url: String): Boolean = usesHttpUpstream(url)
 
     private fun resolveVodCacheMaxBytes(context: Context): Long {
         val maxBytes = PlayerSettings.MAX_VOD_CACHE_SIZE_MB.toLong() * 1024L * 1024L
@@ -928,6 +925,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             } catch (_: Exception) {
                 emptyMap()
             }
+        }
+
+        internal fun usesHttpUpstream(url: String): Boolean {
+            val scheme = runCatching { Uri.parse(url).scheme?.lowercase(Locale.US) }.getOrNull()
+            return scheme == "https" ||
+                scheme == "http" ||
+                url.startsWith("https://", ignoreCase = true) ||
+                url.startsWith("http://", ignoreCase = true)
         }
 
         private fun getReadySimpleCache(expectedMaxBytes: Long): SimpleCache? {
