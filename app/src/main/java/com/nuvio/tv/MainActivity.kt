@@ -1051,13 +1051,6 @@ private fun ModernSidebarScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    if (shouldApplySidebarHaze) {
-                        Modifier.haze(sidebarHazeState)
-                    } else {
-                        Modifier
-                    }
-                )
                 .onPreviewKeyEvent { keyEvent ->
                     if (
                         isSidebarExpanded &&
