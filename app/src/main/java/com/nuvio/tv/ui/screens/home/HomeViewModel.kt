@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.os.SystemClock
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -60,6 +61,8 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
+        internal const val STARTUP_GRACE_PERIOD_MS = 3_000L
+        internal const val CONTINUE_WATCHING_ENRICHMENT_GRACE_PERIOD_MS = 10_000L
         private const val CONTINUE_WATCHING_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
@@ -135,9 +138,12 @@ class HomeViewModel @Inject constructor(
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
     internal var movieWatchedBatchJob: Job? = null
     internal var lastMovieWatchedItemKeys: Set<String> = emptySet()
+    internal var libraryTabsObserverJob: Job? = null
     internal var activePosterListPickerInput: LibraryEntryInput? = null
+    internal var posterStatusObservationEnabled: Boolean = false
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
+    internal val startupStartedAtMs: Long = SystemClock.elapsedRealtime()
     @Volatile
     internal var startupGracePeriodActive: Boolean = true
     internal var startupAuthNoticeJob: Job? = null
@@ -157,9 +163,21 @@ class HomeViewModel @Inject constructor(
         loadContinueWatching()
         observeInstalledAddons()
         viewModelScope.launch {
-            delay(3000)
+            delay(STARTUP_GRACE_PERIOD_MS)
             startupGracePeriodActive = false
         }
+    }
+
+    internal fun remainingStartupGraceMs(nowMs: Long = SystemClock.elapsedRealtime()): Long {
+        if (!startupGracePeriodActive) return 0L
+        return (STARTUP_GRACE_PERIOD_MS - (nowMs - startupStartedAtMs)).coerceAtLeast(0L)
+    }
+
+    internal fun remainingContinueWatchingEnrichmentGraceMs(
+        nowMs: Long = SystemClock.elapsedRealtime()
+    ): Long {
+        return (CONTINUE_WATCHING_ENRICHMENT_GRACE_PERIOD_MS - (nowMs - startupStartedAtMs))
+            .coerceAtLeast(0L)
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
@@ -231,7 +249,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun loadContinueWatching() = loadContinueWatchingPipeline()
+    private fun loadContinueWatching() {
+        loadContinueWatchingPipeline()
+    }
 
     private fun removeContinueWatching(
         contentId: String,
