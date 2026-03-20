@@ -212,6 +212,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        window?.setBackgroundDrawable(null)
         setContent {
             var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
