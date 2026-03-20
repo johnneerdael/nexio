@@ -551,15 +551,25 @@ class TmdbMetadataService @Inject constructor(
     ): String? {
         if (images.isEmpty()) return null
         val languageCode = normalizedLanguage.substringBefore("-")
+        val regionCode = normalizedLanguage.substringAfter("-", "").uppercase(Locale.US).takeIf { it.length == 2 }
+            ?: DEFAULT_LANGUAGE_REGIONS[languageCode]
         return images
             .sortedWith(
-                compareByDescending<TmdbImage> { it.iso6391 == normalizedLanguage }
+                compareByDescending<TmdbImage> { it.iso6391 == languageCode && it.iso31661 == regionCode }
+                    .thenByDescending { it.iso6391 == languageCode && it.iso31661 == null }
                     .thenByDescending { it.iso6391 == languageCode }
                     .thenByDescending { it.iso6391 == "en" }
                     .thenByDescending { it.iso6391 == null }
             )
             .firstOrNull()
             ?.filePath
+    }
+
+    companion object {
+        private val DEFAULT_LANGUAGE_REGIONS = mapOf(
+            "pt" to "PT",
+            "es" to "ES"
+        )
     }
 
     suspend fun fetchPersonDetail(
