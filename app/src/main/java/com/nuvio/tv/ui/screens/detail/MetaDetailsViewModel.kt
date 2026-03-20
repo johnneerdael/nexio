@@ -92,6 +92,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
+    private var trailerHasPlayed = false
 
     private var isPlayButtonFocused = false
     private var hideUnreleasedContent = false
@@ -210,6 +211,7 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnPickerSave -> savePickerMembership()
             MetaDetailsEvent.OnPickerDismiss -> dismissListPicker()
             MetaDetailsEvent.OnClearMessage -> clearMessage()
+            MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
         }
     }
 
@@ -1513,6 +1515,7 @@ class MetaDetailsViewModel @Inject constructor(
         val state = _uiState.value
         if (state.trailerUrl == null || state.isTrailerPlaying) return
         if (!trailerAutoplayEnabled) return
+        if (trailerHasPlayed) return
         if (!isPlayButtonFocused) return
 
         idleTimerJob = viewModelScope.launch {
@@ -1543,11 +1546,22 @@ class MetaDetailsViewModel @Inject constructor(
         isPlayButtonFocused = false
 
         if (shouldStopAutoTrailer) {
+            trailerHasPlayed = true
             setTrailerPlaybackState(
                 isPlaying = false,
                 showControls = false,
                 hideLogo = false
             )
+        }
+    }
+
+    private fun handleLifecyclePause() {
+        idleTimerJob?.cancel()
+        isPlayButtonFocused = false
+        val state = _uiState.value
+        if (state.isTrailerPlaying && !state.showTrailerControls) {
+            trailerHasPlayed = true
+            setTrailerPlaybackState(isPlaying = false, showControls = false, hideLogo = false)
         }
     }
 
@@ -1564,6 +1578,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun handleTrailerEnded() {
+        trailerHasPlayed = true
         isPlayButtonFocused = false
         setTrailerPlaybackState(
             isPlaying = false,

@@ -3,15 +3,23 @@ name: Beta Release
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: "Choose whether to preview, save as draft, or publish immediately"
+        required: true
+        default: dry_run
+        type: choice
+        options:
+          - dry_run
+          - draft
+          - publish
       version:
         description: "Target versionName, for example 0.4.19-beta"
         required: true
         type: string
-      dry_run:
-        description: "Preview release notes only without building or publishing"
-        required: true
-        default: true
-        type: boolean
+      version_code:
+        description: "Optional versionCode override. Defaults to current versionCode + 1."
+        required: false
+        type: string
       downloader_code:
         description: "Optional downloader code footer"
         required: false
@@ -68,7 +76,7 @@ jobs:
           fi
 
       - name: Prepare signing config
-        if: ${{ !inputs.dry_run }}
+        if: ${{ inputs.release_mode != 'dry_run' }}
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}
           RELEASE_KEY_ALIAS: ${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
@@ -88,41 +96,55 @@ jobs:
           fi
 
       - name: Preview beta release
-        if: ${{ inputs.dry_run }}
+        if: ${{ inputs.release_mode == 'dry_run' }}
         env:
           CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
-          CUSTOM_NOTES_ARG=""
+          args=(python3 scripts/release_beta.py "${{ inputs.version }}" --dry-run)
+          if [ -n "${{ inputs.version_code }}" ]; then
+            args+=(--version-code "${{ inputs.version_code }}")
+          fi
           if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
             printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
-            CUSTOM_NOTES_ARG="--custom-notes-file $RUNNER_TEMP/custom-release-notes.md"
+            args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
           fi
-          python3 scripts/release_beta.py "${{ inputs.version }}" \
-            --dry-run \
-            $CUSTOM_NOTES_ARG \
-            --downloader-code "${{ inputs.downloader_code }}" \
-            --extra-notes "${{ inputs.extra_notes }}"
+          if [ -n "${{ inputs.downloader_code }}" ]; then
+            args+=(--downloader-code "${{ inputs.downloader_code }}")
+          fi
+          if [ -n "${{ inputs.extra_notes }}" ]; then
+            args+=(--extra-notes "${{ inputs.extra_notes }}")
+          fi
+          "${args[@]}"
 
       - name: Upload preview notes
-        if: ${{ inputs.dry_run }}
+        if: ${{ inputs.release_mode == 'dry_run' }}
         uses: actions/upload-artifact@v4
         with:
           name: beta-release-preview-${{ inputs.version }}
           path: build/release/release-notes-${{ inputs.version }}.md
 
-      - name: Publish beta release
-        if: ${{ !inputs.dry_run }}
+      - name: Build beta release
+        if: ${{ inputs.release_mode != 'dry_run' }}
         env:
           GH_TOKEN: ${{ github.token }}
           CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
-          CUSTOM_NOTES_ARG=""
+          args=(python3 scripts/release_beta.py "${{ inputs.version }}")
+          case "${{ inputs.release_mode }}" in
+            draft) args+=(--draft) ;;
+            publish) args+=(--publish) ;;
+          esac
+          if [ -n "${{ inputs.version_code }}" ]; then
+            args+=(--version-code "${{ inputs.version_code }}")
+          fi
           if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
             printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
-            CUSTOM_NOTES_ARG="--custom-notes-file $RUNNER_TEMP/custom-release-notes.md"
+            args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
           fi
-          python3 scripts/release_beta.py "${{ inputs.version }}" \
-            --publish \
-            $CUSTOM_NOTES_ARG \
-            --downloader-code "${{ inputs.downloader_code }}" \
-            --extra-notes "${{ inputs.extra_notes }}"
+          if [ -n "${{ inputs.downloader_code }}" ]; then
+            args+=(--downloader-code "${{ inputs.downloader_code }}")
+          fi
+          if [ -n "${{ inputs.extra_notes }}" ]; then
+            args+=(--extra-notes "${{ inputs.extra_notes }}")
+          fi
+          "${args[@]}"

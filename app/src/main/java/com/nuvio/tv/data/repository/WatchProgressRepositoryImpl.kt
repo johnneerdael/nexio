@@ -238,17 +238,10 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 .onStart {
                     emit(emptyList())
                 },
-            watchProgressPreferences.allProgress,
-            metadataState,
-            traktProgressService.observeRemoteProgressLoaded()
-        ) { remoteItems, localItems, metadataMap, remoteLoaded ->
-            val visibleItems = if (remoteLoaded || remoteItems.isNotEmpty()) {
-                remoteItems
-            } else {
-                localItems
-            }
-            hydrateMetadata(visibleItems)
-            visibleItems.map { enrichWithMetadata(it, metadataMap) }
+            metadataState
+        ) { remoteItems, metadataMap ->
+            hydrateMetadata(remoteItems)
+            remoteItems.map { enrichWithMetadata(it, metadataMap) }
         }.distinctUntilChanged()
     }
 
@@ -275,7 +268,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         return useTraktProgressFlow()
             .flatMapLatest { useTraktProgress ->
                 if (useTraktProgress) {
-                    traktAllProgressFlow().map { items ->
+                    traktProgressService.observeAllProgress().map { items ->
                         items
                             .filter { it.contentId == contentId }
                             .maxByOrNull { it.lastWatched }
@@ -290,7 +283,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         return useTraktProgressFlow()
             .flatMapLatest { useTraktProgress ->
                 if (useTraktProgress) {
-                    getAllEpisodeProgress(contentId).map { progressMap -> progressMap[season to episode] }
+                    traktProgressService.observeAllProgress().map { items ->
+                        items.firstOrNull {
+                            it.contentId == contentId && it.season == season && it.episode == episode
+                        }
+                    }
                 } else {
                     watchProgressPreferences.getEpisodeProgress(contentId, season, episode)
                 }
@@ -303,17 +300,18 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 if (useTraktProgress) {
                     combine(
                         traktProgressService.observeEpisodeProgress(contentId)
-                            .onStart {
-                                emit(emptyMap())
-                            },
-                        watchProgressPreferences.getAllEpisodeProgress(contentId),
-                        traktProgressService.observeEpisodeProgressLoaded(contentId)
-                    ) { remoteMap, localMap, remoteLoaded ->
-                        if (remoteLoaded || remoteMap.isNotEmpty()) {
-                            remoteMap
-                        } else {
-                            localMap
+                            .onStart { emit(emptyMap()) },
+                        allProgress.map { items ->
+                            items.filter { it.contentId == contentId && it.season != null && it.episode != null }
                         }
+                    ) { remoteMap, liveEpisodes ->
+                        val merged = remoteMap.toMutableMap()
+                        liveEpisodes.forEach { episodeProgress ->
+                            val seasonNum = episodeProgress.season ?: return@forEach
+                            val episodeNum = episodeProgress.episode ?: return@forEach
+                            merged[seasonNum to episodeNum] = episodeProgress
+                        }
+                        merged
                     }.distinctUntilChanged()
                 } else {
                     watchProgressPreferences.getAllEpisodeProgress(contentId)
@@ -427,10 +425,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun removeProgress(contentId: String, season: Int?, episode: Int?) {
         val useTraktProgress = shouldUseTraktProgress()
         val hasEffectiveTraktConnection = hasEffectiveTraktConnection()
-        Log.d(
-            TAG,
-            "removeProgress called contentId=$contentId season=$season episode=$episode useTraktProgress=$useTraktProgress hasEffectiveTraktConnection=$hasEffectiveTraktConnection"
-        )
+        val remoteDeleteKeys = if (!useTraktProgress) {
+            resolveRemoteDeleteKeys(contentId, season, episode)
+        } else {
+            emptyList()
+        }
         if (hasEffectiveTraktConnection) {
             traktProgressService.applyOptimisticRemoval(contentId, season, episode)
             traktProgressService.removeProgress(contentId, season, episode)
@@ -439,7 +438,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (useTraktProgress) {
             return
         }
-        val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, season, episode)
         if (authManager.isAuthenticated && remoteDeleteKeys.isNotEmpty()) {
             watchProgressSyncService.deleteFromRemote(remoteDeleteKeys)
                 .onFailure { error ->
@@ -451,6 +449,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     override suspend fun removeFromHistory(contentId: String, videoId: String?, season: Int?, episode: Int?) {
         val useTraktProgress = shouldUseTraktProgress()
+        val remoteDeleteKeys = if (!useTraktProgress) {
+            resolveRemoteDeleteKeys(contentId, season, episode)
+        } else {
+            emptyList()
+        }
         if (hasEffectiveTraktConnection()) {
             traktProgressService.removeFromHistory(contentId, videoId, season, episode)
         }
@@ -459,7 +462,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (useTraktProgress) {
             return
         }
-        val remoteDeleteKeys = resolveRemoteDeleteKeys(contentId, season, episode)
         if (authManager.isAuthenticated && remoteDeleteKeys.isNotEmpty()) {
             watchProgressSyncService.deleteFromRemote(remoteDeleteKeys)
                 .onFailure { error ->
@@ -566,21 +568,22 @@ class WatchProgressRepositoryImpl @Inject constructor(
         season: Int?,
         episode: Int?
     ): List<String> {
+        val rawEntries = watchProgressPreferences.getAllRawEntries()
         val keys = if (season != null && episode != null) {
             listOf("${contentId}_s${season}e${episode}", contentId)
         } else {
-            val matchingLocalKeys = watchProgressPreferences
-                .getAllRawEntries()
+            val matchingLocalKeys = rawEntries
                 .keys
                 .filter { key ->
                     key == contentId || key.startsWith("${contentId}_")
                 }
             matchingLocalKeys + contentId
         }
-        return keys
+        val resolvedKeys = keys
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
+        return resolvedKeys
     }
 
 }

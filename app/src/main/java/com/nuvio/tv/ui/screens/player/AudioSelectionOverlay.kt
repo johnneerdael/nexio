@@ -77,13 +77,8 @@ internal fun AudioSelectionOverlay(
         if (!visible) return@LaunchedEffect
 
         if (tracks.isNotEmpty()) {
-            val targetIndex = lastFocusedAudioIndex
-                ?.let { idx -> tracks.indexOfFirst { it.index == idx } }
-                ?.takeIf { it >= 0 }
-                ?: tracks.indexOfFirst { it.index == selectedIndex }
-                    .takeIf { it >= 0 }
-                ?: 0
-            listState.scrollToItem(targetIndex)
+            val selectedListIndex = tracks.indexOfFirst { it.index == selectedIndex }.takeIf { it >= 0 } ?: 0
+            listState.scrollToItem(selectedListIndex)
             delay(120)
             runCatching { tracksFocusRequester.requestFocus() }
         } else {
@@ -359,7 +354,13 @@ private fun AudioMixContent(
                 focusRequester = minusFocusRequester,
                 leftFocusRequester = leftFocusRequester,
                 rightFocusRequester = if (canIncrease) plusFocusRequester else persistFocusRequester,
-                onClick = { onAmplificationChange(currentDb - 1) }
+                onClick = {
+                    val nextDb = currentDb - 1
+                    onAmplificationChange(nextDb)
+                    if (nextDb <= AUDIO_AMPLIFICATION_MIN_DB && canIncrease) {
+                        runCatching { plusFocusRequester.requestFocus() }
+                    }
+                }
             )
             MixStepCard(
                 icon = Icons.Default.Add,
@@ -367,7 +368,13 @@ private fun AudioMixContent(
                 focusRequester = plusFocusRequester,
                 leftFocusRequester = plusLeftFocusRequester,
                 rightFocusRequester = persistFocusRequester,
-                onClick = { onAmplificationChange(currentDb + 1) }
+                onClick = {
+                    val nextDb = currentDb + 1
+                    onAmplificationChange(nextDb)
+                    if (nextDb >= AUDIO_AMPLIFICATION_MAX_DB && canDecrease) {
+                        runCatching { minusFocusRequester.requestFocus() }
+                    }
+                }
             )
         }
 

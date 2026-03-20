@@ -261,8 +261,11 @@ def write_release_notes(version_name: str, notes: str) -> Path:
 
 def append_job_summary(
     *,
-    dry_run: bool,
+    mode: str,
     version_name: str,
+    release_tag: str,
+    release_title: str,
+    commit_message: str,
     version_code: int,
     previous_tag: str | None,
     notes_path: Path,
@@ -275,8 +278,11 @@ def append_job_summary(
     lines = [
         "## Beta Release Preview",
         "",
-        f"- Mode: {'dry-run' if dry_run else 'publish'}",
+        f"- Mode: `{mode}`",
         f"- Version: `{version_name}`",
+        f"- Tag: `{release_tag}`",
+        f"- Title: `{release_title}`",
+        f"- Commit message: `{commit_message}`",
         f"- versionCode: `{version_code}`",
         f"- Previous tag: `{previous_tag or 'none'}`",
         f"- Notes file: `{notes_path.relative_to(ROOT)}`",
@@ -315,12 +321,12 @@ def ensure_clean_worktree() -> None:
         )
 
 
-def ensure_version_available(version_name: str) -> None:
+def ensure_version_available(release_tag: str) -> None:
     tag_check = run(
-        "git", "rev-parse", "-q", "--verify", f"refs/tags/{version_name}", check=False
+        "git", "rev-parse", "-q", "--verify", f"refs/tags/{release_tag}", check=False
     )
     if tag_check.returncode == 0:
-        raise SystemExit(f"Tag already exists: {version_name}")
+        raise SystemExit(f"Tag already exists: {release_tag}")
 
 
 def build_release() -> list[Path]:
@@ -342,49 +348,82 @@ def build_release() -> list[Path]:
     return assets
 
 
-def commit_tag_push(version_name: str, branch_name: str) -> None:
+def commit_tag_push(
+    version_name: str,
+    release_tag: str,
+    release_title: str,
+    commit_message: str,
+    branch_name: str,
+) -> None:
     subprocess.run(["git", "add", str(BUILD_FILE.relative_to(ROOT))], cwd=ROOT, check=True)
     subprocess.run(
-        ["git", "commit", "-m", f"release: {version_name}"],
+        ["git", "commit", "-m", commit_message],
         cwd=ROOT,
         check=True,
         text=True,
     )
     subprocess.run(
-        ["git", "tag", "-a", version_name, "-m", f"Release {version_name}"],
+        ["git", "tag", "-a", release_tag, "-m", f"Release {release_title}"],
         cwd=ROOT,
         check=True,
         text=True,
     )
     subprocess.run(["git", "push", "origin", f"HEAD:{branch_name}"], cwd=ROOT, check=True)
-    subprocess.run(["git", "push", "origin", version_name], cwd=ROOT, check=True)
+    subprocess.run(["git", "push", "origin", release_tag], cwd=ROOT, check=True)
 
 
-def create_github_release(version_name: str, notes_path: Path, assets: list[Path]) -> None:
+def create_github_release(
+    release_tag: str,
+    release_title: str,
+    notes_path: Path,
+    assets: list[Path],
+    *,
+    draft: bool,
+) -> None:
     require_tool("gh")
     command = [
         "gh",
         "release",
         "create",
-        version_name,
+        release_tag,
         *[str(asset) for asset in assets],
         "--title",
-        version_name,
+        release_title,
         "--notes-file",
         str(notes_path),
-        "--latest",
     ]
+    if draft:
+        command.append("--draft")
+    else:
+        command.append("--latest")
     subprocess.run(command, cwd=ROOT, check=True, text=True)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Preview or publish a beta GitHub release by bumping app version, "
+            "Preview, draft, or publish a beta GitHub release by bumping app version, "
             "building APKs, and generating release notes from recent commits."
         )
     )
     parser.add_argument("version", help="Target versionName, for example 0.4.19-beta")
+    parser.add_argument(
+        "--version-code",
+        type=int,
+        help="Explicit versionCode to write. Defaults to current versionCode + 1.",
+    )
+    parser.add_argument(
+        "--release-tag",
+        help="Git tag to create for the release. Defaults to the target versionName.",
+    )
+    parser.add_argument(
+        "--release-title",
+        help="GitHub release title. Defaults to the release tag.",
+    )
+    parser.add_argument(
+        "--commit-message",
+        help="Git commit message for the version bump. Defaults to 'release: <release-tag>'.",
+    )
     parser.add_argument(
         "--custom-notes",
         help="Full release notes markdown. When set, it replaces the generated notes entirely.",
@@ -423,14 +462,20 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Build all release APKs, commit the version bump, push tag/branch, and create the GitHub release.",
     )
+    parser.add_argument(
+        "--draft",
+        action="store_true",
+        help="Build all release APKs, commit the version bump, push tag/branch, and create the GitHub release as a draft.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
 
-    if args.dry_run and args.publish:
-        raise SystemExit("Use either --dry-run or --publish, not both.")
+    selected_modes = [args.dry_run, args.publish, args.draft]
+    if sum(1 for enabled in selected_modes if enabled) > 1:
+        raise SystemExit("Use only one of --dry-run, --draft, or --publish.")
     if args.custom_notes and args.custom_notes_file:
         raise SystemExit("Use either --custom-notes or --custom-notes-file, not both.")
 
@@ -439,8 +484,13 @@ def main() -> int:
 
     original_contents = read_build_file()
     current_version_name, current_version_code = parse_versions(original_contents)
-    next_version_code = current_version_code + 1
+    next_version_code = args.version_code if args.version_code is not None else current_version_code + 1
+    if next_version_code < 1:
+        raise SystemExit("versionCode must be a positive integer.")
     previous_tag = last_tag()
+    release_tag = args.release_tag or args.version
+    release_title = args.release_title or release_tag
+    commit_message = args.commit_message or f"release: {release_tag}"
     custom_notes = args.custom_notes
     if args.custom_notes_file:
         custom_notes = Path(args.custom_notes_file).read_text(encoding="utf-8")
@@ -457,6 +507,9 @@ def main() -> int:
     print(f"Current versionName: {current_version_name}")
     print(f"Current versionCode: {current_version_code}")
     print(f"Target versionName: {args.version}")
+    print(f"Release tag: {release_tag}")
+    print(f"Release title: {release_title}")
+    print(f"Commit message: {commit_message}")
     print(f"Target versionCode: {next_version_code}")
     print(f"Previous tag: {previous_tag or 'none'}")
     print(f"Release notes: {notes_path.relative_to(ROOT)}")
@@ -464,13 +517,23 @@ def main() -> int:
     print(notes.strip())
     print()
 
+    mode = (
+        "dry-run" if args.dry_run
+        else "draft" if args.draft
+        else "publish" if args.publish
+        else "local-build"
+    )
+
     if args.dry_run:
         print("Dry run expected assets:")
         for asset_name in EXPECTED_ASSET_NAMES:
             print(f"- {asset_name}")
         append_job_summary(
-            dry_run=True,
+            mode=mode,
             version_name=args.version,
+            release_tag=release_tag,
+            release_title=release_title,
+            commit_message=commit_message,
             version_code=next_version_code,
             previous_tag=previous_tag,
             notes_path=notes_path,
@@ -478,9 +541,9 @@ def main() -> int:
         )
         return 0
 
-    if args.publish:
+    if args.publish or args.draft:
         ensure_clean_worktree()
-        ensure_version_available(args.version)
+        ensure_version_available(release_tag)
 
     updated_contents = updated_build_file(
         original_contents, version_name=args.version, version_code=next_version_code
@@ -495,19 +558,39 @@ def main() -> int:
         for asset in assets:
             print(f"- {asset.relative_to(ROOT)}")
 
-        if args.publish:
+        if args.publish or args.draft:
             branch_name = current_branch()
-            commit_tag_push(args.version, branch_name)
-            create_github_release(args.version, notes_path, assets)
-            print(f"Published GitHub release {args.version} from branch {branch_name}")
+            commit_tag_push(
+                args.version, release_tag, release_title, commit_message, branch_name
+            )
+            create_github_release(
+                release_tag,
+                release_title,
+                notes_path,
+                assets,
+                draft=args.draft,
+            )
+            if args.draft:
+                print(
+                    f"Created draft GitHub release {release_tag} "
+                    f"({release_title}) from branch {branch_name}"
+                )
+            else:
+                print(
+                    f"Published GitHub release {release_tag} "
+                    f"({release_title}) from branch {branch_name}"
+                )
     except Exception:
-        if not args.publish:
+        if not (args.publish or args.draft):
             write_build_file(original_contents)
         raise
 
     append_job_summary(
-        dry_run=False,
+        mode=mode,
         version_name=args.version,
+        release_tag=release_tag,
+        release_title=release_title,
+        commit_message=commit_message,
         version_code=next_version_code,
         previous_tag=previous_tag,
         notes_path=notes_path,
