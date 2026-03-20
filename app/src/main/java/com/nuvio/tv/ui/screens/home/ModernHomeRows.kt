@@ -678,6 +678,7 @@ private fun ModernCarouselCard(
     val backgroundCardColor = NuvioColors.BackgroundCard
     val focusRingColor = NuvioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
+    val backgroundPainter = remember(backgroundCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(backgroundCardColor) }
     val focusedBorder = remember(cardShape, focusRingColor) {
         Border(
             border = BorderStroke(2.dp, focusRingColor),
@@ -740,8 +741,8 @@ private fun ModernCarouselCard(
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = backgroundCardColor,
-                focusedContainerColor = backgroundCardColor
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent
             ),
             border = CardDefaults.border(
                 focusedBorder = focusedBorder
@@ -770,6 +771,9 @@ private fun ModernCarouselCard(
                             model = imageModel,
                             contentDescription = item.title,
                             modifier = Modifier.fillMaxSize(),
+                            placeholder = backgroundPainter,
+                            error = backgroundPainter,
+                            fallback = backgroundPainter,
                             contentScale = ContentScale.Crop
                         )
                     } else {
