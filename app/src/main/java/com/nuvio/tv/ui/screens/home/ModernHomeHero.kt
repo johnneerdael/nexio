@@ -85,7 +85,7 @@ internal fun ModernHeroMediaLayer(
     val imageModel = remember(localContext, stableBackdrop, requestWidthPx, requestHeightPx) {
         ImageRequest.Builder(localContext)
             .data(stableBackdrop)
-            .crossfade(false)
+            .crossfade(400)
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
     }
