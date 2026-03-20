@@ -105,6 +105,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeWatchedEpisodes()
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
+        observeShowFullReleaseDate()
         observeHideUnreleasedContent()
         loadMeta()
     }
@@ -338,6 +339,18 @@ class MetaDetailsViewModel @Inject constructor(
                 .collectLatest { enabled ->
                 _uiState.update { state ->
                     if (state.blurUnwatchedEpisodes == enabled) state else state.copy(blurUnwatchedEpisodes = enabled)
+                }
+            }
+        }
+    }
+
+    private fun observeShowFullReleaseDate() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.showFullReleaseDate
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                _uiState.update { state ->
+                    if (state.showFullReleaseDate == enabled) state else state.copy(showFullReleaseDate = enabled)
                 }
             }
         }

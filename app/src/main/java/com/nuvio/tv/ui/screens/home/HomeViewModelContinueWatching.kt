@@ -814,12 +814,12 @@ private suspend fun HomeViewModel.resolveTmdbIdForNextUp(
 
 private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
-    val formatter = if (releaseDate.year == todayLocal.year) {
-        DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
-    } else {
-        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
-    }
-    return releaseDate.format(formatter)
+    val locale = Locale.getDefault()
+    val skeleton = if (releaseDate.year == todayLocal.year) "dMMM" else "dMMMy"
+    val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, skeleton)
+    return java.text.SimpleDateFormat(pattern, locale).format(
+        java.util.Date(releaseDate.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
+    )
 }
 
 private fun String?.normalizeImageUrl(): String? = this
