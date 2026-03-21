@@ -25,7 +25,10 @@
       <button class="secondary-btn" :disabled="busy" @click="emit('google')">Continue with Google</button>
     </div>
 
-    <p v-if="displayError" style="margin: 0; color: #ffd7da;">{{ displayError }}</p>
+    <div v-if="displayError" class="glass error-card" style="padding: 1rem 1.25rem; border-radius: var(--radius-lg); border: 1px solid rgba(255, 123, 130, 0.35); color: #ffb1b5; background: rgba(43, 8, 8, 0.4); backdrop-filter: blur(12px); display: flex; align-items: center; gap: 0.75rem;">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      {{ displayError }}
+    </div>
   </section>
 </template>
 

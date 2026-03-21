@@ -5,17 +5,16 @@ import java.io.InputStream
 object TransportValidationSessionFactory {
 
     fun createSession(
-        manifest: TransportValidationManifest,
-        sampleId: String,
+        preparedSample: PreparedTransportValidationSample,
         referenceInputStream: InputStream,
         referenceBurstLimit: Int,
     ): TransportValidationSessionSnapshot {
-        val sample = manifest.samples.first { it.id == sampleId }
         return TransportValidationSessionSnapshot(
-            manifestVersion = manifest.version,
-            sample = sample,
+            manifestVersion = preparedSample.manifest.version,
+            sample = preparedSample.sample,
+            assetSource = preparedSample.assetSource,
             referenceBursts = TransportValidationReferenceParser.parseReferenceBursts(
-                sample = sample,
+                sample = preparedSample.sample,
                 inputStream = referenceInputStream,
                 maxBursts = referenceBurstLimit
             )

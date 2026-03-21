@@ -1,212 +1,154 @@
 <template>
   <PortalShell :signed-in="signedIn" @sign-out="signOut">
     <div ref="landingPage" class="landing-page" :class="{ 'is-ready': pageReady }">
-    <section class="landing-hero glass reveal reveal-hero">
-      <div class="landing-copy">
-        <span class="badge">Nexio Account Portal</span>
-        <p class="landing-kicker">Secure sync for a serious playback platform</p>
-        <h1 class="section-title landing-title">One account portal for every Nexio screen.</h1>
-        <p class="landing-summary">
-          Nexio now ties together a premium playback engine and a full account cloud: complete web to addon settings sync, Vault-backed secret handling for paid services, advanced catalog management, and a single control surface for every linked screen in the house.
+      
+      <!-- Centered Enterprise Hero -->
+      <section class="landing-hero reveal reveal-hero pt-20 pb-12 flex flex-col items-center text-center relative max-w-5xl mx-auto">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-[#7bffd3]/[0.05] blur-[120px] rounded-full pointer-events-none z-0"></div>
+        
+        <span class="badge premium-badge shadow-glow mb-8 z-10 relative">
+          <img src="/app_logo_mark.webp" alt="Nexio" class="brand-icon" />
+          <span class="text-sm font-medium tracking-wide">Nexio Premium</span>
+        </span>
+        
+        <h1 class="section-title landing-title z-10 relative max-w-4xl">
+          The ultimate <br/><span class="text-gradient">streaming experience.</span>
+        </h1>
+        
+        <p class="landing-summary mt-6 max-w-2xl mx-auto z-10 relative text-[#edf7ff]/70 text-lg md:text-xl">
+          A bleeding-edge streaming platform built for true cinephiles. Seamless playback, zero-compromise audio, and an interface that feels alive.
         </p>
-        <div class="landing-actions">
-          <NuxtLink class="primary-btn" to="/account">Open account portal</NuxtLink>
+        
+        <div class="landing-actions mt-10 z-10 relative flex gap-4">
+          <NuxtLink class="primary-btn pulse-btn px-8 py-3.5 text-[1rem]" to="/account">Manage Account</NuxtLink>
+          <a href="#features" class="ghost-btn px-8 py-3.5 text-[1rem] border border-white/10 hover:bg-white/5 transition-colors">Explore Features</a>
         </div>
+      </section>
 
-        <div class="landing-metrics">
-          <article class="metric-card">
-            <span>Account model</span>
-            <strong>Public sync + Vault secrets</strong>
-            <p>Addon credentials, Trakt tokens, MDBList keys, and poster-service keys stay out of the public sync payload.</p>
+      <!-- Massive Centered Hero Image -->
+      <section class="hero-visual-container reveal reveal-stage relative w-full max-w-6xl mx-auto px-4 mb-24 z-10">
+        <div class="hero-frame-centered">
+          <div class="absolute inset-0 bg-gradient-to-t from-[#050a10] via-transparent to-transparent z-20"></div>
+          <img src="/modernhome.webp" alt="Nexio Dashboard" class="w-full rounded-2xl md:rounded-[32px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] border border-white/10 object-cover" />
+        </div>
+      </section>
+
+      <!-- Integration Partner Marquee -->
+      <section class="integration-marquee scroll-reveal mb-24 py-12 border-y border-white/5 bg-[#0a1724]/30 backdrop-blur-md relative z-10">
+        <div class="text-center mb-8">
+          <span class="text-dim text-xs uppercase tracking-[0.2em] font-semibold text-white/40">Powered by industry-leading integrations</span>
+        </div>
+        <div class="marquee-container">
+          <div class="marquee-content">
+            <!-- First set -->
+            <img src="/integrations/trakt.webp" class="partner-logo" alt="Trakt" />
+            <img src="/integrations/real-debrid.png" class="partner-logo" alt="Real Debrid" />
+            <img src="/integrations/premiumize.svg" class="partner-logo" alt="Premiumize" />
+            <img src="/integrations/mdblist.webp" class="partner-logo mdblist-logo" alt="MDBList" />
+            <img src="/integrations/tmdb.png" class="partner-logo tmdb-logo" alt="TMDB" />
+            <img src="/integrations/gemini.png" class="partner-logo" alt="Gemini" />
+            <img src="/integrations/rpdb.webp" class="partner-logo rpdb-logo" alt="RPDB" />
+            <img src="/integrations/topposter.svg" class="partner-logo topposter-logo" alt="TOP Posters" />
+            <img src="/integrations/anime-skip.svg" class="partner-logo anime-skip-logo" alt="Anime Skip" />
+            <!-- Duplicate set for infinite scroll effect -->
+            <img src="/integrations/trakt.webp" class="partner-logo" alt="Trakt" />
+            <img src="/integrations/real-debrid.png" class="partner-logo" alt="Real Debrid" />
+            <img src="/integrations/premiumize.svg" class="partner-logo" alt="Premiumize" />
+            <img src="/integrations/mdblist.webp" class="partner-logo mdblist-logo" alt="MDBList" />
+            <img src="/integrations/tmdb.png" class="partner-logo tmdb-logo" alt="TMDB" />
+            <img src="/integrations/gemini.png" class="partner-logo" alt="Gemini" />
+            <img src="/integrations/rpdb.webp" class="partner-logo rpdb-logo" alt="RPDB" />
+            <img src="/integrations/topposter.svg" class="partner-logo topposter-logo" alt="TOP Posters" />
+            <img src="/integrations/anime-skip.svg" class="partner-logo anime-skip-logo" alt="Anime Skip" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Bento Box Feature Grid -->
+      <section id="features" class="max-w-7xl mx-auto px-4 mb-32 z-10 w-full relative">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 auto-rows-auto lg:auto-rows-[480px]">
+          
+          <!-- Bento 1: Interface (Spans 2 columns) -->
+          <article class="bento-card lg:col-span-2 group overflow-hidden scroll-reveal relative flex flex-col">
+            <div class="p-8 md:p-12 relative z-20 w-full md:w-2/3 pointer-events-none">
+              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03]">Interface</span>
+              <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Living, breathing design.</h3>
+              <p class="text-soft text-lg leading-relaxed text-shadow-sm">Fluid micro-animations, rich metadata layouts, and completely personalized catalogs adapting to your context.</p>
+            </div>
+            <!-- Interface images floating bottom right -->
+            <div class="relative w-full flex-grow hidden md:block">
+              <img src="/detail1.webp" class="absolute -right-4 -bottom-10 md:bottom-[-10%] md:right-[-5%] w-[85%] md:w-[70%] rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.9)] border border-white/10 group-hover:scale-[1.02] transition-transform duration-700 z-10 object-cover" />
+            </div>
           </article>
-          <article class="metric-card">
-            <span>Playback core</span>
-            <strong>Custom Media3 and Fire OS tuning</strong>
-            <p>Built around a tuned playback stack with Dolby Vision conversion work and Amazon device compatibility in mind.</p>
+
+          <!-- Bento 2: Audiophile (Spans 1 column) -->
+          <article class="bento-card lg:col-span-1 group overflow-hidden scroll-reveal scroll-reveal-right relative flex flex-col justify-between">
+            <div class="p-8 md:p-12 pb-2 relative z-20 pointer-events-none">
+              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03]">Audiophile</span>
+              <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Bit-Perfect Audio</h3>
+              <p class="text-soft text-lg leading-relaxed text-shadow-sm">Deliver uncompressed, studio-quality sound straight to your AV receiver. Our custom Media3 engine bypasses system processing to guarantee flawless Dolby TrueHD and Atmos playback.</p>
+            </div>
+            
+            <!-- Standalone Audio Marquee -->
+            <div class="relative w-full z-20 overflow-hidden pt-6 pb-10 md:pb-12">
+              <div class="audio-marquee-container">
+                <div class="audio-marquee-content">
+                  <img src="/audio/dolby-atmos.png" class="audio-logo" alt="Dolby Atmos" />
+                  <img src="/audio/truehd.png" class="audio-logo" alt="Dolby TrueHD" />
+                  <img src="/audio/dtsx.png" class="audio-logo" alt="DTS:X" />
+                  <img src="/audio/dtshd.png" class="audio-logo" alt="DTS-HD" />
+                  <img src="/audio/dts.png" class="audio-logo" alt="DTS" />
+                  <img src="/audio/dolby digital.png" class="audio-logo" alt="Dolby Digital" />
+                  <!-- Duplicate for continuous scroll -->
+                  <img src="/audio/dolby-atmos.png" class="audio-logo" alt="Dolby Atmos" />
+                  <img src="/audio/truehd.png" class="audio-logo" alt="Dolby TrueHD" />
+                  <img src="/audio/dtsx.png" class="audio-logo" alt="DTS:X" />
+                  <img src="/audio/dtshd.png" class="audio-logo" alt="DTS-HD" />
+                  <img src="/audio/dts.png" class="audio-logo" alt="DTS" />
+                  <img src="/audio/dolby digital.png" class="audio-logo" alt="Dolby Digital" />
+                </div>
+              </div>
+            </div>
           </article>
-        </div>
-      </div>
 
-      <div class="landing-stage reveal reveal-stage">
-        <div class="stage-aura stage-aura-a" />
-        <div class="stage-aura stage-aura-b" />
-        <div class="stage-grid" />
-
-        <article class="device-frame hero-device">
-          <div class="device-screen playback-screen">
-            <div class="screen-brand">
-              <img src="/landing-logo.webp" alt="Nexio emblem">
-              <span>Nexio Playback Core</span>
+          <!-- Bento 3: Engine (Spans 1 column) -->
+          <article class="bento-card lg:col-span-1 group overflow-hidden scroll-reveal scroll-reveal-left relative flex flex-col justify-center">
+            <div class="p-8 md:p-12 relative z-20 pointer-events-none">
+              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03]">Engine</span>
+              <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Media3 Core</h3>
+              <p class="text-soft text-lg leading-relaxed text-shadow-sm mb-4">Real-time Dolby Vision conversion, dynamic frame rate matching, a custom libdovi fork, and a custom FFmpeg build for VC-1 software decoding.</p>
             </div>
-            <div class="playback-copy">
-              <span class="mini-pill">Realtime video pipeline</span>
-              <h2>DV7 to DV8.1 conversion, Fire OS hardening, premium stream throughput.</h2>
-              <p>Advanced disk cache strategy, reusable startup bootstrap windows, and native parallel range downloading for large progressive streams.</p>
+          </article>
+
+          <!-- Bento 4: Performance (Spans 2 columns) -->
+          <article class="bento-card lg:col-span-2 group overflow-hidden scroll-reveal relative flex flex-col md:flex-row">
+            <div class="p-8 md:p-12 relative z-20 md:w-1/2 flex flex-col justify-center pointer-events-none pb-0 md:pb-12">
+              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03] w-fit">Performance</span>
+              <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Unparalleled Performance</h3>
+              <p class="text-soft text-lg leading-relaxed text-shadow-sm mb-4">Establish parallel connections for maximum throughput, paired with a custom disk cache implementation to prevent in-stream buffers completely.</p>
             </div>
-            <div class="playback-stats">
-              <div>
-                <span>Playback stack</span>
-                <strong>Custom Media3 fork</strong>
-              </div>
-              <div>
-                <span>Performance path</span>
-                <strong>Cache + parallel fetch</strong>
-              </div>
+            <div class="relative w-full md:w-1/2 flex-grow mt-6 md:mt-0 flex justify-end items-end">
+              <img src="/cache-parallel.webp" class="w-[95%] md:w-[85%] rounded-tl-2xl md:rounded-tl-[32px] border-t border-l border-white/10 shadow-[0_-20px_50px_rgba(0,0,0,0.8)] group-hover:-translate-y-2 md:group-hover:-translate-x-2 transition-transform duration-700 z-10" />
             </div>
-          </div>
-        </article>
+          </article>
 
-        <article class="floating-card portal-card glass">
-          <header>
-            <span class="mini-pill">Account portal</span>
-            <strong>Full settings parity</strong>
-          </header>
-          <div class="mock-portal">
-            <aside>
-              <span class="active">Appearance</span>
-              <span>Layout</span>
-              <span>Integrations</span>
-              <span>Playback</span>
-            </aside>
-            <div>
-              <div class="mock-row">
-                <label>Theme</label>
-                <span>White</span>
-              </div>
-              <div class="mock-row">
-                <label>Catalog order</label>
-                <span>Shared across screens</span>
-              </div>
-              <div class="mock-row">
-                <label>Addon stack</label>
-                <span>Instant account push</span>
-              </div>
-            </div>
-          </div>
-        </article>
+        </div>
+      </section>
 
-        <article class="floating-card catalog-card surface">
-          <header>
-            <span class="mini-pill">Catalog system</span>
-            <strong>Trakt, MDBList, addons</strong>
-          </header>
-          <div class="mock-catalogs">
-            <div class="catalog-chip accent">Up Next</div>
-            <div class="catalog-chip">Trending Movies</div>
-            <div class="catalog-chip">MDBList Top 250</div>
-            <div class="catalog-chip">Popular Lists</div>
-            <div class="catalog-chip">Cinemeta Featured</div>
-            <div class="catalog-chip accent-amber">Custom rails</div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="marquee-strip">
-      <span
-        v-for="(item, index) in featureRibbon"
-        :key="item"
-        class="marquee-pill scroll-reveal"
-        :style="{ '--reveal-delay': `${420 + (index * 45)}ms` }"
-      >
-        {{ item }}
-      </span>
-    </section>
-
-    <section class="story-grid">
-      <article class="story-panel story-panel-large glass scroll-reveal scroll-reveal-wide" style="--reveal-delay: 80ms;">
-        <div class="story-copy">
-          <span class="badge">Cloud Account</span>
-          <h2 class="section-title">Complete settings sync between the web and every linked addon instance.</h2>
-          <p>
-            The portal now mirrors the addon settings surface instead of acting like a basic login utility. Appearance, layout, playback behavior, addon stack, catalogs, poster providers, and integration state all move through a single account snapshot.
+      <!-- Closing CTA -->
+      <section class="closing-banner glass scroll-reveal scroll-reveal-wide p-12 lg:p-20 flex flex-col text-center items-center gap-8 mb-24 relative overflow-hidden backdrop-blur-2xl max-w-5xl mx-auto rounded-[40px]">
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-b from-[#7bffd3]/[0.03] to-transparent z-0"></div>
+        
+        <div class="relative z-10 max-w-2xl">
+          <img src="/app_logo_mark.webp" class="w-16 h-16 mx-auto mb-6 object-contain" alt="Nexio Logo" />
+          <h2 class="section-title text-4xl lg:text-5xl leading-tight mb-5">Take control of your library today.</h2>
+          <p class="text-soft text-lg leading-relaxed mb-8">
+            The account portal syncs your configurations, secrets, addons, and viewing states across every television in your home instantly. Sign in once, deploy everywhere.
           </p>
+          <NuxtLink class="primary-btn pulse-btn shadow-glow px-10 py-4 text-lg font-bold tracking-wide inline-block" to="/account">Launch Nexio Portal</NuxtLink>
         </div>
-        <div class="story-visual sync-visual">
-          <div class="sync-node">
-            <strong>Web portal</strong>
-            <span>Manage settings, secrets, addons, catalogs</span>
-          </div>
-          <div class="sync-line" />
-          <div class="sync-node active">
-            <strong>Secret-backed account core</strong>
-            <span>Public sync state plus Vault-backed secrets</span>
-          </div>
-          <div class="sync-line" />
-          <div class="sync-cluster">
-            <div class="sync-tv">Living room TV</div>
-            <div class="sync-tv">Bedroom TV</div>
-            <div class="sync-tv">Office TV</div>
-          </div>
-        </div>
-      </article>
-
-      <article class="story-panel surface scroll-reveal scroll-reveal-left" style="--reveal-delay: 120ms;">
-        <div class="story-copy">
-          <span class="badge">Native Integrations</span>
-          <h3 class="section-title">Trakt and MDBList go beyond basic auth.</h3>
-          <p>
-            Trakt covers scrobble, check-in, continue watching, built-in rails, and custom popular-list catalogs. MDBList adds ratings overlays plus personal-list and top-list catalog management with ordering and visibility controls.
-          </p>
-        </div>
-        <div class="integration-stack">
-          <div class="integration-tile">
-            <strong>Trakt</strong>
-            <span>Scrobble, check-in, Up Next, custom lists</span>
-          </div>
-          <div class="integration-tile">
-            <strong>MDBList</strong>
-            <span>IMDb, TMDB, Trakt, Letterboxd, Rotten Tomatoes, audience, Metacritic</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="story-panel glass scroll-reveal scroll-reveal-right" style="--reveal-delay: 160ms;">
-        <div class="story-copy">
-          <span class="badge">Poster Stack</span>
-          <h3 class="section-title">Custom posters without breaking the account model.</h3>
-          <p>
-            RPDB and TOP Posters remain first-class integrations, with their keys handled through the secret channel instead of leaking into the synced settings document.
-          </p>
-        </div>
-        <div class="poster-wall">
-          <div class="poster-slab poster-slab-a">RPDB</div>
-          <div class="poster-slab poster-slab-b">TOP Posters</div>
-          <div class="poster-slab poster-slab-c">Fallback-safe artwork</div>
-        </div>
-      </article>
-
-      <article class="story-panel surface scroll-reveal scroll-reveal-left" style="--reveal-delay: 200ms;">
-        <div class="story-copy">
-          <span class="badge">Localization</span>
-          <h3 class="section-title">One account language profile across every screen.</h3>
-          <p>
-            Language preferences stay aligned across English, German, French, Spanish, Dutch, and Mandarin, so the account experience feels coherent whether users configure from the portal or directly on the TV.
-          </p>
-        </div>
-        <div class="language-cloud">
-          <span>English</span>
-          <span>Deutsch</span>
-          <span>Français</span>
-          <span>Español</span>
-          <span>Nederlands</span>
-          <span>中文</span>
-        </div>
-      </article>
-    </section>
-
-    <section class="closing-banner glass scroll-reveal scroll-reveal-wide" style="--reveal-delay: 120ms;">
-      <div>
-        <span class="badge">Ready</span>
-        <h2 class="section-title">Control onboarding, secrets, catalogs, and synced settings from one place.</h2>
-        <p>
-          The account portal is now part of the product story, not a side utility. It sells Nexio as a high-end playback platform with serious account sync and integration depth.
-        </p>
-      </div>
-      <div class="landing-actions">
-        <NuxtLink class="primary-btn" to="/account">Launch portal</NuxtLink>
-      </div>
-    </section>
+      </section>
+      
     </div>
   </PortalShell>
 </template>
@@ -215,19 +157,6 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import PortalShell from '~/components/portal/PortalShell.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
-
-const featureRibbon = [
-  'Vault-backed account secrets',
-  'Complete web to addon settings sync',
-  'Custom Media3 playback core',
-  'Realtime Dolby Vision conversion work',
-  'Amazon Fire OS optimization',
-  'Advanced disk cache and parallel downloading',
-  'Native Trakt scrobble and catalogs',
-  'Native MDBList ratings and curated rails',
-  'RPDB and TOP Posters integrations',
-  'English, German, French, Spanish, Dutch, Mandarin'
-]
 
 const pageReady = ref(false)
 const landingPage = ref<HTMLElement | null>(null)
@@ -249,19 +178,12 @@ const setupScrollReveals = async () => {
   revealObserver = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
-        if (!entry.isIntersecting) {
-          return
-        }
-
+        if (!entry.isIntersecting) return
         entry.target.classList.add('is-visible')
         revealObserver?.unobserve(entry.target)
       })
     },
-    {
-      root: null,
-      rootMargin: '0px 0px -12% 0px',
-      threshold: 0.16
-    }
+    { root: null, rootMargin: '0px 0px -10% 0px', threshold: 0.15 }
   )
 
   root.querySelectorAll<HTMLElement>('.scroll-reveal').forEach((element) => {
@@ -283,28 +205,25 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.landing-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: 1.5rem;
-  padding: 2rem;
-  border-radius: var(--radius-xl);
-  min-height: 42rem;
-}
-
+/* Core Page Transition */
 .landing-page {
-  display: grid;
-  gap: 1rem;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  overflow-x: hidden;
 }
 
+.landing-page.is-ready {
+  opacity: 1;
+}
+
+/* Animations */
 .reveal {
   opacity: 0;
-  transform: translateY(28px) scale(0.985);
-  filter: blur(10px);
-  transition:
-    opacity 780ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 900ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(30px) scale(0.98);
+  filter: blur(8px);
+  transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.9s ease;
   transition-delay: var(--reveal-delay, 0ms);
 }
 
@@ -314,406 +233,17 @@ onBeforeUnmount(() => {
   filter: blur(0);
 }
 
-.landing-copy {
-  display: grid;
-  align-content: start;
-  gap: 1rem;
-  padding: 0.5rem 0;
-}
-
-.landing-kicker {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  font-size: 0.74rem;
-  color: var(--accent);
-}
-
-.landing-title {
-  margin: 0;
-  max-width: 11ch;
-  font-size: clamp(3.2rem, 6vw, 5.8rem);
-  line-height: 0.92;
-}
-
-.landing-summary {
-  margin: 0;
-  max-width: 48rem;
-  color: var(--text-soft);
-  font-size: 1.08rem;
-  line-height: 1.8;
-}
-
-.landing-actions {
-  display: flex;
-  gap: 0.85rem;
-  flex-wrap: wrap;
-}
-
-.landing-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.metric-card {
-  padding: 1.15rem;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.metric-card span {
-  display: block;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: var(--text-dim);
-}
-
-.metric-card strong {
-  display: block;
-  margin-top: 0.55rem;
-  font-size: 1.05rem;
-}
-
-.metric-card p {
-  margin: 0.55rem 0 0;
-  color: var(--text-soft);
-  line-height: 1.55;
-}
-
-.landing-stage {
-  position: relative;
-  min-height: 38rem;
-  border-radius: 30px;
-  overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
-    linear-gradient(135deg, rgba(7, 16, 28, 0.98), rgba(8, 21, 34, 0.9));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.stage-grid,
-.stage-aura {
-  position: absolute;
-  pointer-events: none;
-}
-
-.stage-grid {
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 92%);
-  opacity: 0.25;
-}
-
-.stage-aura {
-  border-radius: 999px;
-  filter: blur(50px);
-}
-
-.stage-aura-a {
-  top: 6%;
-  right: 8%;
-  width: 14rem;
-  height: 14rem;
-  background: rgba(123, 255, 211, 0.18);
-}
-
-.stage-aura-b {
-  left: 10%;
-  bottom: 10%;
-  width: 16rem;
-  height: 16rem;
-  background: rgba(255, 191, 105, 0.16);
-}
-
-.device-frame,
-.floating-card {
-  position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
-}
-
-.hero-device {
-  top: 3.5rem;
-  left: 3.2rem;
-  width: 31rem;
-  max-width: calc(100% - 8rem);
-  padding: 0.8rem;
-  border-radius: 30px;
-  background: rgba(2, 8, 14, 0.72);
-  backdrop-filter: blur(14px);
-  transform: rotate(-4deg);
-}
-
-.device-screen {
-  border-radius: 24px;
-  min-height: 23rem;
-  overflow: hidden;
-  position: relative;
-}
-
-.playback-screen {
-  display: grid;
-  align-content: space-between;
-  padding: 1.3rem;
-  background:
-    radial-gradient(circle at top left, rgba(255, 209, 102, 0.22), transparent 26%),
-    radial-gradient(circle at top right, rgba(123, 255, 211, 0.22), transparent 24%),
-    linear-gradient(160deg, rgba(9, 20, 35, 0.92), rgba(5, 10, 17, 0.98)),
-    url('/landing-logo.webp');
-  background-size: auto, auto, cover, 42%;
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-  background-position: top left, top right, center, 112% 116%;
-}
-
-.screen-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.45rem 0.75rem;
-  width: fit-content;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(14px);
-}
-
-.screen-brand img {
-  width: 1.4rem;
-  height: 1.4rem;
-  object-fit: contain;
-}
-
-.screen-brand span {
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.playback-copy {
-  max-width: 24rem;
-  display: grid;
-  gap: 0.7rem;
-}
-
-.playback-copy h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 2rem;
-  line-height: 1.02;
-  letter-spacing: -0.04em;
-}
-
-.playback-copy p {
-  margin: 0;
-  color: var(--text-soft);
-  line-height: 1.65;
-}
-
-.playback-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
-}
-
-.playback-stats div {
-  padding: 0.85rem 0.95rem;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(12px);
-}
-
-.playback-stats span,
-.floating-card header span {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-}
-
-.playback-stats strong {
-  display: block;
-  margin-top: 0.45rem;
-}
-
-.floating-card {
-  padding: 1rem;
-  border-radius: 24px;
-}
-
-.portal-card {
-  right: 2.2rem;
-  top: 4rem;
-  width: 17rem;
-  transform: rotate(4deg);
-}
-
-.catalog-card {
-  right: 3.5rem;
-  bottom: 2.4rem;
-  width: 18.5rem;
-  transform: rotate(-6deg);
-}
-
-.landing-page.is-ready .hero-device {
-  animation: heroFloat 9s ease-in-out 1.05s infinite;
-}
-
-.landing-page.is-ready .portal-card {
-  animation: cardFloatA 8.5s ease-in-out 1.2s infinite;
-}
-
-.landing-page.is-ready .catalog-card {
-  animation: cardFloatB 9.5s ease-in-out 1.45s infinite;
-}
-
-.floating-card header {
-  display: grid;
-  gap: 0.45rem;
-  margin-bottom: 0.95rem;
-}
-
-.floating-card header strong {
-  font-size: 1.05rem;
-}
-
-.mini-pill {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  padding: 0.38rem 0.65rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.86);
-}
-
-.mock-portal {
-  display: grid;
-  grid-template-columns: 6rem 1fr;
-  gap: 0.8rem;
-}
-
-.mock-portal aside,
-.mock-portal > div {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.mock-portal aside span,
-.mock-row {
-  padding: 0.7rem;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.mock-portal aside .active {
-  background: linear-gradient(135deg, rgba(123, 255, 211, 0.24), rgba(155, 231, 255, 0.16));
-  color: white;
-}
-
-.mock-row label {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-.mock-row span {
-  display: block;
-  margin-top: 0.4rem;
-  color: var(--text-soft);
-}
-
-.mock-catalogs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.catalog-chip {
-  padding: 0.65rem 0.8rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-soft);
-  font-size: 0.82rem;
-}
-
-.catalog-chip.accent {
-  background: rgba(123, 255, 211, 0.16);
-  color: white;
-}
-
-.catalog-chip.accent-amber {
-  background: rgba(255, 191, 105, 0.16);
-  color: white;
-}
-
-.marquee-strip {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin: 1rem 0 1.2rem;
-}
-
-.marquee-pill {
-  opacity: 0;
-  transform: translateY(16px);
-  filter: blur(6px);
-  transition:
-    opacity 620ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 760ms cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--reveal-delay, 0ms);
-  padding: 0.82rem 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-soft);
-  backdrop-filter: blur(12px);
-}
-
-.scroll-reveal.is-visible.marquee-pill {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
-}
-
 .scroll-reveal {
   opacity: 0;
-  transform: translate3d(0, 34px, 0) scale(0.985);
-  filter: blur(12px);
-  transition:
-    opacity 860ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 1050ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 1050ms cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--reveal-delay, 0ms);
+  transform: translate3d(0, 30px, 0) scale(0.98);
+  filter: blur(8px);
+  transition: all 0.9s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform, filter;
 }
 
-.scroll-reveal-left {
-  transform: translate3d(-26px, 34px, 0) scale(0.985);
-}
-
-.scroll-reveal-right {
-  transform: translate3d(26px, 34px, 0) scale(0.985);
-}
-
-.scroll-reveal-wide {
-  transform: translate3d(0, 42px, 0) scale(0.978);
-}
+.scroll-reveal-left { transform: translate3d(-30px, 30px, 0) scale(0.98); }
+.scroll-reveal-right { transform: translate3d(30px, 30px, 0) scale(0.98); }
+.scroll-reveal-wide { transform: translate3d(0, 40px, 0) scale(0.97); }
 
 .scroll-reveal.is-visible {
   opacity: 1;
@@ -721,342 +251,190 @@ onBeforeUnmount(() => {
   filter: blur(0);
 }
 
-.story-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(123, 255, 211, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(123, 255, 211, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(123, 255, 211, 0); }
 }
 
-.story-panel {
-  display: grid;
-  gap: 1.2rem;
-  padding: 1.5rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+/* Typography & Badges */
+.text-gradient {
+  background: linear-gradient(135deg, var(--accent), #9be7ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
 
-.story-panel > *,
-.closing-banner > * {
-  opacity: 0;
-  transform: translateY(18px);
-  filter: blur(8px);
-  transition:
-    opacity 720ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 860ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 860ms cubic-bezier(0.22, 1, 0.36, 1);
-}
+.text-soft { color: var(--text-soft); }
+.text-dim { color: var(--text-dim); }
 
-.story-panel > *:nth-child(1),
-.closing-banner > *:nth-child(1) {
-  transition-delay: 110ms;
-}
-
-.story-panel > *:nth-child(2),
-.closing-banner > *:nth-child(2) {
-  transition-delay: 220ms;
-}
-
-.scroll-reveal.is-visible.story-panel > *,
-.scroll-reveal.is-visible.closing-banner > * {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
-}
-
-.story-panel-large {
-  grid-column: span 2;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+.premium-badge {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(123, 255, 211, 0.2);
+  padding: 0.6rem 1.25rem;
+  border-radius: 999px;
+  display: inline-flex;
   align-items: center;
+  gap: 0.5rem;
+  backdrop-filter: blur(12px);
 }
 
-.story-copy h2,
-.story-copy h3 {
-  margin: 0.6rem 0 0.5rem;
-  font-size: 2rem;
-  line-height: 1.02;
+.brand-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
-.story-copy h3 {
-  font-size: 1.5rem;
+.shadow-glow {
+  box-shadow: 0 0 30px rgba(123, 255, 211, 0.1);
 }
 
-.story-copy p {
+.pulse-btn:hover {
+  animation: pulseGlow 1.5s infinite;
+}
+
+/* Centered Hero */
+.landing-title {
+  font-size: clamp(3.2rem, 6.5vw, 5.5rem);
+  line-height: 1.05;
   margin: 0;
-  color: var(--text-soft);
-  line-height: 1.72;
-}
-
-.story-visual {
-  min-height: 18rem;
-}
-
-.sync-visual {
-  display: grid;
-  align-items: center;
-  gap: 0.9rem;
-}
-
-.sync-node,
-.sync-tv,
-.integration-tile,
-.poster-slab {
-  padding: 1rem;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.sync-node,
-.sync-line,
-.sync-tv,
-.integration-tile,
-.poster-slab,
-.language-cloud span {
-  opacity: 0;
-  transform: translateY(14px);
-  transition:
-    opacity 640ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.scroll-reveal.is-visible .sync-node,
-.scroll-reveal.is-visible .sync-line,
-.scroll-reveal.is-visible .sync-tv,
-.scroll-reveal.is-visible .integration-tile,
-.scroll-reveal.is-visible .poster-slab,
-.scroll-reveal.is-visible .language-cloud span {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.scroll-reveal.is-visible .sync-node:nth-child(1),
-.scroll-reveal.is-visible .integration-tile:nth-child(1),
-.scroll-reveal.is-visible .poster-slab:nth-child(1),
-.scroll-reveal.is-visible .language-cloud span:nth-child(1) {
-  transition-delay: 160ms;
-}
-
-.scroll-reveal.is-visible .sync-node:nth-child(3),
-.scroll-reveal.is-visible .integration-tile:nth-child(2),
-.scroll-reveal.is-visible .poster-slab:nth-child(2),
-.scroll-reveal.is-visible .language-cloud span:nth-child(2) {
-  transition-delay: 240ms;
-}
-
-.scroll-reveal.is-visible .sync-cluster .sync-tv:nth-child(1),
-.scroll-reveal.is-visible .poster-slab:nth-child(3),
-.scroll-reveal.is-visible .language-cloud span:nth-child(3) {
-  transition-delay: 320ms;
-}
-
-.scroll-reveal.is-visible .sync-cluster .sync-tv:nth-child(2),
-.scroll-reveal.is-visible .language-cloud span:nth-child(4) {
-  transition-delay: 400ms;
-}
-
-.scroll-reveal.is-visible .sync-cluster .sync-tv:nth-child(3),
-.scroll-reveal.is-visible .language-cloud span:nth-child(5) {
-  transition-delay: 480ms;
-}
-
-.scroll-reveal.is-visible .language-cloud span:nth-child(6) {
-  transition-delay: 560ms;
-}
-
-.sync-node strong,
-.integration-tile strong {
-  display: block;
-  margin-bottom: 0.4rem;
-}
-
-.sync-node span,
-.sync-tv,
-.integration-tile span,
-.poster-slab {
-  color: var(--text-soft);
-}
-
-.sync-node.active {
-  background: linear-gradient(135deg, rgba(123, 255, 211, 0.14), rgba(255, 191, 105, 0.12));
-}
-
-.sync-line {
-  width: 2px;
-  height: 2.1rem;
-  margin-left: 1.4rem;
-  background: linear-gradient(180deg, rgba(123, 255, 211, 0.5), rgba(255, 191, 105, 0.2));
-}
-
-.sync-cluster {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
-}
-
-.integration-stack,
-.poster-wall {
-  display: grid;
-  gap: 0.8rem;
-}
-
-.poster-wall {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.poster-slab {
-  min-height: 7rem;
-  display: grid;
-  place-items: center;
-  text-align: center;
+  letter-spacing: -0.04em;
   font-weight: 700;
 }
 
-.poster-slab-a {
-  background: linear-gradient(160deg, rgba(123, 255, 211, 0.18), rgba(255, 255, 255, 0.04));
+.hero-frame-centered {
+  position: relative;
+  transform: perspective(1200px) rotateX(8deg);
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
-.poster-slab-b {
-  background: linear-gradient(160deg, rgba(255, 191, 105, 0.18), rgba(255, 255, 255, 0.04));
+.hero-frame-centered::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+  border-radius: 34px;
+  z-index: -1;
+  pointer-events: none;
 }
 
-.poster-slab-c {
-  background: linear-gradient(160deg, rgba(152, 201, 255, 0.16), rgba(255, 255, 255, 0.04));
+.hero-visual-container:hover .hero-frame-centered {
+  transform: perspective(1200px) rotateX(2deg);
 }
 
-.language-cloud {
+/* Integration Marquee */
+.integration-marquee {
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+}
+
+.marquee-container {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
+  overflow: hidden;
+  user-select: none;
+  width: 100%;
 }
 
-.language-cloud span {
-  padding: 0.75rem 0.95rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-soft);
-}
-
-.closing-banner {
-  margin-top: 1rem;
-  padding: 1.7rem;
-  border-radius: var(--radius-xl);
+.marquee-content {
+  flex-shrink: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: end;
+  align-items: center;
+  justify-content: space-around;
+  gap: 5rem;
+  min-width: 100%;
+  animation: scroll 40s linear infinite;
+  padding: 0 2.5rem;
 }
 
-.closing-banner h2 {
-  margin: 0.55rem 0 0.35rem;
-  font-size: 2rem;
-  max-width: 16ch;
+@keyframes scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(calc(-50% - 2.5rem)); }
 }
 
-.closing-banner p {
-  margin: 0;
-  color: var(--text-soft);
-  max-width: 46rem;
-  line-height: 1.7;
+.partner-logo {
+  height: 40px;
+  object-fit: contain;
+  opacity: 0.4;
+  transition: opacity 0.4s ease, filter 0.4s ease, transform 0.4s ease;
+  filter: grayscale(100%) brightness(1.2);
+  cursor: pointer;
 }
 
-@keyframes heroFloat {
-  0%,
-  100% {
-    transform: rotate(-4deg) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: rotate(-3deg) translate3d(0, -10px, 0);
-  }
+.partner-logo:hover {
+  opacity: 1;
+  filter: none;
+  transform: scale(1.05);
 }
 
-@keyframes cardFloatA {
-  0%,
-  100% {
-    transform: rotate(4deg) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: rotate(3deg) translate3d(-4px, -8px, 0);
-  }
+/* Specific Logo Adjustments */
+.mdblist-logo { height: 28px; filter: grayscale(100%) brightness(2.5); }
+.tmdb-logo { height: 22px; filter: grayscale(100%) brightness(2); }
+.rpdb-logo { height: 44px; filter: grayscale(100%) brightness(0.8); }
+.topposter-logo { height: 32px; filter: grayscale(100%) brightness(1.8); }
+.anime-skip-logo { height: 34px; }
+
+/* Audio Marquee */
+.audio-marquee-container {
+  display: flex;
+  overflow: hidden;
+  user-select: none;
+  width: 100%;
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
 }
 
-@keyframes cardFloatB {
-  0%,
-  100% {
-    transform: rotate(-6deg) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: rotate(-5deg) translate3d(4px, -10px, 0);
-  }
+.audio-marquee-content {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 3rem;
+  min-width: 100%;
+  animation: scrollAudio 25s linear infinite;
+  padding: 0 1.5rem;
 }
 
-@media (max-width: 1180px) {
-  .landing-hero,
-  .story-panel-large {
-    grid-template-columns: 1fr;
-  }
-
-  .landing-stage {
-    min-height: 44rem;
-  }
+@keyframes scrollAudio {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(calc(-50% - 1.5rem)); }
 }
 
-@media (max-width: 980px) {
-  .story-grid,
-  .landing-metrics,
-  .playback-stats,
-  .sync-cluster,
-  .poster-wall {
-    grid-template-columns: 1fr;
-  }
-
-  .story-panel-large {
-    grid-column: span 1;
-  }
-
-  .hero-device {
-    position: relative;
-    inset: auto;
-    width: auto;
-    max-width: none;
-    margin: 1rem;
-    transform: none;
-  }
-
-  .portal-card,
-  .catalog-card {
-    position: relative;
-    inset: auto;
-    width: auto;
-    margin: 0 1rem 1rem;
-    transform: none;
-  }
-
-  .landing-stage {
-    display: grid;
-    align-content: start;
-    padding-bottom: 1rem;
-  }
-
-  .closing-banner {
-    flex-direction: column;
-    align-items: start;
-  }
+.audio-logo {
+  height: 28px;
+  object-fit: contain;
+  opacity: 0.5;
+  filter: brightness(0) invert(1);
+  transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
-@media (max-width: 680px) {
-  .landing-hero,
-  .story-panel,
-  .closing-banner {
-    padding: 1.2rem;
-  }
+.audio-logo:hover {
+  opacity: 1;
+  transform: scale(1.08);
+}
 
-  .landing-title {
-    max-width: none;
-    font-size: clamp(2.6rem, 12vw, 4rem);
-  }
+/* Bento Box Grid */
+.bento-card {
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  background: #09131a;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
 
-  .mock-portal {
-    grid-template-columns: 1fr;
-  }
+.bento-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+}
+
+@media (max-width: 768px) {
+  .landing-hero { padding-top: 4rem; padding-bottom: 2rem; }
+  .grid { grid-template-columns: 1fr; auto-rows: minmax(350px, auto); }
+  .bento-card { grid-column: span 1 !important; flex-direction: column !important; }
+  .hero-frame-centered { transform: none; }
+  .hero-visual-container:hover .hero-frame-centered { transform: none; }
+  .marquee-content { gap: 3rem; }
+  .partner-logo { height: 32px; }
 }
 </style>

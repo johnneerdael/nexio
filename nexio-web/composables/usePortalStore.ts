@@ -86,6 +86,16 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function cleanErrorMessage(error: unknown, fallback: string): string {
+  const msg = error instanceof Error ? error.message.trim() : fallback
+  const lower = msg.toLowerCase()
+  if (lower.includes('jwt expired') || lower.includes('missing sub claim') || lower.includes('invalid claim')) return 'Your session has expired or is invalid. Please sign in again.'
+  if (lower.includes('invalid login credentials')) return 'Invalid email or password.'
+  if (lower.includes('user not found')) return 'User not found.'
+  if (lower.includes('rate limit')) return 'Too many attempts. Please try again later.'
+  return msg
+}
+
 function readLocalState(): Partial<StoreState> {
   if (!process.client) {
     return {}
@@ -670,7 +680,7 @@ export function usePortalStore() {
         }
       })
     } catch (error) {
-      state.value.error = error instanceof Error ? error.message : 'Addon inspection failed.'
+      state.value.error = cleanErrorMessage(error, 'Addon inspection failed.')
     }
   }
 
@@ -787,7 +797,7 @@ export function usePortalStore() {
     } catch (error) {
       state.value.bootstrapped = true
       state.value.demoMode = isDemoModeForSession(state.value.session)
-      state.value.error = error instanceof Error ? error.message : 'Failed to load portal state.'
+      state.value.error = cleanErrorMessage(error, 'Failed to load portal state.')
     } finally {
       state.value.loading = false
     }
@@ -808,7 +818,7 @@ export function usePortalStore() {
       state.value.bootstrapped = false
       await bootstrap()
     } catch (error) {
-      state.value.error = error instanceof Error ? error.message : 'Unable to sign in.'
+      state.value.error = cleanErrorMessage(error, 'Unable to sign in.')
       throw error
     } finally {
       state.value.loading = false
@@ -830,7 +840,7 @@ export function usePortalStore() {
       state.value.bootstrapped = false
       await bootstrap()
     } catch (error) {
-      state.value.error = error instanceof Error ? error.message : 'Unable to create account.'
+      state.value.error = cleanErrorMessage(error, 'Unable to create account.')
       throw error
     } finally {
       state.value.loading = false
@@ -885,7 +895,7 @@ export function usePortalStore() {
       state.value.bootstrapped = false
       await bootstrap(true)
     } catch (error) {
-      state.value.error = error instanceof Error ? error.message : 'Unable to complete sign in.'
+      state.value.error = cleanErrorMessage(error, 'Unable to complete sign in.')
       throw error
     } finally {
       state.value.loading = false
@@ -1134,7 +1144,7 @@ export function usePortalStore() {
       remoteSignature = snapshotSignature(state.value.settings, state.value.addons)
     } catch (error) {
       state.value.demoMode = isDemoModeForSession(state.value.session)
-      state.value.error = error instanceof Error ? error.message : 'Failed to sync to Nexio Live.'
+      state.value.error = cleanErrorMessage(error, 'Failed to sync to Nexio Live.')
       throw error
     } finally {
       state.value.saving = false
@@ -1308,7 +1318,7 @@ export function usePortalStore() {
       state.value.mdblistDiscovery = {
         validating: false,
         valid: previous.valid,
-        error: error instanceof Error ? error.message : 'MDBList validation failed.',
+        error: cleanErrorMessage(error, 'MDBList validation failed.'),
         personalLists: previous.personalLists,
         topLists: previous.topLists
       }
@@ -1519,7 +1529,7 @@ export function usePortalStore() {
       if (!options.auto) {
         throw error
       }
-      state.value.error = error instanceof Error ? error.message : 'Failed to check Real-Debrid approval.'
+      state.value.error = cleanErrorMessage(error, 'Failed to check Real-Debrid approval.')
       shouldRetry = true
     } finally {
       realDebridPollInFlight = false
@@ -1573,7 +1583,7 @@ export function usePortalStore() {
       if (!options.auto) {
         throw error
       }
-      state.value.error = error instanceof Error ? error.message : 'Failed to check Trakt approval.'
+      state.value.error = cleanErrorMessage(error, 'Failed to check Trakt approval.')
       shouldRetry = true
     } finally {
       traktPollInFlight = false
@@ -1607,7 +1617,7 @@ export function usePortalStore() {
     } catch (error) {
       state.value.traktDiscovery = {
         loading: false,
-        error: error instanceof Error ? error.message : 'Failed to load Trakt lists.',
+        error: cleanErrorMessage(error, 'Failed to load Trakt lists.'),
         popularLists: previous.popularLists
       }
       throw error

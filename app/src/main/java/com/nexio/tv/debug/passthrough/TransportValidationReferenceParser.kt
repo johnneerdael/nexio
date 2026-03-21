@@ -14,13 +14,13 @@ object TransportValidationReferenceParser {
             return emptyList()
         }
 
-        val burstSizeBytes = bundledReferenceBurstSize(sample.codecFamily)
         return buildList {
             var offset = 0
             var burstIndex = 0
             while (offset + IEC_PREAMBLE_BYTES <= bytes.size &&
                 (maxBursts == null || burstIndex < maxBursts)
             ) {
+                val burstSizeBytes = referenceBurstSize(sample, bytes, offset)
                 val currentBurstSize = minOf(burstSizeBytes, bytes.size - offset)
                 if (currentBurstSize < IEC_PREAMBLE_BYTES) {
                     break
@@ -41,15 +41,23 @@ object TransportValidationReferenceParser {
         if (maxBursts <= 0) {
             return emptyList()
         }
-        val burstSizeBytes = bundledReferenceBurstSize(sample.codecFamily)
-        val burstBuffer = ByteArray(burstSizeBytes)
         return buildList {
             var burstIndex = 0
             while (burstIndex < maxBursts) {
-                val bytesRead = inputStream.readBurstInto(burstBuffer, burstSizeBytes)
-                if (bytesRead < IEC_PREAMBLE_BYTES) {
+                val preamble = ByteArray(IEC_PREAMBLE_BYTES)
+                val preambleBytesRead = inputStream.readBurstInto(preamble, IEC_PREAMBLE_BYTES)
+                if (preambleBytesRead < IEC_PREAMBLE_BYTES) {
                     break
                 }
+                val burstSizeBytes = referenceBurstSize(sample, preamble, 0)
+                val burstBuffer = ByteArray(burstSizeBytes)
+                System.arraycopy(preamble, 0, burstBuffer, 0, IEC_PREAMBLE_BYTES)
+                val payloadBytesRead = inputStream.readBurstInto(
+                    burstBuffer,
+                    burstSizeBytes - IEC_PREAMBLE_BYTES,
+                    IEC_PREAMBLE_BYTES,
+                )
+                val bytesRead = IEC_PREAMBLE_BYTES + payloadBytesRead
                 val burstBytes = burstBuffer.copyOfRange(0, bytesRead)
                 add(parseBurst(sample, burstBytes, burstIndex, TIME_UNSET))
                 burstIndex += 1
@@ -101,9 +109,39 @@ object TransportValidationReferenceParser {
             TransportValidationCodecFamily.E_AC3_JOC -> 24_576
             TransportValidationCodecFamily.DTS_CORE -> 2_048
             TransportValidationCodecFamily.DTS_HD,
-            TransportValidationCodecFamily.DTS_X -> 16_384
+            TransportValidationCodecFamily.DTS_X -> 32_768
             TransportValidationCodecFamily.TRUEHD -> 61_440
         }
+
+    private fun referenceBurstSize(
+        sample: TransportValidationSample,
+        bytes: ByteArray,
+        offset: Int,
+    ): Int {
+        if (sample.codecFamily != TransportValidationCodecFamily.DTS_HD &&
+            sample.codecFamily != TransportValidationCodecFamily.DTS_X
+        ) {
+            return bundledReferenceBurstSize(sample.codecFamily)
+        }
+        if (offset + IEC_PREAMBLE_BYTES > bytes.size) {
+            return bundledReferenceBurstSize(sample.codecFamily)
+        }
+        val subtype = littleEndianWord(bytes, offset + 4) ushr 8
+        return dtsHdBurstSizeFromSubtype(subtype) ?: bundledReferenceBurstSize(sample.codecFamily)
+    }
+
+    private fun dtsHdBurstSizeFromSubtype(subtype: Int): Int? {
+        val period = when (subtype) {
+            0 -> 512
+            1 -> 1_024
+            2 -> 2_048
+            3 -> 4_096
+            4 -> 8_192
+            5 -> 16_384
+            else -> return null
+        }
+        return period shl 2
+    }
 
     private fun payloadBytes(
         sample: TransportValidationSample,
@@ -197,10 +235,11 @@ object TransportValidationReferenceParser {
     private fun InputStream.readBurstInto(
         buffer: ByteArray,
         burstSizeBytes: Int,
+        offset: Int = 0,
     ): Int {
         var totalRead = 0
         while (totalRead < burstSizeBytes) {
-            val read = read(buffer, totalRead, burstSizeBytes - totalRead)
+            val read = read(buffer, offset + totalRead, burstSizeBytes - totalRead)
             if (read <= 0) {
                 break
             }

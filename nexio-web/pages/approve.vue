@@ -35,7 +35,11 @@
           <button class="primary-btn" :disabled="approving" @click="approve">{{ approving ? 'Approving...' : 'Approve This TV' }}</button>
           <NuxtLink class="secondary-btn" to="/account">Open account dashboard</NuxtLink>
         </div>
-        <p v-if="message" style="margin:0; color: var(--accent);">{{ message }}</p>
+        <div v-if="message" class="glass" :style="isError ? 'padding: 1rem 1.25rem; border-radius: var(--radius-lg); border: 1px solid rgba(255, 123, 130, 0.35); color: #ffb1b5; background: rgba(43, 8, 8, 0.4); backdrop-filter: blur(12px); display: flex; align-items: center; gap: 0.75rem;' : 'padding: 1rem 1.25rem; border-radius: var(--radius-lg); border: 1px solid rgba(123, 255, 211, 0.35); color: #7bffd3; background: rgba(8, 43, 22, 0.4); backdrop-filter: blur(12px); display: flex; align-items: center; gap: 0.75rem;'">
+          <svg v-if="isError" class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <svg v-else class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          {{ message }}
+        </div>
       </section>
     </section>
   </PortalShell>
@@ -53,6 +57,7 @@ const code = computed(() => (typeof route.query.code === 'string' ? route.query.
 const nonce = computed(() => (typeof route.query.nonce === 'string' ? route.query.nonce.trim() : ''))
 const hasApprovalContext = computed(() => Boolean(code.value && nonce.value))
 const message = ref('')
+const isError = ref(false)
 const approving = ref(false)
 
 const { state, bootstrap, signIn, signUp, startGoogleSignIn, signOut, signedIn, approveTvLogin } = usePortalStore()
@@ -77,11 +82,19 @@ async function approve() {
 
   approving.value = true
   message.value = ''
+  isError.value = false
   try {
     const result = await approveTvLogin(code.value, nonce.value)
     message.value = result.message
+    isError.value = false
   } catch (error) {
-    message.value = error instanceof Error ? error.message : 'Approval failed.'
+    const raw = error instanceof Error ? error.message.trim() : 'Approval failed.'
+    const lower = raw.toLowerCase()
+    isError.value = true
+    if (lower.includes('jwt expired') || lower.includes('missing sub claim') || lower.includes('invalid claim')) message.value = 'Your session has expired. Please sign in again.'
+    else if (lower.includes('invalid login credentials')) message.value = 'Invalid email or password.'
+    else if (lower.includes('user not found')) message.value = 'User not found.'
+    else message.value = raw
   } finally {
     approving.value = false
   }

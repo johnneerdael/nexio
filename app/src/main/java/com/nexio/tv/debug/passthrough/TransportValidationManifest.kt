@@ -108,10 +108,38 @@ data class TransportValidationRouteSnapshot(
 data class TransportValidationSessionSnapshot(
     val manifestVersion: String,
     val sample: TransportValidationSample,
+    val assetSource: TransportValidationAssetSourceSnapshot? = null,
     val routeSnapshot: TransportValidationRouteSnapshot? = null,
     val referenceBursts: List<TransportValidationBurstRecord> = emptyList(),
     val packerInputBursts: List<TransportValidationBurstRecord> = emptyList(),
     val packedBursts: List<TransportValidationBurstRecord> = emptyList(),
     val audioTrackWriteBursts: List<TransportValidationBurstRecord> = emptyList(),
     val comparisonResults: List<TransportValidationComparisonResult> = emptyList(),
+    val transportVerdict: TransportValidationVerdict = TransportValidationVerdict.UNKNOWN,
+    val runtimeSnapshot: TransportValidationRuntimeSnapshot? = null,
 )
+
+@Serializable
+data class TransportValidationAssetSourceSnapshot(
+    val baseUrl: String,
+    val manifestUrl: String,
+    val manifestVersion: String,
+    val source: TransportValidationCachedAssetSnapshot,
+    val reference: TransportValidationCachedAssetSnapshot,
+    val elementary: TransportValidationCachedAssetSnapshot? = null,
+)
+
+@Serializable
+data class TransportValidationCachedAssetSnapshot(
+    val remotePath: String,
+    val localFileName: String,
+    val localFilePath: String,
+    val checksum: String,
+    val cacheState: TransportValidationAssetCacheState,
+)
+
+@Serializable
+enum class TransportValidationAssetCacheState {
+    REUSED,
+    DOWNLOADED,
+}

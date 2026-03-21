@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.debug.passthrough.TransportValidationCaptureMode
 import com.nexio.tv.debug.passthrough.TransportValidationComparisonMode
+import com.nexio.tv.debug.passthrough.TransportValidationRuntimeDefaults
 import com.nexio.tv.debug.passthrough.TransportValidationSettings
 import com.nexio.tv.debug.passthrough.TransportValidationSettingsStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -50,6 +51,12 @@ class DebugSettingsDataStore @Inject constructor(
         intPreferencesKey("transport_validation_capture_burst_count")
     private val transportValidationBinaryDumpsEnabledKey =
         booleanPreferencesKey("transport_validation_binary_dumps_enabled")
+    private val transportValidationRuntimeValidationEnabledKey =
+        booleanPreferencesKey("transport_validation_runtime_validation_enabled")
+    private val transportValidationRuntimeStartupTimeoutMsKey =
+        intPreferencesKey("transport_validation_runtime_startup_timeout_ms")
+    private val transportValidationRuntimeObservationWindowMsKey =
+        intPreferencesKey("transport_validation_runtime_observation_window_ms")
     private val transportValidationExportRequestCountKey =
         intPreferencesKey("transport_validation_export_request_count")
 
@@ -98,6 +105,14 @@ class DebugSettingsDataStore @Inject constructor(
                     ?: TransportValidationCaptureMode.FIRST_N_BURSTS,
                 captureBurstCount = prefs[transportValidationCaptureBurstCountKey] ?: 8,
                 binaryDumpsEnabled = prefs[transportValidationBinaryDumpsEnabledKey] ?: false,
+                runtimeValidationEnabled =
+                    prefs[transportValidationRuntimeValidationEnabledKey] ?: true,
+                runtimeStartupTimeoutMs =
+                    prefs[transportValidationRuntimeStartupTimeoutMsKey]
+                        ?: TransportValidationRuntimeDefaults.thresholds.startupTimeoutMs.toInt(),
+                runtimeObservationWindowMs =
+                    prefs[transportValidationRuntimeObservationWindowMsKey]
+                        ?: TransportValidationRuntimeDefaults.thresholds.observationWindowMs.toInt(),
                 exportRequestCount = prefs[transportValidationExportRequestCountKey] ?: 0,
             )
         }
@@ -173,6 +188,24 @@ class DebugSettingsDataStore @Inject constructor(
     override suspend fun setTransportValidationBinaryDumpsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[transportValidationBinaryDumpsEnabledKey] = enabled
+        }
+    }
+
+    override suspend fun setTransportValidationRuntimeValidationEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[transportValidationRuntimeValidationEnabledKey] = enabled
+        }
+    }
+
+    override suspend fun setTransportValidationRuntimeStartupTimeoutMs(timeoutMs: Int) {
+        dataStore.edit { prefs ->
+            prefs[transportValidationRuntimeStartupTimeoutMsKey] = timeoutMs
+        }
+    }
+
+    override suspend fun setTransportValidationRuntimeObservationWindowMs(observationWindowMs: Int) {
+        dataStore.edit { prefs ->
+            prefs[transportValidationRuntimeObservationWindowMsKey] = observationWindowMs
         }
     }
 

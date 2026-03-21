@@ -201,6 +201,49 @@ fun DebugSettingsContent(
                     )
                 }
 
+                item(key = "debug_transport_validation_runtime_enabled") {
+                    DebugToggleCard(
+                        title = stringResource(R.string.debug_transport_validation_runtime_enabled_title),
+                        subtitle = stringResource(R.string.debug_transport_validation_runtime_enabled_subtitle),
+                        checked = uiState.transportValidationRuntimeValidationEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                DebugSettingsEvent.ToggleTransportValidationRuntimeValidation(it)
+                            )
+                        }
+                    )
+                }
+
+                item(key = "debug_transport_validation_runtime_startup_timeout") {
+                    DebugActionCard(
+                        title = stringResource(R.string.debug_transport_validation_runtime_startup_timeout_title),
+                        subtitle = stringResource(
+                            R.string.debug_transport_validation_runtime_timeout_value,
+                            uiState.transportValidationRuntimeStartupTimeoutMs
+                        ),
+                        onClick = {
+                            viewModel.onEvent(
+                                DebugSettingsEvent.AdvanceTransportValidationRuntimeStartupTimeout
+                            )
+                        }
+                    )
+                }
+
+                item(key = "debug_transport_validation_runtime_observation_window") {
+                    DebugActionCard(
+                        title = stringResource(R.string.debug_transport_validation_runtime_observation_window_title),
+                        subtitle = stringResource(
+                            R.string.debug_transport_validation_runtime_timeout_value,
+                            uiState.transportValidationRuntimeObservationWindowMs
+                        ),
+                        onClick = {
+                            viewModel.onEvent(
+                                DebugSettingsEvent.AdvanceTransportValidationRuntimeObservationWindow
+                            )
+                        }
+                    )
+                }
+
                 item(key = "debug_transport_validation_export") {
                     DebugActionCard(
                         title = stringResource(R.string.debug_transport_validation_export_title),

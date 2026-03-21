@@ -62,7 +62,7 @@ object TransportValidationComparator {
                 TransportValidationCodecFamily.E_AC3,
                 TransportValidationCodecFamily.E_AC3_JOC
             ) &&
-            live.payloadBytes != live.pd
+            live.payloadBytes * 8 != live.pd
         ) {
             return failed(
                 stage,

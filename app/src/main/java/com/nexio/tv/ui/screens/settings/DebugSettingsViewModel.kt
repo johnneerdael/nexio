@@ -73,6 +73,12 @@ class DebugSettingsViewModel @Inject constructor(
                             controllerState.settings.captureBurstCount,
                         transportValidationBinaryDumpsEnabled =
                             controllerState.settings.binaryDumpsEnabled,
+                        transportValidationRuntimeValidationEnabled =
+                            controllerState.settings.runtimeValidationEnabled,
+                        transportValidationRuntimeStartupTimeoutMs =
+                            controllerState.settings.runtimeStartupTimeoutMs,
+                        transportValidationRuntimeObservationWindowMs =
+                            controllerState.settings.runtimeObservationWindowMs,
                         transportValidationExportRequestCount =
                             controllerState.settings.exportRequestCount,
                     )
@@ -159,6 +165,22 @@ class DebugSettingsViewModel @Inject constructor(
                     transportValidationController.setBinaryDumpsEnabled(event.enabled)
                 }
             }
+            is DebugSettingsEvent.ToggleTransportValidationRuntimeValidation -> {
+                viewModelScope.launch {
+                    transportValidationController.setRuntimeValidationEnabled(event.enabled)
+                }
+            }
+            is DebugSettingsEvent.SetTransportValidationRuntimeStartupTimeoutMs -> {
+                viewModelScope.launch {
+                    transportValidationController.setRuntimeStartupTimeoutMs(event.timeoutMs)
+                }
+            }
+            is DebugSettingsEvent.SetTransportValidationRuntimeObservationWindowMs -> {
+                viewModelScope.launch {
+                    transportValidationController
+                        .setRuntimeObservationWindowMs(event.observationWindowMs)
+                }
+            }
             DebugSettingsEvent.RequestTransportValidationExport -> {
                 viewModelScope.launch {
                     transportValidationController.requestExport()
@@ -200,9 +222,31 @@ class DebugSettingsViewModel @Inject constructor(
                     transportValidationController.setCaptureBurstCount(next)
                 }
             }
+            DebugSettingsEvent.AdvanceTransportValidationRuntimeStartupTimeout -> {
+                val allowedTimeoutsMs = listOf(3_000, 5_000, 8_000, 12_000)
+                val currentIndex =
+                    allowedTimeoutsMs.indexOf(uiState.value.transportValidationRuntimeStartupTimeoutMs)
+                val next = allowedTimeoutsMs[(currentIndex + 1).floorMod(allowedTimeoutsMs.size)]
+                viewModelScope.launch {
+                    transportValidationController.setRuntimeStartupTimeoutMs(next)
+                }
+            }
+            DebugSettingsEvent.AdvanceTransportValidationRuntimeObservationWindow -> {
+                val allowedWindowsMs = listOf(10_000, 15_000, 30_000, 60_000)
+                val currentIndex =
+                    allowedWindowsMs.indexOf(
+                        uiState.value.transportValidationRuntimeObservationWindowMs
+                    )
+                val next = allowedWindowsMs[(currentIndex + 1).floorMod(allowedWindowsMs.size)]
+                viewModelScope.launch {
+                    transportValidationController.setRuntimeObservationWindowMs(next)
+                }
+            }
             DebugSettingsEvent.StartTransportValidationPlayback -> {
                 val sampleId = uiState.value.transportValidationSelectedSampleId ?: return
-                transportValidationPlaybackLauncher.launchSelectedSample(sampleId)
+                viewModelScope.launch {
+                    transportValidationPlaybackLauncher.launchSelectedSample(sampleId)
+                }
             }
             DebugSettingsEvent.StopTransportValidationPlayback -> {
                 transportValidationPlaybackLauncher.stopPlayback()
@@ -225,6 +269,9 @@ data class DebugSettingsUiState(
         TransportValidationCaptureMode.FIRST_N_BURSTS,
     val transportValidationCaptureBurstCount: Int = 8,
     val transportValidationBinaryDumpsEnabled: Boolean = false,
+    val transportValidationRuntimeValidationEnabled: Boolean = true,
+    val transportValidationRuntimeStartupTimeoutMs: Int = 5000,
+    val transportValidationRuntimeObservationWindowMs: Int = 30000,
     val transportValidationExportRequestCount: Int = 0,
     val transportValidationAvailableSamples: List<TransportValidationSampleOption> = emptyList(),
     val signInLoading: Boolean = false,
@@ -247,11 +294,19 @@ sealed class DebugSettingsEvent {
     ) : DebugSettingsEvent()
     data class SetTransportValidationBurstCount(val count: Int) : DebugSettingsEvent()
     data class ToggleTransportValidationBinaryDumps(val enabled: Boolean) : DebugSettingsEvent()
+    data class ToggleTransportValidationRuntimeValidation(val enabled: Boolean) :
+        DebugSettingsEvent()
+    data class SetTransportValidationRuntimeStartupTimeoutMs(val timeoutMs: Int) :
+        DebugSettingsEvent()
+    data class SetTransportValidationRuntimeObservationWindowMs(val observationWindowMs: Int) :
+        DebugSettingsEvent()
     data object RequestTransportValidationExport : DebugSettingsEvent()
     data object AdvanceTransportValidationSample : DebugSettingsEvent()
     data object AdvanceTransportValidationComparisonMode : DebugSettingsEvent()
     data object AdvanceTransportValidationCaptureMode : DebugSettingsEvent()
     data object AdvanceTransportValidationBurstCount : DebugSettingsEvent()
+    data object AdvanceTransportValidationRuntimeStartupTimeout : DebugSettingsEvent()
+    data object AdvanceTransportValidationRuntimeObservationWindow : DebugSettingsEvent()
     data object StartTransportValidationPlayback : DebugSettingsEvent()
     data object StopTransportValidationPlayback : DebugSettingsEvent()
     data class SignIn(val email: String, val password: String) : DebugSettingsEvent()

@@ -11,6 +11,11 @@ data class TransportValidationSettings(
         TransportValidationCaptureMode.FIRST_N_BURSTS,
     val captureBurstCount: Int = 8,
     val binaryDumpsEnabled: Boolean = false,
+    val runtimeValidationEnabled: Boolean = true,
+    val runtimeStartupTimeoutMs: Int =
+        TransportValidationRuntimeDefaults.thresholds.startupTimeoutMs.toInt(),
+    val runtimeObservationWindowMs: Int =
+        TransportValidationRuntimeDefaults.thresholds.observationWindowMs.toInt(),
     val exportRequestCount: Int = 0,
 )
 
@@ -33,6 +38,12 @@ interface TransportValidationSettingsStore {
     suspend fun setTransportValidationCaptureBurstCount(count: Int)
 
     suspend fun setTransportValidationBinaryDumpsEnabled(enabled: Boolean)
+
+    suspend fun setTransportValidationRuntimeValidationEnabled(enabled: Boolean)
+
+    suspend fun setTransportValidationRuntimeStartupTimeoutMs(timeoutMs: Int)
+
+    suspend fun setTransportValidationRuntimeObservationWindowMs(observationWindowMs: Int)
 
     suspend fun incrementTransportValidationExportRequestCount()
 }

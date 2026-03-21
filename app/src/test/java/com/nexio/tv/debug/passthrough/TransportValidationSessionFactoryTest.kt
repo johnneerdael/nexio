@@ -12,12 +12,48 @@ class TransportValidationSessionFactoryTest {
     @Test
     fun `create session snapshot from bundled sample manifest and bounded reference stream`() {
         val manifest = loader.parseManifest(assetFile("transport_validation_manifest.json").readText())
+        val sample = manifest.samples.first { it.id == "truehd" }
+        val preparedSample =
+            PreparedTransportValidationSample(
+                manifest = manifest,
+                sample = sample,
+                sourceFile = assetFile(sample.sourceAssetPath),
+                referenceFile = assetFile(sample.referenceAssetPath),
+                elementaryFile = sample.elementaryAssetPath?.let(::assetFile),
+                assetSource = TransportValidationAssetSourceSnapshot(
+                    baseUrl = "https://files.thepi.es/validator",
+                    manifestUrl = "https://files.thepi.es/validator/transport_validation_manifest.json",
+                    manifestVersion = manifest.version,
+                    source = TransportValidationCachedAssetSnapshot(
+                        remotePath = sample.sourceAssetPath,
+                        localFileName = sample.sourceAssetPath,
+                        localFilePath = assetFile(sample.sourceAssetPath).absolutePath,
+                        checksum = sample.assetChecksums.getValue("sourceAssetPath"),
+                        cacheState = TransportValidationAssetCacheState.REUSED,
+                    ),
+                    reference = TransportValidationCachedAssetSnapshot(
+                        remotePath = sample.referenceAssetPath,
+                        localFileName = sample.referenceAssetPath,
+                        localFilePath = assetFile(sample.referenceAssetPath).absolutePath,
+                        checksum = sample.assetChecksums.getValue("referenceAssetPath"),
+                        cacheState = TransportValidationAssetCacheState.REUSED,
+                    ),
+                    elementary = sample.elementaryAssetPath?.let { path ->
+                        TransportValidationCachedAssetSnapshot(
+                            remotePath = path,
+                            localFileName = path,
+                            localFilePath = assetFile(path).absolutePath,
+                            checksum = sample.assetChecksums.getValue("elementaryAssetPath"),
+                            cacheState = TransportValidationAssetCacheState.REUSED,
+                        )
+                    },
+                ),
+            )
 
         val session =
             assetFile("truehd.spdif").inputStream().use { inputStream ->
                 TransportValidationSessionFactory.createSession(
-                    manifest = manifest,
-                    sampleId = "truehd",
+                    preparedSample = preparedSample,
                     referenceInputStream = inputStream,
                     referenceBurstLimit = 8,
                 )

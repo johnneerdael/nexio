@@ -3,6 +3,7 @@ package com.nexio.tv
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import java.io.File
 import android.net.Uri
 import android.view.KeyEvent
 import android.os.SystemClock
@@ -460,13 +461,14 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(pendingTransportValidation) {
                         val navigation = pendingTransportValidation ?: return@LaunchedEffect
+                        val localFile = File(navigation.assetPath)
                         navController.navigate(
                             Screen.Player.createRoute(
-                                streamUrl = "asset:///${navigation.assetPath}",
+                                streamUrl = Uri.fromFile(localFile).toString(),
                                 title = navigation.title,
                                 streamName = "Passthrough Transport Validation",
                                 playerBackend = "INTERNAL",
-                                filename = navigation.assetPath
+                                filename = localFile.name
                             )
                         )
                         pendingTransportValidationNavigation.value = null
