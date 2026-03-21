@@ -3,8 +3,11 @@ package com.nuvio.tv.ui.screens.tmdb
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.tmdb.TmdbEntityBrowseData
 import com.nuvio.tv.core.tmdb.TmdbEntityKind
+import com.nuvio.tv.core.tmdb.TmdbEntityMediaType
 import com.nuvio.tv.core.tmdb.TmdbMetadataService
+import com.nuvio.tv.core.tmdb.TmdbEntityRailType
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,8 @@ class TmdbEntityBrowseViewModel @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+    private val inFlightRailLoads = mutableSetOf<String>()
 
     val entityKind: TmdbEntityKind = TmdbEntityKind.fromRouteValue(
         savedStateHandle.get<String>("entityKind").orEmpty()
@@ -42,6 +47,58 @@ class TmdbEntityBrowseViewModel @Inject constructor(
     fun retry() {
         _uiState.value = TmdbEntityBrowseUiState.Loading
         load()
+    }
+
+    fun loadMoreRail(mediaType: TmdbEntityMediaType, railType: TmdbEntityRailType) {
+        val railKey = "${mediaType.value}_${railType.value}"
+        val currentSuccess = _uiState.value as? TmdbEntityBrowseUiState.Success ?: return
+        val targetRail = currentSuccess.data.rails.firstOrNull {
+            it.mediaType == mediaType && it.railType == railType
+        } ?: return
+        if (!targetRail.hasMore || targetRail.isLoading || !inFlightRailLoads.add(railKey)) return
+
+        _uiState.value = TmdbEntityBrowseUiState.Success(
+            currentSuccess.data.withUpdatedRail(mediaType, railType) { it.copy(isLoading = true) }
+        )
+
+        viewModelScope.launch {
+            try {
+                val latestData = (_uiState.value as? TmdbEntityBrowseUiState.Success)?.data ?: return@launch
+                val latestRail = latestData.rails.firstOrNull {
+                    it.mediaType == mediaType && it.railType == railType
+                } ?: return@launch
+                val language = tmdbSettingsDataStore.settings.first().language
+                val nextPage = latestRail.currentPage + 1
+                val pageResult = tmdbMetadataService.fetchEntityRailPage(
+                    entityKind = entityKind,
+                    entityId = entityId,
+                    mediaType = mediaType,
+                    railType = railType,
+                    language = language,
+                    page = nextPage
+                )
+                val mergedItems = (latestRail.items + pageResult.items)
+                    .distinctBy { it.id }
+
+                _uiState.value = TmdbEntityBrowseUiState.Success(
+                    latestData.withUpdatedRail(mediaType, railType) {
+                        it.copy(
+                            items = mergedItems,
+                            currentPage = nextPage,
+                            hasMore = pageResult.hasMore,
+                            isLoading = false
+                        )
+                    }
+                )
+            } catch (_: Exception) {
+                val fallback = (_uiState.value as? TmdbEntityBrowseUiState.Success)?.data ?: return@launch
+                _uiState.value = TmdbEntityBrowseUiState.Success(
+                    fallback.withUpdatedRail(mediaType, railType) { it.copy(isLoading = false) }
+                )
+            } finally {
+                inFlightRailLoads.remove(railKey)
+            }
+        }
     }
 
     private fun load() {
@@ -72,5 +129,21 @@ class TmdbEntityBrowseViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun TmdbEntityBrowseData.withUpdatedRail(
+        mediaType: TmdbEntityMediaType,
+        railType: TmdbEntityRailType,
+        transform: (com.nuvio.tv.core.tmdb.TmdbEntityRail) -> com.nuvio.tv.core.tmdb.TmdbEntityRail
+    ): TmdbEntityBrowseData {
+        return copy(
+            rails = rails.map { rail ->
+                if (rail.mediaType == mediaType && rail.railType == railType) {
+                    transform(rail)
+                } else {
+                    rail
+                }
+            }
+        )
     }
 }

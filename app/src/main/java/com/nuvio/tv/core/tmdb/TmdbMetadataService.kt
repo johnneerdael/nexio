@@ -542,20 +542,25 @@ class TmdbMetadataService @Inject constructor(
         val rails = buildEntityMediaOrder(entityKind, normalizedSourceType)
             .flatMap { mediaType ->
                 TmdbEntityRailType.values().mapNotNull { railType ->
-                    val items = fetchEntityRail(
+                    val pageResult = fetchEntityRailPage(
                         entityKind = entityKind,
                         entityId = entityId,
                         mediaType = mediaType,
                         railType = railType,
-                        language = normalizedLanguage
+                        language = normalizedLanguage,
+                        page = 1
                     )
+                    val items = pageResult.items
                     if (items.isEmpty()) {
                         null
                     } else {
                         TmdbEntityRail(
                             mediaType = mediaType,
                             railType = railType,
-                            items = items
+                            items = items,
+                            currentPage = 1,
+                            hasMore = pageResult.hasMore,
+                            isLoading = false
                         )
                     }
                 }
@@ -649,49 +654,60 @@ class TmdbMetadataService @Inject constructor(
         return header
     }
 
-    private suspend fun fetchEntityRail(
+    suspend fun fetchEntityRailPage(
         entityKind: TmdbEntityKind,
         entityId: Int,
         mediaType: TmdbEntityMediaType,
         railType: TmdbEntityRailType,
-        language: String
-    ): List<MetaPreview> {
+        language: String,
+        page: Int
+    ): TmdbEntityRailPageResult {
         if (entityKind == TmdbEntityKind.NETWORK && mediaType == TmdbEntityMediaType.MOVIE) {
-            return emptyList()
+            return TmdbEntityRailPageResult(items = emptyList(), hasMore = false)
         }
 
-        val cacheKey = "${entityKind.routeValue}:$entityId:${mediaType.value}:${railType.value}:$language"
-        entityRailCache[cacheKey]?.let { return it }
+        val cacheKey = "${entityKind.routeValue}:$entityId:${mediaType.value}:${railType.value}:$language:page:$page"
+        entityRailCache[cacheKey]?.let { cached ->
+            return TmdbEntityRailPageResult(
+                items = cached,
+                hasMore = cached.isNotEmpty()
+            )
+        }
 
         val today = LocalDate.now().toString()
         val voteCountFloor = if (railType == TmdbEntityRailType.TOP_RATED) TOP_RATED_VOTE_COUNT_FLOOR else null
         val result = try {
-            val results = when (mediaType) {
+            val response = when (mediaType) {
                 TmdbEntityMediaType.MOVIE -> {
                     tmdbApi.discoverMovies(
                         apiKey = TMDB_API_KEY,
                         language = language,
+                        page = page,
                         sortBy = movieSortBy(railType),
                         withCompanies = entityId.toString(),
                         releaseDateLte = if (railType == TmdbEntityRailType.RECENT) today else null,
                         voteCountGte = voteCountFloor
-                    ).body()?.results.orEmpty()
+                    ).body()
                 }
 
                 TmdbEntityMediaType.TV -> {
                     tmdbApi.discoverTv(
                         apiKey = TMDB_API_KEY,
                         language = language,
+                        page = page,
                         sortBy = tvSortBy(railType),
                         withCompanies = if (entityKind == TmdbEntityKind.COMPANY) entityId.toString() else null,
                         withNetworks = if (entityKind == TmdbEntityKind.NETWORK) entityId.toString() else null,
                         firstAirDateLte = if (railType == TmdbEntityRailType.RECENT) today else null,
                         voteCountGte = voteCountFloor
-                    ).body()?.results.orEmpty()
+                    ).body()
                 }
             }
 
-            results
+            val results = response?.results.orEmpty()
+            val totalPages = response?.totalPages ?: page
+
+            val mappedItems = results
                 .filter { it.id > 0 }
                 .mapNotNull { discoverItem ->
                     mapEntityDiscoverResult(
@@ -700,16 +716,21 @@ class TmdbMetadataService @Inject constructor(
                     )
                 }
                 .take(ENTITY_RAIL_MAX_ITEMS)
+
+            TmdbEntityRailPageResult(
+                items = mappedItems,
+                hasMore = page < totalPages && mappedItems.isNotEmpty()
+            )
         } catch (e: Exception) {
             Log.w(
                 TAG,
                 "Failed to fetch ${entityKind.routeValue} rail ${railType.value}/${mediaType.value} for $entityId: ${e.message}"
             )
-            emptyList()
+            TmdbEntityRailPageResult(items = emptyList(), hasMore = false)
         }
 
-        if (result.isNotEmpty()) {
-            entityRailCache[cacheKey] = result
+        if (result.items.isNotEmpty()) {
+            entityRailCache[cacheKey] = result.items
         }
         return result
     }
@@ -1141,12 +1162,20 @@ data class TmdbEntityHeader(
 data class TmdbEntityRail(
     val mediaType: TmdbEntityMediaType,
     val railType: TmdbEntityRailType,
-    val items: List<MetaPreview>
+    val items: List<MetaPreview>,
+    val currentPage: Int = 1,
+    val hasMore: Boolean = false,
+    val isLoading: Boolean = false
 )
 
 data class TmdbEntityBrowseData(
     val header: TmdbEntityHeader,
     val rails: List<TmdbEntityRail>
+)
+
+data class TmdbEntityRailPageResult(
+    val items: List<MetaPreview>,
+    val hasMore: Boolean
 )
 
 private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
