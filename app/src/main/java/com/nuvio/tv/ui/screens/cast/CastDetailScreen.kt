@@ -82,7 +82,6 @@ fun CastDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
     ) {
         Crossfade(
             targetState = uiState,
