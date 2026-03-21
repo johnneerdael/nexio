@@ -128,3 +128,28 @@ Current parity conclusion:
 - Our current branch still revisits the same steady-state remainder too aggressively
   under a stable tuple, so the next native-only change should target bounded zero-write
   cadence tied to packet/output duration, not another play-state or transport change.
+
+## Structural Pass Hypothesis
+
+Current revert point before the structural pass:
+- root `5253bb329`
+- media `3757398fae`
+
+Updated root-cause read after the cadence pass:
+- the active branch is no longer failing on one retry constant alone
+- Java still owns a custom TrueHD startup/steady-state handoff decision
+- native still keeps layered startup and steady-state ownership above the actual pending output
+- that layered ownership is still more custom than Media3 even though transport and the outer
+  contract remain good
+
+The next pass will therefore change architecture, not tuning:
+- isolate startup-only behavior from steady-state completely
+- move startup completion ownership into the native engine
+- make Java handoff passive once native steady-state begins
+- collapse steady-state native handling toward one pending-output truth model
+
+Non-goals for this pass:
+- no MAT/IEC transport changes
+- no Java `AudioSink` contract changes
+- no route tuple changes
+- no buffer sizing changes
