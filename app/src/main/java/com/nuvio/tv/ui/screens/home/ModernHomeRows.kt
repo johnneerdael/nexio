@@ -7,6 +7,9 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +92,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val MODERN_HORIZONTAL_FOCUS_DEBOUNCE_MS = 140L
 private const val POSTER_PREFETCH_DISTANCE = 8
+
+internal val LocalVerticalRowsScrolling = androidx.compose.runtime.compositionLocalOf { false }
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -408,6 +413,7 @@ internal fun ModernRowSection(
 
         val rowItemCount = row.items.size
         LaunchedEffect(row.key, rowItemCount, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
+            delay(150) // Wait before spamming image requests to survive rapid vertical D-pad scrolls!
             val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
             val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
             val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }
@@ -668,7 +674,14 @@ private fun ModernCarouselCard(
     }
     var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     val shouldPlayTrailerInCard = playTrailerInExpandedCard && !trailerPreviewUrl.isNullOrBlank()
-    val hasImage = !imageUrl.isNullOrBlank()
+    val isVerticalRowsScrolling = LocalVerticalRowsScrolling.current
+    val imageCacheKey = "${imageUrl}_${requestWidthPx}x${requestHeightPx}"
+    val isImageCached = remember(imageModel) {
+        context.imageLoader.memoryCache?.get(MemoryCache.Key(imageCacheKey)) != null
+    }
+
+    val safeImageModel = if (isVerticalRowsScrolling && !isImageCached) null else imageModel
+    val hasImage = !imageUrl.isNullOrBlank() && safeImageModel != null
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
             !effectiveLogoUrl.isNullOrBlank() &&
@@ -678,6 +691,7 @@ private fun ModernCarouselCard(
     val backgroundCardColor = NuvioColors.BackgroundCard
     val focusRingColor = NuvioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
+    val backgroundPainter = remember(backgroundCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(backgroundCardColor) }
     val focusedBorder = remember(cardShape, focusRingColor) {
         Border(
             border = BorderStroke(2.dp, focusRingColor),
@@ -688,18 +702,13 @@ private fun ModernCarouselCard(
         titleMedium.copy(fontWeight = FontWeight.Medium)
     }
 
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+
     Column(
         modifier = modifier.width(animatedCardWidth),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Card(
-            onClick = {
-                if (longPressTriggered) {
-                    longPressTriggered = false
-                } else {
-                    onClick()
-                }
-            },
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
@@ -737,16 +746,20 @@ private fun ModernCarouselCard(
                         return@onPreviewKeyEvent true
                     }
                     false
-                },
-            shape = CardDefaults.shape(shape = cardShape),
-            colors = CardDefaults.colors(
-                containerColor = backgroundCardColor,
-                focusedContainerColor = backgroundCardColor
-            ),
-            border = CardDefaults.border(
-                focusedBorder = focusedBorder
-            ),
-            scale = CardDefaults.scale(focusedScale = 1f)
+                }
+                .clip(cardShape)
+                .border(if (isFocused) focusedBorder.border else BorderStroke(0.dp, Color.Transparent), cardShape)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = {
+                        if (longPressTriggered) {
+                            longPressTriggered = false
+                        } else {
+                            onClick()
+                        }
+                    }
+                )
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 val mediaLayerModifier = remember(hasLandscapeLogo) {
@@ -767,9 +780,12 @@ private fun ModernCarouselCard(
                 Box(modifier = mediaLayerModifier) {
                     if (hasImage) {
                         AsyncImage(
-                            model = imageModel,
+                            model = safeImageModel,
                             contentDescription = item.title,
                             modifier = Modifier.fillMaxSize(),
+                            placeholder = backgroundPainter,
+                            error = backgroundPainter,
+                            fallback = backgroundPainter,
                             contentScale = ContentScale.Crop
                         )
                     } else {

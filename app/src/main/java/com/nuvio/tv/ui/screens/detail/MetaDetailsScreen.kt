@@ -273,7 +273,6 @@ fun MetaDetailsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioColors.Background)
             .onPreviewKeyEvent { keyEvent ->
                 if (currentIsTrailerPlaying) {
                     if (currentShowTrailerControls) {
@@ -1553,29 +1552,21 @@ private fun BackdropLayer(
     bottomGradient: ImageBitmap,
 ) {
     val backdropAlphaState = animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0f else 1f,
-        animationSpec = tween(durationMillis = 800),
+        targetValue = if (isTrailerPlaying) 0f else if (isScrolledPastHero) 0.15f else 1f,
+        animationSpec = tween(durationMillis = if (isScrolledPastHero) 300 else 800),
         label = "backdropFade"
     )
     val gradientAlphaState = animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0f else 1f,
-        animationSpec = tween(durationMillis = 800),
+        targetValue = if (isTrailerPlaying || isScrolledPastHero) 0f else 1f,
+        animationSpec = tween(durationMillis = if (isScrolledPastHero) 300 else 800),
         label = "gradientFade"
-    )
-    val bottomGradientAlphaState = animateFloatAsState(
-        targetValue = if (isScrolledPastHero) 1f else 0f,
-        animationSpec = tween(durationMillis = 300),
-        label = "bottomGradientFade"
     )
     Box(modifier = Modifier.fillMaxSize()) {
         AsyncImage(
             model = backdropRequest,
             contentDescription = null,
-            modifier = if (isTrailerPlaying || backdropAlphaState.value < 1f) {
-                Modifier.fillMaxSize().graphicsLayer { alpha = backdropAlphaState.value }
-            } else {
-                Modifier.fillMaxSize()
-            },
+            modifier = Modifier.fillMaxSize(),
+            alpha = backdropAlphaState.value,
             contentScale = ContentScale.Crop
         )
         TrailerPlayer(
@@ -1594,18 +1585,14 @@ private fun BackdropLayer(
                 .fillMaxSize()
                 .drawWithCache {
                     onDrawBehind {
-                        drawImage(
-                            leftGradient,
-                            dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
-                            alpha = gradientAlphaState.value,
-                            filterQuality = androidx.compose.ui.graphics.FilterQuality.Low
-                        )
-                        drawImage(
-                            bottomGradient,
-                            dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
-                            alpha = bottomGradientAlphaState.value,
-                            filterQuality = androidx.compose.ui.graphics.FilterQuality.Low
-                        )
+                        if (gradientAlphaState.value > 0f) {
+                            drawImage(
+                                leftGradient,
+                                dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                                alpha = gradientAlphaState.value,
+                                filterQuality = androidx.compose.ui.graphics.FilterQuality.Low
+                            )
+                        }
                     }
                 }
         )
