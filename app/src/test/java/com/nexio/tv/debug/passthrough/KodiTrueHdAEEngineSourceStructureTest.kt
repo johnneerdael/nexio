@@ -16,27 +16,25 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
-    fun flushLoopDoesNotDuplicateSteadyStateBackoffGate() {
+    fun steadyStateFlushDoesNotCallRetryAdmissionHelper() {
         val flushMethod =
             extractMethod(
                 loadSource(),
                 "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
             )
 
-        assertFalse(flushMethod.contains("steadyStateRetryBackoffActive"))
-        assertFalse(flushMethod.contains("!steadyStateRetryingPendingRemainder && !shouldRetry"))
-        assertTrue(flushMethod.contains("if (!shouldRetry)"))
+        assertFalse(flushMethod.contains("ShouldRetrySteadyStatePendingPackedRemainderLocked("))
     }
 
     @Test
-    fun steadyStateRetryAdmissionDoesNotDependOnAudioTrackPlayState() {
+    fun steadyStateFlushDoesNotWaitForAudioTrackPlayState() {
         val flushMethod =
             extractMethod(
                 loadSource(),
                 "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
             )
 
-        assertFalse(flushMethod.contains("retryingPendingRemainder && output_.IsPlaying()"))
+        assertFalse(flushMethod.contains("\"steady_state_waiting_for_play_state\""))
     }
 
     @Test
@@ -77,28 +75,19 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
-    fun steadyStateRetryCadenceDoesNotUseFixedFourMillisecondBackoff() {
-        val engineSource = loadSource()
-
-        assertFalse(engineSource.contains("kSteadyStateRepeatedZeroBackoffUs = 4000"))
-    }
-
-    @Test
-    fun pendingPackedRetryStateTracksNextEligibleRetryTime() {
+    fun trueHdEngineTracksSplitStartupAndSteadyStatePendingInput() {
         val headerSource = loadHeaderSource()
 
-        assertTrue(headerSource.contains("nextEligibleRetryTimeUs_"))
+        assertTrue(headerSource.contains("startupPendingPassthroughInput_"))
+        assertTrue(headerSource.contains("steadyStatePendingPassthroughInput_"))
     }
 
     @Test
-    fun steadyStateZeroWritesUsePacketDurationBackoffReason() {
-        val flushMethod =
-            extractMethod(
-                loadSource(),
-                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
-            )
+    fun trueHdEngineExposesNativeStartupCompletion() {
+        val headerSource = loadHeaderSource()
 
-        assertTrue(flushMethod.contains("\"steady_state_packet_duration_backoff\""))
+        assertTrue(headerSource.contains("bool IsTrueHdStartupComplete()"))
+        assertTrue(headerSource.contains("trueHdStartupComplete_"))
     }
 
     private fun loadSource(): String {
