@@ -88,7 +88,9 @@ data class NextUpInfo(
     val lastWatched: Long,
     val imdbRating: Float? = null,
     val genres: List<String> = emptyList(),
-    val releaseInfo: String? = null
+    val releaseInfo: String? = null,
+    val seedSeason: Int? = null,
+    val seedEpisode: Int? = null
 )
 
 @Immutable
