@@ -28,6 +28,28 @@ class KodiTrueHdAEEngineSourceStructureTest {
         assertTrue(flushMethod.contains("if (!shouldRetry)"))
     }
 
+    @Test
+    fun steadyStateRetryAdmissionDoesNotDependOnAudioTrackPlayState() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertFalse(flushMethod.contains("retryingPendingRemainder && output_.IsPlaying()"))
+    }
+
+    @Test
+    fun steadyStateRetryDiagnosticsDoNotFallBackToForcedRetry() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertFalse(flushMethod.contains("\"forced_retry\""))
+    }
+
     private fun loadSource(): String {
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val relativePath =
