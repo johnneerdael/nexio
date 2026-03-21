@@ -487,7 +487,7 @@ private fun EntityRailRow(
                     item = item,
                     onClick = { onItemClick(item) },
                     posterCardStyle = posterCardStyle,
-                    showLabel = true,
+                    showLabel = false,
                     focusRequester = requester,
                     onFocused = {
                         onFocusedItemIndexChanged(itemIndex)
