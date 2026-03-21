@@ -76,6 +76,31 @@ class KodiTrueHdAEEngineSourceStructureTest {
         )
     }
 
+    @Test
+    fun steadyStateRetryCadenceDoesNotUseFixedFourMillisecondBackoff() {
+        val engineSource = loadSource()
+
+        assertFalse(engineSource.contains("kSteadyStateRepeatedZeroBackoffUs = 4000"))
+    }
+
+    @Test
+    fun pendingPackedRetryStateTracksNextEligibleRetryTime() {
+        val headerSource = loadHeaderSource()
+
+        assertTrue(headerSource.contains("nextEligibleRetryTimeUs_"))
+    }
+
+    @Test
+    fun steadyStateZeroWritesUsePacketDurationBackoffReason() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertTrue(flushMethod.contains("\"steady_state_packet_duration_backoff\""))
+    }
+
     private fun loadSource(): String {
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val relativePath =
@@ -96,6 +121,30 @@ class KodiTrueHdAEEngineSourceStructureTest {
                 Files.exists(directCandidate) -> directCandidate
                 Files.exists(moduleCandidate) -> moduleCandidate
                 else -> error("Unable to locate KodiTrueHdAEEngine.cpp from working directory $cwd")
+            }
+        return String(Files.readAllBytes(sourcePath), Charsets.UTF_8)
+    }
+
+    private fun loadHeaderSource(): String {
+        val cwd = Paths.get("").toAbsolutePath().normalize()
+        val relativePath =
+            Paths.get(
+                "media",
+                "libraries",
+                "exoplayer_kodi_cpp_audiosink",
+                "src",
+                "main",
+                "jni",
+                "src",
+                "KodiTrueHdAEEngine.h",
+            )
+        val directCandidate = cwd.resolve(relativePath)
+        val moduleCandidate = cwd.resolve("..").resolve(relativePath).normalize()
+        val sourcePath =
+            when {
+                Files.exists(directCandidate) -> directCandidate
+                Files.exists(moduleCandidate) -> moduleCandidate
+                else -> error("Unable to locate KodiTrueHdAEEngine.h from working directory $cwd")
             }
         return String(Files.readAllBytes(sourcePath), Charsets.UTF_8)
     }
