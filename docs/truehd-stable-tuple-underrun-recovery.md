@@ -54,3 +54,44 @@ Current primary mismatch to fix:
   `4 ms` worth of audio.
 - The next implementation group is packet-duration-shaped zero-write gating in the native
   steady-state path.
+
+## Group F validation note
+
+Validated with:
+- `/Users/jneerdael/Scripts/nexio/scripts/run_adb_validation.sh`
+- bundle: `/tmp/transport-validation-truehd-1774133657269.zip`
+- comparison baseline: `/tmp/transport-validation-truehd-1774129824226.zip`
+
+Hard-gate result:
+- transport stayed `PASS`
+- burst chain stayed `8 -> 64 -> 64 -> 64`
+- `routeChangeCountAfterStableStart=0`
+- `routeTupleChangeCountAfterStableStart=0`
+- `routeReopenCountAfterStart=0`
+- `playerStateVerdict=PASS`
+- `continuousPlayingWindowSatisfied=true`
+
+What improved:
+- `timeToReadyMs`: `1076 -> 996`
+- `zeroWriteCount`: `2365 -> 2242`
+- `remainderRetryEventCount`: `2368 -> 2242`
+- `successfulWriteCount`: `4101 -> 4546`
+- retry reasons are now explicit and split:
+  - `steady_state_packet_duration_backoff=1385`
+  - `steady_state_output_driven=857`
+
+What got worse:
+- `audioUnderrunCount`: `0 -> 1`
+- `droppedVideoFrames`: `0 -> 51`
+- `maxZeroWriteStreak`: `3 -> 4`
+- `longestZeroWriteStreakMs`: `37 -> 74`
+- `longestStuckRemainderMs`: `13 -> 98`
+- packets with `zero -> zero -> success`: `117 -> 484`
+
+Grounded conclusion after Group F:
+- Packet-duration gating did not break transport or the validated outer contract boundary.
+- It did not normalize late-stream audio quality.
+- The active gap is no longer just “too-fast fixed backoff”; it is still stable-tuple late-stream
+  zero-write cadence and recovery behavior under the same direct-output route.
+- Because Group F preserved hard gates but still worsened late-stream movie-shape metrics, the next
+  follow-up should be a separate audit/plan, not an in-place extension of this step.
