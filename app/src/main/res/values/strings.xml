@@ -124,6 +124,13 @@
     <string name="detail_tab_more_like_this">More like this</string>
     <string name="detail_section_network">Network</string>
     <string name="detail_section_production">Production</string>
+    <string name="tmdb_entity_kind_company">Production Company</string>
+    <string name="tmdb_entity_kind_network">Network</string>
+    <string name="tmdb_entity_rail_popular">Popular</string>
+    <string name="tmdb_entity_rail_top_rated">Top Rated</string>
+    <string name="tmdb_entity_rail_recent">Recent</string>
+    <string name="tmdb_entity_empty_title">No titles found</string>
+    <string name="tmdb_entity_empty_subtitle">TMDB does not currently have browseable titles for this selection.</string>
     <string name="episodes_unavailable">Unavailable</string>
     <string name="series_status_ended">Ended</string>
     <string name="series_status_continuing">Ongoing</string>
