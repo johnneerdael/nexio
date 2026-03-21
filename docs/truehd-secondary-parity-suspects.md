@@ -185,3 +185,16 @@ They should stay documented as:
 - valid follow-up suspects
 - not the first next fix boundary
 - especially not worth reopening if the cadence fix already solves the audible defect
+
+## Decision Gate After The Cadence Fix
+
+Use this handoff rule after the packet-duration zero-write cadence change is validated:
+
+- if the cadence fix keeps transport and contract clean and materially improves audible quality,
+  stop there and do not reopen the secondary suspects
+- if the cadence fix keeps transport and contract clean but audible quality is still not materially
+  improved, the next follow-up plan should target exactly one of the secondary suspects in the
+  priority order above
+- do not bundle multiple secondary suspects into the first follow-up plan
+- do not reopen buffer sizing, startup complexity, or `HasPendingData()` truth in the same patch as
+  the cadence fix
