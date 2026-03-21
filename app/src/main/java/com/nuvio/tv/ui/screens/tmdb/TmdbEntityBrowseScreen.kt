@@ -3,8 +3,11 @@ package com.nuvio.tv.ui.screens.tmdb
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import android.graphics.Bitmap
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,11 +42,13 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.AnimationSpec
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -117,6 +123,7 @@ fun TmdbEntityBrowseScreen(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun TmdbEntityBrowseContent(
     data: TmdbEntityBrowseData,
     sourceType: String,
@@ -139,6 +146,8 @@ private fun TmdbEntityBrowseContent(
     }
 
     val posterCardStyle = PosterCardDefaults.Style
+    val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
+    val localDensity = LocalDensity.current
 
     val backgroundRequest = rememberBackgroundRequest(
         data = data,
@@ -179,41 +188,61 @@ private fun TmdbEntityBrowseContent(
                 modifier = Modifier.align(Alignment.Center)
             )
         } else {
-            val railsViewportFraction = 0.65f
-            val railsViewportHeight = maxHeight * railsViewportFraction
+            // Give the list extra trailing scroll room so the last rail can settle cleanly.
+            val railsTailPadding = maxHeight * 0.55f
+            val railHeaderFocusInset = 32.dp
+            val railsBringIntoViewSpec = remember(localDensity, defaultBringIntoViewSpec) {
+                val topInsetPx = with(localDensity) { railHeaderFocusInset.toPx() }
+                @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+                object : BringIntoViewSpec {
+                    override val scrollAnimationSpec: AnimationSpec<Float> =
+                        defaultBringIntoViewSpec.scrollAnimationSpec
 
-            // Fixed hero in the upper area
-            TmdbEntityHero(
-                data = data,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 24.dp, bottom = 8.dp)
-            )
+                    override fun calculateScrollDistance(
+                        offset: Float,
+                        size: Float,
+                        containerSize: Float
+                    ): Float = offset - topInsetPx
+                }
+            }
 
-            // Scrollable rails anchored to the bottom
-            LazyColumn(
+            Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .height(railsViewportHeight),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .fillMaxSize()
+                    .padding(top = 24.dp)
             ) {
-                items(
-                    items = data.rails,
-                    key = { rail -> "${rail.mediaType.value}_${rail.railType.value}" }
-                ) { rail ->
-                    EntityRailRow(
-                        rail = rail,
-                        posterCardStyle = posterCardStyle,
-                        restoreItemId = pendingRestoreItemId,
-                        restoreFocusToken = restoreFocusToken,
-                        onRestoreFocusHandled = { pendingRestoreItemId = null },
-                        onItemClick = { item ->
-                            pendingRestoreItemId = item.id
-                            onNavigateToDetail(item.id, item.apiType, null)
+                TmdbEntityHero(
+                    data = data,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                )
+
+                CompositionLocalProvider(LocalBringIntoViewSpec provides railsBringIntoViewSpec) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = railsTailPadding),
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        items(
+                            items = data.rails,
+                            key = { rail -> "${rail.mediaType.value}_${rail.railType.value}" }
+                        ) { rail ->
+                            EntityRailRow(
+                                rail = rail,
+                                posterCardStyle = posterCardStyle,
+                                restoreItemId = pendingRestoreItemId,
+                                restoreFocusToken = restoreFocusToken,
+                                onRestoreFocusHandled = { pendingRestoreItemId = null },
+                                onItemClick = { item ->
+                                    pendingRestoreItemId = item.id
+                                    onNavigateToDetail(item.id, item.apiType, null)
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
@@ -248,14 +277,71 @@ private fun TmdbEntityHero(
     data: TmdbEntityBrowseData,
     modifier: Modifier = Modifier
 ) {
+    val hasLogo = !data.header.logo.isNullOrBlank()
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 48.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         val context = LocalContext.current
-        if (!data.header.logo.isNullOrBlank()) {
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = if (hasLogo) 32.dp else 0.dp)
+        ) {
+            Text(
+                text = entityKindLabel(data.header.kind),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.4.sp
+                ),
+                color = NuvioColors.TextSecondary
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = data.header.name,
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontSize = 56.sp,
+                    lineHeight = 60.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-1).sp
+                ),
+                color = NuvioColors.TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            val metaLine = listOfNotNull(
+                data.header.originCountry?.takeIf { it.isNotBlank() },
+                data.header.secondaryLabel?.takeIf { it.isNotBlank() }
+            ).joinToString(" • ")
+            if (metaLine.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = metaLine,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = NuvioColors.TextSecondary
+                )
+            }
+            data.header.description?.takeIf { it.isNotBlank() }?.let { description ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        lineHeight = 24.sp
+                    ),
+                    color = NuvioColors.TextSecondary,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(0.88f)
+                )
+            }
+        }
+
+        if (hasLogo) {
             val logoPainter = rememberAsyncImagePainter(
                 model = ImageRequest.Builder(context)
                     .data(data.header.logo)
@@ -280,60 +366,15 @@ private fun TmdbEntityHero(
                 }
             }
 
-            androidx.compose.foundation.Image(
+            Image(
                 painter = logoPainter,
                 contentDescription = data.header.name,
                 modifier = Modifier
-                    .width(220.dp)
-                    .height(90.dp),
+                    .width(280.dp)
+                    .height(120.dp),
                 contentScale = ContentScale.Fit,
                 colorFilter = logoColorFilter
             )
-            Spacer(modifier = Modifier.width(24.dp))
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = entityKindLabel(data.header.kind),
-                style = MaterialTheme.typography.labelLarge,
-                color = NuvioColors.TextSecondary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = data.header.name,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp
-                ),
-                color = NuvioColors.TextPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val metaLine = listOfNotNull(
-                data.header.originCountry?.takeIf { it.isNotBlank() },
-                data.header.secondaryLabel?.takeIf { it.isNotBlank() }
-            ).joinToString(" • ")
-            if (metaLine.isNotBlank()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = metaLine,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NuvioColors.TextSecondary
-                )
-            }
-            data.header.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        lineHeight = 20.sp
-                    ),
-                    color = NuvioColors.TextSecondary,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(0.72f)
-                )
-            }
         }
     }
 }
