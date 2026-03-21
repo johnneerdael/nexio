@@ -53,6 +53,18 @@ class TransportValidationController @Inject constructor(
         settingsStore.setTransportValidationBinaryDumpsEnabled(enabled)
     }
 
+    suspend fun setRuntimeValidationEnabled(enabled: Boolean) {
+        settingsStore.setTransportValidationRuntimeValidationEnabled(enabled)
+    }
+
+    suspend fun setRuntimeStartupTimeoutMs(timeoutMs: Int) {
+        settingsStore.setTransportValidationRuntimeStartupTimeoutMs(timeoutMs)
+    }
+
+    suspend fun setRuntimeObservationWindowMs(observationWindowMs: Int) {
+        settingsStore.setTransportValidationRuntimeObservationWindowMs(observationWindowMs)
+    }
+
     suspend fun requestExport() {
         settingsStore.incrementTransportValidationExportRequestCount()
     }

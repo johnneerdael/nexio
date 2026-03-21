@@ -1,9 +1,9 @@
 ---
 name: validating-nexio-adb-passthrough
-description: Executes the exact ADB broadcast workflow to validate audio passthrough transport in the Nexio TV debug app, capture logcat evidence, and export a validation bundle. Use when testing passthrough samples ac3, eac3, dts, dtshd, dtsx, or truehd on com.nexiodebug.tv, or when the user asks to run Nexio passthrough transport validation via ADB.
+description: Executes the exact ADB broadcast workflow to validate audio passthrough transport and runtime playback quality in the Nexio TV debug app, capture logcat evidence, and export a validation bundle. Use when testing passthrough samples ac3, eac3, dts, dtshd, dtsx, or truehd on com.nexiodebug.tv, or when the user asks to run Nexio passthrough transport or runtime validation via ADB.
 ---
 
-# Validating Nexio ADB Passthrough Transport
+# Validating Nexio ADB Passthrough
 
 ## Scope
 
@@ -13,6 +13,45 @@ Use this skill only for the Nexio TV debug build.
 - Receiver: `com.nexiodebug.tv/com.nexio.tv.debug.passthrough.TransportValidationReceiver`
 - Action: `com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION`
 - Supported sample ids: `ac3`, `eac3`, `dts`, `dtshd`, `dtsx`, `truehd`
+- Hosted validator asset source: `https://files.thepi.es/validator`
+
+## Golden rule
+
+When passthrough transport already validates but runtime playback quality is broken, treat
+the Media3 sink contract as the primary debugging reference.
+
+Use this order:
+
+1. Prove transport integrity first.
+2. If transport passes, debug runtime as a sink-contract problem before blaming codec bytes again.
+3. Keep Media3-facing behavior stock-like, while allowing codec-specific internals underneath.
+
+For runtime debugging, first inspect whether the custom sink still behaves like a well-formed
+Media3 `AudioSink` at the boundary expected by:
+
+- `handleBuffer(...)`
+- `hasPendingData()`
+- `isEnded()`
+- `getCurrentPositionUs(...)`
+- `play()`, `pause()`, `flush()`, `playToEndOfStream()`
+
+Use this rule of thumb:
+
+- `handleBuffer(...)` should return `false` because the sink cannot make real progress now,
+  not because a custom buffering policy merely decided it has "enough queued".
+- `hasPendingData()` should mean audio is effectively still in flight at the output path,
+  not just that a Java-side startup queue is non-empty.
+- `isEnded()` should remain stock-like: end-of-stream handled, and no pending data left.
+- `getCurrentPositionUs(...)` must stay on the player/media timeline Media3 expects.
+- Startup backpressure should come primarily from real write/no-progress state and actual
+  pending output, not arbitrary queue thresholds unless the codec transport truly forces it.
+
+If runtime validation fails while transport passes, explicitly separate:
+
+- transport truth: bytes are correct through packer and `AudioTrack.write()`
+- runtime truth: playback contract, buffering, readiness, progress, underruns, and errors
+
+Do not weaken transport conclusions because runtime is still bad.
 
 ## Degrees of freedom
 
@@ -32,7 +71,7 @@ Before starting, confirm all of the following are available:
 - Device serial: `<serial>`
 - Target sample id: one of `ac3`, `eac3`, `dts`, `dtshd`, `dtsx`, `truehd`
 - Writable temp paths under `/tmp`
-- Debug build with bundled validation assets already present
+- Debug build with network access to the hosted validator asset source
 
 ## Sample-to-asset map
 
@@ -53,7 +92,15 @@ Copy this checklist into the working response and keep it updated:
 
 ```text
 Passthrough validation progress
+- [ ] Create Debug build: ./gradlew :app:assembleDebug
+- [ ] Install Debug build:  adb -s x.x.x.x:5555 install -r /Users/jneerdael/Scripts/nexio/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+- [ ] Start Debuggable process and sleep for 20 (wait for boot)
+- [ ] Press left on keypad to wake from screensaver
 - [ ] Enable validation
+- [ ] Enable runtime validation if runtime quality should be scored
+- [ ] Set runtime startup timeout if needed
+- [ ] Set runtime observation window if needed
+- [ ] Record operator observation if AVR lock or audible quality should be captured
 - [ ] Load sample
 - [ ] Start playback
 - [ ] Start log collection
@@ -86,7 +133,59 @@ adb -s <serial> shell am broadcast \
   --es action sample --es name <codec_name>
 ```
 
+### 2a) Optional runtime validation controls
+
+Enable runtime validation:
+
+```bash
+adb -s <serial> shell am broadcast \
+  -n com.nexiodebug.tv/com.nexio.tv.debug.passthrough.TransportValidationReceiver \
+  -a com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION \
+  --es action runtime \
+  --ez enabled true
+```
+
+Set runtime startup timeout:
+
+```bash
+adb -s <serial> shell am broadcast \
+  -n com.nexiodebug.tv/com.nexio.tv.debug.passthrough.TransportValidationReceiver \
+  -a com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION \
+  --es action runtime_timeout \
+  --ei ms 5000
+```
+
+Set runtime observation window:
+
+```bash
+adb -s <serial> shell am broadcast \
+  -n com.nexiodebug.tv/com.nexio.tv.debug.passthrough.TransportValidationReceiver \
+  -a com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION \
+  --es action runtime_window \
+  --ei ms 30000
+```
+
+Record operator observation:
+
+```bash
+adb -s <serial> shell am broadcast \
+  -n com.nexiodebug.tv/com.nexio.tv.debug.passthrough.TransportValidationReceiver \
+  -a com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION \
+  --es action mark_runtime_observation \
+  --es avr_lock weak \
+  --es audio_quality choppy \
+  --es note "frequent glitches every few seconds"
+```
+
 ### 3) Start playback
+
+Before starting playback, clear any screensaver or focus-stealing overlay with `DPAD_LEFT`.
+
+Do not send `BACK` as part of the standard validator workflow on this device path, because it can exit Nexio instead of just dismissing the overlay.
+
+```bash
+adb -s <serial> shell input keyevent KEYCODE_DPAD_LEFT
+```
 
 ```bash
 adb -s <serial> shell am broadcast \
@@ -155,11 +254,23 @@ Use the exported `/tmp/<bundle>.zip` and `/tmp/passthrough-validation.log` toget
 Verify all of the following:
 
 - Manifest version is present
+- Hosted validator source metadata is present
 - Selected sample metadata is present and matches `<codec_name>`
 - Source container, elementary stream, and SPDIF golden reference match the sample-to-asset map above
 - Checksums are present for the source/reference/elementary assets
+- Cache-state metadata is present for the downloaded or reused local files
 - Route snapshot fields are present
 - Burst-count summary is present and reflects the requested `8` bursts
+- If runtime validation was enabled:
+  - `runtimeVerdict` is present
+  - `runtime-summary.json` is present
+  - `playback-stats.json` is present
+  - `player-events.json` is present
+  - `analytics-events.json` is present
+  - `sink-health.json` is present
+  - `route-health.json` is present
+  - `playback-head-health.json` is present
+  - `operator-observation.json` is present
 
 ### Check the log file
 
@@ -171,6 +282,59 @@ Verify the log contains evidence for the same run:
 - Capture initiated
 - Export initiated
 - No obvious broadcast, receiver, playback, permission, or fatal exception errors
+- If runtime validation was enabled, no obvious startup-timeout, playback-stall, or player-error evidence contradicts the exported runtime verdict
+
+### Runtime debugging order
+
+When the bundle shows:
+
+- `transportVerdict=PASS`
+- but `runtimeVerdict!=PASS`
+
+follow this order before proposing codec-byte changes:
+
+1. Check the runtime artifacts first:
+   - `runtime-summary.json`
+   - `playback-stats.json`
+   - `player-events.json`
+   - `analytics-events.json`
+   - `sink-health.json`
+   - `route-health.json`
+   - `playback-head-health.json`
+   - `operator-observation.json`
+2. Classify the failure shape:
+   - startup timeout
+   - ready/buffering oscillation
+   - position stalled
+   - player error
+   - underrun / dropped frames / route churn
+   - zero-write streak / partial remainder stuck
+   - playback-head stall while `isPlaying=true`
+   - weak AVR lock / choppy operator observation
+3. Inspect the Media3 sink contract at the active sink boundary:
+   - `handleBuffer(...)`
+   - `hasPendingData()`
+   - `isEnded()`
+   - `getCurrentPositionUs(...)`
+   - lifecycle methods
+4. Only after that, inspect codec-family runtime internals:
+   - startup pacing
+   - pending output accounting
+   - drain/reconfigure behavior
+   - route stabilization
+5. Revisit codec bytes only if transport validation stopped passing or new evidence shows the
+   transport is no longer correct.
+
+Important runtime heuristics:
+
+- `hasPendingData()` returning true because an internal startup queue is non-empty is suspicious.
+- `handleBuffer(...)` returning false due to custom queue thresholds rather than real no-progress
+  is suspicious.
+- `position` stalling while `buffered position` continues to rise is usually a sink/runtime issue
+  before it is a transport-integrity issue.
+- repeated `READY`/`BUFFERING` churn with transport pass should be treated as a runtime/sink
+  contract problem first.
+- transport pass with weak AVR lock or choppy audio is still a degraded runtime result, not a pass.
 
 ### Decide PASS or FAIL
 
@@ -183,7 +347,10 @@ Return **FAIL** if any of the following happens:
 - Sample metadata does not match the requested codec
 - Asset names do not match the sample-to-asset map
 - Checksums are missing
+- Hosted asset source or cache-state metadata is missing
 - Burst summary is missing or does not match `8`
+- Runtime artifacts are missing when runtime validation was enabled
+- Sink/route/playback-head/operator artifacts are missing when runtime continuity validation was enabled
 - Log evidence is missing or shows obvious failures
 
 ## Required output format
@@ -197,6 +364,7 @@ Nexio passthrough validation result
 - Bundle: /tmp/<bundle>.zip
 - Log: /tmp/passthrough-validation.log
 - Verdict: PASS | FAIL
+- Runtime verdict: PASS | DEGRADED | FAIL | UNKNOWN
 - Evidence:
   - Bundle checks: ...
   - Log checks: ...
@@ -236,6 +404,91 @@ adb -s <serial> shell am broadcast \
   -a com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION \
   --es action disable
 ```
+
+## Runtime resolution workflow
+
+When passthrough transport validates but runtime playback quality is still degraded, use a
+two-layer workflow instead of patching symptoms one-by-one without a standing contract audit.
+
+### Layer 1: parity audit
+
+Keep a living parity checklist for the active codec path against the Media3 sink contract.
+Treat the stock Media3 `DefaultAudioSink` boundary as the contract reference, while also
+grounding against the known-good baseline custom path when available.
+
+Track rows such as:
+
+- `handleBuffer(...)`
+- `hasPendingData()`
+- `isEnded()`
+- `getCurrentPositionUs(...)`
+- startup readiness
+- backpressure
+- `AudioTrack` write mode
+- output cadence / flush cadence
+- route reopen / restart behavior
+- sink underrun / restart export
+- sink continuity / playback-head export
+
+Classify each row as exactly one of:
+
+- `stock-like`
+- `intentionally custom`
+- `suspicious divergence`
+- `proven necessary divergence`
+
+Guidance:
+
+- `stock-like`: behaves like Media3 or the baseline custom path in the relevant boundary.
+- `intentionally custom`: different on purpose, but not yet proven necessary.
+- `suspicious divergence`: likely candidate for the next runtime issue.
+- `proven necessary divergence`: codec-family-specific behavior required by transport, such as
+  TrueHD MAT-specific startup or packing behavior.
+
+### Layer 2: run planning
+
+For each runtime validation run, choose one `suspicious divergence` as the primary target.
+
+Do not plan a run around “make everything more stock-like” in one patch.
+Do not patch multiple unrelated runtime boundaries in the same run unless the issue is already
+proven to be one structural boundary.
+
+For each run:
+
+1. Name the target divergence explicitly.
+2. State the expected stock/baseline behavior.
+3. State the current custom behavior.
+4. Make the narrowest change that tests that divergence.
+5. Re-run validation and update the parity checklist.
+
+This gives:
+
+- strategic direction from the parity audit
+- tactical progress from narrow, interpretable runs
+
+### Escalation rule
+
+If repeated runs show that the remaining failures are structural rather than incidental
+(for example steady-state pending/progress semantics, flush cadence, or restart behavior),
+stop doing symptom-by-symptom patches and do one broader parity audit pass first.
+
+After that audit, implement grouped alignment patches by boundary, such as:
+
+- Java sink contract
+- native progress / pending semantics
+- output cadence / timestamp / restart semantics
+
+### Runtime-first interpretation rule
+
+When:
+
+- `transportVerdict=PASS`
+- and `runtimeVerdict!=PASS`
+
+treat the active issue as a sink/runtime contract problem first.
+
+Use the parity checklist before revisiting codec bytes again, unless new evidence shows
+transport is no longer correct.
 
 ## Authoring notes
 

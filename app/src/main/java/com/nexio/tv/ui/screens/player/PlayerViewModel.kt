@@ -9,6 +9,7 @@ import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -39,6 +40,7 @@ class PlayerViewModel @Inject constructor(
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     private val playbackIdleGateState: PlaybackIdleGateState,
+    private val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -57,6 +59,7 @@ class PlayerViewModel @Inject constructor(
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         geminiSubtitleTranslationService = geminiSubtitleTranslationService,
         playbackIdleGateState = playbackIdleGateState,
+        transportValidationRuntimeCollector = transportValidationRuntimeCollector,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

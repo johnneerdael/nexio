@@ -31,6 +31,9 @@ class TransportValidationControllerTest {
         controller.setCaptureMode(TransportValidationCaptureMode.UNTIL_FAILURE)
         controller.setCaptureBurstCount(16)
         controller.setBinaryDumpsEnabled(true)
+        controller.setRuntimeValidationEnabled(false)
+        controller.setRuntimeStartupTimeoutMs(8000)
+        controller.setRuntimeObservationWindowMs(15000)
 
         val settings = controller.state.first { it.settings.selectedSampleId == "truehd" }.settings
         assertEquals("truehd", settings.selectedSampleId)
@@ -38,6 +41,9 @@ class TransportValidationControllerTest {
         assertEquals(TransportValidationCaptureMode.UNTIL_FAILURE, settings.captureMode)
         assertEquals(16, settings.captureBurstCount)
         assertTrue(settings.binaryDumpsEnabled)
+        assertFalse(settings.runtimeValidationEnabled)
+        assertEquals(8000, settings.runtimeStartupTimeoutMs)
+        assertEquals(15000, settings.runtimeObservationWindowMs)
     }
 
     @Test
@@ -50,6 +56,9 @@ class TransportValidationControllerTest {
                 captureMode = TransportValidationCaptureMode.FIRST_N_BURSTS,
                 captureBurstCount = 8,
                 binaryDumpsEnabled = false,
+                runtimeValidationEnabled = true,
+                runtimeStartupTimeoutMs = 5000,
+                runtimeObservationWindowMs = 30000,
                 exportRequestCount = 2,
             )
         )
@@ -61,6 +70,9 @@ class TransportValidationControllerTest {
         assertEquals("dtshd", settings.selectedSampleId)
         assertEquals(8, settings.captureBurstCount)
         assertFalse(settings.binaryDumpsEnabled)
+        assertTrue(settings.runtimeValidationEnabled)
+        assertEquals(5000, settings.runtimeStartupTimeoutMs)
+        assertEquals(30000, settings.runtimeObservationWindowMs)
         assertEquals(2, settings.exportRequestCount)
     }
 
@@ -107,6 +119,20 @@ class TransportValidationControllerTest {
 
         override suspend fun setTransportValidationBinaryDumpsEnabled(enabled: Boolean) {
             state.value = state.value.copy(binaryDumpsEnabled = enabled)
+        }
+
+        override suspend fun setTransportValidationRuntimeValidationEnabled(enabled: Boolean) {
+            state.value = state.value.copy(runtimeValidationEnabled = enabled)
+        }
+
+        override suspend fun setTransportValidationRuntimeStartupTimeoutMs(timeoutMs: Int) {
+            state.value = state.value.copy(runtimeStartupTimeoutMs = timeoutMs)
+        }
+
+        override suspend fun setTransportValidationRuntimeObservationWindowMs(
+            observationWindowMs: Int
+        ) {
+            state.value = state.value.copy(runtimeObservationWindowMs = observationWindowMs)
         }
 
         override suspend fun incrementTransportValidationExportRequestCount() {

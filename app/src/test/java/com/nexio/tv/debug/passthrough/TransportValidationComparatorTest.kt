@@ -119,13 +119,13 @@ class TransportValidationComparatorTest {
             index = 3,
             codecFamily = TransportValidationCodecFamily.E_AC3_JOC,
             pd = 4096,
-            payloadBytes = 4096
+            payloadBytes = 512
         )
         val live = burstRecord(
             index = 3,
             codecFamily = TransportValidationCodecFamily.E_AC3_JOC,
             pd = 4096,
-            payloadBytes = 2048
+            payloadBytes = 256
         )
 
         val result = TransportValidationComparator.compareReferenceBurst(
@@ -136,6 +136,33 @@ class TransportValidationComparatorTest {
 
         assertFalse(result.passed)
         assertEquals(TransportValidationFailureCode.EAC3_AGGREGATION_MISMATCH, result.failureCode)
+    }
+
+    @Test
+    fun `comparator accepts eac3 when pd matches aggregated payload bits`() {
+        val reference = burstRecord(
+            index = 4,
+            codecFamily = TransportValidationCodecFamily.E_AC3,
+            pd = 5120,
+            payloadBytes = 640,
+            fullBurstHash = "same"
+        )
+        val live = burstRecord(
+            index = 4,
+            codecFamily = TransportValidationCodecFamily.E_AC3,
+            pd = 5120,
+            payloadBytes = 640,
+            fullBurstHash = "same"
+        )
+
+        val result = TransportValidationComparator.compareReferenceBurst(
+            sample = sample(codecFamily = TransportValidationCodecFamily.E_AC3),
+            reference = reference,
+            live = live
+        )
+
+        assertTrue(result.passed)
+        assertNull(result.failureCode)
     }
 
     @Test

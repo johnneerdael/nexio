@@ -1,6 +1,9 @@
 package com.nexio.tv.ui.screensaver
 
+import androidx.compose.ui.unit.IntSize
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IdleScreensaverOverlayTest {
@@ -43,6 +46,80 @@ class IdleScreensaverOverlayTest {
             ),
             segments
         )
+    }
+
+    @Test
+    fun `screensaver motion configuration gives the pan time to complete with a noticeable zoom delta`() {
+        assertTrue(SCREENSAVER_MOTION_DURATION_MS <= SCREENSAVER_SLIDE_ADVANCE_MS)
+        assertTrue((SCREENSAVER_END_SCALE - SCREENSAVER_START_SCALE) >= 0.12f)
+    }
+
+    @Test
+    fun `screensaverMotionFrame keeps top left anchored motion within right and bottom overscan`() {
+        val viewportSize = IntSize(width = 1920, height = 1080)
+        val scale = 1.12f
+        val startFrame = screensaverMotionFrame(
+            viewportSize = viewportSize,
+            progress = 0f,
+            motion = screensaverMotionPresetFor(0),
+            scale = scale
+        )
+        val endFrame = screensaverMotionFrame(
+            viewportSize = viewportSize,
+            progress = 1f,
+            motion = screensaverMotionPresetFor(0),
+            scale = scale
+        )
+
+        val maxTranslationX = (viewportSize.width * scale) - viewportSize.width
+        val maxTranslationY = (viewportSize.height * scale) - viewportSize.height
+
+        assertNotEquals(startFrame.translationX, endFrame.translationX)
+        assertNotEquals(startFrame.translationY, endFrame.translationY)
+        assertTrue(startFrame.translationX <= 0f)
+        assertTrue(startFrame.translationX >= -maxTranslationX)
+        assertTrue(endFrame.translationX <= 0f)
+        assertTrue(endFrame.translationX >= -maxTranslationX)
+        assertTrue(startFrame.translationY <= 0f)
+        assertTrue(startFrame.translationY >= -maxTranslationY)
+        assertTrue(endFrame.translationY <= 0f)
+        assertTrue(endFrame.translationY >= -maxTranslationY)
+        assertTrue(kotlin.math.abs(endFrame.translationX - startFrame.translationX) >= maxTranslationX * 0.5f)
+        assertTrue(kotlin.math.abs(endFrame.translationY - startFrame.translationY) >= maxTranslationY * 0.5f)
+    }
+
+    @Test
+    fun `screensaverMotionFrame keeps bottom right anchored motion within left and top overscan`() {
+        val viewportSize = IntSize(width = 1920, height = 1080)
+        val scale = 1.12f
+        val startFrame = screensaverMotionFrame(
+            viewportSize = viewportSize,
+            progress = 0f,
+            motion = screensaverMotionPresetFor(1),
+            scale = scale
+        )
+        val endFrame = screensaverMotionFrame(
+            viewportSize = viewportSize,
+            progress = 1f,
+            motion = screensaverMotionPresetFor(1),
+            scale = scale
+        )
+
+        val maxTranslationX = (viewportSize.width * scale) - viewportSize.width
+        val maxTranslationY = (viewportSize.height * scale) - viewportSize.height
+
+        assertNotEquals(startFrame.translationX, endFrame.translationX)
+        assertNotEquals(startFrame.translationY, endFrame.translationY)
+        assertTrue(startFrame.translationX >= 0f)
+        assertTrue(startFrame.translationX <= maxTranslationX)
+        assertTrue(endFrame.translationX >= 0f)
+        assertTrue(endFrame.translationX <= maxTranslationX)
+        assertTrue(startFrame.translationY >= 0f)
+        assertTrue(startFrame.translationY <= maxTranslationY)
+        assertTrue(endFrame.translationY >= 0f)
+        assertTrue(endFrame.translationY <= maxTranslationY)
+        assertTrue(kotlin.math.abs(endFrame.translationX - startFrame.translationX) >= maxTranslationX * 0.5f)
+        assertTrue(kotlin.math.abs(endFrame.translationY - startFrame.translationY) >= maxTranslationY * 0.5f)
     }
 
     private fun buildSlide(

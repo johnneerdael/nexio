@@ -11,24 +11,25 @@ import javax.inject.Singleton
 @Singleton
 class TransportValidationPlaybackLauncher @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val manifestLoader: TransportValidationManifestLoader,
+    private val hostedAssetStore: TransportValidationHostedAssetStore,
     private val sessionStore: TransportValidationSessionStore,
 ) {
-    fun launchSelectedSample(sampleId: String): Boolean {
+    suspend fun launchSelectedSample(sampleId: String): Boolean {
         Log.i(TAG, "launchSelectedSample begin sampleId=$sampleId")
-        val sample = runCatching {
-            Log.i(TAG, "launchSelectedSample loading manifest sampleId=$sampleId")
-            manifestLoader.loadFromAssets(context.assets).samples.firstOrNull { it.id == sampleId }
+        val preparedSample = runCatching {
+            Log.i(TAG, "launchSelectedSample preparing hosted sample sampleId=$sampleId")
+            hostedAssetStore.prepareSample(sampleId)
         }.getOrNull() ?: run {
-            Log.w(TAG, "Failed to load manifest or find sample sampleId=$sampleId")
+            Log.w(TAG, "Failed to prepare hosted sample sampleId=$sampleId")
             return false
         }
+        val sample = preparedSample.sample
         Log.i(
             TAG,
-            "launchSelectedSample manifest resolved sampleId=${sample.id} assetPath=${sample.sourceAssetPath} referenceAsset=${sample.referenceAssetPath}"
+            "launchSelectedSample sample resolved sampleId=${sample.id} file=${preparedSample.sourceFile.absolutePath} referenceAsset=${sample.referenceAssetPath}"
         )
         Log.i(TAG, "launchSelectedSample starting session sampleId=${sample.id}")
-        val session = sessionStore.startSession(sample.id) ?: run {
+        val session = sessionStore.startSession(preparedSample) ?: run {
             Log.w(TAG, "Failed to start transport validation session sampleId=${sample.id}")
             return false
         }
@@ -44,11 +45,14 @@ class TransportValidationPlaybackLauncher @Inject constructor(
                 .putExtra(MainActivity.EXTRA_TRANSPORT_VALIDATION_COMMAND, MainActivity.TRANSPORT_VALIDATION_COMMAND_START)
                 .putExtra(MainActivity.EXTRA_TRANSPORT_VALIDATION_SAMPLE_ID, sample.id)
                 .putExtra(MainActivity.EXTRA_TRANSPORT_VALIDATION_SAMPLE_TITLE, sample.displayName)
-                .putExtra(MainActivity.EXTRA_TRANSPORT_VALIDATION_ASSET_PATH, sample.sourceAssetPath)
+                .putExtra(
+                    MainActivity.EXTRA_TRANSPORT_VALIDATION_ASSET_PATH,
+                    preparedSample.sourceFile.absolutePath
+                )
         )
         Log.i(
             TAG,
-            "Launched transport validation sampleId=${sample.id} assetPath=${sample.sourceAssetPath} referenceBursts=${session.referenceBursts.size}"
+            "Launched transport validation sampleId=${sample.id} assetPath=${preparedSample.sourceFile.absolutePath} referenceBursts=${session.referenceBursts.size}"
         )
         return true
     }

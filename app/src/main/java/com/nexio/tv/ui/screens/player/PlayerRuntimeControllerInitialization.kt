@@ -864,6 +864,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
                 }
                 addListener(playerListener)
+                transportValidationRuntimeCollector.attachPlayer(this, url)
                 if (dv5HardwareToneMapActive) {
                     setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
                         Dv5HardwareToneMapRpuTap.onFrameAboutToRender(presentationTimeUs)
@@ -878,6 +879,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 }
                 setMediaSource(initialMediaSource)
                 playWhenReady = true
+                transportValidationRuntimeCollector.onPrepareRequested(url)
                 prepare()
                 launchStartupPreparationTasks(
                     url = url,

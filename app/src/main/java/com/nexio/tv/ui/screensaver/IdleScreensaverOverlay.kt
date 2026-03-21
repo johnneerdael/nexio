@@ -62,17 +62,19 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val SCREENSAVER_MOTION_DURATION_MS = 20_000
+internal const val SCREENSAVER_MOTION_DURATION_MS = 14_000
 private const val SCREENSAVER_CROSSFADE_MS = 1_000
-private const val SCREENSAVER_SLIDE_ADVANCE_MS = 15_000
+internal const val SCREENSAVER_SLIDE_ADVANCE_MS = 15_000
 private const val SCREENSAVER_PRELOAD_LEAD_MS = 5_000L
 private const val SCREENSAVER_OPEN_GUARD_MS = 180L
 private const val SCREENSAVER_DETAILS_PROMPT_VISIBLE_MS = 5_000L
 private const val SCREENSAVER_DETAILS_PROMPT_FADE_MS = 1_500
-private const val SCREENSAVER_START_SCALE = 1.05f
-private const val SCREENSAVER_END_SCALE = 1.145f
+internal const val SCREENSAVER_START_SCALE = 1.04f
+internal const val SCREENSAVER_END_SCALE = 1.19f
 private const val SCREENSAVER_TRANSLATE_X_FRACTION = 0.045f
 private const val SCREENSAVER_TRANSLATE_Y_FRACTION = 0.026f
+private const val SCREENSAVER_MOTION_RANGE_START_FRACTION = 0.18f
+private const val SCREENSAVER_MOTION_RANGE_END_FRACTION = 0.82f
 private const val SCREENSAVER_LOW_POWER_MAX_WIDTH = 1280
 private const val SCREENSAVER_LOW_POWER_MAX_HEIGHT = 720
 private val ScreensaverMotionEasing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
@@ -333,9 +335,13 @@ private fun ScreensaverBackgroundImage(
 ) {
     var size by remember(layer.slide.backgroundUrl) { mutableStateOf(IntSize.Zero) }
     val progress = layer.frozenProgress ?: layer.progress.value
-    val translationX = size.width * layer.motion.translateXFraction * progress
-    val translationY = size.height * layer.motion.translateYFraction * progress
     val scale = SCREENSAVER_START_SCALE + ((SCREENSAVER_END_SCALE - SCREENSAVER_START_SCALE) * progress)
+    val motionFrame = screensaverMotionFrame(
+        viewportSize = size,
+        progress = progress,
+        motion = layer.motion,
+        scale = scale
+    )
 
     AsyncImage(
         model = remember(layer.slide.backgroundUrl, decodeSize) {
@@ -354,8 +360,8 @@ private fun ScreensaverBackgroundImage(
                 transformOrigin = layer.motion.transformOrigin
                 scaleX = scale
                 scaleY = scale
-                this.translationX = translationX
-                this.translationY = translationY
+                translationX = motionFrame.translationX
+                translationY = motionFrame.translationY
             }
             .onSizeChanged { size = it }
     )
@@ -513,13 +519,69 @@ private suspend fun prepareScreensaverLayer(
     layer.alpha.snapTo(0f)
 }
 
-private data class ScreensaverMotionPreset(
+internal data class ScreensaverMotionPreset(
     val transformOrigin: TransformOrigin,
     val translateXFraction: Float,
     val translateYFraction: Float
 )
 
-private fun screensaverMotionPresetFor(index: Int): ScreensaverMotionPreset {
+internal data class ScreensaverMotionFrame(
+    val translationX: Float,
+    val translationY: Float
+)
+
+internal data class ScreensaverMotionAxisRange(
+    val start: Float,
+    val end: Float
+)
+
+internal fun screensaverMotionFrame(
+    viewportSize: IntSize,
+    progress: Float,
+    motion: ScreensaverMotionPreset,
+    scale: Float
+): ScreensaverMotionFrame {
+    val maxTranslationX = ((viewportSize.width * scale) - viewportSize.width).coerceAtLeast(0f)
+    val maxTranslationY = ((viewportSize.height * scale) - viewportSize.height).coerceAtLeast(0f)
+    val xRange = screensaverMotionAxisRange(
+        origin = motion.transformOrigin.pivotFractionX,
+        overscan = maxTranslationX
+    )
+    val yRange = screensaverMotionAxisRange(
+        origin = motion.transformOrigin.pivotFractionY,
+        overscan = maxTranslationY
+    )
+    val clampedProgress = progress.coerceIn(0f, 1f)
+    return ScreensaverMotionFrame(
+        translationX = lerp(xRange.start, xRange.end, clampedProgress),
+        translationY = lerp(yRange.start, yRange.end, clampedProgress)
+    )
+}
+
+private fun screensaverMotionAxisRange(
+    origin: Float,
+    overscan: Float
+): ScreensaverMotionAxisRange {
+    val startOffset = overscan * SCREENSAVER_MOTION_RANGE_START_FRACTION
+    val endOffset = overscan * SCREENSAVER_MOTION_RANGE_END_FRACTION
+    return if (origin <= 0.5f) {
+        ScreensaverMotionAxisRange(
+            start = -startOffset,
+            end = -endOffset
+        )
+    } else {
+        ScreensaverMotionAxisRange(
+            start = startOffset,
+            end = endOffset
+        )
+    }
+}
+
+private fun lerp(start: Float, end: Float, progress: Float): Float {
+    return start + ((end - start) * progress)
+}
+
+internal fun screensaverMotionPresetFor(index: Int): ScreensaverMotionPreset {
     val presets = listOf(
         ScreensaverMotionPreset(
             transformOrigin = TransformOrigin(0f, 0f),

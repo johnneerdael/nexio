@@ -1,6 +1,8 @@
 package com.nexio.tv.core.di
 
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.debug.passthrough.OkHttpTransportValidationAssetFetcher
+import com.nexio.tv.debug.passthrough.TransportValidationAssetFetcher
 import com.nexio.tv.debug.passthrough.TransportValidationSettingsStore
 import dagger.Binds
 import dagger.Module
@@ -17,4 +19,10 @@ abstract class DebugSettingsModule {
     abstract fun bindTransportValidationSettingsStore(
         impl: DebugSettingsDataStore
     ): TransportValidationSettingsStore
+
+    @Binds
+    @Singleton
+    abstract fun bindTransportValidationAssetFetcher(
+        impl: OkHttpTransportValidationAssetFetcher
+    ): TransportValidationAssetFetcher
 }

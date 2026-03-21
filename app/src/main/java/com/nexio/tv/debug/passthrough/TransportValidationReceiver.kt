@@ -60,6 +60,55 @@ class TransportValidationReceiver : BroadcastReceiver() {
                         settingsStore.setTransportValidationBinaryDumpsEnabled(enabled)
                         Log.i(TAG, "Binary dumps enabled=$enabled")
                     }
+                    "runtime" -> {
+                        val enabled = intent.getBooleanExtra(EXTRA_ENABLED, true)
+                        settingsStore.setTransportValidationRuntimeValidationEnabled(enabled)
+                        Log.i(TAG, "Runtime validation enabled=$enabled")
+                    }
+                    "runtime_timeout" -> {
+                        intent.getIntExtra(EXTRA_DURATION_MS, -1)
+                            .takeIf { it > 0 }
+                            ?.let { timeoutMs ->
+                                settingsStore.setTransportValidationRuntimeStartupTimeoutMs(timeoutMs)
+                                Log.i(TAG, "Runtime startup timeout updated timeoutMs=$timeoutMs")
+                            }
+                    }
+                    "runtime_window" -> {
+                        intent.getIntExtra(EXTRA_DURATION_MS, -1)
+                            .takeIf { it > 0 }
+                            ?.let { observationWindowMs ->
+                                settingsStore
+                                    .setTransportValidationRuntimeObservationWindowMs(
+                                        observationWindowMs
+                                    )
+                                Log.i(
+                                    TAG,
+                                    "Runtime observation window updated observationWindowMs=$observationWindowMs"
+                                )
+                            }
+                    }
+                    "mark_runtime_observation" -> {
+                        val observation =
+                            TransportValidationOperatorObservation(
+                                avrLock =
+                                    when (intent.getStringExtra(EXTRA_AVR_LOCK)?.trim()?.lowercase()) {
+                                        "good" -> TransportValidationAvrLockQuality.GOOD
+                                        "weak" -> TransportValidationAvrLockQuality.WEAK
+                                        "none" -> TransportValidationAvrLockQuality.NONE
+                                        else -> TransportValidationAvrLockQuality.UNKNOWN
+                                    },
+                                audioQuality =
+                                    when (intent.getStringExtra(EXTRA_AUDIO_QUALITY)?.trim()?.lowercase()) {
+                                        "clean" -> TransportValidationAudioQuality.CLEAN
+                                        "choppy" -> TransportValidationAudioQuality.CHOPPY
+                                        "dropouts" -> TransportValidationAudioQuality.DROPOUTS
+                                        else -> TransportValidationAudioQuality.UNKNOWN
+                                    },
+                                note = intent.getStringExtra(EXTRA_NOTE)?.trim()?.takeIf { it.isNotEmpty() },
+                            )
+                        sessionStore.recordOperatorObservation(observation)
+                        Log.i(TAG, "Recorded runtime observation observation=$observation")
+                    }
                     "start" -> {
                         val requestedSampleId = intent.getStringExtra(EXTRA_SAMPLE_NAME)?.trim()
                         Log.i(TAG, "Start action requestedSampleId=${requestedSampleId ?: "null"}")
@@ -74,9 +123,12 @@ class TransportValidationReceiver : BroadcastReceiver() {
                                 settingsStore.setTransportValidationSelectedSampleId(sampleId)
                                 Log.i(TAG, "Start action refreshed selected sampleId=$sampleId")
                             }
-                            Log.i(TAG, "Start action launching sampleId=$sampleId")
-                            val started = playbackLauncher.launchSelectedSample(sampleId)
-                            Log.i(TAG, "Start action sampleId=$sampleId started=$started")
+                            Log.i(TAG, "Start action scheduling async launch sampleId=$sampleId")
+                            receiverScope.launch {
+                                Log.i(TAG, "Start action launching sampleId=$sampleId")
+                                val started = playbackLauncher.launchSelectedSample(sampleId)
+                                Log.i(TAG, "Start action sampleId=$sampleId started=$started")
+                            }
                         }
                     }
                     "stop" -> {
@@ -95,6 +147,13 @@ class TransportValidationReceiver : BroadcastReceiver() {
                         settingsStore.setTransportValidationSelectedSampleId(null)
                         settingsStore.setTransportValidationEnabled(false)
                         settingsStore.setTransportValidationBinaryDumpsEnabled(false)
+                        settingsStore.setTransportValidationRuntimeValidationEnabled(true)
+                        settingsStore.setTransportValidationRuntimeStartupTimeoutMs(
+                            TransportValidationRuntimeDefaults.thresholds.startupTimeoutMs.toInt()
+                        )
+                        settingsStore.setTransportValidationRuntimeObservationWindowMs(
+                            TransportValidationRuntimeDefaults.thresholds.observationWindowMs.toInt()
+                        )
                         settingsStore.setTransportValidationComparisonMode(
                             TransportValidationComparisonMode.FULL_BURST_COMPARE
                         )
@@ -122,6 +181,10 @@ class TransportValidationReceiver : BroadcastReceiver() {
         const val EXTRA_SAMPLE_NAME = "name"
         const val EXTRA_BURST_COUNT = "bursts"
         const val EXTRA_ENABLED = "enabled"
+        const val EXTRA_DURATION_MS = "ms"
+        const val EXTRA_AVR_LOCK = "avr_lock"
+        const val EXTRA_AUDIO_QUALITY = "audio_quality"
+        const val EXTRA_NOTE = "note"
 
         private const val TAG = "TransportValidationReceiver"
     }

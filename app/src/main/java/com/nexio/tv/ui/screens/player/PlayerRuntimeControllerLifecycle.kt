@@ -40,6 +40,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     nextEpisodeAutoPlayJob = null
     builtInAiSubtitleTranslationJob?.cancel()
     builtInAiSubtitleTranslationJob = null
+    transportValidationRuntimeCollector.detachPlayer(_exoPlayer)
     _exoPlayer?.release()
     _exoPlayer = null
 }

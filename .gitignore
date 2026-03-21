@@ -34,6 +34,7 @@ docs/tv_qr_login.sql
 docss
 benchmark
 .mcp.json
+/.codex
 db/
 backups/
 .supabase_db.env

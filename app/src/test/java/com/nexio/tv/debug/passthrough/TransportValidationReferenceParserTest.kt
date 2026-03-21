@@ -88,14 +88,37 @@ class TransportValidationReferenceParserTest {
         )
 
         assertTrue(bursts.isNotEmpty())
+        assertEquals(32768, bursts[0].burstSizeBytes)
         assertEquals(0x11, bursts[0].normalizedPc)
         assertTrue(bursts[0].dtsHdWrapperPresent == true)
         assertNotNull(bursts[0].dtsHdWrapperPayloadSize)
         assertNotNull(bursts[0].dtsHdSubtype)
+        assertEquals(4, bursts[0].dtsHdSubtype)
         assertEquals(
             TransportValidationDtsPayloadClassification.HD_PAYLOAD,
             bursts[0].dtsHdPayloadClassification
         )
+        assertEquals(32768, bursts[1].burstSizeBytes)
+        assertEquals(0x11, bursts[1].normalizedPc)
+    }
+
+    @Test
+    fun `parse DTSHD reference bursts from input stream with dynamic subtype burst size`() {
+        val sample = sample("dtshd")
+
+        val bursts =
+            assetFile(sample.referenceAssetPath).inputStream().use { inputStream ->
+                TransportValidationReferenceParser.parseReferenceBursts(
+                    sample = sample,
+                    inputStream = inputStream,
+                    maxBursts = 2,
+                )
+            }
+
+        assertEquals(2, bursts.size)
+        assertEquals(32768, bursts[0].burstSizeBytes)
+        assertEquals(32768, bursts[1].burstSizeBytes)
+        assertEquals(bursts[0].first64ByteHash, bursts[1].first64ByteHash)
     }
 
     @Test

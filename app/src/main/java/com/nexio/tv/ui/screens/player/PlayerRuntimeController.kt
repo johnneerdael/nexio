@@ -22,6 +22,7 @@ import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.AddonRepository
@@ -55,6 +56,7 @@ class PlayerRuntimeController(
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
+    internal val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {

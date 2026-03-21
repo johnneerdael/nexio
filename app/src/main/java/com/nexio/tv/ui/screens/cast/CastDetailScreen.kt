@@ -32,9 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
@@ -116,9 +113,6 @@ private fun CastDetailContent(
     person: PersonDetail,
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit
 ) {
-    val backgroundColor = NexioColors.Background
-    val accentColor = NexioColors.Secondary
-
     val allCredits = remember(person.movieCredits, person.tvCredits) {
         (person.movieCredits + person.tvCredits)
             .distinctBy { it.id }
@@ -138,53 +132,6 @@ private fun CastDetailContent(
     val firstPosterFocusRequester = remember { FocusRequester() }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Left accent gradient overlay
-        val accentGradient = remember(accentColor, backgroundColor) {
-            Brush.horizontalGradient(
-                colorStops = arrayOf(
-                    0.0f to accentColor.copy(alpha = 0.26f),
-                    0.12f to accentColor.copy(alpha = 0.18f),
-                    0.28f to accentColor.copy(alpha = 0.10f),
-                    0.45f to accentColor.copy(alpha = 0.04f),
-                    0.60f to Color.Transparent
-                )
-            )
-        }
-        // Left-to-right dark gradient for readability
-        val leftGradient = remember(backgroundColor) {
-            Brush.horizontalGradient(
-                colorStops = arrayOf(
-                    0.0f to backgroundColor.copy(alpha = 0.74f),
-                    0.22f to backgroundColor.copy(alpha = 0.70f),
-                    0.38f to backgroundColor.copy(alpha = 0.60f),
-                    0.55f to backgroundColor.copy(alpha = 0.46f),
-                    0.72f to backgroundColor.copy(alpha = 0.26f),
-                    1.0f to Color.Transparent
-                )
-            )
-        }
-        val bottomGradient = remember(backgroundColor) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.0f to Color.Transparent,
-                    0.6f to Color.Transparent,
-                    0.85f to backgroundColor.copy(alpha = 0.85f),
-                    1.0f to backgroundColor
-                )
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    onDrawBehind {
-                        drawRect(brush = leftGradient, size = size)
-                        drawRect(brush = accentGradient, size = size)
-                        drawRect(brush = bottomGradient, size = size)
-                    }
-                }
-        )
-
         // Main content
         AnimatedVisibility(
             visible = true,
@@ -426,55 +373,7 @@ private fun FilmographyRow(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CastDetailSkeleton(personName: String) {
-    val backgroundColor = NexioColors.Background
-    val accentColor = NexioColors.Secondary
-
     Box(modifier = Modifier.fillMaxSize()) {
-        val accentGradient = remember(accentColor, backgroundColor) {
-            Brush.horizontalGradient(
-                colorStops = arrayOf(
-                    0.0f to accentColor.copy(alpha = 0.26f),
-                    0.12f to accentColor.copy(alpha = 0.18f),
-                    0.28f to accentColor.copy(alpha = 0.10f),
-                    0.45f to accentColor.copy(alpha = 0.04f),
-                    0.60f to Color.Transparent
-                )
-            )
-        }
-        val leftGradient = remember(backgroundColor) {
-            Brush.horizontalGradient(
-                colorStops = arrayOf(
-                    0.0f to backgroundColor.copy(alpha = 0.74f),
-                    0.22f to backgroundColor.copy(alpha = 0.70f),
-                    0.38f to backgroundColor.copy(alpha = 0.60f),
-                    0.55f to backgroundColor.copy(alpha = 0.46f),
-                    0.72f to backgroundColor.copy(alpha = 0.26f),
-                    1.0f to Color.Transparent
-                )
-            )
-        }
-        val bottomGradient = remember(backgroundColor) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.0f to Color.Transparent,
-                    0.6f to Color.Transparent,
-                    0.85f to backgroundColor.copy(alpha = 0.85f),
-                    1.0f to backgroundColor
-                )
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    onDrawBehind {
-                        drawRect(brush = leftGradient, size = size)
-                        drawRect(brush = accentGradient, size = size)
-                        drawRect(brush = bottomGradient, size = size)
-                    }
-                }
-        )
-
         Column(modifier = Modifier.fillMaxSize()) {
             // Hero skeleton
             Row(
