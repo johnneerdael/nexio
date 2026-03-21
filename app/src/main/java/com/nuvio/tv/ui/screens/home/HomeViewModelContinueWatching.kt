@@ -182,10 +182,26 @@ private suspend fun HomeViewModel.resolveCurrentEpisodeDescription(
     val meta = resolveMetaForProgress(progress, metaCache) ?: return null
     if (isSeriesTypeCW(progress.contentType)) {
         val video = resolveVideoForProgress(progress, meta)
-        val episodeOverview = video?.overview?.takeIf { it.isNotBlank() }
-        if (episodeOverview != null) return episodeOverview
+        if (video != null) {
+            val season = video.season
+            val episode = video.episode
+            if (season != null && episode != null && currentTmdbSettings.enabled) {
+                val tmdbId = resolveTmdbIdForNextUp(progress, meta)
+                if (tmdbId != null) {
+                    val tmdbOverview = runCatching {
+                        tmdbMetadataService.fetchEpisodeEnrichment(
+                            tmdbId = tmdbId,
+                            seasonNumbers = listOf(season),
+                            language = currentTmdbSettings.language
+                        )[season to episode]?.overview
+                    }.getOrNull()
+                    if (!tmdbOverview.isNullOrBlank()) return tmdbOverview
+                }
+            }
+            val episodeOverview = video.overview?.takeIf { it.isNotBlank() }
+            if (episodeOverview != null) return episodeOverview
+        }
     }
-    // For movies (or series with no per-episode overview), fall back to show/movie description
     return meta.description?.takeIf { it.isNotBlank() }
 }
 
