@@ -62,3 +62,69 @@ The active Group C code still only consults the explicit retry policy when the u
 - Stock Media3 keeps encoded pending output as the truth and does not use a synthetic `forced_retry` branch for encoded pending output.
 - Kodi keeps retry and resume behavior tied to the real output-thread state in the sink path.
 - Our engine still allows steady-state retries to bypass explicit policy when `outputStarted_` and real `AudioTrack` play state diverge.
+
+## Post-Group E Reality Check
+
+Reference artifacts:
+- `/tmp/transport-validation-truehd-1774128629972.zip`
+- `/tmp/transport-validation-truehd-1774129824226.zip`
+
+Grounded facts from the active branch:
+- The old `forced_retry` path is gone.
+- The active source now routes steady-state retry admission through
+  `ShouldRetrySteadyStatePendingPackedRemainderLocked(...)`.
+- The current issue is no longer hidden retry-reason fallback. It is steady-state
+  zero-write cadence under a stable tuple.
+
+Comparison snapshot:
+
+| Field | Group D `/tmp/transport-validation-truehd-1774128629972.zip` | Group E `/tmp/transport-validation-truehd-1774129824226.zip` |
+| --- | --- | --- |
+| `transportVerdict` | `PASS` | `PASS` |
+| `runtimeVerdict` | `DEGRADED` | `DEGRADED` |
+| `timeToReadyMs` | `955` | `1076` |
+| `audioUnderrunCount` | `1` | `0` |
+| `writeAttemptCount` | `7119` | `6466` |
+| `zeroWriteCount` | `2567` | `2365` |
+| `remainderRetryEventCount` | `2570` | `2368` |
+| `retryReasonCounts` | `steady_state_retry_reason_unset=1360`, `steady_state_output_driven=1210` | `steady_state_output_driven=2368` |
+
+What the latest valid bundle disproves:
+- The remaining churn is not coming from first-attempt steady-state zero writes with
+  `offsetBytes=0`.
+- In `/tmp/transport-validation-truehd-1774129824226.zip`, all exported steady-state
+  `audio_write_zero` events occur on real remainders with `offsetBytes>0`.
+
+What the latest valid bundle shows instead:
+- The dominant packet-level sequences are:
+  - `audio_write_zero -> audio_write_success`
+  - `audio_write_zero -> audio_write_zero -> audio_write_success`
+- Example packet sequences from `/tmp/transport-validation-truehd-1774129824226.zip`:
+
+```text
+packetId=87  : zero -> zero -> success   requestedBytes=36480
+packetId=309 : zero -> zero -> success   requestedBytes=44672
+packetId=317 : zero -> zero -> zero -> partial   requestedBytes=11904
+```
+
+- On the failed retries, `playbackHeadDeltaFrames` is often `0` or very small.
+- On the eventual success for the same packet, `playbackHeadDeltaFrames` jumps materially.
+
+That means the engine is still retrying the same steady-state remainder before the sink
+has drained enough, even though route stability and transport stay clean.
+
+Duration implication for the common remainders on `IEC61937|192000|7.1`:
+- `11904` bytes ~= `3.875 ms`
+- `16000` bytes ~= `5.208 ms`
+- `20096` bytes ~= `6.542 ms`
+- `36480` bytes ~= `11.875 ms`
+- `44672` bytes ~= `14.542 ms`
+- full `61440`-byte MAT packet ~= `20.0 ms`
+
+Current parity conclusion:
+- Kodi does one bounded retry after a zero write and waits roughly a packet duration.
+- Stock Media3 leaves the encoded pending buffer as the truth and retries on the next
+  renderer opportunity.
+- Our current branch still revisits the same steady-state remainder too aggressively
+  under a stable tuple, so the next native-only change should target bounded zero-write
+  cadence tied to packet/output duration, not another play-state or transport change.

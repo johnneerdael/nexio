@@ -50,6 +50,32 @@ class KodiTrueHdAEEngineSourceStructureTest {
         assertFalse(flushMethod.contains("\"forced_retry\""))
     }
 
+    @Test
+    fun steadyStateRetryDiagnosticsDoNotUseUnsetFallbackReason() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertFalse(flushMethod.contains("\"steady_state_retry_reason_unset\""))
+    }
+
+    @Test
+    fun steadyStateRetryProgressDoesNotResetRetryEpisodeBeforePacketCompletion() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertFalse(
+            flushMethod.contains(
+                "if (retryingPendingRemainder && isSteadyState)\n      activeRetryState->Reset();",
+            ),
+        )
+    }
+
     private fun loadSource(): String {
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val relativePath =
