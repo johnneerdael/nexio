@@ -48,6 +48,7 @@ data class HomeUiState(
     val posterListPickerError: String? = null,
     val gridItems: List<GridItem> = emptyList(),
     val hideUnreleasedContent: Boolean = false,
+    val showFullReleaseDate: Boolean = true,
     val startupAuthNotice: StartupAuthNotice? = null
 )
 

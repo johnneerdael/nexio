@@ -443,6 +443,8 @@
     <string name="layout_trailer_button_sub">Show trailer button on detail page (only when trailer is available).</string>
     <string name="layout_prefer_external_meta">Prefer meta from external addon</string>
     <string name="layout_prefer_external_meta_sub">Use metadata from external addon instead of catalog addon.</string>
+    <string name="layout_show_full_release_date">Show full release date</string>
+    <string name="layout_show_full_release_date_sub">For movies, show full release date instead of year only.</string>
     <string name="layout_section_focused">Focused Poster</string>
     <string name="layout_section_focused_desc">Advanced behavior for focused poster cards.</string>
     <string name="layout_expand_poster">Expand Focused Poster to Backdrop</string>

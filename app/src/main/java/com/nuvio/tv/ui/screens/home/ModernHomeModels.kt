@@ -139,6 +139,7 @@ internal class ModernCarouselRowBuildCache {
 internal data class CachedCarouselItem(
     val source: MetaPreview,
     val useLandscapePosters: Boolean,
+    val showFullReleaseDate: Boolean,
     val carouselItem: ModernCarouselItem
 )
 
@@ -282,7 +283,8 @@ internal fun buildCatalogItem(
     useLandscapePosters: Boolean,
     occurrence: Int,
     strTypeMovie: String = "",
-    strTypeSeries: String = ""
+    strTypeSeries: String = "",
+    showFullReleaseDate: Boolean = true
 ): ModernCarouselItem {
     val heroPreview = HeroPreview(
         title = item.name,
@@ -294,7 +296,7 @@ internal fun buildCatalogItem(
             else -> item.apiType.replaceFirstChar { ch -> ch.uppercase() }
         },
         isSeries = isSeriesType(item.apiType),
-        yearText = extractYearText(item.type, item.releaseInfo, item.released),
+        yearText = extractYearText(item.type, item.releaseInfo, item.released, showFullReleaseDate),
         runtimeText = formatHeroRuntime(item.runtime),
         imdbText = item.imdbRating?.let { String.format("%.1f", it) },
         ageRatingText = item.ageRating,
@@ -380,11 +382,17 @@ internal fun extractYear(releaseInfo: String?): String? {
     return YEAR_REGEX.find(releaseInfo)?.value
 }
 
-internal fun extractYearText(type: ContentType, releaseInfo: String?, released: String?): String? {
-    if (type == ContentType.MOVIE) {
+internal fun extractYearText(type: ContentType, releaseInfo: String?, released: String?, showFullDate: Boolean = true): String? {
+    if (showFullDate && type == ContentType.MOVIE) {
         val full = released
             ?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalDate() }.getOrNull() }
-            ?.let { java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault()).format(it) }
+            ?.let {
+                val locale = java.util.Locale.getDefault()
+                val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMMy")
+                java.text.SimpleDateFormat(pattern, locale).format(
+                    java.util.Date(it.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
+                )
+            }
         if (full != null) return full
     }
     return extractYear(releaseInfo)

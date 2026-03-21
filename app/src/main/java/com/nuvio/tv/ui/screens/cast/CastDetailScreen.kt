@@ -668,7 +668,8 @@ private fun parseDateFlexible(date: String?): Date? {
 private fun formatDateForDisplay(date: String?): String? {
     val parsed = parseDateFlexible(date) ?: return null
     return try {
-        SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(parsed)
+        val locale = Locale.getDefault()
+        SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMy"), locale).format(parsed)
     } catch (_: Exception) {
         null
     }
