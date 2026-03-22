@@ -231,7 +231,6 @@
           </div>
         </section>
       </div>
-    </div>
 
     <Teleport to="body">
       <div v-if="snippetsOpen" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" @click.self="snippetsOpen = false">
@@ -343,6 +342,7 @@ import type { PortalSettings } from '~/types/portal'
 import { builtInTemplates } from '~/utils/formatter-templates'
 import {
   DEFAULT_FORMATTER_PREVIEW_STATE,
+  FORMATTER_PREVIEW_SERVICE_OPTIONS,
   FORMATTER_PREVIEW_PRESETS,
   buildFormatterPreviewStream,
   type FormatterPreviewState,
@@ -530,10 +530,7 @@ watch(
   { immediate: true },
 )
 
-const serviceOptions = Object.values(constants.SERVICE_DETAILS).map((service: any) => ({
-  label: service.name,
-  value: service.id,
-}))
+const serviceOptions = FORMATTER_PREVIEW_SERVICE_OPTIONS
 
 const streamTypeOptions = (constants.STREAM_TYPES as readonly string[]).map((type) => ({
   label: type.charAt(0).toUpperCase() + type.slice(1),
