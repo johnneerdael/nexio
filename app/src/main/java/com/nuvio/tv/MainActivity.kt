@@ -235,6 +235,21 @@ class MainActivity : ComponentActivity() {
             val activeProfile = remember(activeProfileId, profiles) {
                 profiles.firstOrNull { it.id == activeProfileId }
             }
+            var profilePinStates by remember { mutableStateOf<Map<Int, Boolean>>(emptyMap()) }
+
+            LaunchedEffect(authState, profiles) {
+                if (authState is AuthState.FullAccount) {
+                    profileSyncService.pullProfileLockStates()
+                        .onSuccess { profilePinStates = it }
+                        .onFailure { profilePinStates = emptyMap() }
+                } else {
+                    profilePinStates = emptyMap()
+                }
+            }
+
+            val activeProfileHasPin = remember(activeProfileId, profilePinStates) {
+                profilePinStates[activeProfileId] == true
+            }
             var avatarCatalog by remember { mutableStateOf(emptyList<com.nuvio.tv.data.remote.supabase.AvatarCatalogItem>()) }
 
             LaunchedEffect(Unit) {
@@ -334,7 +349,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val shouldShowProfileSelection =
-                        !hasSelectedProfileThisSession && profiles.size > 1
+                        !hasSelectedProfileThisSession && (profiles.size > 1 || activeProfileHasPin)
 
                     if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(

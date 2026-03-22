@@ -728,7 +728,6 @@ private fun ProfileGrid(
                 profiles.forEachIndexed { index, profile ->
                     ProfileCard(
                         profile = profile,
-                        isPinEnabled = profilePinEnabled[profile.id] == true,
                         avatarImageUrl = profile.avatarId?.let(avatarImageUrlsById::get),
                         focusRequester = focusRequesters[index],
                         onFocused = { onProfileFocused(profile.avatarColorHex) },
@@ -751,7 +750,6 @@ private fun ProfileGrid(
 @Composable
 private fun ProfileCard(
     profile: UserProfile,
-    isPinEnabled: Boolean,
     avatarImageUrl: String?,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
@@ -903,14 +901,6 @@ private fun ProfileCard(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.8.sp
-                )
-            } else if (isPinEnabled) {
-                Text(
-                    text = stringResource(R.string.profile_pin_badge),
-                    color = NuvioColors.TextTertiary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.6.sp
                 )
             }
         }
@@ -1577,11 +1567,6 @@ private fun ProfilePinOverlay(
         animationSpec = tween(180),
         label = "pinSupportFontSize"
     )
-    val kickerFontSize by animateFloatAsState(
-        targetValue = if (shouldUseCompactLayout) 16f else 18f,
-        animationSpec = tween(180),
-        label = "pinKickerFontSize"
-    )
     val topPadding by animateDpAsState(
         targetValue = if (shouldUseCompactLayout) 40.dp else 0.dp,
         animationSpec = tween(180),
@@ -1718,13 +1703,6 @@ private fun ProfilePinOverlay(
             },
         contentAlignment = Alignment.Center
     ) {
-        val kickerText = when {
-            state is ProfilePinOverlayState.Unlock -> stringResource(R.string.profile_pin_overlay_unlock_kicker)
-            state is ProfilePinOverlayState.VerifyCurrentForChange -> stringResource(R.string.profile_pin_overlay_change_verify_kicker)
-            state is ProfilePinOverlayState.VerifyCurrentForRemove -> stringResource(R.string.profile_pin_overlay_remove_verify_kicker)
-            entryStage == ProfilePinEntryStage.Confirm -> stringResource(R.string.profile_pin_overlay_confirm_kicker)
-            else -> stringResource(R.string.profile_pin_overlay_set_kicker)
-        }
         val headingText = when {
             state is ProfilePinOverlayState.Unlock -> stringResource(R.string.profile_pin_overlay_unlock_heading, state.profile.name)
             state is ProfilePinOverlayState.VerifyCurrentForChange -> stringResource(R.string.profile_pin_overlay_change_verify_heading, state.profile.name)
@@ -1756,13 +1734,6 @@ private fun ProfilePinOverlay(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(topPadding))
-
-            Text(
-                text = kickerText,
-                color = NuvioColors.TextSecondary,
-                fontSize = kickerFontSize.sp,
-                fontWeight = FontWeight.SemiBold
-            )
 
             Spacer(modifier = Modifier.height(headingGap))
 
