@@ -91,6 +91,13 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
+    fun trueHdEngineKeepsStartupRetryStateIsolated() {
+        val headerSource = loadHeaderSource()
+
+        assertTrue(headerSource.contains("PendingPackedRetryState startupRetryState_"))
+    }
+
+    @Test
     fun trueHdEngineExposesNativeSteadyStateHandoffReadyQuery() {
         val headerSource = loadHeaderSource()
 
@@ -132,17 +139,19 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
-    fun trueHdEngineOwnsSteadyStatePacketAndRetryMetadataInSingleTruthObject() {
+    fun trueHdEngineOwnsSteadyStatePacketAndDedicatedControlMetadataInSingleTruthObject() {
         val headerSource = loadHeaderSource()
 
         assertTrue(headerSource.contains("struct PendingSteadyStatePackedOutput"))
+        assertTrue(headerSource.contains("struct PendingSteadyStateControlState"))
         assertTrue(headerSource.contains("KodiPackedAccessUnit packet;"))
-        assertTrue(headerSource.contains("PendingPackedRetryState retryState;"))
+        assertTrue(headerSource.contains("PendingSteadyStateControlState controlState;"))
         assertTrue(
             headerSource.contains(
                 "std::optional<PendingSteadyStatePackedOutput> steadyStatePendingPackedOutput_",
             ),
         )
+        assertFalse(headerSource.contains("PendingPackedRetryState retryState;"))
         assertFalse(headerSource.contains("PendingPackedRetryState& GetPendingPackedRetryStateLocked("))
         assertFalse(headerSource.contains("PendingPackedRetryState steadyStateRetryState_"))
     }
