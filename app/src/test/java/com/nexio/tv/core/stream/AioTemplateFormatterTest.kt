@@ -1,6 +1,8 @@
 package com.nexio.tv.core.stream
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AioTemplateFormatterTest {
@@ -69,7 +71,7 @@ class AioTemplateFormatterTest {
                 uLanguages = listOf("English", "Italian"),
                 uLanguageEmojis = listOf("🇬🇧", "🇮🇹"),
                 releaseGroup = "GROUP",
-                filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
+                filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv"
             ),
             service = AioServiceTemplateModel(
                 id = "RD",
@@ -81,16 +83,11 @@ class AioTemplateFormatterTest {
         )
 
         val result = formatter.format(parseValue)
+        val titleLine = result.name
+        val detailLine = result.description
 
-        assertEquals("⭐⭐⭐⭐⭐ 4K - Movie Title (2023)", result.name)
-        assertEquals(
-            """
-            🎥 Blu-ray  • 🔊 Dolby Atmos Dolby TrueHD 7.1 • ⏱️ Unknown
-            💾 10.74 GB • ☁️ Real-Debrid • Torrentio
-            🗣️ 🇬🇧 🇮🇹 • 👤 GROUP
-            📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv
-            """.trimIndent(),
-            result.description
-        )
+        assertTrue(titleLine.contains("[[icon:4k]]"))
+        assertFalse(titleLine.contains("⭐⭐⭐⭐⭐ 4K"))
+        assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
     }
 }

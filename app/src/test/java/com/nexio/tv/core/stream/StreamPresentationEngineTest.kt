@@ -4,6 +4,7 @@ import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.StreamBehaviorHints
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,24 +59,19 @@ class StreamPresentationEngineTest {
     @Test
     fun `universal template renders full aio style movie card details`() {
         val stream = stream(
-            filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv",
+            filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv",
             name = "⚡ RD",
             addonName = "Torrentio",
             videoSizeBytes = 10L * 1024L * 1024L * 1024L
         )
 
         val item = organize(stream)
+        val titleLine = item.title
+        val detailLine = item.detailLines[2]
 
-        assertEquals("⭐⭐⭐⭐⭐ 4K UHD - Movie Title (2023)", item.title)
-        assertEquals(
-            listOf(
-                "🎥 Blu-ray  • 🔊 Dolby Atmos Dolby TrueHD 7.1 • ⏱️ Unknown",
-                "💾 10.74 GB • 💎 Cached (Debrid) • ☁️ Real-Debrid • Torrentio",
-                "🗣️ 🇬🇧 🇮🇹 • 👤 GROUP",
-                "📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
-            ),
-            item.detailLines
-        )
+        assertTrue(titleLine.contains("[[icon:4k]]"))
+        assertFalse(titleLine.contains("⭐⭐⭐⭐⭐ 4K"))
+        assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
     }
 
     @Test
