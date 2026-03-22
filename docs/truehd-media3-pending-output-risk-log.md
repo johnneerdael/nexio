@@ -150,3 +150,85 @@ Known limitation carried forward:
 
 - late-stream audio quality is still not at parity
 - late steady-state remainders still spend too long in repeated zero-write churn under a stable tuple
+
+## Batch 3 Scope
+
+Files touched:
+
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/java/androidx/media3/exoplayer/audio/kodi/KodiTrueHdNativeAudioSink.java`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdNativeAudioSinkSourceStructureTest.kt`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/docs/truehd-late-stream-audio-quality-audit.md`
+
+What changed:
+
+- `handleBuffer(...)` now becomes observational once `trueHdStartupCompleted` is already true and routes directly to the steady-state path without re-running startup handoff work
+- Java startup/handoff diagnostics are still recorded, but the steady-state write path no longer depends on repeated Java-side handoff evaluation
+
+Rejected sub-change:
+
+- a broader Batch 3 candidate also changed `hasPendingDataForTrueHdIfNeeded()` to fall back to baseline once startup completed
+- that change was treated as contract-sensitive because it touched renderer pending-data semantics
+- it was backed out before final acceptance
+
+What was explicitly not changed in the accepted Batch 3:
+
+- MAT / IEC transport path
+- AudioTrack tuple/config logic
+- native steady-state drain control from Batch 2
+- route logic
+- startup reservoir sizing
+
+## Batch 3 Validation
+
+- rejected broad candidate bundle: `/tmp/transport-validation-truehd-1774150943435.zip`
+- accepted narrowed bundle: `/tmp/transport-validation-truehd-1774151306697.zip`
+- comparison bundle: `/tmp/transport-validation-truehd-1774150499518.zip`
+
+Hard-gate read for accepted narrowed bundle:
+
+- `transportVerdict=PASS`
+- burst chain remained `8 -> 64 -> 64 -> 64`
+- route remained stable after startup:
+  - `routeTupleChangeCountAfterStableStart=0`
+  - `routeReopenCountAfterStart=0`
+- playback reached `ENDED` at `63331ms`
+- no exported player/runtime error event was present in the bundle or validator log
+
+Important caveat:
+
+- the validator's 120s summary path still emits `playerStateVerdict=FAIL` / `POSITION_STALLED` for this ~64s sample even when playback ends cleanly
+- raw player events and the validator log are therefore the grounded source for the outer-boundary decision
+
+Observed runtime shape for accepted narrowed bundle vs rejected broad candidate:
+
+- `timeToReadyMs`: `1187 -> 1073`
+- `droppedVideoFrames`: `34 -> 10`
+- `audioUnderrunCount`: `1 -> 1`
+- `writeAttemptCount`: `6968 -> 6959`
+- `zeroWriteCount`: `2416 -> 2407`
+- `remainderRetryEventCount`: `2419 -> 2410`
+- `longestZeroWriteStreakMs`: `100 -> 37`
+- `longestStuckRemainderMs`: `7 -> 14`
+
+## Batch 3 Decision
+
+Keep the narrowed Batch 3 only.
+
+Reason:
+
+- the contract-sensitive `hasPendingData()` fallback was the risky part of the broad candidate and is not part of the accepted change
+- the accepted narrowed bundle keeps transport, route stability, and end-of-stream completion intact on `.37`
+- this completes the Media3-first structural pass without leaving the Java layer in charge of steady-state pacing
+
+## Final Findings
+
+- Batch 1, Batch 2, and the narrowed Batch 3 are all accepted on `.37`
+- the Media3-first structural pass is complete
+- the remaining defect is no longer startup crossover or Java handoff control
+- the remaining defect is late-stream native steady-state zero-write churn under a stable tuple
+
+## Latest Good Rollback Point
+
+- latest accepted validation bundle: `/tmp/transport-validation-truehd-1774151306697.zip`
+- last committed root checkpoint before Batch 3 commit: `065cfdaad`
+- last committed media checkpoint before Batch 3 commit: `e44828554c`
