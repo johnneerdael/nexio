@@ -107,6 +107,31 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
+    fun trueHdEngineExposesSplitStartupAndSteadyStatePendingPackedOutputSlots() {
+        val headerSource = loadHeaderSource()
+
+        assertTrue(headerSource.contains("startupPendingPackedOutput_"))
+        assertTrue(headerSource.contains("steadyStatePendingPackedOutput_"))
+    }
+
+    @Test
+    fun trueHdEngineExposesPackedOutputOwnershipHelpers() {
+        val headerSource = loadHeaderSource()
+
+        assertTrue(
+            headerSource.contains(
+                "std::optional<KodiPackedAccessUnit>& GetPendingPackedOutputSlotLocked(",
+            ),
+        )
+        assertTrue(
+            headerSource.contains(
+                "PendingPackedRetryState& GetPendingPackedRetryStateLocked(",
+            ),
+        )
+        assertTrue(headerSource.contains("PendingPassthroughOwner GetActiveTrueHdPendingPackedOutputOwnerLocked()"))
+    }
+
+    @Test
     fun steadyStateZeroWritesUsePacketDurationBackoffReason() {
         val flushMethod =
             extractMethod(
