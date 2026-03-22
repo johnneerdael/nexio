@@ -4,7 +4,6 @@ import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.StreamBehaviorHints
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -44,7 +43,7 @@ class StreamPresentationEngineTest {
 
         val item = organize(stream)
 
-        assertEquals("⭐⭐⭐⭐⭐ 4K UHD - Shelter (2026)", item.title)
+        assertEquals("[[icon:4k]] - Shelter (2026)", item.title)
         assertEquals(
             listOf(
                 "🎥 Streaming  • 🔊 Stereo • ⏱️ Unknown",
@@ -66,11 +65,9 @@ class StreamPresentationEngineTest {
         )
 
         val item = organize(stream)
-        val titleLine = item.title
         val detailOutput = item.detailLines.joinToString("\n")
 
-        assertTrue(titleLine.contains("[[icon:4k]]"))
-        assertFalse(titleLine.startsWith("⭐"))
+        assertEquals("[[icon:fullhd]] - Shrinking (Season 03 Episode 06)", item.title)
         assertTrue(detailOutput.contains("[[icon:netflix]] Netflix"))
     }
 
