@@ -3,6 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -244,7 +245,7 @@ data class PlayerSettings(
         const val MIN_VOD_CACHE_SIZE_MB = 100
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
         val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
-        const val DEFAULT_USE_PARALLEL_CONNECTIONS = false
+        const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
         const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
         const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
         const val MIN_PARALLEL_CONNECTION_COUNT = 2
@@ -253,6 +254,42 @@ data class PlayerSettings(
         const val MAX_PARALLEL_CHUNK_SIZE_MB = 128
     }
 }
+
+private val migrationStreamSelectionDefaultsV2EnabledKey =
+    booleanPreferencesKey("migration_stream_selection_defaults_v2_enabled")
+private val uniformStreamFormattingEnabledMigrationKey =
+    booleanPreferencesKey("uniform_stream_formatting_enabled")
+private val groupStreamsAcrossAddonsEnabledMigrationKey =
+    booleanPreferencesKey("group_streams_across_addons_enabled")
+private val deduplicateGroupedStreamsEnabledMigrationKey =
+    booleanPreferencesKey("deduplicate_grouped_streams_enabled")
+private val filterEpisodeMismatchStreamsEnabledMigrationKey =
+    booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
+private val filterMovieYearMismatchStreamsEnabledMigrationKey =
+    booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
+private val useParallelConnectionsMigrationKey =
+    booleanPreferencesKey("use_parallel_connections")
+private val parallelConnectionCountMigrationKey =
+    intPreferencesKey("parallel_connection_count")
+
+internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
+    val streamSelectionDefaultsEnabled =
+        prefs[migrationStreamSelectionDefaultsV2EnabledKey] ?: false
+    if (!streamSelectionDefaultsEnabled) {
+        prefs[uniformStreamFormattingEnabledMigrationKey] = true
+        prefs[groupStreamsAcrossAddonsEnabledMigrationKey] = true
+        prefs[deduplicateGroupedStreamsEnabledMigrationKey] = true
+        prefs[filterEpisodeMismatchStreamsEnabledMigrationKey] = true
+        prefs[filterMovieYearMismatchStreamsEnabledMigrationKey] = true
+        prefs[useParallelConnectionsMigrationKey] = true
+        prefs[parallelConnectionCountMigrationKey] = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
+        prefs[migrationStreamSelectionDefaultsV2EnabledKey] = true
+    } else if (prefs[groupStreamsAcrossAddonsEnabledMigrationKey] != true) {
+        prefs[groupStreamsAcrossAddonsEnabledMigrationKey] = true
+    }
+}
+
+internal fun uniformStreamFormattingEnabledFromPreferences(prefs: Preferences): Boolean = true
 
 enum class StreamAutoPlayMode {
     MANUAL,
@@ -443,7 +480,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val migrationLoadControlMinBufferRetunedDoneKey =
         booleanPreferencesKey("migration_load_control_min_buffer_retuned_done")
     private val migrationStreamSelectionDefaultsEnabledKey =
-        booleanPreferencesKey("migration_stream_selection_defaults_enabled")
+        migrationStreamSelectionDefaultsV2EnabledKey
 
     init {
         ioScope.launch {
@@ -523,18 +560,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[migrationLoadControlMinBufferRetunedDoneKey] = true
                 }
 
-                val streamSelectionDefaultsEnabled =
-                    prefs[migrationStreamSelectionDefaultsEnabledKey] ?: false
-                if (!streamSelectionDefaultsEnabled) {
-                    prefs[uniformStreamFormattingEnabledKey] = true
-                    prefs[groupStreamsAcrossAddonsEnabledKey] = true
-                    prefs[deduplicateGroupedStreamsEnabledKey] = true
-                    prefs[filterEpisodeMismatchStreamsEnabledKey] = true
-                    prefs[filterMovieYearMismatchStreamsEnabledKey] = true
-                    prefs[migrationStreamSelectionDefaultsEnabledKey] = true
-                } else if (prefs[groupStreamsAcrossAddonsEnabledKey] != true) {
-                    prefs[groupStreamsAcrossAddonsEnabledKey] = true
-                }
+                applyPlayerSettingsMigrations(prefs)
 
                 val min = prefs[minBufferMsKey]
                 val max = prefs[maxBufferMsKey]
@@ -707,7 +733,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 ),
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
-                uniformStreamFormattingEnabled = prefs[uniformStreamFormattingEnabledKey] ?: true,
+                uniformStreamFormattingEnabled =
+                    uniformStreamFormattingEnabledFromPreferences(prefs),
                 syncedFormatterTemplate = SyncedFormatterTemplateSettings(
                     enabled = prefs[syncedFormatterEnabledKey] ?: true,
                     selectedTemplateId = prefs[syncedFormatterSelectedTemplateIdKey] ?: "universal",
@@ -963,7 +990,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setUniformStreamFormattingEnabled(enabled: Boolean) {
         store().edit { prefs ->
-            prefs[uniformStreamFormattingEnabledKey] = enabled
+            prefs[uniformStreamFormattingEnabledKey] = true
         }
     }
 

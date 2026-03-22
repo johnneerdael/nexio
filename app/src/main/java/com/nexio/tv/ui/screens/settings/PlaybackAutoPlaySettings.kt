@@ -84,7 +84,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
-    onSetUniformStreamFormattingEnabled: (Boolean) -> Unit,
     onSetGroupStreamsAcrossAddonsEnabled: (Boolean) -> Unit,
     onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
@@ -113,17 +112,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 onFocused = onItemFocused
             )
         }
-    }
-
-    item(key = "streams_uniform_formatting") {
-        ToggleSettingsItem(
-            icon = Icons.Default.AutoAwesome,
-            title = stringResource(R.string.streams_uniform_formatting_title),
-            subtitle = stringResource(R.string.streams_uniform_formatting_sub),
-            isChecked = playerSettings.uniformStreamFormattingEnabled,
-            onCheckedChange = onSetUniformStreamFormattingEnabled,
-            onFocused = onItemFocused
-        )
     }
 
     item(key = "streams_deduplicate_grouped") {

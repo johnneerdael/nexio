@@ -237,9 +237,6 @@ fun PlaybackSettingsContent(
                     coroutineScope.launch { viewModel.setNextEpisodeThresholdMinutesBeforeEnd(minutes) }
                 },
                 onSetReuseLastLinkEnabled = { enabled -> coroutineScope.launch { viewModel.setStreamReuseLastLinkEnabled(enabled) } },
-                onSetUniformStreamFormattingEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setUniformStreamFormattingEnabled(enabled) }
-                },
                 onSetGroupStreamsAcrossAddonsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setGroupStreamsAcrossAddonsEnabled(enabled) }
                 },
