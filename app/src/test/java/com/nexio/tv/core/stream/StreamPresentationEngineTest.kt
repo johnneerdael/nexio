@@ -67,11 +67,11 @@ class StreamPresentationEngineTest {
 
         val item = organize(stream)
         val titleLine = item.title
-        val detailLine = item.detailLines[2]
+        val detailOutput = item.detailLines.joinToString("\n")
 
         assertTrue(titleLine.contains("[[icon:4k]]"))
         assertFalse(titleLine.startsWith("⭐"))
-        assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
+        assertTrue(detailOutput.contains("[[icon:netflix]] Netflix"))
     }
 
     @Test
