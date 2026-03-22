@@ -473,7 +473,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 
                 debug.markPhase("build-next-up")
                 val nextUpStartMs = SystemClock.elapsedRealtime()
-                val largestPartialNextUpCount = AtomicInteger(0)
+                val publishedPartialNextUpCount = AtomicInteger(0)
+                val partialPublishMutex = Mutex()
                 val nextUpItems = buildLightweightNextUpItems(
                     allProgress = recentItems,
                     nextUpSeeds = recentNextUpSeeds,
@@ -482,34 +483,26 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     showUnairedNextUp = showUnairedNextUp,
                     debug = debug,
                     onPartialUpdate = { partialNextUpItems ->
-                        val partialCount = partialNextUpItems.size
-                        var shouldPublish = false
-                        while (true) {
-                            val currentMax = largestPartialNextUpCount.get()
-                            if (partialCount <= currentMax) {
-                                break
-                            }
-                            if (largestPartialNextUpCount.compareAndSet(currentMax, partialCount)) {
-                                shouldPublish = true
-                                break
-                            }
-                        }
-                        if (shouldPublish) {
-                            val partialItems = mergeContinueWatchingItems(
-                                inProgressItems = inProgressOnly,
-                                nextUpItems = partialNextUpItems
-                            )
-                            _uiState.update { state ->
-                                if (state.continueWatchingItems == partialItems) {
-                                    state
-                                } else {
-                                    state.copy(continueWatchingItems = partialItems)
+                        partialPublishMutex.withLock {
+                            val partialCount = partialNextUpItems.size
+                            if (partialCount > publishedPartialNextUpCount.get()) {
+                                publishedPartialNextUpCount.set(partialCount)
+                                val partialItems = mergeContinueWatchingItems(
+                                    inProgressItems = inProgressOnly,
+                                    nextUpItems = partialNextUpItems
+                                )
+                                _uiState.update { state ->
+                                    if (state.continueWatchingItems == partialItems) {
+                                        state
+                                    } else {
+                                        state.copy(continueWatchingItems = partialItems)
+                                    }
                                 }
+                                debug.recordPartialRendered(
+                                    count = partialItems.size,
+                                    elapsedMs = SystemClock.elapsedRealtime() - cycleStartMs
+                                )
                             }
-                            debug.recordPartialRendered(
-                                count = partialItems.size,
-                                elapsedMs = SystemClock.elapsedRealtime() - cycleStartMs
-                            )
                         }
                     }
                 )
@@ -585,6 +578,7 @@ private fun shouldTreatAsInProgressForContinueWatching(progress: WatchProgress):
 }
 
 private fun shouldUseAsCompletedSeed(progress: WatchProgress): Boolean {
+    if (isMalformedNextUpSeedContentId(progress.contentId)) return false
     if (!progress.isCompleted()) return false
     if (progress.source != WatchProgress.SOURCE_TRAKT_PLAYBACK) return true
     val explicitPercent = progress.progressPercent ?: return false
@@ -633,6 +627,15 @@ private fun nextUpSeedSourceRank(progress: WatchProgress): Int {
         WatchProgress.SOURCE_TRAKT_HISTORY -> 1
         WatchProgress.SOURCE_LOCAL -> 2
         else -> 4
+    }
+}
+
+private fun isMalformedNextUpSeedContentId(contentId: String?): Boolean {
+    val trimmed = contentId?.trim().orEmpty()
+    if (trimmed.isEmpty()) return true
+    return when (trimmed.lowercase(Locale.US)) {
+        "tmdb", "imdb", "trakt", "tmdb:", "imdb:", "trakt:" -> true
+        else -> false
     }
 }
 
@@ -838,6 +841,10 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
             state.copy(continueWatchingItems = enrichedItems)
         }
     }
+    persistLocalContinueWatchingMetadata(
+        originalItems = finalItems,
+        enrichedItems = enrichedItems
+    )
     true
 }
 
@@ -882,16 +889,18 @@ private suspend fun HomeViewModel.buildNextUpItem(
         showUnairedNextUp = showUnairedNextUp,
         debug = debug
     ) ?: return null
+    val seedMeta = resolveMetaForProgress(progress, cwMetaCache, debug)
 
     val name = progress.name.trim().takeIf { it.isNotEmpty() }
+        ?: seedMeta?.name
         ?: progress.contentId
     val info = NextUpInfo(
         contentId = progress.contentId,
         contentType = progress.contentType,
         name = name,
-        poster = progress.poster.normalizeImageUrl(),
-        backdrop = progress.backdrop.normalizeImageUrl(),
-        logo = progress.logo.normalizeImageUrl(),
+        poster = progress.poster.normalizeImageUrl() ?: seedMeta?.poster.normalizeImageUrl(),
+        backdrop = progress.backdrop.normalizeImageUrl() ?: seedMeta?.backdropUrl.normalizeImageUrl(),
+        logo = progress.logo.normalizeImageUrl() ?: seedMeta?.logo.normalizeImageUrl(),
         videoId = nextUp.videoId,
         season = nextUp.season,
         episode = nextUp.episode,
@@ -931,6 +940,13 @@ private suspend fun HomeViewModel.enrichInProgressItem(
     val genres = meta.genres.take(3)
     val releaseInfo = meta.releaseInfo?.takeIf { it.isNotBlank() }
     return item.copy(
+        progress = item.progress.copy(
+            name = item.progress.name.takeIf { it.isNotBlank() } ?: meta.name,
+            poster = item.progress.poster ?: meta.poster.normalizeImageUrl(),
+            backdrop = item.progress.backdrop ?: meta.backdropUrl.normalizeImageUrl(),
+            logo = item.progress.logo ?: meta.logo.normalizeImageUrl(),
+            episodeTitle = item.progress.episodeTitle ?: video?.title?.takeIf { it.isNotBlank() }
+        ),
         episodeDescription = description,
         episodeThumbnail = thumbnail,
         episodeImdbRating = imdbRating,
@@ -1286,6 +1302,34 @@ private fun buildNextUpSeedCacheKey(
         append("|unaired=")
         append(showUnairedNextUp)
     }
+}
+
+private fun HomeViewModel.persistLocalContinueWatchingMetadata(
+    originalItems: List<ContinueWatchingItem>,
+    enrichedItems: List<ContinueWatchingItem>
+) {
+    val localItems = enrichedItems.indices.mapNotNull { index ->
+        val original = originalItems.getOrNull(index) as? ContinueWatchingItem.InProgress ?: return@mapNotNull null
+        val enriched = enrichedItems.getOrNull(index) as? ContinueWatchingItem.InProgress ?: return@mapNotNull null
+        enriched.progress
+            .takeIf { it.source == WatchProgress.SOURCE_LOCAL }
+            ?.takeIf { it != original.progress }
+    }
+    if (localItems.isEmpty()) return
+
+    viewModelScope.launch(Dispatchers.IO) {
+        val persistable = localItems.filter { it.hasRenderableMetadata() }
+        if (persistable.isEmpty()) return@launch
+        runCatching {
+            watchProgressRepository.saveProgressBatch(persistable, syncRemote = false)
+        }.onFailure { error ->
+            Log.w(CW_DEBUG_TAG, "Failed to persist local CW metadata batch (${persistable.size} items)", error)
+        }
+    }
+}
+
+private fun WatchProgress.hasRenderableMetadata(): Boolean {
+    return name.isNotBlank() || poster != null || backdrop != null || logo != null || episodeTitle != null
 }
 
 private fun NextUpInfo.toProgressSeed(): WatchProgress {
