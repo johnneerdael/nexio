@@ -1,27 +1,29 @@
 # Security and Data
 
-## Purpose
-Document the security and data-handling baseline for Nexio web administration, with emphasis on authentication state, configuration safety, and operational verification.
+Nexio’s web portal is designed around authenticated account access and separate handling for visible settings versus sensitive service credentials.
 
-## Audience
-- Web administrators
-- Developers validating configuration and sync behavior
+## What to know
+- Administrative changes should be made while signed in.
+- Account settings are meant to stay with the account, not in a shared note or one-off device configuration.
+- Service secrets are managed separately from the normal account settings you see in the portal.
+- If you sign in on a shared device, remember to sign out when you are done.
 
-## Prerequisites
-- Signed-in workspace access
-- Basic familiarity with account and integration setup
+## Safe operating habits
+1. Confirm the account identity before changing anything sensitive.
+2. Change one area at a time: addons, catalogs, integrations, then formatter.
+3. Save and verify the result before moving to the next layer.
+4. Keep credentials out of chat logs, tickets, and documentation.
+5. Refresh or replace a secret from the portal when a service stops working instead of reusing an old value elsewhere.
 
-## Procedure and Guidance
-1. Confirm authentication is active before performing administrative changes.
-2. Apply configuration changes incrementally (addons, catalogs, integrations, formatter).
-3. Validate each change in runtime behavior before applying the next one.
-4. Avoid storing credentials in plain text documentation or shared notes.
-5. Use environment-specific access controls and rotate external service credentials when needed.
+## What this protects
+- Your account state stays consistent across devices.
+- Secrets are not mixed into the visible layout and catalog choices.
+- It is easier to tell whether a change came from an account update or from a local browser session.
 
-## Validation and Expected Outcome
-- Administrative actions require authenticated access
-- Configuration changes are traceable and reversible
-- Runtime behavior matches recent configuration updates
+## Common mistakes to avoid
+- Editing the wrong account after sign-in.
+- Leaving a shared browser signed in after administration work.
+- Assuming a working saved browser session is the same as a synced account state.
 
 ## Related pages
 - [Account](./account.md)

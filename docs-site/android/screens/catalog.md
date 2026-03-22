@@ -1,28 +1,39 @@
-# Catalog and Library
+# Catalogs and Library
 
-## Purpose
-Explain how catalog browsing and library-oriented selection fit into the Android navigation flow between Home discovery and playback.
+## What this page covers
+This page explains the rows you browse from Home and how catalog-backed discovery flows into detail pages and playback.
 
-## Audience
-- Android users validating day-to-day browsing behavior
-- Testers verifying content discovery paths
+## What catalogs are
+Catalog rows are the TV-facing view of addon and integration content. They can represent standard addon rows, synced account-based rows, and curated lists from services such as Trakt or MDBList.
 
-## Prerequisites
-- At least one working addon and enabled catalog
-- Basic familiarity with [Home](./home.md) and [Media Detail](./detail.md)
+## How browsing feels
+- Move left and right across a row to browse posters.
+- Open a poster to reach [Media Detail](./detail.md).
+- Use `See all` when the row is only a preview of a larger catalog.
+- Keep the rows you care about near the top by adjusting catalog order in the web admin or settings flow.
 
-## Procedure and Guidance
-1. Open a catalog row from Home and move through items with directional navigation.
-2. Select a title to open Media Detail and verify metadata context.
-3. Use consistent catalog ordering from web admin settings to reduce navigation noise.
-4. Return to Home and confirm that high-priority catalogs remain easy to reach.
+## What users get from catalogs
+- Faster discovery than direct search when you already know the source or list you want.
+- Better continuity with integrations such as Trakt and MDBList because catalog rails can be synced or curated centrally.
+- A familiar TV layout where row order matters and high-priority sources stay easy to reach.
 
-## Validation and Expected Outcome
-- Catalog rows are visible and ordered as configured
-- Item selection reliably opens Media Detail
-- Browsing-to-playback flow remains predictable
+## Important behavior
+- Catalog rows only appear when the related addon or integration is enabled and returning content.
+- A row can be visible while some of its items are still loading in the background.
+- The app uses poster labels, addon names, and type suffixes when those display options are turned on in [Settings](./settings.md).
+
+## Best use guidance
+- Use catalog rows when you want to browse by source, list, or rail.
+- Use search when you want a title by name.
+- Use detail pages when you want to compare metadata before picking a stream.
+
+## Troubleshooting
+- If a catalog row is missing, check the addon or integration that feeds it.
+- If the ordering feels wrong, adjust the catalog order rather than re-opening the row repeatedly.
+- If a row looks incomplete, wait for sync or refresh the app after changing account integrations.
 
 ## Related pages
 - [Home](./home.md)
 - [Media Detail](./detail.md)
+- [Settings](./settings.md)
 - [Catalog Inventory](../../web/admin-workspaces/catalogs.md)
