@@ -87,7 +87,7 @@ class AioTemplateFormatterTest {
         val detailLine = result.description
 
         assertTrue(titleLine.contains("[[icon:4k]]"))
-        assertFalse(titleLine.contains("⭐⭐⭐⭐⭐ 4K"))
+        assertFalse(titleLine.contains("⭐⭐⭐⭐⭐"))
         assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
     }
 }
