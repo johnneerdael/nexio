@@ -71,3 +71,13 @@
   - result: transport stayed `PASS`, player-state stayed `PASS`, route stability stayed clean, and the new `nativeHandoffReady=` field is present in log output
   - refinement: cache the native handoff-ready truth per Java handoff-decision cycle instead of re-querying it during write-event detail append
   - remaining caveat: runtime still exported `DEGRADED` on `droppedVideoFrames=44`, but sink churn returned to baseline-like levels, so this is treated as acceptable for Step 1 rather than a proven contract/transport regression
+
+## Step 2: Java handoff passive to native truth
+
+- touched files:
+  - `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/java/androidx/media3/exoplayer/audio/kodi/KodiTrueHdNativeAudioSink.java`
+
+- validation bundle: `/tmp/transport-validation-truehd-1774139208103.zip`
+  - result: transport stayed `PASS`, player-state stayed `PASS`, continuous playback remained true, and route stability remained clean
+  - behavior change: `handleBuffer()` now syncs startup completion from cached native `handoffReady` truth instead of evaluating the old Java-side ownership heuristic
+  - remaining caveat: runtime still exported `DEGRADED` on `droppedVideoFrames=34`; this is lower than Step 1 and is not currently tied to a specific Step 2 contract/transport regression

@@ -11,15 +11,14 @@ import org.junit.Test
 class KodiTrueHdNativeAudioSinkSourceStructureTest {
 
     @Test
-    fun onlyHandleBufferMutatesTrueHdStartupOwnership() {
+    fun handleBufferPassivelySyncsTrueHdStartupOwnershipFromNative() {
         val source = loadSource()
 
-        assertTrue(source.contains("maybeExitTrueHdStartupOwnership(\"handleBuffer\")"))
-        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"play\")"))
-        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"playToEndOfStream\")"))
+        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"handleBuffer\")"))
+        assertTrue(source.contains("syncTrueHdStartupStateFromNative(\"handleBuffer\")"))
         assertEquals(
             1,
-            Regex("""maybeExitTrueHdStartupOwnership\(\"""").findAll(source).count(),
+            Regex("""syncTrueHdStartupStateFromNative\(\"""").findAll(source).count(),
         )
     }
 
