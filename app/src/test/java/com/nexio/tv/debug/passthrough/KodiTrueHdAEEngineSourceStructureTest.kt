@@ -98,6 +98,15 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
+    fun trueHdEngineTracksSplitStartupAndSteadyStatePendingInput() {
+        val headerSource = loadHeaderSource()
+
+        assertTrue(headerSource.contains("startupPendingPassthroughInput_"))
+        assertTrue(headerSource.contains("steadyStatePendingPassthroughInput_"))
+        assertFalse(headerSource.contains("std::optional<PendingPassthroughInput> pendingPassthroughInput_"))
+    }
+
+    @Test
     fun steadyStateZeroWritesUsePacketDurationBackoffReason() {
         val flushMethod =
             extractMethod(

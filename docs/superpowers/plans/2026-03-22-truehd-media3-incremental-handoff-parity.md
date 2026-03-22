@@ -74,14 +74,14 @@ If a step fails these gates:
 - Modify: `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdAEEngineSourceStructureTest.kt`
 - Modify: `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdNativeAudioSinkSourceStructureTest.kt`
 
-- [ ] **Step 1: Add failing source-structure tests for native handoff-ready observation**
+- [x] **Step 1: Add failing source-structure tests for native handoff-ready observation**
 
 Require:
 - a public native engine query such as `IsTrueHdSteadyStateHandoffReady()`
 - a matching JNI method such as `nIsTrueHdSteadyStateHandoffReady(...)`
 - Java observation/logging of `nativeHandoffReady`
 
-- [ ] **Step 2: Run focused tests to confirm the new assertions fail**
+- [x] **Step 2: Run focused tests to confirm the new assertions fail**
 
 Run:
 
@@ -92,14 +92,14 @@ Run:
 Expected:
 - FAIL on the new handoff-ready structure assertions
 
-- [ ] **Step 3: Implement the native handoff-ready query without changing control flow**
+- [x] **Step 3: Implement the native handoff-ready query without changing control flow**
 
 Rules:
 - do not change startup/steady-state path selection yet
 - do not change transport, route, or steady-state retry cadence
 - expose the new native query and include it in diagnostics only
 
-- [ ] **Step 4: Re-run focused tests**
+- [x] **Step 4: Re-run focused tests**
 
 Run:
 
@@ -110,7 +110,7 @@ Run:
 Expected:
 - PASS
 
-- [ ] **Step 5: Build, install, validate, analyze, and commit if hard gates hold**
+- [x] **Step 5: Build, install, validate, analyze, and commit if hard gates hold**
 
 Run:
 
@@ -150,10 +150,10 @@ git -C /Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/medi
 - Modify: `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/java/androidx/media3/exoplayer/audio/kodi/KodiTrueHdNativeAudioSink.java`
 - Modify: `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdNativeAudioSinkSourceStructureTest.kt`
 
-- [ ] **Step 1: Add failing tests that reject Java heuristic handoff mutation**
-- [ ] **Step 2: Replace heuristic handoff mutation with passive sync to native handoff-ready truth**
-- [ ] **Step 3: Keep `handleBuffer()` as the only decision point, but make it observational**
-- [ ] **Step 4: Build, install, validate with `run_adb_validation.sh`, analyze any gate failure, and commit only if hard gates hold**
+- [x] **Step 1: Add failing tests that reject Java heuristic handoff mutation**
+- [x] **Step 2: Replace heuristic handoff mutation with passive sync to native handoff-ready truth**
+- [x] **Step 3: Keep `handleBuffer()` as the only decision point, but make it observational**
+- [x] **Step 4: Build, install, validate with `run_adb_validation.sh`, analyze any gate failure, and commit only if hard gates hold**
 
 ---
 
@@ -164,13 +164,13 @@ git -C /Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/medi
 - Modify: `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.cpp`
 - Modify: `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdAEEngineSourceStructureTest.kt`
 
-- [ ] **Step 1: Add failing tests for explicit startup-only vs steady-state native input ownership**
-- [ ] **Step 2: Split the shared pending passthrough input only after Task 2 is validated**
-- [ ] **Step 3: Keep transport bytes, packet capture, and steady-state retry cadence unchanged in this step**
-- [ ] **Step 4: Build, install, validate with `run_adb_validation.sh`, analyze any gate failure, and commit only if hard gates hold**
+- [x] **Step 1: Add failing tests for explicit startup-only vs steady-state native input ownership**
+- [x] **Step 2: Split the shared pending passthrough input only after Task 2 is validated**
+- [x] **Step 3: Keep transport bytes, packet capture, and steady-state retry cadence unchanged in this step**
+- [x] **Step 4: Build, install, validate with `run_adb_validation.sh`, analyze any gate failure, and commit only if hard gates hold**
 
 ---
 
 ### Decision Gate After Task 3
 
-- [ ] If audio quality is still degraded but hard gates remain clean, stop and write a fresh late-stream audio-quality audit before touching cadence or buffer sizing again.
+- [x] If audio quality is still degraded but hard gates remain clean, stop and write a fresh late-stream audio-quality audit before touching cadence or buffer sizing again.

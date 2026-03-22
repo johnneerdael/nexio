@@ -81,3 +81,22 @@
   - result: transport stayed `PASS`, player-state stayed `PASS`, continuous playback remained true, and route stability remained clean
   - behavior change: `handleBuffer()` now syncs startup completion from cached native `handoffReady` truth instead of evaluating the old Java-side ownership heuristic
   - remaining caveat: runtime still exported `DEGRADED` on `droppedVideoFrames=34`; this is lower than Step 1 and is not currently tied to a specific Step 2 contract/transport regression
+
+## Step 3: Native startup-vs-steady-state pending input split
+
+- touched files:
+  - `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.h`
+  - `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.cpp`
+
+- validation bundle: `/tmp/transport-validation-truehd-1774140016993.zip`
+  - result: transport stayed `PASS`, player-state stayed `PASS`, playback still reached `ENDED`, route stability remained clean, and runtime stayed `DEGRADED`
+  - behavior change: startup-owned passthrough input and steady-state passthrough input no longer share one mutable native slot; emitted packed output now follows the active input owner instead of writing both phases through the same pending input object
+  - grounded comparison vs Step 2 `/tmp/transport-validation-truehd-1774139208103.zip`:
+    - `writeAttemptCount 6861 -> 6633`
+    - `zeroWriteCount 2312 -> 2085`
+    - `remainderRetryEventCount 2313 -> 2088`
+    - `longestZeroWriteStreakMs 76 -> 69`
+    - `longestStuckRemainderMs 94 -> 92`
+    - `timeToReadyMs 865 -> 876`
+    - `droppedVideoFrames 34 -> 44`
+  - current read: Step 3 is structurally safe to keep because the hard gates remained green and the sink churn is modestly better than Step 2, but it is not the audio-parity fix
