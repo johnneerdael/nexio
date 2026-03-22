@@ -1,48 +1,32 @@
-## Who this is for
-New users who want to set up and manage a NEXIO admin workspace.
+# Web Get Started
 
-## What you will build
-A fully functional admin workspace with addons, catalogs, integrations, and a custom formatter.
+## Purpose
+Provide a practical setup sequence for a Nexio web admin workspace.
 
-## Before you start
-1. Have a computer with internet access.
-2. Install the NEXIO CLI.
-3. Create a workspace folder.
+## Audience
+- New web administrators
+- Contributors validating default configuration workflows
 
-## Addons
-- Add a media source addon.
-- Verify the addon appears in the workspace.
+## Prerequisites
+- Browser access to Nexio web workspace
+- Valid account credentials
+- Network access for provider and integration setup
 
-## Catalogs
-- Create a catalog to organize media.
-- Add items to the catalog.
+## Procedure and Guidance
+1. Sign in and verify the expected account context.
+2. Install one addon in [Addon Manager](./admin-workspaces/addons.md).
+3. Configure ordering and visibility in [Catalog Inventory](./admin-workspaces/catalogs.md).
+4. Connect required services in [Integrations](./admin-workspaces/integrations.md).
+5. Apply stream formatting changes only after provider and integration baselines are stable.
 
-## Integrations
-- Connect a streaming service integration.
-- Test the integration by fetching a stream list.
+## Validation and Expected Outcome
+- Addon is installed and usable
+- Catalog configuration appears in Android Home behavior
+- Integration changes produce expected runtime signals
+- Formatter updates are visible and do not break stream readability
 
-## Custom Formatter
-- Create a simple formatter file.
-- Apply it to a stream name.
-- Verify the formatted output.
-
-## Manage-from-Phone
-- Open the NEXIO web UI on a phone.
-- Use the mobile view to add or edit items.
-
-## Check your result
-- All components should be visible in the web UI.
-- The formatter should change the stream name as expected.
-
-## Common mistakes
-- Forgetting to restart the workspace after adding an addon.
-- Using an incorrect path for the formatter file.
-- Not enabling the integration in the workspace config.
-
-## Troubleshooting
-- **Addon not listed**: Ensure the addon package is installed and the workspace config references it.
-- **Formatter not applied**: Verify the formatter file has the correct extension (.fmt) and is referenced in the workspace config.
-- **Integration fails**: Check network connectivity and API keys.
-
-## Next step
-Read the advanced formatter reference at [formatter.md](/web/admin-workspaces/formatter).
+## Related pages
+- [Web Overview](./index.md)
+- [Account](./account.md)
+- [Security and Data](./security-and-data.md)
+- [Formatter Getting Started](./admin-workspaces/formatter-getting-started.md)

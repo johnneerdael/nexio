@@ -2,37 +2,34 @@
 layout: home
 
 hero:
-  name: NEXIO Docs
-  text: The ultimate documentation portal
-  tagline: Seamless playback, zero-compromise audio.
+  name: Nexio Documentation
+  text: Product and operational guidance for Web, Android, and developer workflows
+  tagline: Focused documentation for setup, operation, troubleshooting, and maintenance.
   image:
     src: /app_logo_mark.webp
-    alt: NEXIO Logo
+    alt: Nexio logo
   actions:
     - theme: brand
-      text: Custom Formatter
-      link: /web/admin-workspaces/formatter
+      text: Web quick start
+      link: ./web/get-started.md
     - theme: alt
-      text: Get Started
-      link: /web/
+      text: Android quick start
+      link: ./android/getting-started.md
     - theme: alt
-      text: Android App
-      link: /android/
-    - theme: brand
-      text: Formatter Getting Started
-      link: /web/admin-workspaces/formatter-getting-started.md
-    - theme: brand
-      text: Android Getting Started
-      link: /android/getting-started.md
-    - theme: brand
-      text: Web Getting Started
-      link: /web/get-started.md
+      text: Developer architecture
+      link: ./dev/architecture.md
 
 features:
-  - title: Bit-Perfect Audio
-    details: Studio-quality sound with custom Media3 engine and IEC passthrough.
-  - title: Media3 Core
-    details: Real-time Dolby Vision conversion and custom FFmpeg software decoding.
-  - title: Custom Formatter
-    details: Powerful stream name and description formatting for personalized experience.
+  - title: Web administration
+    details: Configure addons, catalogs, integrations, and formatter behavior in the web workspace.
+  - title: Android operation
+    details: Understand Android screen flows, playback behavior, and technical components.
+  - title: Developer maintenance
+    details: Review architecture and deployment guidance for repository and docs operations.
 ---
+
+## Start by audience
+
+- **Web administrators:** use [Web Overview](./web/index.md) and [Web Get Started](./web/get-started.md).
+- **Android users and testers:** use [Android Overview](./android/index.md) and [Android Getting Started](./android/getting-started.md).
+- **Developers and maintainers:** use [Architecture](./dev/architecture.md) and [Deployment](./dev/deployment.md).
