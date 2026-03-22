@@ -115,20 +115,36 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
-    fun trueHdEngineExposesPackedOutputOwnershipHelpers() {
+    fun trueHdEngineExposesPackedOutputOwnershipBoundary() {
         val headerSource = loadHeaderSource()
 
-        assertTrue(
+        assertTrue(headerSource.contains("PendingPassthroughOwner GetActiveTrueHdPendingPackedOutputOwnerLocked()"))
+        assertFalse(
             headerSource.contains(
                 "std::optional<KodiPackedAccessUnit>& GetPendingPackedOutputSlotLocked(",
             ),
         )
-        assertTrue(
+        assertFalse(
             headerSource.contains(
                 "PendingPackedRetryState& GetPendingPackedRetryStateLocked(",
             ),
         )
-        assertTrue(headerSource.contains("PendingPassthroughOwner GetActiveTrueHdPendingPackedOutputOwnerLocked()"))
+    }
+
+    @Test
+    fun trueHdEngineOwnsSteadyStatePacketAndRetryMetadataInSingleTruthObject() {
+        val headerSource = loadHeaderSource()
+
+        assertTrue(headerSource.contains("struct PendingSteadyStatePackedOutput"))
+        assertTrue(headerSource.contains("KodiPackedAccessUnit packet;"))
+        assertTrue(headerSource.contains("PendingPackedRetryState retryState;"))
+        assertTrue(
+            headerSource.contains(
+                "std::optional<PendingSteadyStatePackedOutput> steadyStatePendingPackedOutput_",
+            ),
+        )
+        assertFalse(headerSource.contains("PendingPackedRetryState& GetPendingPackedRetryStateLocked("))
+        assertFalse(headerSource.contains("PendingPackedRetryState steadyStateRetryState_"))
     }
 
     @Test
