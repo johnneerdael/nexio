@@ -50,3 +50,4 @@ openspec/
 screenshots/
 scripts/
 supabase/
+.cxx-build/
