@@ -25,7 +25,7 @@ class KodiTrueHdAEEngineSourceStructureTest {
 
         assertFalse(flushMethod.contains("steadyStateRetryBackoffActive"))
         assertFalse(flushMethod.contains("!steadyStateRetryingPendingRemainder && !shouldRetry"))
-        assertTrue(flushMethod.contains("if (!shouldRetry)"))
+        assertFalse(flushMethod.contains("if (!shouldRetry)"))
     }
 
     @Test
@@ -156,6 +156,18 @@ class KodiTrueHdAEEngineSourceStructureTest {
             )
 
         assertTrue(flushMethod.contains("\"steady_state_packet_duration_backoff\""))
+    }
+
+    @Test
+    fun steadyStateDrainDoesNotGatePendingTruthThroughRetryEligibility() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertFalse(flushMethod.contains("ShouldRetrySteadyStatePendingPackedRemainderLocked("))
+        assertFalse(flushMethod.contains("if (!shouldRetry)"))
     }
 
     private fun loadSource(): String {
