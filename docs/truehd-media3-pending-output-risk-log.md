@@ -232,3 +232,79 @@ Reason:
 - latest accepted validation bundle: `/tmp/transport-validation-truehd-1774151306697.zip`
 - last committed root checkpoint before Batch 3 commit: `065cfdaad`
 - last committed media checkpoint before Batch 3 commit: `e44828554c`
+
+## Four-Batch Teardown Rollback Anchor
+
+- root commit before Batch 1: `ece921745`
+- media commit before Batch 1: `d4e7d5c8a3`
+- accepted `.37` baseline bundle: `/tmp/transport-validation-truehd-1774151306697.zip`
+
+## Four-Batch Teardown - Batch 1
+
+Scope:
+
+- remove steady-state control use of `PendingPackedRetryState`
+- keep startup retry logic isolated
+- keep Java startup contract and `hasPendingData()` unchanged
+- keep MAT / IEC transport unchanged
+- keep route / output tuple logic unchanged
+
+Files touched:
+
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.h`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.cpp`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdAEEngineSourceStructureTest.kt`
+
+What changed:
+
+- steady-state pending packed output now owns a dedicated `PendingSteadyStateControlState`
+- startup still uses `PendingPackedRetryState startupRetryState_`
+- the hot flush loop was refactored to bind startup and steady-state control separately, without changing the intended steady-state behavior in this batch
+
+Why this batch is risky:
+
+- it touches the late-stream steady-state flush loop directly
+- even though the intended change is structural only, any control-flow drift there can surface as playback degradation
+
+Validation:
+
+- install target: `192.168.50.37:5555`
+- validation bundle: `/tmp/transport-validation-truehd-1774153252455.zip`
+- comparison baseline bundle: `/tmp/transport-validation-truehd-1774151306697.zip`
+
+Hard-gate read:
+
+- `transportVerdict=PASS`
+- burst chain remained `8 -> 64 -> 64 -> 64`
+- raw player events still reached `ENDED`
+- route stayed stable after startup:
+  - `routeTupleChangeCountAfterStableStart=0`
+  - `routeReopenCountAfterStart=0`
+
+Important caveat:
+
+- `runtimeVerdict=FAIL` remains noisy here, just like the accepted baseline, because the 120s validator summary still flags `POSITION_STALLED` on this ~64s sample even when playback reaches `ENDED`
+- the grounded contract read for this batch therefore comes from transport, raw player events, and route stability first
+
+Observed runtime shape vs accepted baseline:
+
+- `timeToReadyMs`: `1073 -> 999`
+- `droppedVideoFrames`: `10 -> 12`
+- `audioUnderrunCount`: `1 -> 1`
+- `writeAttemptCount`: `6959 -> 7107`
+- `zeroWriteCount`: `2407 -> 2556`
+- `remainderRetryEventCount`: `2410 -> 2561`
+- `longestZeroWriteStreakMs`: `37 -> 65`
+- `longestStuckRemainderMs`: `14 -> 81`
+
+Batch 1 decision:
+
+- keep Batch 1
+
+Reason:
+
+- no transport regression
+- no route regression
+- no end-of-stream regression
+- the runtime summary degraded only within the same noisy verdict band already present on the accepted baseline
+- the changed metrics are directionally worse, but they did not cross into a new outer-boundary failure mode and the code change is the required structural isolation step for the later scheduler teardown
