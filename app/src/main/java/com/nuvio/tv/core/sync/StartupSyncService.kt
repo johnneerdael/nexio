@@ -47,10 +47,15 @@ class StartupSyncService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
     private var lastPulledKey: String? = null
+    private var lastPulledIncludedProfileSettings: Boolean = false
     @Volatile
     private var forceSyncRequested: Boolean = false
     @Volatile
+    private var forceSyncIncludesProfileSettings: Boolean = true
+    @Volatile
     private var pendingResyncKey: String? = null
+    @Volatile
+    private var pendingResyncIncludesProfileSettings: Boolean = false
 
     init {
         scope.launch {
@@ -58,15 +63,23 @@ class StartupSyncService @Inject constructor(
                 when (state) {
                     is AuthState.FullAccount -> {
                         val force = forceSyncRequested
-                        val started = scheduleStartupPull(state.userId, force = force)
+                        val includeProfileSettings = if (force) forceSyncIncludesProfileSettings else true
+                        val started = scheduleStartupPull(
+                            userId = state.userId,
+                            force = force,
+                            includeProfileSettings = includeProfileSettings
+                        )
                         if (force && started) forceSyncRequested = false
                     }
                     is AuthState.SignedOut -> {
                         startupPullJob?.cancel()
                         startupPullJob = null
                         lastPulledKey = null
+                        lastPulledIncludedProfileSettings = false
                         forceSyncRequested = false
+                        forceSyncIncludesProfileSettings = true
                         pendingResyncKey = null
+                        pendingResyncIncludesProfileSettings = false
                     }
                     is AuthState.Loading -> Unit
                 }
@@ -74,11 +87,16 @@ class StartupSyncService @Inject constructor(
         }
     }
 
-    fun requestSyncNow() {
+    fun requestSyncNow(includeProfileSettings: Boolean = true) {
         forceSyncRequested = true
+        forceSyncIncludesProfileSettings = forceSyncIncludesProfileSettings || includeProfileSettings
         when (val state = authManager.authState.value) {
             is AuthState.FullAccount -> {
-                val started = scheduleStartupPull(state.userId, force = true)
+                val started = scheduleStartupPull(
+                    userId = state.userId,
+                    force = true,
+                    includeProfileSettings = includeProfileSettings
+                )
                 if (started) forceSyncRequested = false
             }
             else -> Unit
@@ -90,13 +108,27 @@ class StartupSyncService @Inject constructor(
         return "${userId}_p${profileId}"
     }
 
-    private fun scheduleStartupPull(userId: String, force: Boolean = false): Boolean {
+    private fun scheduleStartupPull(
+        userId: String,
+        force: Boolean = false,
+        includeProfileSettings: Boolean = true
+    ): Boolean {
         val key = pullKey(userId)
-        if (!force && lastPulledKey == key) return false
+        if (
+            !force &&
+            lastPulledKey == key &&
+            (!includeProfileSettings || lastPulledIncludedProfileSettings)
+        ) {
+            return false
+        }
         // Never cancel an active sync — it may be mid-write to DataStore.
         // Instead, schedule a follow-up sync after the current one finishes.
         if (startupPullJob?.isActive == true) {
-            if (force) pendingResyncKey = key
+            if (force) {
+                pendingResyncKey = key
+                pendingResyncIncludesProfileSettings =
+                    pendingResyncIncludesProfileSettings || includeProfileSettings
+            }
             return false
         }
 
@@ -104,11 +136,10 @@ class StartupSyncService @Inject constructor(
             val maxAttempts = 3
             var syncCompleted = false
             for (attempt in 1..maxAttempts) {
-                Log.d(TAG, "Startup sync attempt $attempt/$maxAttempts for key=$key")
-                val result = pullRemoteData()
+                val result = pullRemoteData(includeProfileSettings = includeProfileSettings)
                 if (result.isSuccess) {
                     lastPulledKey = key
-                    Log.d(TAG, "Startup sync completed for key=$key")
+                    lastPulledIncludedProfileSettings = includeProfileSettings
                     syncCompleted = true
                     break
                 }
@@ -121,17 +152,26 @@ class StartupSyncService @Inject constructor(
             
             val resyncKey = pendingResyncKey
             if (resyncKey != null) {
+                val resyncIncludesProfileSettings = pendingResyncIncludesProfileSettings
                 pendingResyncKey = null
-                if (!syncCompleted || resyncKey != lastPulledKey) {
-                    Log.d(TAG, "Running pending re-sync for key=$resyncKey")
-                    scheduleStartupPull(userId, force = true)
+                pendingResyncIncludesProfileSettings = false
+                if (
+                    !syncCompleted ||
+                    resyncKey != lastPulledKey ||
+                    (resyncIncludesProfileSettings && !lastPulledIncludedProfileSettings)
+                ) {
+                    scheduleStartupPull(
+                        userId = userId,
+                        force = true,
+                        includeProfileSettings = resyncIncludesProfileSettings
+                    )
                 }
             }
         }
         return true
     }
 
-    private suspend fun pullRemoteData(): Result<Unit> {
+    private suspend fun pullRemoteData(includeProfileSettings: Boolean): Result<Unit> {
         try {
             val profileId = profileManager.activeProfileId.value
             Log.d(TAG, "Pulling remote data for profile $profileId")
@@ -140,15 +180,17 @@ class StartupSyncService @Inject constructor(
             profileSyncService.pullFromRemote().getOrElse { throw it }
             Log.d(TAG, "Pulled profiles from remote")
 
-            // Pull profile-scoped UI/player/settings blob.
-            // If not present, local settings are preserved.
-            profileSettingsSyncService.pullCurrentProfileFromRemote()
-                .onSuccess { applied ->
-                    Log.d(TAG, "Profile settings blob pull completed for profile $profileId (applied=$applied)")
-                }
-                .onFailure { e ->
-                    Log.e(TAG, "Failed to pull profile settings blob, keeping local settings", e)
-                }
+            if (includeProfileSettings) {
+                // Pull profile-scoped UI/player/settings blob.
+                // If not present, local settings are preserved.
+                profileSettingsSyncService.pullCurrentProfileFromRemote()
+                    .onSuccess { applied ->
+                        Log.d(TAG, "Profile settings blob pull completed for profile $profileId (applied=$applied)")
+                    }
+                    .onFailure { e ->
+                        Log.e(TAG, "Failed to pull profile settings blob, keeping local settings", e)
+                    }
+            }
 
             pluginManager.isSyncingFromRemote = true
             try {

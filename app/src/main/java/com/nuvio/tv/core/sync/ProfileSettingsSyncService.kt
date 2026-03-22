@@ -1,6 +1,8 @@
 package com.nuvio.tv.core.sync
 
+import android.os.SystemClock
 import android.util.Log
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -16,13 +18,19 @@ import com.nuvio.tv.data.remote.supabase.SupabaseProfileSettingsBlob
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -43,6 +51,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "ProfileSettingsSyncService"
+private const val SETTINGS_PUSH_DEBOUNCE_MS = 1500L
+private const val FOREGROUND_PULL_DELAY_MS = 2500L
+private const val FOREGROUND_PULL_MIN_INTERVAL_MS = 60_000L
 
 @Singleton
 class ProfileSettingsSyncService @Inject constructor(
@@ -52,8 +63,13 @@ class ProfileSettingsSyncService @Inject constructor(
     private val profileDataStoreFactory: ProfileDataStoreFactory
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val syncMutex = Mutex()
     @Volatile
     private var applyingRemoteBlob: Boolean = false
+    @Volatile
+    private var skipNextPushSignature: String? = null
+    private var foregroundPullJob: Job? = null
+    private var lastForegroundPullAtMs: Long = 0L
 
     private val syncedFeatures = listOf(
         "theme_settings",
@@ -80,50 +96,81 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     suspend fun pushCurrentProfileToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val profileId = profileManager.activeProfileId.value
-            val settingsJson = exportSettingsBlob(profileId)
+        syncMutex.withLock {
+            try {
+                val profileId = profileManager.activeProfileId.value
+                val settingsJson = exportSettingsBlob(profileId)
 
-            val params = buildJsonObject {
-                put("p_profile_id", profileId)
-                put("p_settings_json", settingsJson)
+                val params = buildJsonObject {
+                    put("p_profile_id", profileId)
+                    put("p_settings_json", settingsJson)
+                }
+
+                withJwtRefreshRetry {
+                    postgrest.rpc("sync_push_profile_settings_blob", params)
+                }
+
+                Log.d(TAG, "Pushed profile settings blob for profile $profileId")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to push profile settings blob", e)
+                Result.failure(e)
             }
-
-            withJwtRefreshRetry {
-                postgrest.rpc("sync_push_profile_settings_blob", params)
-            }
-
-            Log.d(TAG, "Pushed profile settings blob for profile $profileId")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to push profile settings blob", e)
-            Result.failure(e)
         }
     }
 
     suspend fun pullCurrentProfileFromRemote(): Result<Boolean> = withContext(Dispatchers.IO) {
-        try {
-            val profileId = profileManager.activeProfileId.value
-            val params = buildJsonObject {
-                put("p_profile_id", profileId)
-            }
+        syncMutex.withLock {
+            try {
+                val profileId = profileManager.activeProfileId.value
+                val params = buildJsonObject {
+                    put("p_profile_id", profileId)
+                }
 
-            val response = withJwtRefreshRetry {
-                postgrest.rpc("sync_pull_profile_settings_blob", params)
-            }
-            val rows = response.decodeList<SupabaseProfileSettingsBlob>()
-            val blob = rows.firstOrNull()?.settingsJson
-            if (blob == null) {
-                Log.d(TAG, "No remote profile settings blob for profile $profileId; keeping local settings")
-                return@withContext Result.success(false)
-            }
+                val response = withJwtRefreshRetry {
+                    postgrest.rpc("sync_pull_profile_settings_blob", params)
+                }
+                val rows = response.decodeList<SupabaseProfileSettingsBlob>()
+                val blob = rows.firstOrNull()?.settingsJson
+                if (blob == null) {
+                    Log.d(TAG, "No remote profile settings blob for profile $profileId; keeping local settings")
+                    return@withLock Result.success(false)
+                }
 
-            importSettingsBlob(profileId, blob)
-            Log.d(TAG, "Applied remote profile settings blob for profile $profileId")
-            Result.success(true)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to pull profile settings blob", e)
-            Result.failure(e)
+                val featuresJson = blob["features"]?.jsonObject ?: return@withLock Result.success(false)
+                val remoteSignature = buildSettingsSignature(featuresJson)
+                val localSignature = buildSettingsSignature(profileId)
+                if (remoteSignature == localSignature) {
+                    Log.d(TAG, "Remote profile settings already match local for profile $profileId")
+                    return@withLock Result.success(false)
+                }
+
+                importSettingsBlob(profileId, featuresJson)
+                skipNextPushSignature = remoteSignature
+                Log.d(TAG, "Applied remote profile settings blob for profile $profileId")
+                Result.success(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to pull profile settings blob", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    fun requestForegroundPull(force: Boolean = false) {
+        if (!authManager.isAuthenticated) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (!force && foregroundPullJob?.isActive == true) return
+        if (!force && now - lastForegroundPullAtMs < FOREGROUND_PULL_MIN_INTERVAL_MS) return
+
+        foregroundPullJob = scope.launch {
+            if (!force) {
+                delay(FOREGROUND_PULL_DELAY_MS)
+            }
+            if (!authManager.isAuthenticated) return@launch
+
+            lastForegroundPullAtMs = SystemClock.elapsedRealtime()
+            pullCurrentProfileFromRemote()
         }
     }
 
@@ -147,9 +194,7 @@ class ProfileSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun importSettingsBlob(profileId: Int, blob: JsonObject) {
-        val featuresJson = blob["features"]?.jsonObject ?: return
-
+    private suspend fun importSettingsBlob(profileId: Int, featuresJson: JsonObject) {
         applyingRemoteBlob = true
         try {
             syncedFeatures.forEach { feature ->
@@ -173,22 +218,60 @@ class ProfileSettingsSyncService @Inject constructor(
                     val featureFlows = syncedFeatures.map { feature ->
                         profileDataStoreFactory.get(profileId, feature).data
                             .map { prefs ->
-                                // Build a stable signature per feature to detect changes.
-                                prefs.asMap()
-                                    .entries
-                                    .sortedBy { it.key.name }
-                                    .joinToString(separator = "|") { (key, value) -> "${key.name}=${value}" }
+                                "$feature={${buildFeatureSignature(prefs)}}"
                             }
                     }
-                    merge(*featureFlows.toTypedArray())
+                    combine(featureFlows) { signatures ->
+                        signatures.joinToString(separator = "||")
+                    }
                 }
-                .debounce(1500)
-                .collect {
+                .drop(1)
+                .distinctUntilChanged()
+                .debounce(SETTINGS_PUSH_DEBOUNCE_MS)
+                .collect { signature ->
                     if (!authManager.isAuthenticated) return@collect
                     if (applyingRemoteBlob) return@collect
+                    if (signature == skipNextPushSignature) {
+                        skipNextPushSignature = null
+                        return@collect
+                    }
                     pushCurrentProfileToRemote()
                 }
         }
+    }
+
+    private suspend fun buildSettingsSignature(profileId: Int): String {
+        val signatures = ArrayList<String>(syncedFeatures.size)
+        syncedFeatures.forEach { feature ->
+            val prefs = profileDataStoreFactory.get(profileId, feature).data.first()
+            signatures += "$feature={${buildFeatureSignature(prefs)}}"
+        }
+        return signatures.joinToString(separator = "||")
+    }
+
+    private fun buildSettingsSignature(featuresJson: JsonObject): String {
+        return syncedFeatures.joinToString(separator = "||") { feature ->
+            val featureJson = featuresJson[feature]?.jsonObject ?: JsonObject(emptyMap())
+            "$feature={${buildFeatureSignature(featureJson)}}"
+        }
+    }
+
+    private fun buildFeatureSignature(prefs: Preferences): String {
+        return prefs.asMap()
+            .entries
+            .mapNotNull { (key, rawValue) ->
+                encodePreferenceValue(rawValue)?.let { encoded ->
+                    key.name to encoded.toString()
+                }
+            }
+            .sortedBy { it.first }
+            .joinToString(separator = "|") { (key, value) -> "$key=$value" }
+    }
+
+    private fun buildFeatureSignature(featureJson: JsonObject): String {
+        return featureJson.entries
+            .sortedBy { it.key }
+            .joinToString(separator = "|") { (key, value) -> "$key=$value" }
     }
 
     private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
@@ -222,7 +305,7 @@ class ProfileSettingsSyncService @Inject constructor(
                 if (!allStrings) return null
                 buildJsonObject {
                     put("type", "string_set")
-                    val values = rawValue.map { it as String }
+                    val values = rawValue.map { it as String }.sorted()
                     put("value", JsonArray(values.map { JsonPrimitive(it) }))
                 }
             }
