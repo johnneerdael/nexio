@@ -8,6 +8,8 @@ The Detail screen is the decision point between browsing and playback. It gives 
 - Start playback, resume playback, or open a specific episode.
 - Open the trailer when you want a quick preview before committing to a stream.
 - Jump to cast members, collections, similar titles, and reviews when those sections are available.
+- Open cast or crew people to see more titles tied to that person.
+- Open networks and production companies to see the titles Nexio finds for that organization.
 - Mark movies or episodes watched and manage library or watchlist state when your integrations support it.
 
 ## Where the controls live
@@ -15,12 +17,20 @@ The Detail screen is the decision point between browsing and playback. It gives 
 - Episode controls appear in the episode section for series.
 - Trailer, library, and list actions are grouped with the main title actions.
 - Cast, Ratings, More Like This, Reviews, and Collection are section tabs or rows lower on the page.
+- Cast cards can represent actors, creators, directors, or writers, and the person detail path remembers whether the crew view is more relevant.
+- Company logo rows are split by network and production company so you can jump into the right organization page directly.
 
 ## How it behaves
 - Detail keeps focus stable when you move between sections or return from playback.
 - If you played a trailer, Back exits the trailer first instead of immediately leaving the page.
+- When a trailer is available, the hero adds a dedicated trailer button and the page swaps into trailer mode while it plays.
+- Trailer playback keeps the rest of the hero content out of the way, and the on-page controls stay focused on trailer actions until you exit.
 - For series, the screen can preserve the episode you came from so you land back on the right episode after playback.
 - If the requested episode is already watched, Nexio can advance the return focus to the next logical episode.
+- Reviews are merged from TMDB and Trakt when both are available, and more Trakt reviews can load as you move farther through the row.
+- Pressing a review card toggles that review’s auto-scrolling text, which is handy for longer comments.
+- Collection tiles open their own detail pages, and the section keeps focus stable when you come back.
+- More Like This behaves the same way as collection tiles: it is a horizontal discovery row that opens the selected title.
 
 ## Why it matters
 - The screen saves clicks for binge watching by preserving episode context.

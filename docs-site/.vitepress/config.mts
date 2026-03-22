@@ -4,20 +4,20 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   base: '/nexio/',
   title: 'Nexio Documentation',
-  description: 'Product and operational documentation for Nexio web, Android, and developer workflows.',
+  description: 'Product and operational documentation for the Management Portal, TV App, and developer workflows.',
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Web', link: '/web/' },
-      { text: 'Android', link: '/android/' },
+      { text: 'Management Portal', link: '/web/' },
+      { text: 'TV App', link: '/android/' },
       { text: 'Developer', link: '/dev/architecture' }
     ],
 
     sidebar: {
       '/web/': [
         {
-          text: 'Web Documentation',
+          text: 'Management Portal',
           items: [
             { text: 'Overview', link: '/web/' },
             { text: 'Get Started', link: '/web/get-started' },
@@ -38,7 +38,7 @@ export default defineConfig({
       ],
       '/android/': [
         {
-          text: 'Android Documentation',
+          text: 'TV App',
           items: [
             { text: 'Overview', link: '/android/' },
             { text: 'Getting Started', link: '/android/getting-started' }
