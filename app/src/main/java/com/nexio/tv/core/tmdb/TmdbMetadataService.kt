@@ -16,6 +16,7 @@ import com.nexio.tv.data.remote.api.TmdbReviewResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MetaReviewSource
@@ -144,8 +145,10 @@ class TmdbMetadataService @Inject constructor(
                     .mapNotNull { company ->
                         val name = company.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                         MetaCompany(
+                            tmdbId = company.id,
                             name = name,
-                            logo = buildImageUrl(company.logoPath, size = "w300")
+                            logo = buildImageUrl(company.logoPath, size = "w300"),
+                            kind = MetaCompanyKind.COMPANY
                         )
                     }
                 val networks = details?.networks
@@ -153,8 +156,10 @@ class TmdbMetadataService @Inject constructor(
                     .mapNotNull { network ->
                         val name = network.name?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                         MetaCompany(
+                            tmdbId = network.id,
                             name = name,
-                            logo = buildImageUrl(network.logoPath, size = "w300")
+                            logo = buildImageUrl(network.logoPath, size = "w300"),
+                            kind = MetaCompanyKind.NETWORK
                         )
                     }
                 val poster = posterRatingsUrlResolver.resolvePosterUrl(

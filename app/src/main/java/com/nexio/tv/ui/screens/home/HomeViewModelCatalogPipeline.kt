@@ -1063,6 +1063,23 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot
     )
+    val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
+        addons = addonsCache,
+        disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+        traktPrefs = traktPrefs,
+        traktSnapshot = effectiveTraktSnapshot,
+        hasTraktUpNextItems = continueWatchingItems.any { it is ContinueWatchingItem.NextUp },
+        mdbPrefs = mdbListPrefs,
+        mdbSnapshot = effectiveMDBListSnapshot
+    )
+    val publishSourcesReady = areConfiguredHomePublishSourcesReady(
+        addonExpectedOrderKeys = addonExpectedOrderKeys,
+        availableAddonOrderKeys = catalogSnapshot.keys,
+        traktExpectedOrderKeys = traktExpectedOrderKeys,
+        traktObserved = traktDiscoveryObserved,
+        mdbExpectedOrderKeys = mdbExpectedOrderKeys,
+        mdbObserved = mdbListDiscoveryObserved
+    )
     val activeRefreshInProgress =
         catalogsLoadInProgress ||
             traktDiscoveryRefreshInProgress ||
@@ -1265,10 +1282,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val orderedGroupKeys = updateResult.orderedGroupKeys
     val nextTruncatedRowCache = updateResult.truncatedCache
     val candidateSnapshotComplete =
-        sourceCachesReady &&
+        publishSourcesReady &&
             isConfiguredHomeSnapshotComplete(
                 snapshotOrderedGroupKeys = orderedGroupKeys,
-                expectedConfiguredOrderKeys = expectedConfiguredOrderKeys
+                expectedConfiguredOrderKeys = publishableExpectedOrderKeys
             )
 
     truncatedRowCache.clear()
@@ -1422,6 +1439,15 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     )
     val expectedConfiguredOrderKeys =
         (traktExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
+    val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
+        addons = addonsCache,
+        disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+        traktPrefs = traktCatalogPreferences,
+        traktSnapshot = traktDiscoverySnapshot,
+        hasTraktUpNextItems = _uiState.value.continueWatchingItems.any { it is ContinueWatchingItem.NextUp },
+        mdbPrefs = mdbListCatalogPreferences,
+        mdbSnapshot = mdbListDiscoverySnapshot
+    )
     val sourceCachesReady = areConfiguredHomeSourceCachesReady(
         addonExpectedOrderKeys = addonExpectedOrderKeys,
         availableAddonOrderKeys = catalogsMap.keys,
@@ -1443,13 +1469,13 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     }
     val snapshotComplete = isConfiguredHomeSnapshotComplete(
         snapshotOrderedGroupKeys = snapshot.orderedGroupKeys,
-        expectedConfiguredOrderKeys = expectedConfiguredOrderKeys
+        expectedConfiguredOrderKeys = publishableExpectedOrderKeys
     )
-    if (expectedConfiguredOrderKeys.isNotEmpty() && !snapshotComplete) {
-        val missingKeys = expectedConfiguredOrderKeys.filterNot { it in snapshot.orderedGroupKeys.toSet() }
+    if (publishableExpectedOrderKeys.isNotEmpty() && !snapshotComplete) {
+        val missingKeys = publishableExpectedOrderKeys.filterNot { it in snapshot.orderedGroupKeys.toSet() }
         Log.d(
             HomeViewModel.TAG,
-            "Persisted snapshot deferred reason=incomplete expected=${expectedConfiguredOrderKeys.size} " +
+            "Persisted snapshot deferred reason=incomplete expected=${publishableExpectedOrderKeys.size} " +
                 "actual=${snapshot.orderedGroupKeys.size} missing=${missingKeys.joinToString(limit = 12)}"
         )
         pendingRestoredCatalogSnapshot = snapshot
@@ -1457,7 +1483,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     }
     Log.d(
         HomeViewModel.TAG,
-        "Persisted snapshot applied orderedKeys=${snapshot.orderedGroupKeys.size} expected=${expectedConfiguredOrderKeys.size} " +
+        "Persisted snapshot applied orderedKeys=${snapshot.orderedGroupKeys.size} expected=${publishableExpectedOrderKeys.size} " +
             "sourceCachesReady=$sourceCachesReady rows=${snapshot.catalogRows.size} fullRows=${snapshot.fullCatalogRows.size}"
     )
     inMemoryHomeSnapshot = snapshot

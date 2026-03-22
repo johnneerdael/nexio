@@ -1,5 +1,5 @@
 <template>
-  <PortalShell :signed-in="signedIn" @sign-out="signOut">
+  <PortalShell :signed-in="signedIn" :active-view="activeView" @set-view="setView" @sign-out="signOut">
     <template v-if="!signedIn">
       <AuthPanel
         :busy="state.loading"
@@ -11,38 +11,16 @@
     </template>
 
     <template v-else>
-      <div class="account-portal-container max-w-[1280px] mx-auto pb-16">
-        <OverviewPanel
-          :title="state.session?.user.email ?? 'Nexio account'"
-          :addons-count="state.addons.length"
-          :last-synced-at="state.lastSyncedAt"
-          class="mb-6"
-        />
-
+      <div class="account-portal-view w-full">
         <section
           v-if="state.error"
-          class="glass error-card"
+          class="bg-error/10 border border-error/20 text-error p-4 rounded-xl flex items-center gap-3 mb-6"
         >
           <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
           {{ state.error }}
         </section>
 
-        <section class="portal-sticky-nav glass flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl mb-8 z-20 shadow-lg border border-white/5 backdrop-blur-xl">
-          <div class="flex flex-wrap gap-3">
-            <button 
-              v-for="item in nav" 
-              :key="item.id" 
-              class="nav-btn transition-all duration-300 rounded-full px-6 py-2.5 font-medium text-sm border border-transparent"
-              :class="activeView === item.id ? 'bg-gradient-to-r from-[#7bffd3] to-[#9be7ff] text-[#031018] shadow-[0_0_20px_rgba(123,255,211,0.2)]' : 'text-white/70 bg-white/5 hover:bg-white/10 hover:border-white/10 border border-white/5'" 
-              @click="setView(item.id)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-          <span class="badge shadow-glow"><strong>{{ state.demoMode ? 'Demo mode' : 'Nexio Live' }}</strong></span>
-        </section>
-
-        <div class="portal-view-transition animate-fade-in">
+        <div class="portal-view-transition animate-fade-in w-full">
           <AddonManager
             v-if="activeView === 'addons'"
             :addons="state.addons"
@@ -52,6 +30,7 @@
             @add-addon="addAddon"
             @remove-addon="removeAddon"
             @move-addon="moveAddon"
+            @reorder-addons="reorderAddons"
             @toggle-addon="toggleAddon"
             @update-addon-parser-preset="updateAddonParserPreset"
           />
@@ -59,7 +38,8 @@
           <CatalogInventory
             v-else-if="activeView === 'catalogs'"
             :catalogs="catalogInventory"
-            :disabled-keys="state.settings.layout.disabledHomeCatalogKeys"
+            :addons="state.addons"
+            :disabled-keys="state.settings.catalogs.home.disabledHomeCatalogKeys"
             :busy="state.saving"
             @persist="persistSnapshot"
             @move-catalog="moveCatalog"
@@ -77,8 +57,10 @@
             :secret-drafts="state.secretDrafts"
             :trakt-flow="state.traktFlow"
             :trakt-popular-lists="state.traktDiscovery.popularLists"
+            :trakt-search-results="state.traktDiscovery.searchResults"
             :mdblist-personal-lists="state.mdblistDiscovery.personalLists"
             :mdblist-top-lists="state.mdblistDiscovery.topLists"
+            :mdblist-search-results="state.mdblistDiscovery.searchResults"
             :mdblist-validating="state.mdblistDiscovery.validating"
             :mdblist-error="state.mdblistDiscovery.error"
             :busy="state.saving"
@@ -105,15 +87,17 @@
             @validate-mdblist="validateMDBList"
             @toggle-mdblist-personal-list="(key, currentlyHidden) => setMDBListPersonalListEnabled(key, currentlyHidden)"
             @toggle-mdblist-top-list="(key, shouldSelect) => setMDBListTopListSelected(key, shouldSelect)"
+            @search-trakt-lists="searchTraktLists"
+            @search-mdblist-lists="searchMDBListLists"
+          />
+          <FormatterWorkspace
+            v-else-if="activeView === 'formatter'"
+            :settings="state.settings"
+            :busy="state.saving"
+            @update="updateSetting"
+            @persist="persistSnapshot"
           />
         </div>
-
-        <LinkedDevicesPanel
-          v-if="state.linkedDevices.length > 0"
-          :devices="state.linkedDevices"
-          class="mt-12 opacity-80 hover:opacity-100 transition-opacity"
-          @unlink-device="unlinkDevice"
-        />
       </div>
     </template>
   </PortalShell>
@@ -125,10 +109,9 @@ import { useRoute, useRouter } from '#imports'
 import AddonManager from '~/components/portal/AddonManager.vue'
 import AuthPanel from '~/components/portal/AuthPanel.vue'
 import CatalogInventory from '~/components/portal/CatalogInventory.vue'
-import LinkedDevicesPanel from '~/components/portal/LinkedDevicesPanel.vue'
-import OverviewPanel from '~/components/portal/OverviewPanel.vue'
 import PortalShell from '~/components/portal/PortalShell.vue'
 import SettingsWorkspace from '~/components/portal/SettingsWorkspace.vue'
+import FormatterWorkspace from '~/components/portal/FormatterWorkspace.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
 import { accountGroups } from '~/utils/portal-metadata'
 
@@ -148,6 +131,7 @@ const {
   addAddon,
   removeAddon,
   moveAddon,
+  reorderAddons,
   toggleAddon,
   updateAddonParserPreset,
   moveCatalog,
@@ -164,6 +148,7 @@ const {
   saveDraftSecret,
   deleteSecret,
   validateMDBList,
+  searchMDBListLists,
   setMDBListPersonalListEnabled,
   setMDBListTopListSelected,
   startTraktDeviceFlow,
@@ -171,6 +156,7 @@ const {
   startRealDebridDeviceFlow,
   completeRealDebridDeviceFlow,
   refreshTraktPopularLists,
+  searchTraktLists,
   toggleTraktPopularList,
   disconnectTrakt,
   disconnectRealDebrid
@@ -181,7 +167,8 @@ const integrationGroups = computed(() => accountGroups.integrations || [])
 const nav = [
   { id: 'addons', label: 'Addons' },
   { id: 'catalogs', label: 'Catalogs' },
-  { id: 'integrations', label: 'Integrations' }
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'formatter', label: 'Formatter' }
 ]
 
 const activeView = computed(() => {
@@ -224,19 +211,6 @@ onMounted(() => {
   margin-bottom: 1.5rem;
 }
 
-.portal-sticky-nav {
-  position: sticky;
-  top: 1rem;
-}
-
-.nav-btn:hover {
-  transform: translateY(-1px);
-}
-
-.nav-btn:active {
-  transform: translateY(1px) scale(0.98);
-}
-
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
@@ -247,6 +221,6 @@ onMounted(() => {
 }
 
 .shadow-glow {
-  box-shadow: 0 0 20px rgba(123, 255, 211, 0.1);
+  box-shadow: 0 0 20px rgba(186, 158, 255, 0.1);
 }
 </style>

@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -933,13 +934,15 @@ private fun StreamCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(0.8f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = streamName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = NexioColors.TextPrimary
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = NexioColors.TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 streamSubtitle?.takeIf { it != streamName }?.let { subtitle ->
@@ -976,6 +979,7 @@ private fun StreamCard(
             }
 
             Column(
+                modifier = Modifier.weight(0.2f),
                 horizontalAlignment = Alignment.End
             ) {
                 if (addonLogoModel != null) {
@@ -988,15 +992,6 @@ private fun StreamCard(
                         contentScale = ContentScale.Fit
                     )
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = stream.addonName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = NexioTheme.extendedColors.textTertiary,
-                    maxLines = 1
-                )
             }
         }
     }

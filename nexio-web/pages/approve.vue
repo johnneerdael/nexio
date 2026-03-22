@@ -1,5 +1,5 @@
 <template>
-  <PortalShell :signed-in="signedIn" @sign-out="signOut">
+  <PublicShell :signed-in="signedIn" @sign-out="signOut">
     <section class="glass" style="padding:1.6rem; border-radius: var(--radius-xl); display:grid; gap:1.2rem;">
       <div>
         <p class="badge">TV Login Approval</p>
@@ -42,14 +42,14 @@
         </div>
       </section>
     </section>
-  </PortalShell>
+  </PublicShell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from '#imports'
 import AuthPanel from '~/components/portal/AuthPanel.vue'
-import PortalShell from '~/components/portal/PortalShell.vue'
+import PublicShell from '~/components/portal/PublicShell.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
 
 const route = useRoute()

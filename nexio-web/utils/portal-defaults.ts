@@ -1,9 +1,9 @@
 import type {
   AddonRecord,
   CatalogId,
-  PortalSettings,
-  SyncExclusion
+  PortalSettings
 } from '~/types/portal'
+import { ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION } from '~/types/portal'
 
 export const defaultTraktCatalogOrder: CatalogId[] = [
   'trakt_up_next',
@@ -16,42 +16,8 @@ export const defaultTraktCatalogOrder: CatalogId[] = [
   'trakt_calendar_next_7_days'
 ]
 
-export const defaultSyncExclusions: SyncExclusion[] = [
-  { key: 'playback.bufferNetwork.vodCacheSizeMode', reason: 'Cache size should remain per-device.' },
-  { key: 'playback.bufferNetwork.vodCacheSizeMb', reason: 'Cache size should remain per-device.' },
-  { key: 'playback.bufferNetwork.useParallelConnections', reason: 'Parallel fetch tuning should remain per-device.' },
-  { key: 'playback.bufferNetwork.parallelConnectionCount', reason: 'Parallel fetch tuning should remain per-device.' },
-  { key: 'playback.bufferNetwork.parallelChunkSizeMb', reason: 'Parallel fetch tuning should remain per-device.' }
-]
-
 export const defaultSettings = (): PortalSettings => ({
-  appearance: {
-    theme: 'WHITE',
-    font: 'INTER',
-    localeTag: 'system'
-  },
-  layout: {
-    selectedLayout: 'MODERN',
-    modernLandscapePostersEnabled: false,
-    heroCatalogKeys: [],
-    homeCatalogOrderKeys: [],
-    disabledHomeCatalogKeys: [],
-    sidebarCollapsedByDefault: false,
-    modernSidebarEnabled: false,
-    modernSidebarBlurEnabled: false,
-    heroSectionEnabled: true,
-    searchDiscoverEnabled: true,
-    posterLabelsEnabled: true,
-    catalogAddonNameEnabled: true,
-    catalogTypeSuffixEnabled: true,
-    hideUnreleasedContent: false,
-    blurUnwatchedEpisodes: false,
-    preferExternalMetaAddonDetail: false,
-    focusedPosterBackdropExpandEnabled: false,
-    focusedPosterBackdropExpandDelaySeconds: 3,
-    posterCardWidthDp: 126,
-    posterCardCornerRadiusDp: 12
-  },
+  schemaVersion: ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
   integrations: {
     debrid: {
       premiumize: {
@@ -88,10 +54,7 @@ export const defaultSettings = (): PortalSettings => ({
       showLetterboxd: true,
       showTomatoes: true,
       showAudience: true,
-      showMetacritic: true,
-      hiddenPersonalListKeys: [],
-      selectedTopListKeys: [],
-      catalogOrder: []
+      showMetacritic: true
     },
     animeSkip: {
       enabled: false,
@@ -112,84 +75,32 @@ export const defaultSettings = (): PortalSettings => ({
       pending: false
     }
   },
-  playback: {
-    general: {
-      loadingOverlayEnabled: true,
-      pauseOverlayEnabled: true,
-      osdClockEnabled: true,
-      skipIntroEnabled: true,
-      frameRateMatchingMode: 'OFF',
-      resolutionMatchingEnabled: false
+  catalogs: {
+    home: {
+      heroCatalogKeys: [],
+      homeCatalogOrderKeys: [],
+      disabledHomeCatalogKeys: []
     },
-    streamSelection: {
-      streamReuseLastLinkEnabled: false,
-      streamReuseLastLinkCacheHours: 24,
-      uniformStreamFormattingEnabled: false,
-      groupStreamsAcrossAddonsEnabled: false,
-      deduplicateGroupedStreamsEnabled: false,
-      filterEpisodeMismatchStreamsEnabled: false,
-      filterMovieYearMismatchStreamsEnabled: false,
-      streamAutoPlayMode: 'MANUAL',
-      streamAutoPlaySource: 'ALL_SOURCES',
-      streamAutoPlaySelectedAddons: [],
-      streamAutoPlayRegex: '',
-      streamAutoPlayNextEpisodeEnabled: false,
-      streamAutoPlayPreferBingeGroupForNextEpisode: true,
-      nextEpisodeThresholdMode: 'PERCENTAGE',
-      nextEpisodeThresholdPercent: 99,
-      nextEpisodeThresholdMinutesBeforeEnd: 2
+    trakt: {
+      catalogEnabledSet: [
+        'trakt_up_next',
+        'trakt_recommended_movies',
+        'trakt_recommended_shows',
+        'trakt_calendar_next_7_days'
+      ],
+      catalogOrder: defaultTraktCatalogOrder,
+      selectedPopularListKeys: []
     },
-    audio: {
-      preferredAudioLanguage: 'device',
-      secondaryPreferredAudioLanguage: null,
-      skipSilence: false,
-      decoderPriority: 1,
-      tunnelingEnabled: false,
-      experimentalDv7ToDv81Enabled: true,
-      experimentalDtsIecPassthroughEnabled: false,
-      experimentalDv7ToDv81PreserveMappingEnabled: false,
-      experimentalDv5ToDv81Enabled: false
-    },
-    subtitles: {
-      preferredLanguage: 'en',
-      secondaryPreferredLanguage: null,
-      subtitleOrganizationMode: 'BY_LANGUAGE',
-      addonSubtitleStartupMode: 'ALL_SUBTITLES',
-      size: 100,
-      verticalOffset: 5,
-      bold: false,
-      textColor: -1,
-      backgroundColor: 0,
-      outlineEnabled: true,
-      outlineColor: -16777216,
-      useLibass: false
-    },
-    bufferNetwork: {
-      minBufferMs: 20000,
-      maxBufferMs: 50000,
-      bufferForPlaybackMs: 3000,
-      bufferForPlaybackAfterRebufferMs: 5000,
-      targetBufferSizeMb: 100,
-      backBufferDurationMs: 0,
-      enableBufferLogs: false
+    mdblist: {
+      hiddenPersonalListKeys: [],
+      selectedTopListKeys: [],
+      catalogOrder: []
     }
   },
-  trakt: {
-    continueWatchingDaysCap: 60,
-    showUnairedNextUp: true,
-    catalogEnabledSet: [
-      'trakt_up_next',
-      'trakt_recommended_movies',
-      'trakt_recommended_shows',
-      'trakt_calendar_next_7_days'
-    ],
-    catalogOrder: defaultTraktCatalogOrder,
-    selectedPopularListKeys: []
-  },
-  debug: {
-    accountTabEnabled: false,
-    syncCodeFeaturesEnabled: false,
-    bufferLogsEnabled: false
+  formatter: {
+    enabled: true,
+    selectedTemplateId: 'universal',
+    customTemplate: null
   }
 })
 

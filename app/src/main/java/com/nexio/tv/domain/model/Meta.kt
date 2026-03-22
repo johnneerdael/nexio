@@ -45,9 +45,24 @@ data class MetaCastMember(
 
 @Immutable
 data class MetaCompany(
+    val tmdbId: Int? = null,
     val name: String,
-    val logo: String? = null
+    val logo: String? = null,
+    val kind: MetaCompanyKind = MetaCompanyKind.COMPANY
 )
+
+@Immutable
+enum class MetaCompanyKind {
+    COMPANY,
+    NETWORK
+}
+
+@Immutable
+enum class OrganizationDiscoverType {
+    MOVIE_COMPANY,
+    TV_COMPANY,
+    TV_NETWORK
+}
 
 @Immutable
 data class Video(

@@ -1,62 +1,71 @@
 <template>
-  <PortalShell :signed-in="signedIn" @sign-out="signOut">
+  <PublicShell :signed-in="signedIn" @sign-out="signOut">
     <div ref="landingPage" class="landing-page" :class="{ 'is-ready': pageReady }">
       
-      <!-- Centered Enterprise Hero -->
-      <section class="landing-hero reveal reveal-hero pt-20 pb-12 flex flex-col items-center text-center relative max-w-5xl mx-auto">
-        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-[#7bffd3]/[0.05] blur-[120px] rounded-full pointer-events-none z-0"></div>
-        
-        <span class="badge premium-badge shadow-glow mb-8 z-10 relative">
-          <img src="/app_logo_mark.webp" alt="Nexio" class="brand-icon" />
-          <span class="text-sm font-medium tracking-wide">Nexio Premium</span>
-        </span>
-        
-        <h1 class="section-title landing-title z-10 relative max-w-4xl">
-          The ultimate <br/><span class="text-gradient">streaming experience.</span>
-        </h1>
-        
-        <p class="landing-summary mt-6 max-w-2xl mx-auto z-10 relative text-[#edf7ff]/70 text-lg md:text-xl">
-          A bleeding-edge streaming platform built for true cinephiles. Seamless playback, zero-compromise audio, and an interface that feels alive.
-        </p>
-        
-        <div class="landing-actions mt-10 z-10 relative flex gap-4">
-          <NuxtLink class="primary-btn pulse-btn px-8 py-3.5 text-[1rem]" to="/account">Manage Account</NuxtLink>
-          <a href="#features" class="ghost-btn px-8 py-3.5 text-[1rem] border border-white/10 hover:bg-white/5 transition-colors">Explore Features</a>
-        </div>
-      </section>
+      <!-- Side-by-Side Enterprise Hero -->
+      <section class="landing-hero reveal reveal-hero pt-4 md:pt-8 pb-16 relative max-w-7xl mx-auto px-4 lg:px-8 w-full">
+        <!-- Luminescent Scrim -->
+        <div class="absolute top-[-10%] right-[-5%] w-[800px] h-[800px] bg-secondary/[0.05] blur-[120px] rounded-full pointer-events-none z-0"></div>
 
-      <!-- Massive Centered Hero Image -->
-      <section class="hero-visual-container reveal reveal-stage relative w-full max-w-6xl mx-auto px-4 mb-24 z-10">
-        <div class="hero-frame-centered">
-          <div class="absolute inset-0 bg-gradient-to-t from-[#050a10] via-transparent to-transparent z-20"></div>
-          <img src="/modernhome.webp" alt="Nexio Dashboard" class="w-full rounded-2xl md:rounded-[32px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] border border-white/10 object-cover" />
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center relative z-10">
+          
+          <!-- Left: Copy & Actions -->
+          <div class="lg:col-span-5 flex flex-col items-center text-center lg:items-start lg:text-left">
+            <span class="badge premium-badge shadow-glow mb-8 inline-flex">
+              <img src="/app_logo_mark.webp" alt="Nexio" class="brand-icon" />
+              <span class="text-sm font-medium tracking-wide">Nexio Premium</span>
+            </span>
+            
+            <h1 class="section-title landing-title max-w-2xl lg:max-w-none text-5xl md:text-6xl lg:text-6xl font-black tracking-tight mb-6 leading-[1.08]">
+              The ultimate <br class="hidden lg:block hidden md:block" />
+              <span class="text-gradient">streaming experience.</span>
+            </h1>
+            
+            <p class="landing-summary mt-4 max-w-2xl lg:max-w-none text-soft text-lg md:text-xl leading-relaxed">
+              A bleeding-edge streaming platform built for true cinephiles. Seamless playback, zero-compromise audio, and an interface that feels alive.
+            </p>
+            
+            <div class="landing-actions mt-10 flex flex-wrap justify-center lg:justify-start gap-4">
+              <NuxtLink class="primary-btn pulse-btn px-8 py-4 text-[1rem] md:text-lg" to="/account">Manage Account</NuxtLink>
+              <a href="#features" class="ghost-btn px-8 py-4 text-[1rem] md:text-lg border border-white/10 hover:bg-white/5 transition-colors">Explore Features</a>
+            </div>
+          </div>
+
+          <!-- Right: Hero Image Showcase -->
+          <div class="lg:col-span-7 relative w-full perspective-[2000px] mt-12 lg:mt-0">
+            <div class="hero-frame-side w-full relative rounded-2xl md:rounded-[32px] overflow-hidden border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.6)] transform lg:scale-105 lg:translate-x-4 transition-transform duration-1000 ease-out hover:scale-100 lg:hover:translate-x-0" style="transform: rotateY(-10deg) rotateX(4deg);">
+              <div class="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent z-20 pointer-events-none"></div>
+              <img src="/modernhome.webp" alt="Nexio Dashboard" class="w-full h-auto object-cover" />
+            </div>
+          </div>
+
         </div>
       </section>
 
       <!-- Integration Partner Marquee -->
-      <section class="integration-marquee scroll-reveal mb-24 py-12 border-y border-white/5 bg-[#0a1724]/30 backdrop-blur-md relative z-10">
+      <section class="integration-marquee scroll-reveal mb-24 py-12 border-y border-outline-variant/[0.15] bg-surface-container-lowest backdrop-blur-md relative z-10">
         <div class="text-center mb-8">
-          <span class="text-dim text-xs uppercase tracking-[0.2em] font-semibold text-white/40">Powered by industry-leading integrations</span>
+          <span class="text-dim text-xs uppercase tracking-[0.2em] font-semibold text-white/40">Powered by unique and powerfull native integrations</span>
         </div>
         <div class="marquee-container">
           <div class="marquee-content">
             <!-- First set -->
             <img src="/integrations/trakt.webp" class="partner-logo" alt="Trakt" />
-            <img src="/integrations/real-debrid.png" class="partner-logo" alt="Real Debrid" />
+            <img src="/integrations/real-debrid.webp" class="partner-logo" alt="Real Debrid" />
             <img src="/integrations/premiumize.svg" class="partner-logo" alt="Premiumize" />
             <img src="/integrations/mdblist.webp" class="partner-logo mdblist-logo" alt="MDBList" />
-            <img src="/integrations/tmdb.png" class="partner-logo tmdb-logo" alt="TMDB" />
-            <img src="/integrations/gemini.png" class="partner-logo" alt="Gemini" />
+            <img src="/integrations/tmdb.webp" class="partner-logo tmdb-logo" alt="TMDB" />
+            <img src="/integrations/gemini.webp" class="partner-logo" alt="Gemini" />
             <img src="/integrations/rpdb.webp" class="partner-logo rpdb-logo" alt="RPDB" />
             <img src="/integrations/topposter.svg" class="partner-logo topposter-logo" alt="TOP Posters" />
             <img src="/integrations/anime-skip.svg" class="partner-logo anime-skip-logo" alt="Anime Skip" />
             <!-- Duplicate set for infinite scroll effect -->
             <img src="/integrations/trakt.webp" class="partner-logo" alt="Trakt" />
-            <img src="/integrations/real-debrid.png" class="partner-logo" alt="Real Debrid" />
+            <img src="/integrations/real-debrid.webp" class="partner-logo" alt="Real Debrid" />
             <img src="/integrations/premiumize.svg" class="partner-logo" alt="Premiumize" />
             <img src="/integrations/mdblist.webp" class="partner-logo mdblist-logo" alt="MDBList" />
-            <img src="/integrations/tmdb.png" class="partner-logo tmdb-logo" alt="TMDB" />
-            <img src="/integrations/gemini.png" class="partner-logo" alt="Gemini" />
+            <img src="/integrations/tmdb.webp" class="partner-logo tmdb-logo" alt="TMDB" />
+            <img src="/integrations/gemini.webp" class="partner-logo" alt="Gemini" />
             <img src="/integrations/rpdb.webp" class="partner-logo rpdb-logo" alt="RPDB" />
             <img src="/integrations/topposter.svg" class="partner-logo topposter-logo" alt="TOP Posters" />
             <img src="/integrations/anime-skip.svg" class="partner-logo anime-skip-logo" alt="Anime Skip" />
@@ -69,67 +78,77 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 auto-rows-auto lg:auto-rows-[480px]">
           
           <!-- Bento 1: Interface (Spans 2 columns) -->
-          <article class="bento-card lg:col-span-2 group overflow-hidden scroll-reveal relative flex flex-col">
-            <div class="p-8 md:p-12 relative z-20 w-full md:w-2/3 pointer-events-none">
-              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03]">Interface</span>
-              <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Living, breathing design.</h3>
+          <article class="bento-card lg:col-span-2 group overflow-hidden scroll-reveal relative flex flex-col min-h-[450px]">
+  
+            <div class="p-8 md:p-12 relative z-20 w-full md:w-[50%] pointer-events-none">
+              <span class="badge mb-6 inline-block">Interface</span>
+              
+              <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Living, breathing<br class="hidden md:block lg:hidden" /> design.</h3>
+              
               <p class="text-soft text-lg leading-relaxed text-shadow-sm">Fluid micro-animations, rich metadata layouts, and completely personalized catalogs adapting to your context.</p>
             </div>
-            <!-- Interface images floating bottom right -->
-            <div class="relative w-full flex-grow hidden md:block">
-              <img src="/detail1.webp" class="absolute -right-4 -bottom-10 md:bottom-[-10%] md:right-[-5%] w-[85%] md:w-[70%] rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.9)] border border-white/10 group-hover:scale-[1.02] transition-transform duration-700 z-10 object-cover" />
+
+            <div class="hidden md:block absolute top-1/2 -translate-y-1/2 right-6 lg:right-8 w-[45%] z-10">
+              <img 
+                src="/detail1.webp" 
+                alt="Interface preview" 
+                class="w-full h-auto rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 group-hover:scale-[1.02] transition-transform duration-700" 
+              />
             </div>
+            
           </article>
 
           <!-- Bento 2: Audiophile (Spans 1 column) -->
-          <article class="bento-card lg:col-span-1 group overflow-hidden scroll-reveal scroll-reveal-right relative flex flex-col justify-between">
+          <article class="bento-card lg:col-span-1 group overflow-hidden scroll-reveal scroll-reveal-right relative flex flex-col justify-between pb-8 md:pb-12">  
             <div class="p-8 md:p-12 pb-2 relative z-20 pointer-events-none">
-              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03]">Audiophile</span>
+              <span class="badge mb-6 inline-block">Audiophile</span>
               <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Bit-Perfect Audio</h3>
               <p class="text-soft text-lg leading-relaxed text-shadow-sm">Deliver uncompressed, studio-quality sound straight to your AV receiver. Our custom Media3 engine bypasses system processing to guarantee flawless Dolby TrueHD and Atmos playback.</p>
-            </div>
-            
-            <!-- Standalone Audio Marquee -->
-            <div class="relative w-full z-20 overflow-hidden pt-6 pb-10 md:pb-12">
-              <div class="audio-marquee-container">
-                <div class="audio-marquee-content">
-                  <img src="/audio/dolby-atmos.png" class="audio-logo" alt="Dolby Atmos" />
-                  <img src="/audio/truehd.png" class="audio-logo" alt="Dolby TrueHD" />
-                  <img src="/audio/dtsx.png" class="audio-logo" alt="DTS:X" />
-                  <img src="/audio/dtshd.png" class="audio-logo" alt="DTS-HD" />
-                  <img src="/audio/dts.png" class="audio-logo" alt="DTS" />
-                  <img src="/audio/dolby digital.png" class="audio-logo" alt="Dolby Digital" />
-                  <!-- Duplicate for continuous scroll -->
-                  <img src="/audio/dolby-atmos.png" class="audio-logo" alt="Dolby Atmos" />
-                  <img src="/audio/truehd.png" class="audio-logo" alt="Dolby TrueHD" />
-                  <img src="/audio/dtsx.png" class="audio-logo" alt="DTS:X" />
-                  <img src="/audio/dtshd.png" class="audio-logo" alt="DTS-HD" />
-                  <img src="/audio/dts.png" class="audio-logo" alt="DTS" />
-                  <img src="/audio/dolby digital.png" class="audio-logo" alt="Dolby Digital" />
+            </div>            
+            <div class="relative w-full z-20 overflow-hidden pt-6 shrink-0">
+                <div class="audio-marquee-container">
+                  <div class="audio-marquee-content">
+                    <img src="/audio/dolby-atmos.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="Dolby Atmos" />
+                    <img src="/audio/truehd.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="Dolby TrueHD" />
+                    <img src="/audio/dtsx.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="DTS:X" />
+                    <img src="/audio/dtshd.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="DTS-HD" />
+                    <img src="/audio/dts.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="DTS" />
+                    <img src="/audio/dolby digital.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="Dolby Digital" />
+                    
+                    <img src="/audio/dolby-atmos.png" class="audio-logo h-6 md:h-8 w-auto object-contain" alt="Dolby Atmos" />
+                    </div>
                 </div>
               </div>
-            </div>
           </article>
 
           <!-- Bento 3: Engine (Spans 1 column) -->
-          <article class="bento-card lg:col-span-1 group overflow-hidden scroll-reveal scroll-reveal-left relative flex flex-col justify-center">
+          <article class="bento-card lg:col-span-1 group overflow-hidden scroll-reveal scroll-reveal-left relative flex flex-col">
             <div class="p-8 md:p-12 relative z-20 pointer-events-none">
-              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03]">Engine</span>
+              <span class="badge mb-6 inline-block">Engine</span>
               <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Media3 Core</h3>
               <p class="text-soft text-lg leading-relaxed text-shadow-sm mb-4">Real-time Dolby Vision conversion, dynamic frame rate matching, a custom libdovi fork, and a custom FFmpeg build for VC-1 software decoding.</p>
             </div>
           </article>
 
           <!-- Bento 4: Performance (Spans 2 columns) -->
-          <article class="bento-card lg:col-span-2 group overflow-hidden scroll-reveal relative flex flex-col md:flex-row">
-            <div class="p-8 md:p-12 relative z-20 md:w-1/2 flex flex-col justify-center pointer-events-none pb-0 md:pb-12">
-              <span class="badge border border-white/10 rounded-full px-5 py-1.5 text-sm font-medium text-white/70 mb-6 inline-block bg-white/[0.03] w-fit">Performance</span>
+          <article class="bento-card lg:col-span-2 group overflow-hidden scroll-reveal relative flex flex-col min-h-[450px]">
+  
+            <div class="p-8 md:p-12 relative z-20 w-full md:w-[50%] pointer-events-none">
+              <span class="badge mb-6 inline-block">Performance</span>
+              
               <h3 class="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Unparalleled Performance</h3>
-              <p class="text-soft text-lg leading-relaxed text-shadow-sm mb-4">Establish parallel connections for maximum throughput, paired with a custom disk cache implementation to prevent in-stream buffers completely.</p>
+              
+              <p class="text-soft text-lg leading-relaxed text-shadow-sm">Establish parallel connections for maximum throughput, paired with a custom disk cache implementation to prevent in-stream buffers completely.</p>
             </div>
-            <div class="relative w-full md:w-1/2 flex-grow mt-6 md:mt-0 flex justify-end items-end">
-              <img src="/cache-parallel.webp" class="w-[95%] md:w-[85%] rounded-tl-2xl md:rounded-tl-[32px] border-t border-l border-white/10 shadow-[0_-20px_50px_rgba(0,0,0,0.8)] group-hover:-translate-y-2 md:group-hover:-translate-x-2 transition-transform duration-700 z-10" />
+
+            <div class="hidden md:block absolute top-1/2 -translate-y-1/2 right-6 lg:right-8 w-[45%] z-10">
+              <img 
+                src="/speed.webp" 
+                alt="Performance preview" 
+                class="w-full h-auto rounded-xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 group-hover:-translate-y-2 group-hover:-translate-x-2 transition-transform duration-700" 
+              />
             </div>
+            
           </article>
 
         </div>
@@ -137,7 +156,7 @@
 
       <!-- Closing CTA -->
       <section class="closing-banner glass scroll-reveal scroll-reveal-wide p-12 lg:p-20 flex flex-col text-center items-center gap-8 mb-24 relative overflow-hidden backdrop-blur-2xl max-w-5xl mx-auto rounded-[40px]">
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-b from-[#7bffd3]/[0.03] to-transparent z-0"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-b from-primary/[0.03] to-transparent z-0"></div>
         
         <div class="relative z-10 max-w-2xl">
           <img src="/app_logo_mark.webp" class="w-16 h-16 mx-auto mb-6 object-contain" alt="Nexio Logo" />
@@ -150,12 +169,12 @@
       </section>
       
     </div>
-  </PortalShell>
+  </PublicShell>
 </template>
 
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import PortalShell from '~/components/portal/PortalShell.vue'
+import PublicShell from '~/components/portal/PublicShell.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
 
 const pageReady = ref(false)
@@ -252,14 +271,14 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulseGlow {
-  0% { box-shadow: 0 0 0 0 rgba(123, 255, 211, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(123, 255, 211, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(123, 255, 211, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(186, 158, 255, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(186, 158, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(186, 158, 255, 0); }
 }
 
 /* Typography & Badges */
 .text-gradient {
-  background: linear-gradient(135deg, var(--accent), #9be7ff);
+  background: linear-gradient(135deg, var(--primary), var(--primary-dim));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
@@ -269,8 +288,8 @@ onBeforeUnmount(() => {
 .text-dim { color: var(--text-dim); }
 
 .premium-badge {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(123, 255, 211, 0.2);
+  background: var(--surface-container-low);
+  border: 1px solid var(--stroke);
   padding: 0.6rem 1.25rem;
   border-radius: 999px;
   display: inline-flex;
@@ -283,10 +302,11 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   object-fit: contain;
+  filter: grayscale(100%) brightness(100);
 }
 
 .shadow-glow {
-  box-shadow: 0 0 30px rgba(123, 255, 211, 0.1);
+  box-shadow: var(--shadow);
 }
 
 .pulse-btn:hover {
@@ -298,8 +318,8 @@ onBeforeUnmount(() => {
   font-size: clamp(3.2rem, 6.5vw, 5.5rem);
   line-height: 1.05;
   margin: 0;
-  letter-spacing: -0.04em;
-  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-weight: 800;
 }
 
 .hero-frame-centered {
@@ -416,16 +436,16 @@ onBeforeUnmount(() => {
 
 /* Bento Box Grid */
 .bento-card {
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--stroke);
   position: relative;
-  background: #09131a;
+  background: var(--surface-container);
   transition: border-color 0.4s ease, box-shadow 0.4s ease;
 }
 
 .bento-card:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+  border-color: var(--stroke-strong);
+  box-shadow: var(--shadow);
 }
 
 @media (max-width: 768px) {

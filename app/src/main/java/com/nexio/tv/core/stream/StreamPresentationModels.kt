@@ -10,6 +10,7 @@ import kotlin.math.roundToLong
 @Immutable
 data class StreamFeatureFlags(
     val uniformFormattingEnabled: Boolean = false,
+    val uniformFormattingTemplate: AioFormatterSelection = AioFormatterSelection(),
     val groupAcrossAddonsEnabled: Boolean = false,
     val deduplicateGroupedStreamsEnabled: Boolean = false,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
@@ -24,7 +25,8 @@ data class StreamRequestContext(
     val year: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
-    val episodeTitle: String? = null
+    val episodeTitle: String? = null,
+    val runtimeMinutes: Int? = null
 )
 
 enum class StreamTransportKind {
@@ -38,11 +40,21 @@ enum class StreamTransportKind {
 }
 
 @Immutable
+data class PreservedStreamMetadata(
+    val filename: String? = null,
+    val videoHash: String? = null,
+    val videoSize: Long? = null,
+    val bingeGroup: String? = null
+)
+
+@Immutable
 data class ParsedStreamInfo(
     val stream: Stream,
     val title: String?,
     val filename: String?,
+    val folderName: String? = null,
     val sizeBytes: Long?,
+    val folderSizeBytes: Long? = null,
     val resolution: String?,
     val quality: String?,
     val encode: String?,
@@ -50,14 +62,36 @@ data class ParsedStreamInfo(
     val audioTags: List<String>,
     val audioChannels: List<String>,
     val languages: List<String>,
+    val subtitles: List<String> = emptyList(),
     val year: String?,
     val seasons: List<Int>,
     val episodes: List<Int>,
+    val seasonPack: Boolean = false,
     val releaseGroup: String?,
+    val container: String? = null,
+    val extension: String? = null,
+    val network: String? = null,
+    val date: String? = null,
+    val editions: List<String> = emptyList(),
+    val subbed: Boolean = false,
+    val dubbed: Boolean = false,
+    val regraded: Boolean = false,
+    val repack: Boolean = false,
+    val uncensored: Boolean = false,
+    val unrated: Boolean = false,
+    val upscaled: Boolean = false,
     val serviceId: String?,
     val isCached: Boolean?,
     val durationMs: Long?,
-    val transportKind: StreamTransportKind
+    val bitrate: Long? = null,
+    val indexer: String? = null,
+    val seeders: Int? = null,
+    val age: String? = null,
+    val ageHours: Int? = null,
+    val isPrivate: Boolean = false,
+    val message: String? = null,
+    val transportKind: StreamTransportKind,
+    val preservedMetadata: PreservedStreamMetadata = PreservedStreamMetadata()
 ) {
     val isDolbyVision: Boolean get() = visualTags.any { it == "DV" }
     val isWebDl: Boolean get() = quality == "WEB-DL"
@@ -180,22 +214,79 @@ object StreamPresentationEngine {
                 return size > maxEntries
             }
         }
+        private val uniformPresentationCache =
+            object : LinkedHashMap<String, AioUniformPresentation>(maxEntries, 0.75f, true) {
+                override fun removeEldestEntry(
+                    eldest: MutableMap.MutableEntry<String, AioUniformPresentation>?
+                ): Boolean {
+                    return size > maxEntries
+                }
+            }
 
         fun parse(stream: Stream): ParsedStreamInfo {
             val key = stableStreamKey(stream)
             synchronized(cache) {
                 cache[key]?.let { return it }
             }
-            val parsed = AioStyleStreamParser.parse(stream)
+            val parsed = AioStrictStreamParser.parse(stream)
             synchronized(cache) {
                 cache[key] = parsed
             }
             return parsed
         }
 
+        fun uniformPresentation(
+            stream: Stream,
+            parsed: ParsedStreamInfo,
+            selection: AioFormatterSelection,
+            requestContext: StreamRequestContext
+        ): AioUniformPresentation {
+            val key = buildString {
+                append(stableStreamKey(stream))
+                append('|')
+                append(selection.selectedTemplateId)
+                append('|')
+                append(selection.customTemplate?.label.orEmpty())
+                append('|')
+                append(selection.customTemplate?.nameTemplate.orEmpty())
+                append('|')
+                append(selection.customTemplate?.descriptionTemplate.orEmpty())
+                append('|')
+                append(requestContext.contentType.orEmpty())
+                append('|')
+                append(requestContext.title.orEmpty())
+                append('|')
+                append(requestContext.year.orEmpty())
+                append('|')
+                append(requestContext.season ?: -1)
+                append('|')
+                append(requestContext.episode ?: -1)
+                append('|')
+                append(requestContext.episodeTitle.orEmpty())
+                append('|')
+                append(requestContext.runtimeMinutes ?: -1)
+            }
+            synchronized(uniformPresentationCache) {
+                uniformPresentationCache[key]?.let { return it }
+            }
+            val presentation = AioUniformFormatter.render(
+                stream = stream,
+                parsed = parsed,
+                requestContext = requestContext,
+                selection = selection
+            )
+            synchronized(uniformPresentationCache) {
+                uniformPresentationCache[key] = presentation
+            }
+            return presentation
+        }
+
         fun clear() {
             synchronized(cache) {
                 cache.clear()
+            }
+            synchronized(uniformPresentationCache) {
+                uniformPresentationCache.clear()
             }
         }
     }
@@ -209,13 +300,31 @@ object StreamPresentationEngine {
         parserCache: ParserCache? = null
     ): OrganizedStreams {
         val parsed = streams.map { stream ->
-            val parsedInfo = parserCache?.parse(stream) ?: AioStyleStreamParser.parse(stream)
+            val parsedInfo = parserCache?.parse(stream) ?: AioStrictStreamParser.parse(stream)
+            val uniformPresentation = if (flags.uniformFormattingEnabled) {
+                parserCache?.uniformPresentation(
+                    stream = stream,
+                    parsed = parsedInfo,
+                    selection = flags.uniformFormattingTemplate,
+                    requestContext = requestContext
+                ) ?: AioUniformFormatter.render(
+                    stream = stream,
+                    parsed = parsedInfo,
+                    requestContext = requestContext,
+                    selection = flags.uniformFormattingTemplate
+                )
+            } else {
+                null
+            }
             StreamCardModel(
                 stream = stream,
                 parsed = parsedInfo,
-                title = buildTitle(stream, parsedInfo, flags.uniformFormattingEnabled),
-                subtitle = buildSubtitle(stream, parsedInfo, flags.uniformFormattingEnabled),
-                detailLines = buildDetailLines(stream, parsedInfo, flags.uniformFormattingEnabled)
+                title = uniformPresentation?.title
+                    ?: buildTitle(stream, parsedInfo, flags.uniformFormattingEnabled),
+                subtitle = if (uniformPresentation != null) null
+                else buildSubtitle(stream, parsedInfo, flags.uniformFormattingEnabled),
+                detailLines = uniformPresentation?.detailLines
+                    ?: buildDetailLines(stream, parsedInfo, flags.uniformFormattingEnabled)
             )
         }
 
@@ -326,6 +435,7 @@ object StreamPresentationEngine {
 
     private fun deduplicate(items: List<StreamCardModel>): DeduplicationResult {
         if (items.size < 2) return DeduplicationResult(items = items)
+        val policy = StreamDeduplicationDefaults.policy
 
         val disjointSet = IntDisjointSet(items.size)
         val keyToIndexes = LinkedHashMap<String, MutableList<Int>>()
@@ -367,7 +477,7 @@ object StreamPresentationEngine {
                     mixedCachedUncachedClusterCount += 1
                 }
 
-                val selected = selectDeduplicatedCluster(cluster)
+                val selected = selectDeduplicatedCluster(cluster, policy)
                 val selectedHasCached = selected.any {
                     it.parsed.transportKind == StreamTransportKind.CACHED && it.parsed.hasUsablePlaybackTarget
                 }
@@ -392,6 +502,9 @@ object StreamPresentationEngine {
     private fun dedupeKeys(item: StreamCardModel): Set<String> {
         val parsed = item.parsed
         val stream = item.stream
+        val hasStrongIdentity = parsed.normalizedFilenameKey != null ||
+            !stream.behaviorHints?.videoHash.isNullOrBlank() ||
+            !stream.infoHash.isNullOrBlank()
         return buildSet {
             parsed.normalizedFilenameKey?.let { add("filename:$it") }
             stream.behaviorHints?.videoHash
@@ -401,15 +514,9 @@ object StreamPresentationEngine {
             if (!stream.infoHash.isNullOrBlank()) {
                 add("hash:${stream.infoHash.lowercase(Locale.US)}:${stream.fileIdx ?: 0}")
             }
-            parsed.smartDetectKey?.let { add("smart:$it") }
-            if (parsed.normalizedTitleKey != null && parsed.roundedSizeBucket != null) {
-                add("title-size:${parsed.normalizedTitleKey}:${parsed.roundedSizeBucket}")
+            if (!hasStrongIdentity) {
+                parsed.smartDetectKey?.let { add("smart:$it") }
             }
-            stream.getStreamUrl()
-                ?.trim()
-                ?.lowercase(Locale.US)
-                ?.takeIf { it.isNotBlank() }
-                ?.let { add("url:$it") }
         }
     }
 
@@ -426,19 +533,97 @@ object StreamPresentationEngine {
         }
     }
 
-    private fun selectDeduplicatedCluster(cluster: List<StreamCardModel>): List<StreamCardModel> {
-        val exactCollapsed = cluster
-            .groupBy { it.parsed.exactDuplicateKey }
-            .values
-            .map { pickBestRepresentative(it) }
+    private fun selectDeduplicatedCluster(
+        cluster: List<StreamCardModel>,
+        policy: StreamDeduplicationPolicy
+    ): List<StreamCardModel> {
+        if (cluster.isEmpty()) return emptyList()
 
-        if (exactCollapsed.isEmpty()) return emptyList()
-        return exactCollapsed
+        val groupedByTransport = cluster.groupBy { it.parsed.transportKind }.toMutableMap()
+        val filteredGroups = applyMultiGroupBehavior(groupedByTransport, policy.multiGroupBehavior)
+
+        return filteredGroups.entries
+            .sortedBy { dedupeGroupRank(it.key) }
+            .flatMap { (kind, items) -> applyDeduplicationMode(items, policy.modeFor(kind)) }
+    }
+
+    private fun applyMultiGroupBehavior(
+        groups: MutableMap<StreamTransportKind, List<StreamCardModel>>,
+        behavior: MultiGroupBehavior
+    ): Map<StreamTransportKind, List<StreamCardModel>> {
+        val cached = groups[StreamTransportKind.CACHED].orEmpty()
+        val uncached = groups[StreamTransportKind.UNCACHED].orEmpty()
+        val p2p = groups[StreamTransportKind.P2P].orEmpty()
+        val hasMixed = listOf(cached, uncached, p2p).count { it.isNotEmpty() } >= 2
+        if (!hasMixed) return groups.filterValues { it.isNotEmpty() }
+
+        return when (behavior) {
+            MultiGroupBehavior.AGGRESSIVE -> {
+                if (cached.isNotEmpty()) {
+                    groups.remove(StreamTransportKind.P2P)
+                    groups.remove(StreamTransportKind.UNCACHED)
+                } else if (p2p.isNotEmpty()) {
+                    groups.remove(StreamTransportKind.UNCACHED)
+                }
+                groups.filterValues { it.isNotEmpty() }
+            }
+
+            MultiGroupBehavior.KEEP_ALL -> groups.filterValues { it.isNotEmpty() }
+
+            MultiGroupBehavior.CONSERVATIVE -> {
+                if (cached.isNotEmpty()) {
+                    val cachedServices = cached.mapNotNull { it.parsed.serviceId }.toSet()
+                    val retainedUncached = uncached.filter { item ->
+                        val serviceId = item.parsed.serviceId
+                        serviceId == null || serviceId !in cachedServices
+                    }
+                    if (retainedUncached.isEmpty()) {
+                        groups.remove(StreamTransportKind.UNCACHED)
+                    } else {
+                        groups[StreamTransportKind.UNCACHED] = retainedUncached
+                    }
+                    groups.remove(StreamTransportKind.P2P)
+                }
+                groups.filterValues { it.isNotEmpty() }
+            }
+        }
+    }
+
+    private fun applyDeduplicationMode(
+        items: List<StreamCardModel>,
+        mode: DeduplicationMode
+    ): List<StreamCardModel> {
+        if (items.isEmpty()) return emptyList()
+        return when (mode) {
+            DeduplicationMode.DISABLED -> items
+            DeduplicationMode.SINGLE_RESULT -> listOf(pickBestRepresentative(items))
+            DeduplicationMode.PER_SERVICE -> items
+                .groupBy { it.parsed.serviceId ?: "__missing_service__" }
+                .values
+                .map { pickBestRepresentative(it) }
+            DeduplicationMode.PER_ADDON -> items
+                .groupBy { addonPriority(it) }
+                .values
+                .map { pickBestRepresentative(it) }
+        }
+    }
+
+    private fun dedupeGroupRank(kind: StreamTransportKind): Int {
+        return when (kind) {
+            StreamTransportKind.CACHED -> 0
+            StreamTransportKind.UNCACHED -> 1
+            StreamTransportKind.P2P -> 2
+            StreamTransportKind.HTTP -> 3
+            StreamTransportKind.EXTERNAL -> 4
+            StreamTransportKind.YOUTUBE -> 5
+            StreamTransportKind.OTHER -> 6
+        }
     }
 
     private fun pickBestRepresentative(items: List<StreamCardModel>): StreamCardModel {
         return items.minWithOrNull(
             compareBy<StreamCardModel> { dedupePriority(it) }
+                .thenBy { servicePriority(it) }
                 .thenBy { addonPriority(it) }
                 .thenByDescending { it.parsed.hasUsablePlaybackTarget }
                 .thenByDescending { it.parsed.sizeBytes ?: -1L }
@@ -450,6 +635,12 @@ object StreamPresentationEngine {
 
     private fun addonPriority(item: StreamCardModel): String {
         return item.stream.addonName.lowercase(Locale.US)
+    }
+
+    private fun servicePriority(item: StreamCardModel): Int {
+        val serviceId = item.parsed.serviceId ?: return Int.MAX_VALUE
+        val index = StreamDeduplicationDefaults.preferredServiceOrder.indexOf(serviceId)
+        return if (index >= 0) index else StreamDeduplicationDefaults.preferredServiceOrder.size
     }
 
     private fun metadataRichness(parsed: ParsedStreamInfo): Int {
@@ -799,7 +990,58 @@ private data class DeduplicationResult(
     val cachedDroppedForUncachedClusterCount: Int = 0
 )
 
-private object AioStyleStreamParser {
+private enum class DeduplicationMode {
+    DISABLED,
+    SINGLE_RESULT,
+    PER_SERVICE,
+    PER_ADDON
+}
+
+private enum class MultiGroupBehavior {
+    AGGRESSIVE,
+    KEEP_ALL,
+    CONSERVATIVE
+}
+
+private data class StreamDeduplicationPolicy(
+    val multiGroupBehavior: MultiGroupBehavior,
+    val cached: DeduplicationMode,
+    val uncached: DeduplicationMode,
+    val p2p: DeduplicationMode,
+    val http: DeduplicationMode,
+    val live: DeduplicationMode,
+    val youtube: DeduplicationMode,
+    val external: DeduplicationMode
+) {
+    fun modeFor(kind: StreamTransportKind): DeduplicationMode {
+        return when (kind) {
+            StreamTransportKind.CACHED -> cached
+            StreamTransportKind.UNCACHED -> uncached
+            StreamTransportKind.P2P -> p2p
+            StreamTransportKind.HTTP -> http
+            StreamTransportKind.YOUTUBE -> youtube
+            StreamTransportKind.EXTERNAL -> external
+            StreamTransportKind.OTHER -> live
+        }
+    }
+}
+
+private object StreamDeduplicationDefaults {
+    val policy = StreamDeduplicationPolicy(
+        multiGroupBehavior = MultiGroupBehavior.CONSERVATIVE,
+        cached = DeduplicationMode.PER_SERVICE,
+        uncached = DeduplicationMode.PER_SERVICE,
+        p2p = DeduplicationMode.SINGLE_RESULT,
+        http = DeduplicationMode.DISABLED,
+        live = DeduplicationMode.DISABLED,
+        youtube = DeduplicationMode.DISABLED,
+        external = DeduplicationMode.DISABLED
+    )
+
+    val preferredServiceOrder = listOf("RD", "PM", "AD", "DL", "TB", "ED", "PK")
+}
+
+internal object AioStyleStreamParser {
     private val seasonEpisodeTokenRegex = Regex("""(?i)^s\d{1,2}e\d{1,2}$""")
     private val seasonOnlyTokenRegex = Regex("""(?i)^s\d{1,2}$""")
     private val episodeOnlyTokenRegex = Regex("""(?i)^e\d{1,2}$""")

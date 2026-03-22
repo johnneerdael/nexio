@@ -2,12 +2,16 @@ package com.nexio.tv.ui.screens.player
 
 import android.util.Log
 import androidx.media3.common.util.UnstableApi
+import com.nexio.tv.core.stream.AioCustomTemplateSelection
+import com.nexio.tv.core.stream.AioFormatterSelection
+import com.nexio.tv.core.stream.StreamBingeGroupResolver
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.SyncedFormatterTemplateSettings
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.domain.model.Stream
@@ -293,11 +297,27 @@ private fun com.nexio.tv.domain.model.Addon.supportsStreamResourceForChip(type: 
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
     return StreamFeatureFlags(
         uniformFormattingEnabled = uniformStreamFormattingEnabled,
+        uniformFormattingTemplate = syncedFormatterTemplate.toAioFormatterSelection(),
         groupAcrossAddonsEnabled = true,
         deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
         filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled,
         filterEpisodeMismatchStreamsEnabled = filterEpisodeMismatchStreamsEnabled,
         filterMovieYearMismatchStreamsEnabled = filterMovieYearMismatchStreamsEnabled
+    )
+}
+
+private fun SyncedFormatterTemplateSettings.toAioFormatterSelection(): AioFormatterSelection {
+    return AioFormatterSelection(
+        selectedTemplateId = selectedTemplateId,
+        customTemplate = if (!customNameTemplate.isNullOrBlank() && !customDescriptionTemplate.isNullOrBlank()) {
+            AioCustomTemplateSelection(
+                label = customTemplateLabel,
+                nameTemplate = customNameTemplate,
+                descriptionTemplate = customDescriptionTemplate
+            )
+        } else {
+            null
+        }
     )
 }
 
@@ -354,7 +374,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
 
     currentStreamUrl = url
     currentHeaders = newHeaders
-    currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
+    currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
@@ -659,7 +679,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     currentStreamUrl = url
     currentHeaders = newHeaders
-    currentStreamBingeGroup = stream.behaviorHints?.bingeGroup
+    currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename

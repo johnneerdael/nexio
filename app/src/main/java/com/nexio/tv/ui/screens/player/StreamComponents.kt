@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyRow
@@ -158,7 +157,7 @@ internal fun StreamItem(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(0.8f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
@@ -167,8 +166,10 @@ internal fun StreamItem(
                 ) {
                     Text(
                         text = item.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = NexioColors.TextPrimary
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = NexioColors.TextPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     if (isCurrentStream) {
@@ -223,6 +224,7 @@ internal fun StreamItem(
             }
 
             Column(
+                modifier = Modifier.weight(0.2f),
                 horizontalAlignment = Alignment.End
             ) {
                 if (stream.addonLogo != null) {
@@ -238,16 +240,6 @@ internal fun StreamItem(
                         contentScale = ContentScale.Fit
                     )
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = stream.addonName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = NexioTheme.extendedColors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }

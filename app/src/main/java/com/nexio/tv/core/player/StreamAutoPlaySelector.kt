@@ -2,6 +2,7 @@ package com.nexio.tv.core.player
 
 import android.util.Log
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
+import com.nexio.tv.core.stream.StreamBingeGroupResolver
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.domain.model.AddonStreams
@@ -11,6 +12,14 @@ import java.net.URL
 
 object StreamAutoPlaySelector {
     private const val TAG = "StreamAutoPlaySelector"
+
+    private fun normalizeBingeGroup(value: String?): String {
+        return value
+            ?.trim()
+            ?.lowercase()
+            ?.replace(Regex("""\s+"""), " ")
+            .orEmpty()
+    }
 
     fun orderAddonStreams(
         streams: List<AddonStreams>,
@@ -79,10 +88,11 @@ object StreamAutoPlaySelector {
         if (candidateStreams.isEmpty()) return null
         if (mode == StreamAutoPlayMode.MANUAL) return null
 
-        val targetBingeGroup = preferredBingeGroup?.trim().orEmpty()
+        val targetBingeGroup = normalizeBingeGroup(preferredBingeGroup)
         if (targetBingeGroup.isNotEmpty()) {
             val bingeGroupMatch = candidateStreams.firstOrNull { stream ->
-                stream.behaviorHints?.bingeGroup == targetBingeGroup && stream.getStreamUrl() != null
+                normalizeBingeGroup(StreamBingeGroupResolver.resolve(stream)) == targetBingeGroup &&
+                    stream.getStreamUrl() != null
             }
             if (bingeGroupMatch != null) return bingeGroupMatch
         }
@@ -137,7 +147,7 @@ object StreamAutoPlaySelector {
                 // 2. Try each matching stream until one works
                 for (stream in matchingStreams) {
                     val resolved = resolvePlayableUrl(stream) ?: continue
-                    Log.d(TAG, "Trying resolved stream ${sanitizeUrlForLogs(resolved)}")
+                    runCatching { Log.d(TAG, "Trying resolved stream ${sanitizeUrlForLogs(resolved)}") }
                     if (urlWorks(resolved)) return stream
 
                 }

@@ -86,10 +86,12 @@ import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.NextToWatch
+import com.nexio.tv.domain.model.OrganizationDiscoverType
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.core.player.FrameRateUtils
@@ -174,6 +176,12 @@ fun MetaDetailsScreen(
     returnFocusEpisode: Int? = null,
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
+    onNavigateToOrganizationDetail: (
+        entityId: Int,
+        entityName: String,
+        kindName: String,
+        discoverTypeName: String
+    ) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onPlayClick: (
         videoId: String,
@@ -466,6 +474,7 @@ fun MetaDetailsScreen(
                     onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
                     restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
                     onNavigateToCastDetail = onNavigateToCastDetail,
+                    onNavigateToOrganizationDetail = onNavigateToOrganizationDetail,
                     onNavigateToDetail = onNavigateToDetail,
                     onReviewFocused = { index ->
                         viewModel.onEvent(MetaDetailsEvent.OnReviewItemFocused(index))
@@ -591,6 +600,7 @@ private fun MetaDetailsContent(
     onTrailerButtonClick: () -> Unit,
     restorePlayFocusAfterTrailerBackToken: Int,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
+    onNavigateToOrganizationDetail: (Int, String, String, String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onReviewFocused: (Int) -> Unit = {}
 ) {
@@ -1343,7 +1353,14 @@ private fun MetaDetailsContent(
                     item(key = "networks", contentType = "horizontal_row") {
                         CompanyLogosSection(
                             title = stringResource(R.string.detail_section_network),
-                            companies = meta.networks
+                            companies = meta.networks,
+                            onCompanyClick = { company ->
+                                navigateToOrganizationDetail(
+                                    company = company,
+                                    discoverType = OrganizationDiscoverType.TV_NETWORK,
+                                    onNavigateToOrganizationDetail = onNavigateToOrganizationDetail
+                                )
+                            }
                         )
                     }
                 }
@@ -1352,7 +1369,14 @@ private fun MetaDetailsContent(
                     item(key = "production", contentType = "horizontal_row") {
                         CompanyLogosSection(
                             title = stringResource(R.string.detail_section_production),
-                            companies = meta.productionCompanies
+                            companies = meta.productionCompanies,
+                            onCompanyClick = { company ->
+                                navigateToOrganizationDetail(
+                                    company = company,
+                                    discoverType = OrganizationDiscoverType.TV_COMPANY,
+                                    onNavigateToOrganizationDetail = onNavigateToOrganizationDetail
+                                )
+                            }
                         )
                     }
                 }
@@ -1361,7 +1385,14 @@ private fun MetaDetailsContent(
                     item(key = "production", contentType = "horizontal_row") {
                         CompanyLogosSection(
                             title = stringResource(R.string.detail_section_production),
-                            companies = meta.productionCompanies
+                            companies = meta.productionCompanies,
+                            onCompanyClick = { company ->
+                                navigateToOrganizationDetail(
+                                    company = company,
+                                    discoverType = OrganizationDiscoverType.MOVIE_COMPANY,
+                                    onNavigateToOrganizationDetail = onNavigateToOrganizationDetail
+                                )
+                            }
                         )
                     }
                 }
@@ -1370,7 +1401,14 @@ private fun MetaDetailsContent(
                     item(key = "networks", contentType = "horizontal_row") {
                         CompanyLogosSection(
                             title = stringResource(R.string.detail_section_network),
-                            companies = meta.networks
+                            companies = meta.networks,
+                            onCompanyClick = { company ->
+                                navigateToOrganizationDetail(
+                                    company = company,
+                                    discoverType = OrganizationDiscoverType.TV_NETWORK,
+                                    onNavigateToOrganizationDetail = onNavigateToOrganizationDetail
+                                )
+                            }
                         )
                     }
                 }
@@ -1393,6 +1431,20 @@ private fun MetaDetailsContent(
             )
         }
     }
+}
+
+private fun navigateToOrganizationDetail(
+    company: MetaCompany,
+    discoverType: OrganizationDiscoverType,
+    onNavigateToOrganizationDetail: (Int, String, String, String) -> Unit
+) {
+    val entityId = company.tmdbId ?: return
+    onNavigateToOrganizationDetail(
+        entityId,
+        company.name,
+        company.kind.name,
+        discoverType.name
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)

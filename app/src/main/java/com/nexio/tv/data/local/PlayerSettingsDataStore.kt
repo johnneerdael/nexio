@@ -121,6 +121,14 @@ data class BufferSettings(
     }
 }
 
+data class SyncedFormatterTemplateSettings(
+    val enabled: Boolean = true,
+    val selectedTemplateId: String = "universal",
+    val customTemplateLabel: String? = null,
+    val customNameTemplate: String? = null,
+    val customDescriptionTemplate: String? = null
+)
+
 /**
  * Available audio language options
  */
@@ -215,6 +223,7 @@ data class PlayerSettings(
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
     val uniformStreamFormattingEnabled: Boolean = true,
+    val syncedFormatterTemplate: SyncedFormatterTemplateSettings = SyncedFormatterTemplateSettings(),
     val groupStreamsAcrossAddonsEnabled: Boolean = true,
     val deduplicateGroupedStreamsEnabled: Boolean = true,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
@@ -388,6 +397,11 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
     private val uniformStreamFormattingEnabledKey = booleanPreferencesKey("uniform_stream_formatting_enabled")
+    private val syncedFormatterEnabledKey = booleanPreferencesKey("synced_formatter_enabled")
+    private val syncedFormatterSelectedTemplateIdKey = stringPreferencesKey("synced_formatter_selected_template_id")
+    private val syncedFormatterCustomTemplateLabelKey = stringPreferencesKey("synced_formatter_custom_template_label")
+    private val syncedFormatterCustomNameTemplateKey = stringPreferencesKey("synced_formatter_custom_name_template")
+    private val syncedFormatterCustomDescriptionTemplateKey = stringPreferencesKey("synced_formatter_custom_description_template")
     private val groupStreamsAcrossAddonsEnabledKey = booleanPreferencesKey("group_streams_across_addons_enabled")
     private val deduplicateGroupedStreamsEnabledKey = booleanPreferencesKey("deduplicate_grouped_streams_enabled")
     private val filterWebDolbyVisionStreamsEnabledKey = booleanPreferencesKey("filter_web_dolby_vision_streams_enabled")
@@ -694,6 +708,13 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamReuseLastLinkEnabled = prefs[streamReuseLastLinkEnabledKey] ?: false,
                 streamReuseLastLinkCacheHours = (prefs[streamReuseLastLinkCacheHoursKey] ?: 24).coerceIn(1, 168),
                 uniformStreamFormattingEnabled = prefs[uniformStreamFormattingEnabledKey] ?: true,
+                syncedFormatterTemplate = SyncedFormatterTemplateSettings(
+                    enabled = prefs[syncedFormatterEnabledKey] ?: true,
+                    selectedTemplateId = prefs[syncedFormatterSelectedTemplateIdKey] ?: "universal",
+                    customTemplateLabel = prefs[syncedFormatterCustomTemplateLabelKey],
+                    customNameTemplate = prefs[syncedFormatterCustomNameTemplateKey],
+                    customDescriptionTemplate = prefs[syncedFormatterCustomDescriptionTemplateKey]
+                ),
                 groupStreamsAcrossAddonsEnabled = true,
                 deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: true,
                 filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
@@ -943,6 +964,39 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setUniformStreamFormattingEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[uniformStreamFormattingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSyncedFormatterEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[syncedFormatterEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSyncedFormatterSelectedTemplateId(templateId: String) {
+        store().edit { prefs ->
+            prefs[syncedFormatterSelectedTemplateIdKey] = templateId.trim().ifBlank { "universal" }
+        }
+    }
+
+    suspend fun setSyncedFormatterCustomTemplate(
+        label: String?,
+        nameTemplate: String?,
+        descriptionTemplate: String?
+    ) {
+        store().edit { prefs ->
+            val normalizedLabel = label?.trim()?.takeIf { it.isNotEmpty() }
+            val normalizedName = nameTemplate?.takeIf { it.isNotBlank() }
+            val normalizedDescription = descriptionTemplate?.takeIf { it.isNotBlank() }
+            if (normalizedLabel != null && normalizedName != null && normalizedDescription != null) {
+                prefs[syncedFormatterCustomTemplateLabelKey] = normalizedLabel
+                prefs[syncedFormatterCustomNameTemplateKey] = normalizedName
+                prefs[syncedFormatterCustomDescriptionTemplateKey] = normalizedDescription
+            } else {
+                prefs.remove(syncedFormatterCustomTemplateLabelKey)
+                prefs.remove(syncedFormatterCustomNameTemplateKey)
+                prefs.remove(syncedFormatterCustomDescriptionTemplateKey)
+            }
         }
     }
 

@@ -104,9 +104,9 @@ export const accountGroups: Record<string, PortalGroup[]> = {
           ]
         },
         { path: 'layout.modernLandscapePostersEnabled', label: 'Landscape hero cards', description: 'Use wider posters for modern cinematic rails.', kind: 'toggle' },
-        { path: 'layout.heroCatalogKeys', label: 'Hero catalogs', description: 'CSV list of catalog keys to feature at the top of home.', kind: 'list', placeholder: 'trakt_up_next, cinemeta_featured' },
-        { path: 'layout.homeCatalogOrderKeys', label: 'Catalog order', description: 'Define the ordered home feed rail stack.', kind: 'list', placeholder: 'trakt_up_next, mdblist_top_250, addon_new_releases' },
-        { path: 'layout.disabledHomeCatalogKeys', label: 'Disabled catalogs', description: 'Catalog keys hidden from the account-wide home layout.', kind: 'list', placeholder: 'addon_experimental, old_discovery_feed' },
+        { path: 'catalogs.home.heroCatalogKeys', label: 'Hero catalogs', description: 'CSV list of catalog keys to feature at the top of home.', kind: 'list', placeholder: 'trakt_up_next, cinemeta_featured' },
+        { path: 'catalogs.home.homeCatalogOrderKeys', label: 'Catalog order', description: 'Define the ordered home feed rail stack.', kind: 'list', placeholder: 'trakt_up_next, mdblist_top_250, addon_new_releases' },
+        { path: 'catalogs.home.disabledHomeCatalogKeys', label: 'Disabled catalogs', description: 'Catalog keys hidden from the account-wide home layout.', kind: 'list', placeholder: 'addon_experimental, old_discovery_feed' },
         { path: 'layout.sidebarCollapsedByDefault', label: 'Collapsed sidebar', description: 'Open the classic navigation in compact mode by default.', kind: 'toggle' },
         { path: 'layout.modernSidebarEnabled', label: 'Modern sidebar', description: 'Use the newer translucent navigation treatment.', kind: 'toggle' },
         { path: 'layout.modernSidebarBlurEnabled', label: 'Sidebar blur', description: 'Applies depth and glass blur to the modern navigation.', kind: 'toggle' },

@@ -161,6 +161,42 @@ interface TmdbApi {
         @Query("api_key") apiKey: String,
         @Query("language") language: String? = null
     ): Response<TmdbPersonCreditsResponse>
+
+    @GET("company/{company_id}")
+    suspend fun getCompanyDetails(
+        @Path("company_id") companyId: Int,
+        @Query("api_key") apiKey: String
+    ): Response<TmdbCompanyDetailsResponse>
+
+    @GET("network/{network_id}")
+    suspend fun getNetworkDetails(
+        @Path("network_id") networkId: Int,
+        @Query("api_key") apiKey: String
+    ): Response<TmdbNetworkDetailsResponse>
+
+    @GET("discover/movie")
+    suspend fun discoverMoviesByCompany(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("with_companies") companyIds: String,
+        @Query("page") page: Int = 1
+    ): Response<TmdbDiscoverResponse>
+
+    @GET("discover/tv")
+    suspend fun discoverTvByCompany(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("with_companies") companyIds: String,
+        @Query("page") page: Int = 1
+    ): Response<TmdbDiscoverResponse>
+
+    @GET("discover/tv")
+    suspend fun discoverTvByNetwork(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String? = null,
+        @Query("with_networks") networkId: Int,
+        @Query("page") page: Int = 1
+    ): Response<TmdbDiscoverResponse>
 }
 
 @JsonClass(generateAdapter = true)
@@ -251,12 +287,14 @@ data class TmdbGenre(
 
 @JsonClass(generateAdapter = true)
 data class TmdbCompany(
+    @Json(name = "id") val id: Int? = null,
     @Json(name = "name") val name: String? = null,
     @Json(name = "logo_path") val logoPath: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class TmdbNetwork(
+    @Json(name = "id") val id: Int? = null,
     @Json(name = "name") val name: String? = null,
     @Json(name = "logo_path") val logoPath: String? = null
 )
@@ -473,4 +511,52 @@ data class TmdbCollectionSummary(
     @Json(name = "name") val name: String? = null,
     @Json(name = "poster_path") val posterPath: String? = null,
     @Json(name = "backdrop_path") val backdropPath: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCompanyDetailsResponse(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "headquarters") val headquarters: String? = null,
+    @Json(name = "homepage") val homepage: String? = null,
+    @Json(name = "origin_country") val originCountry: String? = null,
+    @Json(name = "logo_path") val logoPath: String? = null,
+    @Json(name = "parent_company") val parentCompany: TmdbCompanyParentResponse? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCompanyParentResponse(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbNetworkDetailsResponse(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "headquarters") val headquarters: String? = null,
+    @Json(name = "homepage") val homepage: String? = null,
+    @Json(name = "origin_country") val originCountry: String? = null,
+    @Json(name = "logo_path") val logoPath: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbDiscoverResponse(
+    @Json(name = "page") val page: Int? = null,
+    @Json(name = "total_results") val totalResults: Int? = null,
+    @Json(name = "results") val results: List<TmdbDiscoverResult>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbDiscoverResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "backdrop_path") val backdropPath: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "first_air_date") val firstAirDate: String? = null,
+    @Json(name = "vote_average") val voteAverage: Double? = null
 )

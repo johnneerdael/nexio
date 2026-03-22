@@ -1017,6 +1017,14 @@
     <string name="cast_detail_error">Something went wrong</string>
     <string name="cast_detail_retry">Retry</string>
     <string name="cast_detail_filmography">Filmography</string>
+    <string name="organization_detail_loading">Loading details</string>
+    <string name="organization_detail_error">Something went wrong</string>
+    <string name="organization_detail_retry">Retry</string>
+    <string name="organization_detail_titles">Titles</string>
+    <string name="organization_detail_country">Country: %1$s</string>
+    <string name="organization_detail_headquarters">Headquarters: %1$s</string>
+    <string name="organization_detail_parent_company">Parent Company: %1$s</string>
+    <string name="organization_detail_homepage">Homepage: %1$s</string>
 
     <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">from %1$s</string>

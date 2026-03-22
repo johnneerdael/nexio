@@ -2,11 +2,12 @@ package com.nexio.tv.data.repository
 
 import android.os.SystemClock
 import android.util.Log
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktCatalogIds
+import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
@@ -78,6 +79,36 @@ data class TraktDiscoverySnapshot(
     val recommendationRefsByStatusKey: Map<String, TraktRecommendationRef> = emptyMap(),
     val updatedAtMs: Long = 0L
 )
+
+internal fun shouldPreserveLastNonEmptyTraktDiscoverySnapshot(
+    previousSnapshot: TraktDiscoverySnapshot,
+    refreshedSnapshot: TraktDiscoverySnapshot,
+    prefs: TraktCatalogPreferences
+): Boolean {
+    if (!prefs.hasExpectedDiscoveryBackedTraktRails()) return false
+    if (!previousSnapshot.hasConfiguredDiscoveryContent(prefs)) return false
+    return !refreshedSnapshot.hasConfiguredDiscoveryContent(prefs)
+}
+
+private fun TraktCatalogPreferences.hasExpectedDiscoveryBackedTraktRails(): Boolean {
+    return enabledCatalogs.any { it != TraktCatalogIds.UP_NEXT } || selectedPopularListKeys.isNotEmpty()
+}
+
+private fun TraktDiscoverySnapshot.hasConfiguredDiscoveryContent(
+    prefs: TraktCatalogPreferences
+): Boolean {
+    if (TraktCatalogIds.TRENDING_MOVIES in prefs.enabledCatalogs && trendingMovieItems.isNotEmpty()) return true
+    if (TraktCatalogIds.TRENDING_SHOWS in prefs.enabledCatalogs && trendingShowItems.isNotEmpty()) return true
+    if (TraktCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs && popularMovieItems.isNotEmpty()) return true
+    if (TraktCatalogIds.POPULAR_SHOWS in prefs.enabledCatalogs && popularShowItems.isNotEmpty()) return true
+    if (TraktCatalogIds.RECOMMENDED_MOVIES in prefs.enabledCatalogs && recommendationMovieItems.isNotEmpty()) return true
+    if (TraktCatalogIds.RECOMMENDED_SHOWS in prefs.enabledCatalogs && recommendationShowItems.isNotEmpty()) return true
+    if (TraktCatalogIds.CALENDAR in prefs.enabledCatalogs && calendarItems.isNotEmpty()) return true
+    if (prefs.selectedPopularListKeys.isEmpty()) return false
+    return customListCatalogs.any { catalog ->
+        catalog.key in prefs.selectedPopularListKeys && catalog.items.isNotEmpty()
+    }
+}
 
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -265,7 +296,7 @@ class TraktDiscoveryService @Inject constructor(
                 }
             }
 
-            rawSnapshotState.value = TraktDiscoverySnapshot(
+            val refreshedSnapshot = TraktDiscoverySnapshot(
                 calendarItems = calendar,
                 recommendationMovieItems = recommendationMovies.map { it.first },
                 recommendationShowItems = recommendationShows.map { it.first },
@@ -278,7 +309,20 @@ class TraktDiscoveryService @Inject constructor(
                 recommendationRefsByStatusKey = refs,
                 updatedAtMs = System.currentTimeMillis()
             )
-            snapshotStore.write(rawSnapshotState.value)
+            val snapshotToPersist = if (
+                shouldPreserveLastNonEmptyTraktDiscoverySnapshot(
+                    previousSnapshot = snapshot,
+                    refreshedSnapshot = refreshedSnapshot,
+                    prefs = prefs
+                )
+            ) {
+                Log.d("TraktDiscovery", "Preserving previous non-empty snapshot after empty refresh")
+                snapshot
+            } else {
+                refreshedSnapshot
+            }
+            rawSnapshotState.value = snapshotToPersist
+            snapshotStore.write(snapshotToPersist)
             lastRefreshMs = System.currentTimeMillis()
         }
     }

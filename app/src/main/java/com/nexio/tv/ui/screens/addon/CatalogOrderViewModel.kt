@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.recommendations.AndroidTvFeedCatalogService
 import com.nexio.tv.core.recommendations.AndroidTvFeedOption
 import com.nexio.tv.core.sync.addonCatalogDisableKey
+import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -183,7 +184,7 @@ class CatalogOrderViewModel @Inject constructor(
         mdbListSnapshot: MDBListDiscoverySnapshot,
         mdbListPrefs: MDBListCatalogPreferences
     ): List<CatalogOrderItem> {
-        val defaultEntries = buildDefaultCatalogEntries(addons)
+        val defaultEntries = buildDefaultCatalogEntries(addons, disabledKeys)
             .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs))
             .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs))
         val availableMap = defaultEntries.associateBy { it.key }
@@ -207,14 +208,17 @@ class CatalogOrderViewModel @Inject constructor(
                 addonName = entry.addonName,
                 typeLabel = entry.typeLabel,
                 isToggleable = entry.isToggleable,
-                isDisabled = entry.disableKey in disabledKeys || entry.key in disabledKeys,
+                isDisabled = entry.isDisabled || entry.disableKey in disabledKeys || entry.key in disabledKeys,
                 canMoveUp = index > 0,
                 canMoveDown = index < effectiveOrder.lastIndex
             )
         }
     }
 
-    private fun buildDefaultCatalogEntries(addons: List<Addon>): List<CatalogOrderEntry> {
+    private fun buildDefaultCatalogEntries(
+        addons: List<Addon>,
+        disabledKeys: Set<String>
+    ): List<CatalogOrderEntry> {
         val entries = mutableListOf<CatalogOrderEntry>()
         val seenKeys = mutableSetOf<String>()
 
@@ -240,7 +244,15 @@ class CatalogOrderViewModel @Inject constructor(
                                 catalogName = catalog.name,
                                 addonName = addon.displayName,
                                 typeLabel = catalog.apiType,
-                                isToggleable = true
+                                isToggleable = true,
+                                isDisabled = isAddonCatalogDisabled(
+                                    disabledKeys = disabledKeys,
+                                    addonBaseUrl = addon.baseUrl,
+                                    addonId = addon.id,
+                                    type = catalog.apiType,
+                                    catalogId = catalog.id,
+                                    catalogName = catalog.name
+                                )
                             )
                         )
                     }
@@ -264,7 +276,8 @@ class CatalogOrderViewModel @Inject constructor(
                 catalogName = catalogName,
                 addonName = "Trakt",
                 typeLabel = typeLabel,
-                isToggleable = false
+                isToggleable = false,
+                isDisabled = false
             )
         }
 
@@ -286,7 +299,8 @@ class CatalogOrderViewModel @Inject constructor(
                 catalogName = list.title,
                 addonName = "Trakt",
                 typeLabel = "custom list",
-                isToggleable = false
+                isToggleable = false,
+                isDisabled = false
             )
         }
         return entries
@@ -325,7 +339,8 @@ class CatalogOrderViewModel @Inject constructor(
                 catalogName = option.title,
                 addonName = "MDBList",
                 typeLabel = if (option.isPersonal) "personal list" else "top list",
-                isToggleable = false
+                isToggleable = false,
+                isDisabled = false
             )
         }
     }
@@ -416,7 +431,8 @@ private data class CatalogOrderEntry(
     val catalogName: String,
     val addonName: String,
     val typeLabel: String,
-    val isToggleable: Boolean
+    val isToggleable: Boolean,
+    val isDisabled: Boolean
 )
 
 private data class BaseCatalogOrderInputs(

@@ -36,6 +36,7 @@ import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.account.AuthSignInScreen
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screens.cast.CastDetailScreen
+import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
 
 @Composable
 fun NexioNavHost(
@@ -247,6 +248,16 @@ fun NexioNavHost(
                 onBackPress = { navController.popBackStack() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
+                },
+                onNavigateToOrganizationDetail = { entityId, entityName, kindName, discoverTypeName ->
+                    navController.navigate(
+                        Screen.OrganizationDetail.createRoute(
+                            entityId = entityId,
+                            entityName = entityName,
+                            kind = enumValueOf(kindName),
+                            discoverType = enumValueOf(discoverTypeName)
+                        )
+                    )
                 },
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
@@ -900,6 +911,23 @@ fun NexioNavHost(
             )
         ) {
             CastDetailScreen(
+                onBackPress = { navController.popBackStack() },
+                onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
+                    navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.OrganizationDetail.route,
+            arguments = listOf(
+                navArgument("entityId") { type = NavType.StringType },
+                navArgument("entityName") { type = NavType.StringType },
+                navArgument("kind") { type = NavType.StringType },
+                navArgument("discoverType") { type = NavType.StringType }
+            )
+        ) {
+            OrganizationDetailScreen(
                 onBackPress = { navController.popBackStack() },
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))

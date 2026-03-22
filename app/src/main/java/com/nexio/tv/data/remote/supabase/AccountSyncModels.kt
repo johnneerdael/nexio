@@ -1,7 +1,10 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.nexio.tv.data.remote.supabase
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
 
 @Serializable
 data class AccountSnapshotRpcResponse(
@@ -9,6 +12,15 @@ data class AccountSnapshotRpcResponse(
     val revision: Long = 0,
     @SerialName("updated_at") val updatedAt: String? = null,
     val settings: AccountSettingsPayload = AccountSettingsPayload(),
+    val addons: List<AccountAddonPayload> = emptyList()
+)
+
+@Serializable
+data class AccountConfigSnapshotRpcResponse(
+    @SerialName("user_id") val userId: String? = null,
+    val revision: Long = 0,
+    @SerialName("updated_at") val updatedAt: String? = null,
+    val settings: AccountConfigSyncPayload = AccountConfigSyncPayload(),
     val addons: List<AccountAddonPayload> = emptyList()
 )
 
@@ -38,6 +50,58 @@ data class AccountAddonSecretPayload(
     val kind: String = "query_params",
     val params: Map<String, String> = emptyMap(),
     @SerialName("pathSegment") val pathSegment: String? = null
+)
+
+@Serializable
+data class AccountConfigSyncPayload(
+    @EncodeDefault
+    val schemaVersion: Int = 2,
+    val integrations: IntegrationSettings = IntegrationSettings(),
+    val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
+    val formatter: FormatterSyncSettings = FormatterSyncSettings()
+)
+
+@Serializable
+data class FormatterSyncSettings(
+    val enabled: Boolean = true,
+    val selectedTemplateId: String = "universal",
+    val customTemplate: CustomFormatterSyncTemplate? = null
+)
+
+@Serializable
+data class CustomFormatterSyncTemplate(
+    val id: String = "custom",
+    val label: String = "Custom",
+    val nameTemplate: String = "",
+    val descriptionTemplate: String = ""
+)
+
+@Serializable
+data class CatalogSyncSettings(
+    val home: HomeCatalogSyncSettings = HomeCatalogSyncSettings(),
+    val trakt: TraktCatalogSyncSettings = TraktCatalogSyncSettings(),
+    val mdblist: MDBListCatalogSyncSettings = MDBListCatalogSyncSettings()
+)
+
+@Serializable
+data class HomeCatalogSyncSettings(
+    val heroCatalogKeys: List<String> = emptyList(),
+    val homeCatalogOrderKeys: List<String> = emptyList(),
+    val disabledHomeCatalogKeys: List<String> = emptyList()
+)
+
+@Serializable
+data class TraktCatalogSyncSettings(
+    val catalogEnabledSet: List<String> = emptyList(),
+    val catalogOrder: List<String> = emptyList(),
+    val selectedPopularListKeys: List<String> = emptyList()
+)
+
+@Serializable
+data class MDBListCatalogSyncSettings(
+    val hiddenPersonalListKeys: List<String> = emptyList(),
+    val selectedTopListKeys: List<String> = emptyList(),
+    val catalogOrder: List<String> = emptyList()
 )
 
 @Serializable

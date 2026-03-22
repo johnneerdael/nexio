@@ -1,6 +1,7 @@
 import { createError } from 'h3'
 import { bearerToken, okJson, readJsonBody, supabaseUser, supabaseFetch } from '~/server/utils/supabase'
 import { normalizeAddonManifestUrl, normalizeAddonUrl } from '~/server/utils/account-secrets'
+import { ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION } from '~/types/portal'
 import type { AddonRecord, PortalSettings } from '~/types/portal'
 
 type PersistBody = {
@@ -27,7 +28,8 @@ export default defineEventHandler(async (event) => {
     method: 'POST',
     body: JSON.stringify({
       p_settings_payload: body.settings,
-      p_source: 'web'
+      p_source: 'web',
+      p_contract_version: ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION
     })
   }, token)
 
