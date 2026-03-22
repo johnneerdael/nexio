@@ -136,6 +136,19 @@ data class SupabaseProfile(
 )
 
 @Serializable
+data class SupabaseProfileLockState(
+    @SerialName("profile_index") val profileIndex: Int,
+    @SerialName("pin_enabled") val pinEnabled: Boolean = false,
+    @SerialName("pin_locked_until") val pinLockedUntil: String? = null
+)
+
+@Serializable
+data class SupabaseProfilePinVerifyResult(
+    val unlocked: Boolean = false,
+    @SerialName("retry_after_seconds") val retryAfterSeconds: Int = 0
+)
+
+@Serializable
 data class SupabaseAvatarCatalogItem(
     val id: String,
     @SerialName("display_name") val displayName: String,
