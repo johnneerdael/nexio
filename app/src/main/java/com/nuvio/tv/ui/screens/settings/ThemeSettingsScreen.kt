@@ -95,10 +95,11 @@ fun ThemeSettingsContent(
         val tags = listOf(
             "en", "de", "es", "es-419", "hu", "fr", "it", "pl",
             "pt-PT", "pt-BR", "tr", "cs", "sk", "sl", "sv", "ro", "ja",
-            "nl", "vi", "hi", "lt"
+            "nl", "vi", "hi", "lt", "he"
         )
         listOf(null to strLanguageSystem) + tags.map { tag ->
-                "pt-PT", "pt-BR", "tr", "sk", "sl", "sv", "he", "ro", "ja",            tag to locale.getDisplayName(locale).replaceFirstChar { it.uppercase() }
+            val locale = Locale.forLanguageTag(tag)
+            tag to locale.getDisplayName(locale).replaceFirstChar { it.uppercase() }
         }.sortedBy { it.second }
     }
     var selectedTag by remember {
