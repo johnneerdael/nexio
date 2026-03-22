@@ -70,7 +70,7 @@ class StreamPresentationEngineTest {
         val detailLine = item.detailLines[2]
 
         assertTrue(titleLine.contains("[[icon:4k]]"))
-        assertFalse(titleLine.contains("⭐⭐⭐⭐⭐ 4K"))
+        assertFalse(titleLine.contains("⭐⭐⭐⭐⭐"))
         assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
     }
 
