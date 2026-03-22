@@ -67,7 +67,7 @@ class StreamPresentationEngineTest {
         val item = organize(stream)
         val detailOutput = item.detailLines.joinToString("\n")
 
-        assertEquals("[[icon:fullhd]] - Shrinking (Season 03 Episode 06)", item.title)
+        assertEquals("[[icon:4k]] - Movie Title (2023)", item.title)
         assertTrue(detailOutput.contains("[[icon:netflix]] Netflix"))
     }
 
