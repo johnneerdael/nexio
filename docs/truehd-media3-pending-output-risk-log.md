@@ -75,3 +75,78 @@ Known limitation carried forward:
 
 - late-stream audio quality is still not at parity
 - the final underrun plus end-of-stream dropped-frame coupling remains
+
+## Batch 2 Scope
+
+Files touched:
+
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.h`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.cpp`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdAEEngineSourceStructureTest.kt`
+
+What changed:
+
+- steady-state flush control no longer calls a dedicated steady-state retry-eligibility helper before retrying the active pending output
+- zero and partial steady-state writes now keep the same pending-output truth active instead of re-admitting through helper-driven control
+- startup-specific retry gating remains isolated and bounded
+
+What was explicitly not changed:
+
+- MAT / IEC transport path
+- AudioTrack tuple/config logic
+- Java `AudioSink` contract methods
+- route logic
+- startup handoff policy
+
+## Batch 2 Validation
+
+- install target: `192.168.50.37:5555`
+- validation bundle: `/tmp/transport-validation-truehd-1774150499518.zip`
+- comparison bundle: `/tmp/transport-validation-truehd-1774149948737.zip`
+
+Hard-gate read:
+
+- `transportVerdict=PASS`
+- burst chain remained `8 -> 64 -> 64 -> 64`
+- route remained stable after startup:
+  - `routeTupleChangeCountAfterStableStart=0`
+  - `routeReopenCountAfterStart=0`
+- playback still reached `ENDED` at `63334ms`
+
+Important caveat:
+
+- `runtimeVerdict=FAIL` and `playerStateVerdict=FAIL` remain noisy on the 120s observation window for this ~64s sample.
+- Raw player events are the grounded source for the outer-boundary judgment on this batch; they show `BUFFERING -> READY -> isPlaying=true -> ENDED`.
+
+Observed runtime shape vs Batch 1:
+
+- `timeToReadyMs`: `1274 -> 1265`
+- `droppedVideoFrames`: `34 -> 28`
+- `audioUnderrunCount`: `1 -> 1`
+- `writeAttemptCount`: `6838 -> 6899`
+- `zeroWriteCount`: `2289 -> 2347`
+- `remainderRetryEventCount`: `2290 -> 2352`
+- `longestZeroWriteStreakMs`: `53 -> 56`
+- `longestStuckRemainderMs`: `23 -> 105`
+
+Retry-shape note:
+
+- steady-state drain semantics are now active in control flow
+- the batch did not normalize late-stream audio yet
+- the bundle still shows repeated steady-state zero-write churn, but without reopening transport, route, or startup control surfaces
+
+## Batch 2 Decision
+
+Keep Batch 2.
+
+Reason:
+
+- no transport regression
+- no route regression
+- no outer playback collapse on `.37`
+- this batch completes the Media3-first steady-state drain control shift without touching startup or Java contract surfaces
+
+Known limitation carried forward:
+
+- late-stream audio quality is still not at parity
+- late steady-state remainders still spend too long in repeated zero-write churn under a stable tuple
