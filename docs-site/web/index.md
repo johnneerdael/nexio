@@ -1,14 +1,14 @@
-# Web Overview
+# Management Portal Overview
 
-Nexio’s web portal is where you shape the account that the Android app uses: addons, catalogs, integrations, and stream formatting all live here and sync with the account rather than a single device.
+Nexio’s Management Portal is where you shape the account that the TV App uses: addons, catalogs, integrations, and stream formatting all live here and sync with the account rather than a single device.
 
 ## Who this is for
-- Web administrators
+- Management Portal administrators
 - Anyone setting up a shared or personal Nexio account
 - Contributors who need to understand the portal workflow before making changes
 
 ## Start here
-1. Read [Web Get Started](./get-started.md) for the recommended setup order.
+1. Read [Management Portal Get Started](./get-started.md) for the recommended setup order.
 2. Review [Account](./account.md) so you understand sign-in and account-scoped behavior.
 3. Use [Addon Manager](./admin-workspaces/addons.md), [Catalog Inventory](./admin-workspaces/catalogs.md), and [Integrations](./admin-workspaces/integrations.md) to configure discovery and services.
 4. Finish with [Formatter Getting Started](./admin-workspaces/formatter-getting-started.md) and [Formatter Reference](./admin-workspaces/formatter.md) if you want to tune stream card appearance.
@@ -20,5 +20,5 @@ Nexio’s web portal is where you shape the account that the Android app uses: a
 - Stream formatting is best tuned after the addon and integration baseline is stable.
 
 ## Related pages
-- [Android Overview](../android/)
+- [TV App Overview](../android/)
 - [Architecture](../dev/architecture.md)
