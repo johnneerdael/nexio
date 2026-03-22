@@ -3,6 +3,7 @@ package com.nuvio.tv.ui.screens.detail
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.model.NextToWatch
+import com.nuvio.tv.domain.model.TraktCommentReview
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.model.LibraryListTab
@@ -47,6 +48,11 @@ data class MetaDetailsUiState(
     val episodeRatingsError: String? = null,
     val mdbListRatings: MDBListRatings? = null,
     val showMdbListImdb: Boolean = false,
+    val comments: List<TraktCommentReview> = emptyList(),
+    val isCommentsLoading: Boolean = false,
+    val commentsError: String? = null,
+    val shouldShowCommentsSection: Boolean = false,
+    val selectedComment: TraktCommentReview? = null,
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )
@@ -57,6 +63,9 @@ sealed class MetaDetailsEvent {
     data object OnPlayClick : MetaDetailsEvent()
     data object OnToggleLibrary : MetaDetailsEvent()
     data object OnRetry : MetaDetailsEvent()
+    data object OnRetryComments : MetaDetailsEvent()
+    data class OnCommentSelected(val review: TraktCommentReview) : MetaDetailsEvent()
+    data object OnDismissCommentOverlay : MetaDetailsEvent()
     data object OnBackPress : MetaDetailsEvent()
     data object OnUserInteraction : MetaDetailsEvent()
     data object OnPlayButtonFocused : MetaDetailsEvent()
