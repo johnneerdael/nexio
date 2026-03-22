@@ -715,6 +715,12 @@
     <string name="profile_pin_overlay_set_heading">Create a 4-digit PIN for %1$s.</string>
     <string name="profile_pin_overlay_confirm_heading">Confirm your new PIN.</string>
     <string name="profile_pin_overlay_unlock_support">Use your remote or keyboard to enter 4 digits.</string>
+    <string name="profile_pin_overlay_change_verify_kicker">Security check required.</string>
+    <string name="profile_pin_overlay_change_verify_heading">Enter current PIN to change PIN for %1$s.</string>
+    <string name="profile_pin_overlay_change_verify_support">Enter the current 4-digit PIN before setting a new one.</string>
+    <string name="profile_pin_overlay_remove_verify_kicker">Security check required.</string>
+    <string name="profile_pin_overlay_remove_verify_heading">Enter current PIN to remove lock for %1$s.</string>
+    <string name="profile_pin_overlay_remove_verify_support">Enter the current 4-digit PIN to remove this lock.</string>
     <string name="profile_pin_overlay_set_support">This PIN will be required before opening this profile.</string>
     <string name="profile_pin_overlay_confirm_support">Re-enter the same 4 digits to finish setup.</string>
     <string name="profile_pin_overlay_mismatch">PINs did not match. Enter a new PIN again.</string>

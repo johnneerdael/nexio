@@ -139,7 +139,9 @@ private sealed interface ProfilePinOverlayState {
     val profile: UserProfile
 
     data class Unlock(override val profile: UserProfile) : ProfilePinOverlayState
-    data class Set(override val profile: UserProfile) : ProfilePinOverlayState
+    data class Set(override val profile: UserProfile, val currentPin: String? = null) : ProfilePinOverlayState
+    data class VerifyCurrentForChange(override val profile: UserProfile) : ProfilePinOverlayState
+    data class VerifyCurrentForRemove(override val profile: UserProfile) : ProfilePinOverlayState
 }
 
 private enum class ProfilePinEntryStage {
@@ -285,36 +287,80 @@ fun ProfileSelectionScreen(
                         pinOverlayError = null
                     },
                     onSubmit = { pin ->
-                        if (activePinOverlay is ProfilePinOverlayState.Set) {
-                            viewModel.setProfilePin(activePinOverlay.profile.id, pin) { success ->
-                                if (success) {
-                                    pinOverlayState = null
-                                    pinOverlayError = null
-                                    pinActionMessage = "PIN saved for ${activePinOverlay.profile.name}."
-                                } else {
-                                    pinOverlayError = "Could not save PIN. Try again."
+                        when (activePinOverlay) {
+                            is ProfilePinOverlayState.Set -> {
+                                viewModel.setProfilePin(
+                                    activePinOverlay.profile.id,
+                                    pin,
+                                    activePinOverlay.currentPin
+                                ) { success ->
+                                    if (success) {
+                                        pinOverlayState = null
+                                        pinOverlayError = null
+                                        pinActionMessage = "PIN saved for ${activePinOverlay.profile.name}."
+                                    } else {
+                                        pinOverlayError = "Could not save PIN. Try again."
+                                    }
                                 }
                             }
-                        } else {
-                            val current = activePinOverlay as ProfilePinOverlayState.Unlock
-                            viewModel.verifyProfilePin(current.profile.id, pin) { result ->
-                                result.onSuccess { verify ->
-                                    if (verify.unlocked) {
+
+                            is ProfilePinOverlayState.Unlock -> {
+                                viewModel.verifyProfilePin(activePinOverlay.profile.id, pin) { result ->
+                                    result.onSuccess { verify ->
+                                        if (verify.unlocked) {
+                                            pinOverlayError = null
+                                            pinOverlayState = null
+                                            viewModel.selectProfile(
+                                                activePinOverlay.profile.id,
+                                                onComplete = onProfileSelected
+                                            )
+                                        } else {
+                                            pinOverlayError = if (verify.retryAfterSeconds > 0) {
+                                                "Profile is locked. Try again in ${verify.retryAfterSeconds}s."
+                                            } else {
+                                                "Invalid PIN. Try again."
+                                            }
+                                        }
+                                    }.onFailure {
+                                        pinOverlayError = "Could not verify PIN. Try again."
+                                    }
+                                }
+                            }
+
+                            is ProfilePinOverlayState.VerifyCurrentForChange -> {
+                                viewModel.verifyProfilePin(activePinOverlay.profile.id, pin) { result ->
+                                    result.onSuccess { verify ->
+                                        if (verify.unlocked) {
+                                            pinOverlayError = null
+                                            pinOverlayState = ProfilePinOverlayState.Set(
+                                                profile = activePinOverlay.profile,
+                                                currentPin = pin
+                                            )
+                                        } else {
+                                            pinOverlayError = if (verify.retryAfterSeconds > 0) {
+                                                "Profile is locked. Try again in ${verify.retryAfterSeconds}s."
+                                            } else {
+                                                "Current PIN is incorrect."
+                                            }
+                                        }
+                                    }.onFailure {
+                                        pinOverlayError = "Could not verify PIN. Try again."
+                                    }
+                                }
+                            }
+
+                            is ProfilePinOverlayState.VerifyCurrentForRemove -> {
+                                viewModel.clearProfilePin(
+                                    profileId = activePinOverlay.profile.id,
+                                    currentPin = pin
+                                ) { success ->
+                                    if (success) {
                                         pinOverlayError = null
                                         pinOverlayState = null
-                                        viewModel.selectProfile(
-                                            current.profile.id,
-                                            onComplete = onProfileSelected
-                                        )
+                                        pinActionMessage = "PIN lock removed for ${activePinOverlay.profile.name}."
                                     } else {
-                                        pinOverlayError = if (verify.retryAfterSeconds > 0) {
-                                            "Profile is locked. Try again in ${verify.retryAfterSeconds}s."
-                                        } else {
-                                            "Invalid PIN. Try again."
-                                        }
+                                        pinOverlayError = "Current PIN is incorrect."
                                     }
-                                }.onFailure {
-                                    pinOverlayError = "Could not verify PIN. Try again."
                                 }
                             }
                         }
@@ -424,7 +470,11 @@ fun ProfileSelectionScreen(
                     onClick = {
                         longPressedProfile = null
                         pinOverlayError = null
-                        pinOverlayState = ProfilePinOverlayState.Set(profile)
+                        pinOverlayState = if (profilePinEnabled[profile.id] == true) {
+                            ProfilePinOverlayState.VerifyCurrentForChange(profile)
+                        } else {
+                            ProfilePinOverlayState.Set(profile)
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.colors(
@@ -445,13 +495,8 @@ fun ProfileSelectionScreen(
                     Button(
                         onClick = {
                             longPressedProfile = null
-                            viewModel.clearProfilePin(profile.id) { success ->
-                                pinActionMessage = if (success) {
-                                    "PIN lock removed for ${profile.name}."
-                                } else {
-                                    "Could not remove PIN lock. Try again."
-                                }
-                            }
+                            pinOverlayError = null
+                            pinOverlayState = ProfilePinOverlayState.VerifyCurrentForRemove(profile)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.colors(
@@ -1496,7 +1541,7 @@ private fun ProfilePinOverlay(
     val keyboardState = rememberKeyboardVisibilityState()
     val focusManager = LocalFocusManager.current
     val focusRequester = remember(state) { FocusRequester() }
-    val isUnlockMode = state is ProfilePinOverlayState.Unlock
+    val isSingleEntryMode = state !is ProfilePinOverlayState.Set
     var pin by remember(state) { mutableStateOf("") }
     var draftPin by remember(state) { mutableStateOf<String?>(null) }
     var entryStage by remember(state) { mutableStateOf(ProfilePinEntryStage.Create) }
@@ -1513,7 +1558,7 @@ private fun ProfilePinOverlay(
         ),
         label = "pinCursorAlpha"
     )
-    val resolvedErrorMessage = if (isUnlockMode) errorMessage else internalErrorMessage ?: errorMessage
+    val resolvedErrorMessage = if (isSingleEntryMode) errorMessage else internalErrorMessage ?: errorMessage
     val isErrorState = !resolvedErrorMessage.isNullOrEmpty()
     val mismatchMessage = stringResource(R.string.profile_pin_overlay_mismatch)
     val shouldUseCompactLayout = keyboardState.isVisible
@@ -1604,7 +1649,7 @@ private fun ProfilePinOverlay(
 
     LaunchedEffect(pin, entryStage, isWorking) {
         if (pin.length != ProfilePinLength || isWorking) return@LaunchedEffect
-        if (isUnlockMode) {
+        if (isSingleEntryMode) {
             onSubmit(pin)
         } else {
             if (entryStage == ProfilePinEntryStage.Create) {
@@ -1653,7 +1698,7 @@ private fun ProfilePinOverlay(
                         if (!isWorking && pin.isNotEmpty()) {
                             pin = pin.dropLast(1)
                             if (!errorMessage.isNullOrEmpty()) onClearError()
-                            if (!isUnlockMode) internalErrorMessage = null
+                            if (!isSingleEntryMode) internalErrorMessage = null
                         }
                         true
                     }
@@ -1663,7 +1708,7 @@ private fun ProfilePinOverlay(
                         if (digit != null && !isWorking && pin.length < ProfilePinLength) {
                             pin += digit
                             if (!errorMessage.isNullOrEmpty()) onClearError()
-                            if (!isUnlockMode) internalErrorMessage = null
+                            if (!isSingleEntryMode) internalErrorMessage = null
                             true
                         } else {
                             false
@@ -1674,20 +1719,26 @@ private fun ProfilePinOverlay(
         contentAlignment = Alignment.Center
     ) {
         val kickerText = when {
-            isUnlockMode -> stringResource(R.string.profile_pin_overlay_unlock_kicker)
+            state is ProfilePinOverlayState.Unlock -> stringResource(R.string.profile_pin_overlay_unlock_kicker)
+            state is ProfilePinOverlayState.VerifyCurrentForChange -> stringResource(R.string.profile_pin_overlay_change_verify_kicker)
+            state is ProfilePinOverlayState.VerifyCurrentForRemove -> stringResource(R.string.profile_pin_overlay_remove_verify_kicker)
             entryStage == ProfilePinEntryStage.Confirm -> stringResource(R.string.profile_pin_overlay_confirm_kicker)
             else -> stringResource(R.string.profile_pin_overlay_set_kicker)
         }
         val headingText = when {
-            isUnlockMode -> stringResource(R.string.profile_pin_overlay_unlock_heading, state.profile.name)
+            state is ProfilePinOverlayState.Unlock -> stringResource(R.string.profile_pin_overlay_unlock_heading, state.profile.name)
+            state is ProfilePinOverlayState.VerifyCurrentForChange -> stringResource(R.string.profile_pin_overlay_change_verify_heading, state.profile.name)
+            state is ProfilePinOverlayState.VerifyCurrentForRemove -> stringResource(R.string.profile_pin_overlay_remove_verify_heading, state.profile.name)
             entryStage == ProfilePinEntryStage.Confirm -> stringResource(R.string.profile_pin_overlay_confirm_heading)
             else -> stringResource(R.string.profile_pin_overlay_set_heading, state.profile.name)
         }
         val supportText = when {
             !resolvedErrorMessage.isNullOrEmpty() -> resolvedErrorMessage
-            isWorking && isUnlockMode -> stringResource(R.string.profile_pin_verifying)
+            isWorking && isSingleEntryMode -> stringResource(R.string.profile_pin_verifying)
             isWorking -> stringResource(R.string.action_saving)
-            isUnlockMode -> stringResource(R.string.profile_pin_overlay_unlock_support)
+            state is ProfilePinOverlayState.Unlock -> stringResource(R.string.profile_pin_overlay_unlock_support)
+            state is ProfilePinOverlayState.VerifyCurrentForChange -> stringResource(R.string.profile_pin_overlay_change_verify_support)
+            state is ProfilePinOverlayState.VerifyCurrentForRemove -> stringResource(R.string.profile_pin_overlay_remove_verify_support)
             entryStage == ProfilePinEntryStage.Confirm -> stringResource(R.string.profile_pin_overlay_confirm_support)
             else -> stringResource(R.string.profile_pin_overlay_set_support)
         }
@@ -1768,7 +1819,7 @@ private fun ProfilePinOverlay(
                 if (!isWorking) {
                     pin = value.filter(Char::isDigit).take(ProfilePinLength)
                     if (!errorMessage.isNullOrEmpty()) onClearError()
-                    if (!isUnlockMode) internalErrorMessage = null
+                    if (!isSingleEntryMode) internalErrorMessage = null
                 }
             },
             modifier = Modifier

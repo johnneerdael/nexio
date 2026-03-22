@@ -133,11 +133,11 @@ class ProfileSelectionViewModel @Inject constructor(
         return _profilePinEnabled.value[profileId] == true
     }
 
-    fun setProfilePin(profileId: Int, pin: String, onComplete: (Boolean) -> Unit) {
+    fun setProfilePin(profileId: Int, pin: String, currentPin: String? = null, onComplete: (Boolean) -> Unit) {
         if (_isPinOperationInProgress.value) return
         viewModelScope.launch {
             _isPinOperationInProgress.value = true
-            val success = profileSyncService.setProfilePin(profileId, pin).isSuccess
+            val success = profileSyncService.setProfilePin(profileId, pin, currentPin).isSuccess
             if (success) {
                 _profilePinEnabled.value = _profilePinEnabled.value + (profileId to true)
             }
@@ -146,11 +146,11 @@ class ProfileSelectionViewModel @Inject constructor(
         }
     }
 
-    fun clearProfilePin(profileId: Int, onComplete: (Boolean) -> Unit) {
+    fun clearProfilePin(profileId: Int, currentPin: String? = null, onComplete: (Boolean) -> Unit) {
         if (_isPinOperationInProgress.value) return
         viewModelScope.launch {
             _isPinOperationInProgress.value = true
-            val success = profileSyncService.clearProfilePin(profileId).isSuccess
+            val success = profileSyncService.clearProfilePin(profileId, currentPin).isSuccess
             if (success) {
                 _profilePinEnabled.value = _profilePinEnabled.value + (profileId to false)
             }

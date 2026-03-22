@@ -129,11 +129,14 @@ class ProfileSyncService @Inject constructor(
         }
     }
 
-    suspend fun setProfilePin(profileId: Int, pin: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun setProfilePin(profileId: Int, pin: String, currentPin: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
                 put("p_pin", pin)
+                if (!currentPin.isNullOrBlank()) {
+                    put("p_current_pin", currentPin)
+                }
             }
             withJwtRefreshRetry {
                 postgrest.rpc("set_profile_pin", params)
@@ -145,10 +148,13 @@ class ProfileSyncService @Inject constructor(
         }
     }
 
-    suspend fun clearProfilePin(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun clearProfilePin(profileId: Int, currentPin: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val params = buildJsonObject {
                 put("p_profile_id", profileId)
+                if (!currentPin.isNullOrBlank()) {
+                    put("p_current_pin", currentPin)
+                }
             }
             withJwtRefreshRetry {
                 postgrest.rpc("clear_profile_pin", params)
