@@ -11,7 +11,6 @@ data class TraktCommentDto(
     @Json(name = "comment") val comment: String? = null,
     @Json(name = "spoiler") val spoiler: Boolean? = null,
     @Json(name = "review") val review: Boolean? = null,
-    @Json(name = "replies") val replies: Int? = null,
     @Json(name = "likes") val likes: Int? = null,
     @Json(name = "user_stats") val userStats: TraktCommentUserStatsDto? = null,
     @Json(name = "user") val user: TraktCommentUserDto? = null

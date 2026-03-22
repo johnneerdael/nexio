@@ -228,10 +228,13 @@ fun MetaDetailsScreen(
     val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsStateWithLifecycle(
         initialValue = false
     )
+    val selectedComment = uiState.selectedComment
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
 
     BackHandler {
-        if (uiState.isTrailerPlaying) {
+        if (selectedComment != null) {
+            viewModel.onEvent(MetaDetailsEvent.OnDismissCommentOverlay)
+        } else if (uiState.isTrailerPlaying) {
             restorePlayFocusAfterTrailerBackToken += 1
             viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
         } else {
@@ -393,6 +396,7 @@ fun MetaDetailsScreen(
                     isCommentsLoading = uiState.isCommentsLoading,
                     commentsError = uiState.commentsError,
                     shouldShowCommentsSection = uiState.shouldShowCommentsSection,
+                    selectedComment = uiState.selectedComment,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                     onEpisodeClick = { video ->
                         onPlayClick(
@@ -534,6 +538,8 @@ fun MetaDetailsScreen(
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
                     onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
                     onRetryComments = { viewModel.onEvent(MetaDetailsEvent.OnRetryComments) },
+                    onCommentClick = { viewModel.onEvent(MetaDetailsEvent.OnCommentSelected(it)) },
+                    onDismissCommentOverlay = { viewModel.onEvent(MetaDetailsEvent.OnDismissCommentOverlay) },
                     restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
                     onNavigateToCastDetail = onNavigateToCastDetail,
                     onNavigateToTmdbEntityBrowse = onNavigateToTmdbEntityBrowse,
@@ -633,6 +639,7 @@ private fun MetaDetailsContent(
     isCommentsLoading: Boolean,
     commentsError: String?,
     shouldShowCommentsSection: Boolean,
+    selectedComment: TraktCommentReview?,
     onSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onEpisodeManualPlayClick: (Video) -> Unit,
@@ -661,6 +668,8 @@ private fun MetaDetailsContent(
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
     onRetryComments: () -> Unit,
+    onCommentClick: (TraktCommentReview) -> Unit,
+    onDismissCommentOverlay: () -> Unit,
     restorePlayFocusAfterTrailerBackToken: Int,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
@@ -1416,12 +1425,12 @@ private fun MetaDetailsContent(
             if (shouldShowCommentsSection) {
                 item(key = "trakt_comments", contentType = "horizontal_row") {
                     CommentsSection(
-                        stateKey = meta.id,
                         comments = comments,
                         isLoading = isCommentsLoading,
                         error = commentsError,
                         upFocusRequester = commentsUpFocusRequester,
-                        onRetry = onRetryComments
+                        onRetry = onRetryComments,
+                        onCommentClick = onCommentClick
                     )
                 }
             }
@@ -1526,6 +1535,13 @@ private fun MetaDetailsContent(
                     showHeroPlayOptionsDialog = false
                     heroPlayManualClick()
                 }
+            )
+        }
+
+        selectedComment?.let { review ->
+            CommentOverlay(
+                review = review,
+                onDismiss = onDismissCommentOverlay
             )
         }
     }

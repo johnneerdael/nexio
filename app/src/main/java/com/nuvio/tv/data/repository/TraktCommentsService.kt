@@ -229,7 +229,6 @@ private fun toReviewModel(dto: TraktCommentDto): TraktCommentReview {
         containsInlineSpoilers = containsInlineSpoilers(dto.comment),
         review = dto.review == true,
         likes = dto.likes ?: 0,
-        replies = dto.replies ?: 0,
         rating = dto.userStats?.rating,
         createdAt = dto.createdAt,
         updatedAt = dto.updatedAt

@@ -24,6 +24,7 @@ import com.nuvio.tv.domain.model.ListMembershipChanges
 import com.nuvio.tv.domain.model.Meta
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.TmdbSettings
+import com.nuvio.tv.domain.model.TraktCommentReview
 import com.nuvio.tv.domain.model.Video
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.LibraryRepository
@@ -250,6 +251,8 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
             MetaDetailsEvent.OnRetry -> loadMeta()
             MetaDetailsEvent.OnRetryComments -> _uiState.value.meta?.let { loadComments(it, forceRefresh = true) }
+            is MetaDetailsEvent.OnCommentSelected -> openCommentOverlay(event.review)
+            MetaDetailsEvent.OnDismissCommentOverlay -> dismissCommentOverlay()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
             MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
             MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
@@ -427,7 +430,8 @@ class MetaDetailsViewModel @Inject constructor(
                     comments = emptyList(),
                     isCommentsLoading = false,
                     commentsError = null,
-                    shouldShowCommentsSection = false
+                    shouldShowCommentsSection = false,
+                    selectedComment = null
                 )
             }
 
@@ -562,7 +566,8 @@ class MetaDetailsViewModel @Inject constructor(
                     comments = emptyList(),
                     isCommentsLoading = false,
                     commentsError = null,
-                    shouldShowCommentsSection = false
+                    shouldShowCommentsSection = false,
+                    selectedComment = null
                 )
             }
             return
@@ -629,6 +634,18 @@ class MetaDetailsViewModel @Inject constructor(
             ContentType.MOVIE -> true
             ContentType.SERIES, ContentType.TV -> true
             else -> meta.apiType in listOf("movie", "series", "tv", "show")
+        }
+    }
+
+    private fun openCommentOverlay(review: TraktCommentReview) {
+        _uiState.update { state ->
+            state.copy(selectedComment = review)
+        }
+    }
+
+    private fun dismissCommentOverlay() {
+        _uiState.update { state ->
+            state.copy(selectedComment = null)
         }
     }
 

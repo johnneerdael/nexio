@@ -12,7 +12,6 @@ data class TraktCommentReview(
     val containsInlineSpoilers: Boolean = false,
     val review: Boolean = false,
     val likes: Int = 0,
-    val replies: Int = 0,
     val rating: Int? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null

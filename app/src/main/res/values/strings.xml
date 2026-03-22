@@ -129,10 +129,13 @@
     <string name="detail_comments_empty">No Trakt reviews available yet.</string>
     <string name="detail_comments_error">Couldn\'t load Trakt reviews right now.</string>
     <string name="detail_comments_spoiler_hidden">Spoiler review. Press OK to reveal.</string>
+    <string name="detail_comments_reveal_spoiler">Reveal spoiler</string>
+    <string name="detail_comments_reveal_spoiler_hint">Press OK to reveal spoiler.</string>
+    <string name="detail_comments_back_hint">Click back to close</string>
     <string name="detail_comments_badge_review">Review</string>
     <string name="detail_comments_badge_spoiler">Spoiler</string>
     <string name="detail_comments_badge_rating">%1$d/10</string>
-    <string name="detail_comments_stats">%1$d likes • %2$d replies</string>
+    <string name="detail_comments_likes">%1$d likes</string>
     <string name="tmdb_entity_kind_company">Production Company</string>
     <string name="tmdb_entity_kind_network">Network</string>
     <string name="tmdb_entity_rail_popular">Popular</string>

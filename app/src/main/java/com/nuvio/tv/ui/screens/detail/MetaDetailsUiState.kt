@@ -52,6 +52,7 @@ data class MetaDetailsUiState(
     val isCommentsLoading: Boolean = false,
     val commentsError: String? = null,
     val shouldShowCommentsSection: Boolean = false,
+    val selectedComment: TraktCommentReview? = null,
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )
@@ -63,6 +64,8 @@ sealed class MetaDetailsEvent {
     data object OnToggleLibrary : MetaDetailsEvent()
     data object OnRetry : MetaDetailsEvent()
     data object OnRetryComments : MetaDetailsEvent()
+    data class OnCommentSelected(val review: TraktCommentReview) : MetaDetailsEvent()
+    data object OnDismissCommentOverlay : MetaDetailsEvent()
     data object OnBackPress : MetaDetailsEvent()
     data object OnUserInteraction : MetaDetailsEvent()
     data object OnPlayButtonFocused : MetaDetailsEvent()
