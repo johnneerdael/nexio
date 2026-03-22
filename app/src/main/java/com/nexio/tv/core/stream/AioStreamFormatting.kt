@@ -700,14 +700,94 @@ class AioTemplateFormatter(
 
     private fun extractCheck(content: String): Pair<String, Pair<String, String>?> {
         if (!content.endsWith("]")) return content to null
-        val start = content.lastIndexOf('[')
-        if (start == -1) return content to null
-        val inner = content.substring(start + 1, content.length - 1)
-        val separator = inner.indexOf("||")
-        if (separator == -1) return content to null
-        val left = inner.substring(0, separator).trim().removeSurrounding("\"")
-        val right = inner.substring(separator + 2).trim().removeSurrounding("\"")
+        val start = findTopLevelOpeningBracket(content) ?: return content to null
+        val closing = findMatchingClosingBracket(content, start) ?: return content to null
+        if (closing != content.lastIndex) return content to null
+        val separator = findTopLevelSeparator(content, start + 1, closing, "||") ?: return content to null
+        val left = content.substring(start + 1, separator).trim().removeSurrounding("\"")
+        val right = content.substring(separator + 2, closing).trim().removeSurrounding("\"")
         return content.substring(0, start) to (left to right)
+    }
+
+    private fun findTopLevelOpeningBracket(content: String): Int? {
+        var parenDepth = 0
+        var braceDepth = 0
+        var quote: Char? = null
+        content.forEachIndexed { index, char ->
+            if (quote != null) {
+                if (char == quote) quote = null
+                return@forEachIndexed
+            }
+            when (char) {
+                '\'', '"' -> quote = char
+                '(' -> parenDepth += 1
+                ')' -> parenDepth = (parenDepth - 1).coerceAtLeast(0)
+                '{' -> braceDepth += 1
+                '}' -> braceDepth = (braceDepth - 1).coerceAtLeast(0)
+                '[' -> if (parenDepth == 0 && braceDepth == 0) return index
+            }
+        }
+        return null
+    }
+
+    private fun findMatchingClosingBracket(content: String, openingIndex: Int): Int? {
+        var quote: Char? = null
+        var nestedBracketDepth = 0
+        for (index in openingIndex + 1 until content.length) {
+            val char = content[index]
+            if (quote != null) {
+                if (char == quote) quote = null
+                continue
+            }
+            when (char) {
+                '\'', '"' -> quote = char
+                '[' -> nestedBracketDepth += 1
+                ']' -> {
+                    if (nestedBracketDepth == 0) return index
+                    nestedBracketDepth -= 1
+                }
+            }
+        }
+        return null
+    }
+
+    private fun findTopLevelSeparator(
+        content: String,
+        start: Int,
+        endExclusive: Int,
+        separator: String
+    ): Int? {
+        var parenDepth = 0
+        var braceDepth = 0
+        var bracketDepth = 0
+        var quote: Char? = null
+        var index = start
+        while (index <= endExclusive - separator.length) {
+            val char = content[index]
+            if (quote != null) {
+                if (char == quote) quote = null
+                index += 1
+                continue
+            }
+            when (char) {
+                '\'', '"' -> quote = char
+                '(' -> parenDepth += 1
+                ')' -> parenDepth = (parenDepth - 1).coerceAtLeast(0)
+                '{' -> braceDepth += 1
+                '}' -> braceDepth = (braceDepth - 1).coerceAtLeast(0)
+                '[' -> bracketDepth += 1
+                ']' -> bracketDepth = (bracketDepth - 1).coerceAtLeast(0)
+            }
+            if (parenDepth == 0 &&
+                braceDepth == 0 &&
+                bracketDepth == 0 &&
+                content.startsWith(separator, index)
+            ) {
+                return index
+            }
+            index += 1
+        }
+        return null
     }
 
     private fun findTopLevelPlaceholders(template: String): List<Placeholder> {
@@ -923,11 +1003,11 @@ object AioBuiltInFormatters {
 
     val UNIVERSAL = AioTemplateDefinition(
         id = "universal",
-        nameTemplate = """{stream.resolution::exists["{stream.resolution::replace('2160p','⭐⭐⭐⭐⭐ 4K')::replace('1440p','⭐⭐⭐⭐☆ 2K')::replace('1080p','⭐⭐⭐☆☆ HD')::replace('720p','⭐⭐☆☆☆ SD')::replace('576p','⭐☆☆☆☆ SD')::replace('480p','⭐☆☆☆☆ SD')}"||"☆☆☆☆☆"]} - {stream.title::exists["{stream.title::title::truncate(30)}"||"?"]}{stream.year::exists[" ({stream.year})"||""]}{stream.seasonEpisode::exists[" ({stream.seasonEpisode::join(' ')::replace('S','Season ')::replace('E','Episode ')})"||""]}{stream.seadexBest::istrue[" 🏆"||""]}{stream.seadex::istrue::and::stream.seadexBest::isfalse[" 🥈"||""]}{stream.message::~Download["{tools.removeLine}"||""]}""",
+        nameTemplate = """{stream.resolution::exists["{stream.resolution::replace('2160p','[[icon:4k]]')::replace('1440p','[[icon:2k]]')::replace('1080p','[[icon:fullhd]]')::replace('720p','[[icon:hd]]')::replace('576p','[[icon:sd]]')::replace('480p','[[icon:sd]]')}"||"☆☆☆☆☆"]} - {stream.title::exists["{stream.title::title::truncate(30)}"||"?"]}{stream.year::exists[" ({stream.year})"||""]}{stream.seasonEpisode::exists[" ({stream.seasonEpisode::join(' ')::replace('S','Season ')::replace('E','Episode ')})"||""]}{stream.seadexBest::istrue[" 🏆"||""]}{stream.seadex::istrue::and::stream.seadexBest::isfalse[" 🥈"||""]}{stream.message::~Download["{tools.removeLine}"||""]}""",
         descriptionTemplate = """
 🎥 {stream.quality::exists["{stream.quality::title::replace('Bluray Remux','Lossless BD')::replace('Bluray','Blu-ray')::replace('Web-Dl','Streaming')::replace('Web-dl','Streaming')::replace('Webrip','Web Rip')::replace('Hdrip','HD Rip')::replace('Dvdrip','DVD Rip')::replace('Hdtv','HDTV')::replace('Cam','CAM')::replace('Ts','Telesync')::replace('Tc','Telecine')::replace('Scr','Screener')}"||""]}  • 🔊 {stream.audioTags::exists["{stream.audioTags::join(' ')::replace('Atmos','Dolby Atmos')::replace('TrueHD','Dolby TrueHD')::replace('DTS-HD MA','DTS-MA')::replace('DD+','Dolby Digital+')::replace('DD','Dolby Digital')::replace('EAC3','Dolby Digital+')::replace('AC3','Dolby Digital')}"||"Stereo"]}{stream.audioChannels::exists[" {stream.audioChannels::join('/')}"||""]} • ⏱️ {stream.duration::>0["{stream.duration::time}"||"Unknown"]}
 💾 {stream.size::>0["{stream.size::bytes}"||"Unknown"]} • ☁️ {service.name::exists["{service.name}"||"Unknown"]} • {addon.name}
-{stream.uLanguages::exists["🗣️ {stream.uLanguageEmojis::join(' ')} • "||""]}{stream.seasonPack::istrue["📦 Pack • "||""]}{stream.filename::~NF["🎬 Netflix"||""]}{stream.filename::~DSNP["🏰 Disney+"||""]}{stream.filename::~HMAX["🟪 HBO Max"||""]}{stream.filename::~.MAX.["🟪 Max"||""]}{stream.filename::~AMZN["📦 Amazon"||""]}{stream.filename::~APTV["🍎 Apple TV+"||""]}{stream.filename::~PMTP["⛰️ Paramount+"||""]}{stream.filename::~PCOK["🦚 Peacock"||""]}{stream.filename::~CRTC["🍥 Crunchyroll"||""]}{stream.filename::~CR.["🍥 Crunchyroll"||""]}{stream.filename::~NF::or::stream.filename::~DSNP::or::stream.filename::~HMAX::or::stream.filename::~.MAX.::or::stream.filename::~AMZN::or::stream.filename::~APTV::or::stream.filename::~PMTP::or::stream.filename::~PCOK::or::stream.filename::~CRTC::or::stream.filename::~CR.::and::stream.releaseGroup::exists[" • "||""]}{stream.releaseGroup::exists["👤 {stream.releaseGroup::truncate(10)}"||""]}{stream.seadexBest::istrue[" • 🏆 BEST"||""]}{stream.seadex::istrue::and::stream.seadexBest::isfalse[" • 🥈 ALT"||""]}{stream.repack::istrue[" • 🔄 Repack"||""]}
+{stream.uLanguages::exists["🗣️ {stream.uLanguageEmojis::join(' ')} • "||""]}{stream.seasonPack::istrue["📦 Pack • "||""]}{stream.filename::~NF["[[icon:netflix]] Netflix"||""]}{stream.filename::~DSNP["[[icon:disneyplus]] Disney+"||""]}{stream.filename::~HMAX["[[icon:hbo]] HBO Max"||""]}{stream.filename::~.MAX.["[[icon:max]] Max"||""]}{stream.filename::~AMZN["[[icon:prime]] Amazon"||""]}{stream.filename::~APTV["[[icon:appletv]] Apple TV+"||""]}{stream.filename::~PMTP["[[icon:paramount]] Paramount+"||""]}{stream.filename::~PCOK["[[icon:peacock]] Peacock"||""]}{stream.filename::~CRTC["[[icon:crunchyroll]] Crunchyroll"||""]}{stream.filename::~CR.["[[icon:crunchyroll]] Crunchyroll"||""]}{stream.filename::~NF::or::stream.filename::~DSNP::or::stream.filename::~HMAX::or::stream.filename::~.MAX.::or::stream.filename::~AMZN::or::stream.filename::~APTV::or::stream.filename::~PMTP::or::stream.filename::~PCOK::or::stream.filename::~CRTC::or::stream.filename::~CR.::and::stream.releaseGroup::exists[" • "||""]}{stream.releaseGroup::exists["👤 {stream.releaseGroup::truncate(10)}"||""]}{stream.seadexBest::istrue[" • 🏆 BEST"||""]}{stream.seadex::istrue::and::stream.seadexBest::isfalse[" • 🥈 ALT"||""]}{stream.repack::istrue[" • 🔄 Repack"||""]}
 📄 {stream.filename::exists["{stream.filename}"||"—"]}
 """.trimIndent()
     )
