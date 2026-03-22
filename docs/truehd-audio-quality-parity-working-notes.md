@@ -153,3 +153,44 @@ Non-goals for this pass:
 - no Java `AudioSink` contract changes
 - no route tuple changes
 - no buffer sizing changes
+
+## Incremental Media3-First Handoff Steps
+
+Reference artifacts:
+- Step 1 `/tmp/transport-validation-truehd-1774138851778.zip`
+- Step 2 `/tmp/transport-validation-truehd-1774139208103.zip`
+- Step 3 `/tmp/transport-validation-truehd-1774140016993.zip`
+
+Current grounded result after Step 3:
+- Step 1 and Step 2 are still structurally valid and committed
+- Step 3 now splits native startup-owned and steady-state-owned passthrough input state
+- transport and outer runtime hard gates stayed clean through all three steps
+- audio quality is still degraded, so the incremental handoff work should be treated as enabling structure, not the parity fix
+
+Step 2 to Step 3 comparison:
+
+| Field | Step 2 `/tmp/transport-validation-truehd-1774139208103.zip` | Step 3 `/tmp/transport-validation-truehd-1774140016993.zip` |
+| --- | --- | --- |
+| `transportVerdict` | `PASS` | `PASS` |
+| `runtimeVerdict` | `DEGRADED` | `DEGRADED` |
+| `playerStateVerdict` | `PASS` | `PASS` |
+| `continuousPlayingWindowSatisfied` | `true` | `true` |
+| `timeToReadyMs` | `865` | `876` |
+| `audioUnderrunCount` | `1` | `1` |
+| `droppedVideoFrames` | `34` | `44` |
+| `writeAttemptCount` | `6861` | `6633` |
+| `zeroWriteCount` | `2312` | `2085` |
+| `partialWriteCount` | `5` | `6` |
+| `remainderRetryEventCount` | `2313` | `2088` |
+| `longestStuckRemainderMs` | `94` | `92` |
+| `longestZeroWriteStreakMs` | `76` | `69` |
+
+What Step 3 actually proved:
+- the shared native pending passthrough input was a real architecture divergence and it can be removed without touching transport or the outer contract
+- emitted packets can be tied to startup-owned vs steady-state-owned input without collapsing playback
+- removing that shared slot alone does not eliminate the late-stream audio stutter or the single underrun
+
+What still remains true after Step 3:
+- the route tuple stays stable after startup
+- transport stays exact
+- the remaining defect is still inside audio continuity under the stable tuple, not in transport, not in route selection, and not in the outer Media3 state machine
