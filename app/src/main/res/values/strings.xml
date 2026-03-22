@@ -692,6 +692,33 @@
     <string name="profile_add_new">Add Profile</string>
     <string name="profile_cancel">Cancel</string>
     <string name="profile_save">Save</string>
+    <string name="profile_pin_title">Profile PIN lock</string>
+    <string name="profile_pin_enabled_subtitle">This profile requires a 4-digit PIN before switching.</string>
+    <string name="profile_pin_disabled_subtitle">Set a 4-digit PIN to lock this profile.</string>
+    <string name="profile_pin_set">Set PIN</string>
+    <string name="profile_pin_change">Change PIN</string>
+    <string name="profile_pin_remove">Remove PIN</string>
+    <string name="profile_pin_set_title">Set profile PIN</string>
+    <string name="profile_pin_set_subtitle">Enter a 4-digit PIN and confirm it.</string>
+    <string name="profile_pin_enter">Enter 4-digit PIN</string>
+    <string name="profile_pin_confirm">Confirm 4-digit PIN</string>
+    <string name="profile_pin_mismatch">PIN values do not match.</string>
+    <string name="profile_pin_save">Save PIN</string>
+    <string name="profile_pin_unlock_title">Unlock %1$s</string>
+    <string name="profile_pin_unlock_subtitle">Enter the 4-digit PIN to continue.</string>
+    <string name="profile_pin_verifying">Verifying…</string>
+    <string name="profile_pin_unlock_action">Unlock</string>
+    <string name="profile_pin_overlay_unlock_kicker">Profile Lock is currently on.</string>
+    <string name="profile_pin_overlay_set_kicker">Profile Lock will be turned on.</string>
+    <string name="profile_pin_overlay_confirm_kicker">One more step.</string>
+    <string name="profile_pin_overlay_unlock_heading">Enter your PIN to access %1$s.</string>
+    <string name="profile_pin_overlay_set_heading">Create a 4-digit PIN for %1$s.</string>
+    <string name="profile_pin_overlay_confirm_heading">Confirm your new PIN.</string>
+    <string name="profile_pin_overlay_unlock_support">Use your remote or keyboard to enter 4 digits.</string>
+    <string name="profile_pin_overlay_set_support">This PIN will be required before opening this profile.</string>
+    <string name="profile_pin_overlay_confirm_support">Re-enter the same 4 digits to finish setup.</string>
+    <string name="profile_pin_overlay_mismatch">PINs did not match. Enter a new PIN again.</string>
+    <string name="profile_pin_overlay_back_hint">Press back to cancel</string>
 
 
     <!-- AddonManagerScreen -->
@@ -990,6 +1017,7 @@
     <string name="profile_selection_hint">Hold to manage profile</string>
     <string name="profile_selection_empty">No profiles found</string>
     <string name="profile_selection_primary_badge">PRIMARY</string>
+    <string name="profile_pin_badge">PIN LOCKED</string>
     <string name="profile_selection_options_title">Profile Options</string>
     <string name="profile_delete_confirm_title">Delete Profile?</string>
     <string name="profile_delete_confirm_subtitle">This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone.</string>
