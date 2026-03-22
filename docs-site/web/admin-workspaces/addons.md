@@ -1,101 +1,50 @@
-# Addon Manager: Operational Guide
+# Addon Manager
 
-## Audience
-This page is for users who manage multiple providers and want predictable stream quality, clean labels, and controlled rollout of source changes.
+Addon Manager is where you add and organize the providers that feed Nexio. Think of it as the source layer for content and stream metadata.
 
-## What this page covers
-- Addon installation and parser behavior
-- Read-only versus editable states
-- QR manage mode architecture
-- Operational workflow for safe provider changes
+## What it does
+- Installs addons from a URL.
+- Keeps the addon list ordered.
+- Lets you enable or disable an addon without deleting its configuration.
+- Lets you choose the parser preset used to interpret each provider’s stream labels.
+- Refreshes the addon name, description, and logo from the manifest when available.
 
-## Source of truth
-Addon manager behavior is implemented in:
-- `app/src/main/java/com/nexio/tv/ui/screens/addon/AddonManagerScreen.kt`
-- `app/src/main/java/com/nexio/tv/core/server/AddonConfigServer.kt`
+## When to use it
+- When you are adding a new content provider.
+- When stream labels look wrong and need a different parser preset.
+- When you want to trim down noisy or unused addons.
+- When you are setting up a new account and want a small, reliable baseline first.
 
-## Addon manager architecture
-Addon Manager is the source control plane for content providers.
-It governs:
-- Installed addon URL set
-- Parser preset assignment
-- Catalog contribution visibility
-- Optional phone-based remote management flow
+## Recommended setup flow
+1. Paste the addon URL or manifest URL.
+2. Choose the parser preset that best matches the provider.
+3. Install the addon and confirm it appears in the list.
+4. Save and sync the account.
+5. Open a known title and check whether the stream names look sensible.
 
-If no addon contributes non-search catalogs, Home cannot present normal row content.
+## Parser presets
+Parser presets help Nexio understand how a provider labels its streams.
 
-## Editable and read-only modes
-The UI can present a read-only notice state.
-In read-only mode, mutation actions are suppressed.
-In editable mode, install URL input and action buttons are active.
+- `Generic` is the safest starting point.
+- `Torrentio`, `StremThru`, and `WebStreamr` are useful when the provider follows one of those styles more closely.
 
-This split supports safer operation for restricted configurations.
+If a provider is installed but the titles, resolutions, or badges look off, adjust the preset before you assume the addon itself is broken.
 
-## Install flow
-1. Open Addon Manager.
-2. Enter addon URL.
-3. Commit install.
-4. Validate addon appears in installed list.
+## Good habits
+- Add one provider at a time so you can tell what changed.
+- Keep only the addons you actually trust and use.
+- Reorder providers so the most useful ones stay near the top of the list.
+- Use disable rather than remove when you may want the addon again later.
 
-**Expected result:** Provider is persisted and available for catalog and stream workflows.
-
-## Parser preset strategy
-Parser presets determine how stream metadata is interpreted.
-Wrong preset selection can degrade stream label quality and matching behavior.
-
-Recommended practice:
-- Start with provider-native preset when available.
-- Validate one known title.
-- Switch preset only if parsed labels are visibly incorrect.
-
-## QR manage mode architecture
-Nexio includes a local HTTP control channel for phone management.
-
-Server capabilities:
-- Serves local management page
-- Exposes state endpoints
-- Accepts proposed changes as pending operations
-- Requires confirm or reject lifecycle for pending change status
-
-Pending change status model:
-- `PENDING`
-- `CONFIRMED`
-- `REJECTED`
-
-Stale pending changes are auto-rejected when a new update request arrives.
-
-## Operational runbook for production-safe changes
-
-### 1. Add one provider at a time
-Do not batch multiple new provider URLs in one session.
-
-### 2. Validate parser output immediately
-Open a known title and inspect stream naming quality.
-
-### 3. Validate Home impact
-Confirm at least one useful catalog row appears.
-
-### 4. Only then add second provider
-Repeat the same validation sequence.
+## What to expect after saving
+- The addon stays attached to the account.
+- Manifest details can update the visible label and logo.
+- The same account should see the same addon setup on another device after sync.
 
 ## Troubleshooting
-
-### Symptom
-Addon is installed but Home still has no usable rows.
-
-### Likely root causes
-- Provider contributes search-only catalogs
-- Catalogs are disabled in ordering settings
-- Install URL is valid syntactically but functionally dead
-
-### Recovery
-1. Confirm addon appears in installed list.
-2. Check catalog state in [Catalog Inventory](./catalogs.md).
-3. Test a known-good addon URL for comparison.
-4. Remove non-working provider to reduce noise.
-
-### Verification
-Home renders at least one populated catalog row and stream list quality is acceptable.
+- If the addon installs but does not help discovery, check whether the provider actually exposes useful catalogs.
+- If the label looks generic, switch parser presets and re-check a known title.
+- If the addon still seems wrong, remove it and try a known-good provider before debugging deeper.
 
 ## Next page
-Continue with [Catalog Inventory](./catalogs.md) to control row ordering and visibility behavior.
+Continue with [Catalog Inventory](./catalogs.md) to control how provider output is shown on Home.

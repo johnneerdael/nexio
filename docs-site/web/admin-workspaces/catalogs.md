@@ -1,84 +1,37 @@
-# Catalog Inventory: Ranking and Visibility Control
+# Catalog Inventory
 
-## Audience
-This page is for users who want deterministic Home composition and repeatable catalog ordering across sessions.
+Catalog Inventory is where you shape the Home screen. It controls the order of rails and whether a catalog is visible enough to matter.
 
-## What this page covers
-- Catalog ordering model
-- Enable and disable behavior
-- Android TV launcher feed linkage
-- Operational strategy for clean Home rails
+## What it does
+- Reorders the rails that appear on Home.
+- Lets you disable a catalog without deleting the addon that provided it.
+- Keeps the current catalog list tied to the account so the same setup can follow you to another device.
 
-## Source of truth
-Catalog behavior is implemented in:
-- `app/src/main/java/com/nexio/tv/ui/screens/addon/CatalogOrderScreen.kt`
+## What catalogs you will see
+- Addon-provided catalogs from the providers you installed.
+- Trakt catalogs, including the built-in lists that Trakt exposes for the account.
+- MDBList catalogs, including personal lists and selected top lists.
 
-## Catalog control architecture
-Catalog Inventory is the ranking layer between addon output and Home rendering.
-It controls:
-- Relative order of catalogs
-- Per-catalog enabled state for Home
-- Android TV launcher feed publication options
+## How to use it well
+1. Keep the catalogs that matter most near the top.
+2. Disable rows that repeat the same discovery intent.
+3. Leave a small, high-quality baseline instead of trying to surface everything at once.
+4. Save and sync after you finish the ordering pass.
 
-This lets you keep provider breadth while maintaining a disciplined surface area on Home.
+## Practical guidance
+- Use the inventory to make Home feel focused, not crowded.
+- If a catalog is managed by Trakt or MDBList, adjust the source integration first if the list itself is missing.
+- If a catalog looks stale, make sure the underlying addon or integration is still active.
 
-## Ordering model
-Each catalog item has:
-- A stable key
-- Move-up and move-down operations
-- Optional enable or disable toggle for Home visibility
-
-Order changes are immediately reflected in the managed list and should become visible in Home after refresh.
-
-## Enabled and disabled semantics
-If a catalog is toggleable and disabled:
-- It remains known to configuration
-- It is marked disabled for Home rendering
-- It can be re-enabled without reinstalling the addon
-
-This supports reversible curation without destructive provider edits.
-
-## Android TV launcher integration
-Catalog Inventory includes Android TV launcher feed controls:
-- Global on or off switch for channel publishing
-- Feed key selection set
-
-Use this only after in-app Home composition is already stable.
-
-## High-confidence curation workflow
-
-### 1. Build a minimal baseline
-Keep only top-value catalogs enabled.
-
-### 2. Rank by usage frequency
-Move frequently used catalogs to the first rows.
-
-### 3. Remove semantic duplicates
-Disable rows that repeat the same intent.
-
-### 4. Validate in Home
-Return to Home and inspect first-screen relevance.
-
-**Expected result:** First rows represent your highest-value discovery paths.
+## A good Home layout usually has
+- A short hero area.
+- A few important discovery rails first.
+- Fewer duplicate rows from overlapping sources.
 
 ## Troubleshooting
-
-### Symptom
-Catalog order changed in settings but Home order did not change.
-
-### Likely root causes
-- Settings were not persisted before exit
-- Home has stale view state
-- Catalog was disabled but expected as visible
-
-### Recovery
-1. Reopen Catalog Inventory and confirm the saved order.
-2. Confirm target catalog is enabled.
-3. Return to Home and force a refresh by navigating away and back.
-4. Restart app if state still appears stale.
-
-### Verification
-Home row order matches configured ranking.
+- If the order changed but Home did not, reopen the page and confirm the saved order.
+- If a row is still missing, check whether it was disabled or whether the source integration is disconnected.
+- If the page still seems stale, refresh the app after syncing.
 
 ## Next page
-Continue with [Integrations](./integrations.md) to add identity and metadata services on top of your curated catalog graph.
+Continue with [Integrations](./integrations.md) to connect the services that feed Trakt, metadata, and debrid behavior.

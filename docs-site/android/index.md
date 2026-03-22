@@ -1,25 +1,21 @@
-# Android Overview
+# Android Guides
 
-## Purpose
-Introduce the Android documentation path for setup, runtime usage, and technical troubleshooting.
+## What this section is for
+This section explains how Nexio behaves on Android TV and Fire OS. It focuses on the screens people actually use from a remote: Home, Catalogs, Detail, Player, Settings, Search, and Cast.
 
-## Audience
-- Android users
-- QA and operational testers
-- Contributors investigating app behavior
+## Who it is for
+- Android TV and Fire OS users
+- Power users tuning playback, subtitles, and source selection
+- Testers who want a stable reference for expected screen behavior
 
-## Prerequisites
-- Installed Android app
-- Basic web workspace setup for addons and catalogs
-
-## Procedure and Guidance
-1. Start with [Android Getting Started](./getting-started.md).
-2. Follow screen-level guides in [Home](./screens/home.md), [Media Detail](./screens/detail.md), and [Playback Interface](./screens/player.md).
-3. Use technical pages for component-level analysis: [Media3](./technical/media3.md), [FFmpeg](./technical/ffmpeg.md), [libdovi](./technical/libdovi.md), and [IEC Passthrough](./technical/iec.md).
-
-## Validation and Expected Outcome
-- The correct guide can be selected quickly for setup, runtime behavior, or technical diagnosis
-- Screen-level and technical documentation stay consistent with operational workflows
+## Start here
+1. Read [Android Getting Started](./getting-started.md) for the first-run path.
+2. Use [Home](./screens/home.md) to understand the main browsing surface.
+3. Use [Catalogs and Library](./screens/catalog.md) for row browsing and catalog-driven discovery.
+4. Use [Media Detail](./screens/detail.md) before opening a stream.
+5. Use [Playback Interface](./screens/player.md) for controls, overlays, and playback features.
+6. Use [Settings](./screens/settings.md) for account, layout, integration, and playback tuning.
+7. Use [Search and Cast](./screens/search-and-cast.md) for search, discover, voice input, and people pages.
 
 ## Related pages
 - [Web Overview](../web/index.md)

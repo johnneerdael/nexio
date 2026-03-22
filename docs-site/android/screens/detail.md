@@ -1,89 +1,44 @@
-# Media Detail: Decision Hub Architecture
+# Media Detail
 
-## Audience
-This guide is for users who want both efficient day-to-day use and a deeper understanding of how the Detail screen manages focus, trailer, and playback handoff.
+## What this screen is for
+The Detail screen is the decision point between browsing and playback. It gives you the metadata you need to choose a title confidently, then hands off to the player when you are ready.
 
-## What this page covers
-- Detail screen role in the app flow
-- Trailer mode and back behavior
-- Episode return focus and next-episode targeting
-- Practical selection workflow
+## What you can do here
+- Read the title’s main metadata, artwork, cast, ratings, and related content.
+- Start playback, resume playback, or open a specific episode.
+- Open the trailer when you want a quick preview before committing to a stream.
+- Jump to cast members, collections, similar titles, and reviews when those sections are available.
+- Mark movies or episodes watched and manage library or watchlist state when your integrations support it.
 
-## Source of truth
-Detail behavior is implemented in:
-- `app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsScreen.kt`
+## Where the controls live
+- The main play and resume actions are near the top hero area.
+- Episode controls appear in the episode section for series.
+- Trailer, library, and list actions are grouped with the main title actions.
+- Cast, Ratings, More Like This, Reviews, and Collection are section tabs or rows lower on the page.
 
-## Why the Detail screen matters
-The Detail screen is the decision hub between discovery and playback.
-It combines:
-- Metadata context
-- Actions like Play and Trailer
-- Episode-level targeting for series
-- Rich people and organization navigation paths
+## How it behaves
+- Detail keeps focus stable when you move between sections or return from playback.
+- If you played a trailer, Back exits the trailer first instead of immediately leaving the page.
+- For series, the screen can preserve the episode you came from so you land back on the right episode after playback.
+- If the requested episode is already watched, Nexio can advance the return focus to the next logical episode.
 
-## Navigation and focus model
-Detail is integrated with explicit return-focus parameters.
-When returning from playback, Nexio can target the relevant episode focus state instead of resetting focus to top-level hero actions.
+## Why it matters
+- The screen saves clicks for binge watching by preserving episode context.
+- It helps avoid opening the wrong stream by showing useful metadata before playback.
+- It makes integrations visible on TV, so you can manage Trakt, MDBList, and library actions without leaving the couch.
 
-This improves high-volume binge workflows by reducing remote clicks.
-
-## Trailer interaction model
-Trailer mode has a dedicated interaction layer.
-
-- Pressing Back while trailer is active does not immediately leave the detail page
-- Back first exits trailer playback state
-- A tokenized focus-restore mechanism returns focus to the intended control
-
-This separation prevents accidental loss of page context.
-
-## Episode progression targeting
-For series, the detail screen can resolve the next actionable episode using:
-- Requested return season and episode
-- Progress completion map
-- Watched episode set
-
-If a requested episode is already completed, Nexio can move focus intent to the next logical episode.
-
-## Practical high-confidence workflow
-
-### 1. Open detail from Home or Search
-Press OK on a title card.
-
-**Expected result:** Metadata and action surface load with stable focus.
-
-### 2. Validate content identity
-Check year, runtime, and genre before opening streams.
-
-**Expected result:** You confirm the correct title before stream selection.
-
-### 3. Use Trailer when uncertain
-Play trailer for a fast quality check.
-Press Back once to return to Detail without losing context.
-
-**Expected result:** Trailer exits and focus returns cleanly.
-
-### 4. Start playback
-Use Play to transition to stream selection and then player.
-
-**Expected result:** Detail context is passed forward for playback and return logic.
+## Best use guidance
+- Use Detail before every new title if you care about release year, runtime, or episode selection.
+- Use the trailer for a fast quality check when the title is unfamiliar.
+- Use the cast and collection sections when you want to continue discovery from a known good title.
 
 ## Troubleshooting
+- If Back behaves differently than expected, check whether trailer playback is still active.
+- If a section is missing, the related integration or metadata source may not be enabled.
+- If episode focus does not return where expected, the episode may already be marked watched and Nexio may have advanced to the next item.
 
-### Symptom
-Back behavior feels inconsistent while trailer is active.
-
-### Likely cause
-You are in trailer mode, where Back is consumed to stop trailer first.
-
-### Recovery
-1. Press Back once to end trailer mode.
-2. Press Back again only if you want to leave Detail.
-
-### Verification
-You can reliably control whether you exit trailer or leave the page.
-
-## Implementation note
-Detail also enforces display mode safety outside main player sessions through frame-rate utility hooks, reducing mode-switch side effects during browsing.
-
-## Next page
-Continue with [Playback Interface](./player.md) for panel stack, back-stack behavior, and frame-rate lifecycle.
+## Related pages
+- [Home](./home.md)
+- [Catalogs and Library](./catalog.md)
+- [Playback Interface](./player.md)
+- [Settings](./settings.md)

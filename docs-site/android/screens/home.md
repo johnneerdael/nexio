@@ -1,91 +1,48 @@
-# Home Screen: Architecture and Daily Use
+# Home
 
-## Audience
-This guide is for users who want a polished Home experience and want to understand why the screen behaves the way it does.
+## What Home does
+Home is the main browsing surface. It is the fastest way to get back to what you were watching, jump into featured content, or open a catalog row from your configured addons and integrations.
 
-## What this page covers
-- The Home loading pipeline
-- Why you may see different empty states
-- How Continue Watching, Hero, and Catalog rails are composed
-- How long-press actions and watched state are resolved
+## How it is organized
+Home is built from three types of content:
+- Hero items at the top
+- Continue Watching items
+- Catalog rows from active addons and synced integrations
 
-## Source of truth
-The Home behavior is implemented in:
-- `app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt`
+The screen is ready as soon as any one of those sections has content. That means Home can feel responsive even when one source is still loading.
 
-## Home rendering model
-Home is built from three content groups:
-1. **Hero items**
-2. **Continue Watching items**
-3. **Catalog rows**
+## What you can do here
+- Resume an in-progress movie or episode from Continue Watching.
+- Open a hero item to jump straight into a featured title.
+- Browse catalog rows and long-press a poster for title actions.
+- Open a row’s `See all` page when you want the full catalog instead of the row preview.
 
-Home is considered renderable as soon as at least one group has content.
+## How it behaves
+- On first load, Home waits briefly for usable content instead of showing a permanent spinner.
+- If nothing renderable arrives, it shows a retryable loading error rather than leaving you stuck.
+- Different empty states are intentional:
+  - No addons installed
+  - Addons are installed, but no catalog addons are available
+  - Content is still loading and has not become renderable yet
+- When the app returns to the foreground, Home refreshes in the background so watched state and rows stay current.
 
-### Startup gate and timeout behavior
-At startup, Nexio opens with a guarded loading state. If no content can be rendered, a timeout guard is armed.
+## Where the important controls live
+- Continue Watching is the quickest route back into active playback.
+- Poster long-press actions are where you remove or manage items tied to watch progress.
+- `See all` is the right choice when you want to browse a catalog more deeply than the Home row allows.
 
-- Timeout threshold: **5000 ms**
-- If the threshold is reached with no renderable content, Home shows a retry-capable error state
+## Best use guidance
+- Use Home for quick re-entry, not for deep catalog exploration.
+- If you want a cleaner or denser browsing style, change the Home layout in [Settings](./settings.md).
+- If Home feels empty, the problem is usually catalog availability rather than the Home screen itself.
 
-This behavior exists to avoid infinite spinner states and to provide a deterministic recovery path.
+## Troubleshooting
+- If you only see a loading state, check that at least one catalog-enabled addon is configured.
+- If you see a no-addon message, install or enable an addon first.
+- If Home times out during startup, retry once before changing anything else.
 
-## Empty and fallback states
-Home can intentionally show different messages depending on root cause.
-
-- **No addons installed**: no providers configured
-- **No catalog addons installed**: addons exist, but none contribute Home catalogs
-- **Timeout loading state**: startup gate elapsed before renderable content arrived
-
-This distinction helps you fix the right layer quickly.
-
-## Focus and remote UX model
-Home is TV-first and focus-driven.
-
-- Focus restoration is designed for rapid row re-entry
-- Long-press actions are bound per item and include watched-state context
-- On app resume, Home triggers foreground refresh logic
-
-## Practical workflow
-
-### 1. Validate provider layer
-Confirm at least one addon with non-search catalogs exists.
-
-**Expected result:** Home can render at least one catalog row.
-
-### 2. Validate content layer
-Open Home and confirm one of these appears quickly:
-- Hero content
-- Continue Watching
-- Catalog rows
-
-**Expected result:** Spinner state resolves into content.
-
-### 3. Validate interaction layer
-Long-press a poster and verify options appear and reflect watched state correctly.
-
-**Expected result:** Context actions are available and relevant.
-
-## Advanced troubleshooting
-
-### Symptom
-Home shows loading and then a timeout error.
-
-### Likely root causes
-- No active content providers
-- Provider reachable but returns empty catalogs
-- Slow startup path with no renderable fallback content
-
-### Recovery runbook
-1. Confirm at least one addon is installed in [Addon Manager](../../web/admin-workspaces/addons.md).
-2. Confirm at least one catalog is enabled in [Catalog Inventory](../../web/admin-workspaces/catalogs.md).
-3. Return to Home and use Retry.
-4. If still empty, restart app once to force a clean bootstrap.
-
-### Verification
-At least one Home section renders without timeout.
-
-## Design note
-Home blocks display mode changes outside the main player session to prevent display switching side effects while browsing.
-
-## Next page
-Continue with [Media Detail](./detail.md) for metadata, trailer, and action orchestration.
+## Related pages
+- [Android Guides](../index.md)
+- [Catalogs and Library](./catalog.md)
+- [Media Detail](./detail.md)
+- [Settings](./settings.md)

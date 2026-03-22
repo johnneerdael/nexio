@@ -1,98 +1,64 @@
-# Playback Interface: Runtime Control Model
+# Playback Interface
 
-## Audience
-This guide is for users who want precise control of playback behavior and want to understand why Back and panel behavior work the way they do.
+## What the player is for
+The player is where Nexio turns a chosen stream into a viewing session. It is built around TV remote use, so the most important actions are always one or two clicks away.
 
-## What this page covers
-- Player back-stack hierarchy
-- Overlay and panel priority
-- Lifecycle pause and frame-rate mode handling
-- Reliable recovery patterns when playback fails
+## What you can do here
+- Play and pause playback.
+- Seek forward or backward.
+- Switch audio tracks and subtitle tracks.
+- Open subtitle delay, speed, aspect ratio, and more-actions controls.
+- Open source panels to change stream, or episode panels to move within a series.
+- Skip intros when a skip interval is available.
+- Jump to the next episode when Nexio is ready to auto-advance.
+- Open the current stream in an external player when supported.
 
-## Source of truth
-Player behavior is implemented in:
-- `app/src/main/java/com/nexio/tv/ui/screens/player/PlayerScreen.kt`
+## Important controls and overlays
+- Press OK to reveal the main controls.
+- `More` contains playback speed, aspect ratio, and external-player actions.
+- Audio and subtitle dialogs are separate so you can change one without disturbing the other.
+- Episode and source side panels are where you change streams without leaving playback.
+- The pause overlay, skip-intro card, and next-episode card appear only when they are relevant.
 
-## Player state machine at a glance
-The player handles multiple layers at once:
-- Core playback state
-- Controls visibility
-- Episode and source panels
-- Subtitle delay and speed dialogs
-- Pause overlay and next-episode card
-- Error state
+## How Back behaves
+Back is intentionally layered. It closes the topmost active surface before it leaves playback.
 
-Back navigation is intentionally hierarchical so one press closes the topmost UI layer before leaving playback.
+In practice, that means Back may close one of these first:
+- Playback error dialog
+- Pause overlay
+- More dialog
+- Subtitle delay overlay
+- Sources panel
+- Episodes panel
+- Skip-intro card
+- Next-episode card
+- Controls overlay
 
-## Back behavior priority
-Back is resolved in this order:
-1. Error exit path
-2. Pause overlay
-3. More dialog
-4. Subtitle delay overlay
-5. Sources panel
-6. Episodes panel and nested episode streams
-7. Skip-intro card
-8. Next-episode card
-9. Controls visibility
-10. Exit player
+If none of those are open, Back exits the player.
 
-This is why Back may hide UI first instead of immediately leaving playback.
+## Playback features that matter on TV
+- VOD cache can keep progressive streams in a local disk cache so playback handles bandwidth swings better.
+- Parallel connections can fetch progressive streams in chunks across multiple connections for faster or steadier startup.
+- Subtitle handling includes language preferences, add-on subtitles, subtitle delay, subtitle style, and advanced rendering.
+- AI subtitle features can appear when supported by the title and your settings.
+- Frame-rate matching can adjust the display for smoother motion when you enable it in settings.
 
-## Lifecycle behavior
-When app lifecycle moves to background, playback is paused through lifecycle handling.
-On resume, Nexio avoids forced auto-resume and lets the user decide.
+## How it behaves when playback changes state
+- Playback pauses when the app moves to the background.
+- Nexio does not force an automatic resume when you come back; you stay in control.
+- Display mode changes are cleaned up when playback ends so browsing does not inherit player display state.
 
-This protects user intent and reduces accidental resume events.
-
-## Frame-rate matching lifecycle
-Player screen coordinates display mode management with the host activity:
-- Marks main player session active on entry
-- Restores original display mode on exit depending on frame-rate mode
-- Cleans up display listeners when needed
-
-This design minimizes display-mode residue after playback exits.
-
-## Practical operation runbook
-
-### 1. Enter playback
-Start from Detail and choose a stream.
-
-**Expected result:** Player loads and can receive focus.
-
-### 2. Validate control surface
-Press OK to show controls.
-
-**Expected result:** Play or Pause control becomes focus target.
-
-### 3. Test panel stack
-Open one panel then press Back.
-
-**Expected result:** Panel closes first, playback remains active.
-
-### 4. Exit correctly
-Hide controls, then press Back to leave player.
-
-**Expected result:** Player releases and returns to previous navigation target.
+## Best use guidance
+- Use the source panel if one stream stalls instead of repeatedly reopening the same stream.
+- Use subtitle settings in [Settings](./settings.md) if you want a preferred language or stronger default styling.
+- If playback feels unstable, test with a simpler stream first before changing multiple settings at once.
 
 ## Troubleshooting
+- If Back does not exit immediately, something else is still open on top of the player.
+- If a stream fails, the player will surface an error path instead of freezing in place.
+- If subtitles or audio do not look right, switch tracks first and then check your playback settings.
 
-### Symptom
-Back does not exit player immediately.
-
-### Likely cause
-A higher-priority overlay or panel is currently open.
-
-### Recovery
-1. Press Back repeatedly and watch each overlay close.
-2. Confirm controls are hidden.
-3. Press Back again to exit player.
-
-### Verification
-Exit path is deterministic and returns without frozen overlays.
-
-## Note on subtitle and audio issues
-If a stream has no usable audio or subtitle track, use source switching or episode-stream fallback rather than repeatedly toggling the same broken track.
-
-## Next page
-Continue with [Settings & Account](./settings.md) for playback-related configuration and integration-level controls.
+## Related pages
+- [Media Detail](./detail.md)
+- [Settings](./settings.md)
+- [Search and Cast](./search-and-cast.md)

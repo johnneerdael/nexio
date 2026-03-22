@@ -1,17 +1,13 @@
 # Formatter Reference
 
-Nexio’s formatter system is a template engine for stream cards. It powers:
+This page is the detailed reference for Nexio’s stream formatter. It covers the syntax used by the built-in presets, the live preview, and custom templates.
 
-- the **title** line
-- the **description** lines
-- the **web live preview**
-- the **Android TV uniform formatting** experience
+If you are still learning the workflow, start with [Formatter Getting Started](./formatter-getting-started.md) first.
 
-If you are new to formatter syntax, start with the [Formatter Getting Started](./formatter-getting-started.md) tutorial first. This page is the detailed reference.
+Nexio’s formatter syntax follows the AIO-style formatting lineage popularized by Viren070’s AIOStreams work. The core formatter implementation in Nexio is adapted from earlier open-source formatter code and keeps that same mental model of variables, modifiers, and conditions.
 
 ## Quick mental model
 A formatter is:
-
 - plain text
 - plus variables like `{stream.title}`
 - plus modifiers like `::title`
@@ -21,98 +17,110 @@ A formatter is:
 ## Core syntax
 
 ### Plain variable
-
 ```text
 {stream.filename}
 ```
 
 ### Variable with modifiers
-
 ```text
 {stream.title::title::truncate(30)}
 ```
 
 ### Conditional block
-
 ```text
 {stream.year::exists[" ({stream.year})"||""]}
 ```
 
 ### Combined condition
-
 ```text
 {stream.filename::~NF::and::stream.releaseGroup::exists[" • "||""]}
 ```
 
+## Built-in template family
+Nexio ships with built-in presets that reflect common formatting styles:
+- `Universal` for a clean cross-provider look
+- `Torrentio` for a Torrentio-style card layout
+- `TorBox` for cloud or debrid-oriented presentation
+- `GDrive`, `Light GDrive`, and `Minimalistic GDrive` for Google-Drive-style libraries
+- `Prism` for a compact, aesthetic layout
+- `Tamtaro` for a dense, information-rich layout
+
+These presets are a good reference even if you plan to write a custom template.
+
 ## Variables
 
 ### `stream`
-These are the most important fields. They combine parsed filename data, provider hints, and stream-level metadata.
+These fields are the most useful for titles, badges, and descriptions.
 
 | Variable | Type | Description |
 | :--- | :--- | :--- |
 | `{stream.filename}` | String | Original filename used for parsing. |
 | `{stream.folderName}` | String | Parent folder name if available. |
-| `{stream.title}` | String | Parsed clean title. |
+| `{stream.title}` | String | Parsed title. |
 | `{stream.year}` | String / Number | Parsed year. |
 | `{stream.seasons}` | Array | Raw season values. |
 | `{stream.episodes}` | Array | Raw episode values. |
 | `{stream.formattedSeasons}` | Array | Human-friendly season labels. |
 | `{stream.formattedEpisodes}` | Array | Human-friendly episode labels. |
-| `{stream.seasonEpisode}` | Array | Compact season/episode pair values. |
+| `{stream.seasonEpisode}` | Array | Compact season and episode pair values. |
 | `{stream.seasonPack}` | Boolean | Whether the stream is a season pack. |
 | `{stream.size}` | Number | File size in bytes. |
-| `{stream.folderSize}` | Number | Folder/package size in bytes. |
+| `{stream.folderSize}` | Number | Folder or package size in bytes. |
 | `{stream.duration}` | Number | Duration in milliseconds. |
 | `{stream.bitrate}` | Number | Bitrate in bits per second. |
 | `{stream.age}` | Number / String | Age derived from provider metadata. |
-| `{stream.indexer}` | String | Upstream indexer/source name. |
+| `{stream.indexer}` | String | Upstream indexer or source name. |
 | `{stream.resolution}` | String | `2160p`, `1440p`, `1080p`, `720p`, etc. |
-| `{stream.quality}` | String | `BluRay`, `BluRay Remux`, `WEB-DL`, `HDTV`, etc. |
+| `{stream.quality}` | String | `BluRay`, `BluRay Remux`, `WEB-DL`, `HDTV`, and similar. |
 | `{stream.encode}` | String | `HEVC`, `AVC`, `AV1`, and similar. |
-| `{stream.visualTags}` | Array | `DV`, `HDR10`, `HDR10+`, `IMAX`, `10bit`, etc. |
-| `{stream.audioTags}` | Array | `Atmos`, `TrueHD`, `DTS:X`, `DTS-HD MA`, `DD+`, etc. |
-| `{stream.audioChannels}` | Array | `7.1`, `5.1`, `2.0`, etc. |
+| `{stream.visualTags}` | Array | `DV`, `HDR10`, `HDR10+`, `IMAX`, `10bit`, and similar. |
+| `{stream.audioTags}` | Array | `Atmos`, `TrueHD`, `DTS:X`, `DTS-HD MA`, `DD+`, and similar. |
+| `{stream.audioChannels}` | Array | `7.1`, `5.1`, `2.0`, and similar. |
 | `{stream.languages}` | Array | All audio languages. |
 | `{stream.languageCodes}` | Array | ISO language codes. |
 | `{stream.languageEmojis}` | Array | Language flag emojis. |
 | `{stream.subtitles}` | Array | Subtitle languages. |
 | `{stream.subtitleCodes}` | Array | Subtitle language codes. |
 | `{stream.subtitleEmojis}` | Array | Subtitle flag emojis. |
-| `{stream.releaseGroup}` | String | Scene/group tag parsed from the filename. |
+| `{stream.releaseGroup}` | String | Scene or group tag parsed from the filename. |
 | `{stream.message}` | String | Provider message or status line. |
-| `{stream.type}` | String | `debrid`, `p2p`, `usenet`, `http`, `live`, `youtube`, `external`. |
-| `{stream.private}` | Boolean | Private tracker / private source flag. |
+| `{stream.type}` | String | `debrid`, `p2p`, `usenet`, `http`, `live`, `youtube`, or `external`. |
+| `{stream.private}` | Boolean | Private tracker or private source flag. |
 | `{stream.proxied}` | Boolean | Whether the stream is proxied. |
 | `{stream.library}` | Boolean | Whether the stream already exists in your library. |
 | `{stream.infoHash}` | String | Torrent hash, when available. |
 | `{stream.videoHash}` | String | Video hash when available. |
 | `{stream.seeders}` | Number | Seeder count for P2P streams. |
-| `{stream.repack}` | Boolean | Repack / proper flag. |
+| `{stream.repack}` | Boolean | Repack or proper flag. |
 | `{stream.regraded}` | Boolean | Regraded visual tag. |
 | `{stream.unrated}` | Boolean | Unrated release flag. |
 | `{stream.uncensored}` | Boolean | Uncensored release flag. |
 | `{stream.upscaled}` | Boolean | Upscaled release flag. |
 | `{stream.seadex}` | Boolean | SeaDex curated match. |
-| `{stream.seadexBest}` | Boolean | SeaDex “best” match. |
+| `{stream.seadexBest}` | Boolean | SeaDex best-match flag. |
+| `{stream.regexMatched}` | String | Best matching regex label. |
+| `{stream.rankedRegexMatched}` | Array | Ordered regex match labels. |
+| `{stream.seMatched}` | String | Best matching stream-expression label. |
+| `{stream.rseMatched}` | Array | Ordered stream-expression match labels. |
+| `{stream.regexScore}` | Number | Raw regex score. |
+| `{stream.nRegexScore}` | Number | Normalized regex score. |
+| `{stream.seScore}` | Number | Raw stream-expression score. |
+| `{stream.nSeScore}` | Number | Normalized stream-expression score. |
 
 ### `service`
-
 | Variable | Type | Description |
 | :--- | :--- | :--- |
 | `{service.id}` | String | Internal service ID. |
 | `{service.name}` | String | Full service name like `Real-Debrid`. |
 | `{service.shortName}` | String | Compact service name like `RD`. |
-| `{service.cached}` | Boolean | Whether the stream is cached / instant. |
+| `{service.cached}` | Boolean | Whether the stream is cached or instant. |
 
 ### `addon`
-
 | Variable | Type | Description |
 | :--- | :--- | :--- |
-| `{addon.name}` | String | Addon/provider display name. |
+| `{addon.name}` | String | Addon or provider display name. |
 
 ### `metadata`
-
 | Variable | Type | Description |
 | :--- | :--- | :--- |
 | `{metadata.title}` | String | Queried content title. |
@@ -122,7 +130,7 @@ These are the most important fields. They combine parsed filename data, provider
 | `{metadata.queryType}` | String | `movie`, `series`, or similar. |
 
 ### User-filtered helpers
-These are especially useful for clean UI because they already respect the user’s language preferences.
+These helpers already respect the user’s language preferences.
 
 | Variable | Description |
 | :--- | :--- |
@@ -134,14 +142,12 @@ These are especially useful for clean UI because they already respect the user�
 | `{stream.uSubtitleEmojis}` | Preferred subtitle flags. |
 
 ### Tools
-
 | Variable | Description |
 | :--- | :--- |
 | `{tools.newLine}` | Forces a new line. |
-| `{tools.removeLine}` | Removes the whole rendered line when emitted inside a failed branch. |
+| `{tools.removeLine}` | Removes the whole rendered line when used in a branch that should collapse. |
 
 ## Text modifiers
-
 | Modifier | Description |
 | :--- | :--- |
 | `::upper` | Convert to uppercase. |
@@ -155,7 +161,6 @@ These are especially useful for clean UI because they already respect the user�
 | `::base64` | Base64-encode a string. |
 
 ## Numeric and unit modifiers
-
 | Modifier | Description |
 | :--- | :--- |
 | `::bytes` | Human-readable bytes. |
@@ -175,7 +180,6 @@ These are especially useful for clean UI because they already respect the user�
 | `::pstar` | Same as `::star` but padded. |
 
 ## Array modifiers
-
 | Modifier | Description |
 | :--- | :--- |
 | `::join(' sep ')` | Join array values with a separator. |
@@ -190,7 +194,6 @@ These are especially useful for clean UI because they already respect the user�
 | `::lsort` | Alphabetical sort. |
 
 ## Localization modifiers
-
 | Modifier | Description |
 | :--- | :--- |
 | `::flag` | Language name to emoji flag. |
@@ -205,16 +208,13 @@ Conditionals use this form:
 ```
 
 ### Boolean conditions
-
 - `::istrue`
 - `::isfalse`
 
 ### Presence conditions
-
 - `::exists`
 
-### Numeric / string comparisons
-
+### Numeric and string comparisons
 - `::>value`
 - `::<value`
 - `::>=value`
@@ -223,7 +223,6 @@ Conditionals use this form:
 - `::!=value`
 
 ### String matching
-
 - `::~value` contains
 - `::$value` starts with
 - `::^value` ends with
@@ -232,7 +231,6 @@ Conditionals use this form:
 You can chain conditions together without nesting.
 
 ### Available comparators
-
 - `::and::`
 - `::or::`
 - `::xor::`
@@ -241,149 +239,20 @@ You can chain conditions together without nesting.
 - `::left::`
 - `::right::`
 
-### Example: only show a separator when both values exist
-
+### Examples
 ```text
 {stream.uLanguages::exists::and::stream.releaseGroup::exists[" • "||""]}
 ```
-
-### Example: only show release-group separator when any service marker matched
 
 ```text
 {stream.filename::~NF::or::stream.filename::~DSNP::or::stream.filename::~AMZN::and::stream.releaseGroup::exists[" • "||""]}
 ```
 
-### Example: highlight premium anime logic
-
 ```text
 {stream.seadexBest::istrue[" 🏆 BEST"||""]}{stream.seadex::istrue::and::stream.seadexBest::isfalse[" 🥈 ALT"||""]}
 ```
 
-## Inline icon tokens
-Nexio supports inline image tokens in formatter output:
-
-```text
-[[icon:token]]
-```
-
-These render as actual inline icons on Android and in the web preview, while preserving plain-text fallback when rendering is unavailable.
-
-## Icon token reference
-
-### Resolution badges
-
-- `[[icon:4k]]`
-- `[[icon:2k]]`
-- `[[icon:fullhd]]`
-- `[[icon:hd]]`
-- `[[icon:sd]]`
-
-### Streaming services
-
-- `[[icon:netflix]]`
-- `[[icon:disneyplus]]`
-- `[[icon:hbo]]`
-- `[[icon:max]]`
-- `[[icon:prime]]`
-- `[[icon:appletv]]`
-- `[[icon:paramount]]`
-- `[[icon:peacock]]`
-- `[[icon:crunchyroll]]`
-
-### Audio
-
-- `[[icon:atmos]]`
-- `[[icon:truehd]]`
-- `[[icon:ddp]]`
-- `[[icon:dd]]`
-- `[[icon:dts]]`
-- `[[icon:dtshd]]`
-- `[[icon:dtsx]]`
-
-### Visual
-
-- `[[icon:dovi]]`
-- `[[icon:hdr10]]`
-
-## Advanced examples
-
-### Resolution badge title
-
-```text
-{stream.resolution::exists["{stream.resolution::replace('2160p','[[icon:4k]]')::replace('1440p','[[icon:2k]]')::replace('1080p','[[icon:fullhd]]')::replace('720p','[[icon:hd]]')::replace('576p','[[icon:sd]]')::replace('480p','[[icon:sd]]')}"||""]}{stream.resolution::exists::and::stream.title::exists["   "||""]}{stream.title::exists["{stream.title::title::truncate(30)}"||"?"]}
-```
-
-### Audio icon row
-
-```text
-{stream.audioTags::exists["{stream.audioTags::join('  ')::replace('Atmos','[[icon:atmos]]')::replace('TrueHD','[[icon:truehd]]')::replace('DTS-HD MA','[[icon:dtshd]]')::replace('DTS:X','[[icon:dtsx]]')::replace('DD+','[[icon:ddp]]')::replace('DD','[[icon:dd]]')::replace('EAC3','[[icon:ddp]]')::replace('AC3','[[icon:dd]]')::replace('DTS','[[icon:dts]]')}"||""]}
-```
-
-### Conditional provider + release group line
-
-```text
-{stream.filename::~NF["[[icon:netflix]] Netflix"||""]}{stream.filename::~DSNP["[[icon:disneyplus]] Disney+"||""]}{stream.filename::~NF::or::stream.filename::~DSNP::and::stream.releaseGroup::exists[" • "||""]}{stream.releaseGroup::exists["👤 {stream.releaseGroup}"||""]}
-```
-
-### Runtime and size line
-
-```text
-💾 {stream.size::>0["{stream.size::bytes}"||"Unknown"]} • ⏱️ {stream.duration::>0["{stream.duration::time}"||"Unknown"]}
-```
-
-### Filename fallback line
-
-```text
-📄 {stream.filename::exists["{stream.filename}"||"—"]}
-```
-
-## Practical guidance
-
-### Good formatter habits
-
-- Guard optional data with `::exists`
-- Keep separators inside the condition
-- Build incrementally
-- Preview with both movies and episodes
-- Test missing-field cases
-
-### When to use icons
-Icons work best for:
-
-- resolution badges
-- streaming platforms
-- premium audio/visual tags
-
-Use plain text when readability matters more than visual density, or when the field can vary too much to justify a token mapping.
-
-### When to use arrays
-Use arrays with `::join(...)` when:
-
-- multiple languages can be present
-- multiple audio tags can exist
-- multiple visual tags can exist
-
-## Current built-in Universal formatter style
-The built-in `Universal` formatter combines:
-
-- resolution icon title badges
-- compact title and year
-- compact `Sxx Exx` season/episode output
-- icon-based premium audio tags
-- size, provider, addon, language, service, release-group, and filename metadata
-
-You can use it as a starting point in the web formatter workspace and customize only the pieces you care about.
-
-## Preview workflow
-
-1. Start with a built-in formatter.
-2. Edit the title first.
-3. Preview it with a movie sample and an episode sample.
-4. Then edit the description.
-5. Use the JSON/debug view when a field is missing or behaving unexpectedly.
-6. Save only after your formatter handles sparse and noisy payloads gracefully.
-
-## Related docs
-
-- [Formatter Getting Started](./formatter-getting-started.md)
-
+## Practical notes
+- Prefer `::exists[...]` around optional values so empty fields do not leave awkward spacing behind.
+- Use `tools.removeLine` when you want a whole line to disappear if a branch does not match.
+- Keep formatter logic readable by building it one condition at a time and validating with the preview.
