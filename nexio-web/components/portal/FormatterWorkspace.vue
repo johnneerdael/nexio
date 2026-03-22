@@ -230,9 +230,7 @@
             </div>
           </div>
         </section>
-      </div>
-
-    <Teleport to="body">
+      <Teleport to="body">
       <div v-if="snippetsOpen" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" @click.self="snippetsOpen = false">
         <div class="max-h-[80vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-outline-variant/20 bg-[#151517] shadow-2xl">
           <div class="flex items-center justify-between border-b border-outline-variant/10 px-6 py-4">
@@ -329,7 +327,7 @@
           </div>
         </div>
       </div>
-    </Teleport>
+      </Teleport>
   </div>
 </template>
 
