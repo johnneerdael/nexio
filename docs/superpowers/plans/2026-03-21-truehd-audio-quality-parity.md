@@ -32,6 +32,14 @@ Reference artifacts:
 - `/tmp/transport-validation-truehd-1774123156108.zip`
 - `/tmp/passthrough-validation-192.168.50.37-truehd-groupc-manual.log`
 
+Status update after the already-landed Group D / Group E work:
+- The active branch has already removed the old `forced_retry` parity gap.
+- The active branch has already made steady-state retry diagnostics explicit.
+- The remaining late-stream gap is no longer retry-admission bypass. It is steady-state
+  zero-write cadence under a stable route tuple.
+- The latest valid artifact for the active branch is:
+  - `/tmp/transport-validation-truehd-1774129824226.zip`
+
 Grounded runtime facts from the active code and the valid Group C rerun:
 - Transport is still correct.
 - The Media3-facing outer behavior is still good enough: playback reaches `ENDED`, route stays stable post-startup, and no route reopen occurs.
@@ -55,6 +63,13 @@ The key parity conclusion is:
 - stock Media3 keeps pending output as the truth and retries on the next renderer opportunity
 - Kodi retries from a dedicated sink path and makes play/write state explicit
 - our remaining divergence is a native play-state mismatch plus retry fallback under a stable route tuple
+
+Updated parity conclusion for the active branch:
+- stock Media3 still keeps pending output as the truth
+- Kodi still does one bounded retry after a zero write and waits roughly a packet duration
+- our active branch now most strongly diverges in late-stream steady-state cadence:
+  it revisits the same remainder too aggressively on natural flushes after zero writes,
+  even though route stability and transport remain correct
 
 ---
 
@@ -486,4 +501,3 @@ Write one of:
 - “audio quality parity restored enough to stop”
 - “native late-stream recovery improved but buffer margin still open”
 - “root cause shifted; new strict audit required”
-
