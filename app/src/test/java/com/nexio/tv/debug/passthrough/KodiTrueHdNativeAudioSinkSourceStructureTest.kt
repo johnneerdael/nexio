@@ -11,15 +11,14 @@ import org.junit.Test
 class KodiTrueHdNativeAudioSinkSourceStructureTest {
 
     @Test
-    fun onlyHandleBufferMutatesTrueHdStartupOwnership() {
+    fun handleBufferPassivelySyncsTrueHdStartupOwnershipFromNative() {
         val source = loadSource()
 
-        assertTrue(source.contains("maybeExitTrueHdStartupOwnership(\"handleBuffer\")"))
-        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"play\")"))
-        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"playToEndOfStream\")"))
+        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"handleBuffer\")"))
+        assertTrue(source.contains("syncTrueHdStartupStateFromNative(\"handleBuffer\")"))
         assertEquals(
             1,
-            Regex("""maybeExitTrueHdStartupOwnership\(\"""").findAll(source).count(),
+            Regex("""syncTrueHdStartupStateFromNative\(\"""").findAll(source).count(),
         )
     }
 
@@ -33,6 +32,39 @@ class KodiTrueHdNativeAudioSinkSourceStructureTest {
 
         assertFalse(startupMethod.contains("return writeBufferDirect("))
         assertFalse(startupMethod.contains("handleTrueHdSteadyStateBuffer("))
+    }
+
+    @Test
+    fun trueHdDiagnosticsObserveNativeHandoffReadyTruth() {
+        val source = loadSource()
+
+        assertTrue(source.contains("nIsTrueHdSteadyStateHandoffReady(nativeHandle)"))
+        assertTrue(source.contains("\"nativeHandoffReady\""))
+    }
+
+    @Test
+    fun handleBufferBecomesObservationalAfterTrueHdStartupCompletes() {
+        val source = loadSource()
+        val handleBufferMethod =
+            extractMethod(
+                source,
+                "public boolean handleBuffer(ByteBuffer buffer, long presentationTimeUs, int encodedAccessUnitCount)",
+            )
+
+        assertTrue(
+            handleBufferMethod.contains(
+                "if (trueHdStartupCompleted) {\n"
+                    + "        recordTrueHdPathDecision(\"steady_state_path\", false, false);\n"
+                    + "        return handleTrueHdSteadyStateBuffer(buffer, presentationTimeUs, encodedAccessUnitCount);\n"
+                    + "      }"
+            )
+        )
+        assertTrue(
+            handleBufferMethod.contains(
+                "refreshTrueHdNativeHandoffReady();\n"
+                    + "      boolean handoffTriggered = syncTrueHdStartupStateFromNative(\"handleBuffer\");"
+            )
+        )
     }
 
     private fun loadSource(): String {
