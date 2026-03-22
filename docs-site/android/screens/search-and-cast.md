@@ -27,14 +27,26 @@ Search is the fastest way to jump to a title by name. It works with a keyboard, 
 ## Cast
 The cast experience is split across detail pages and person pages. On a title detail page, cast members take you into a person view where you can inspect filmography and jump back into related titles.
 
+![Person detail page](/images/tv-app/person-detail.webp)
+*Person pages turn cast and crew entries into a filmography browser, so one useful actor, writer, or director can lead you straight into more titles.*
+
+![Network detail page](/images/tv-app/network-detail.webp)
+*Network pages gather titles under the selected broadcaster or platform, which is useful when you want to browse a service or studio identity instead of a single genre.*
+
+![Production company page](/images/tv-app/company-detail.webp)
+*Production company pages do the same for studios and production houses, giving you another discovery path directly from title metadata.*
+
 ### What users can do
 - Open a cast member from [Media Detail](./detail.md).
 - Read person details and browse their filmography.
 - Open a title from a person’s filmography back into title detail.
+- Open a network from a title detail page and browse other titles tied to that network.
+- Open a production company from a title detail page and browse the related catalog of titles.
 
 ### How it behaves
 - The cast page shows loading, error, or person-detail content.
 - The filmography row is focus-driven and works like the rest of the TV UI.
+- Network and company pages use the same browse pattern as person pages: a header with entity metadata followed by a title row you can open directly.
 - Back returns you to the previous context.
 
 ## Best use guidance
@@ -45,7 +57,7 @@ The cast experience is split across detail pages and person pages. On a title de
 ## Troubleshooting
 - If search returns nothing, try different keywords or wait for the relevant provider to respond.
 - If voice search is not available, use typed search instead.
-- If a person page fails, retry from the cast entry and confirm the title detail page loaded correctly first.
+- If a people, network, or company page looks sparse, the title may simply not have much linked metadata yet.
 
 ## Related pages
 - [Catalogs and Library](./catalog.md)

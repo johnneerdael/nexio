@@ -3,6 +3,9 @@
 ![Media detail screen](/images/tv-app/detail-overview.webp)
 *The Detail screen brings together playback actions, external ratings, seasons, and metadata so you can decide on a title before opening the stream picker.*
 
+![Cast and production sections](/images/tv-app/detail-cast-production.webp)
+*Cast, reviews, and production rows turn one detail page into a discovery hub, letting you move from a title into people, networks, and companies without starting a new search.*
+
 ## What this screen is for
 The Detail screen is the decision point between browsing and playback. It gives you the metadata you need to choose a title confidently, then hands off to the player when you are ready.
 
@@ -20,8 +23,8 @@ The Detail screen is the decision point between browsing and playback. It gives 
 - Episode controls appear in the episode section for series.
 - Trailer, library, and list actions are grouped with the main title actions.
 - Cast, Ratings, More Like This, Reviews, and Collection are section tabs or rows lower on the page.
-- Cast cards can represent actors, creators, directors, or writers, and Nexio is designed to route those cards into the related person view.
-- Company logo rows are split by network and production company so you can move from a title into the related organization view when that metadata path is available.
+- Cast cards can represent actors, creators, directors, or writers, and selecting one opens the related person view.
+- Company logo rows are split by network and production company so you can move from a title into the right organization page directly.
 
 ## How it behaves
 - Detail keeps focus stable when you move between sections or return from playback.
@@ -34,7 +37,7 @@ The Detail screen is the decision point between browsing and playback. It gives 
 - Pressing a review card toggles that review’s auto-scrolling text, which is handy for longer comments.
 - Collection tiles open their own detail pages, and the section keeps focus stable when you come back.
 - More Like This behaves the same way as collection tiles: it is a horizontal discovery row that opens the selected title.
-- Person, network, and production-company navigation depends on the current TMDB-backed metadata path resolving correctly, so those deeper jumps may be unavailable when metadata lookup is incomplete.
+- Person, network, and production-company pages reuse the same TV browsing model, so once you open them you can keep exploring titles from that person or organization without leaving the detail flow.
 
 ## Why it matters
 - The screen saves clicks for binge watching by preserving episode context.
@@ -51,7 +54,6 @@ The Detail screen is the decision point between browsing and playback. It gives 
 - If Back behaves differently than expected, check whether trailer playback is still active.
 - If a section is missing, the related integration or metadata source may not be enabled.
 - If episode focus does not return where expected, the episode may already be marked watched and Nexio may have advanced to the next item.
-- If a cast, network, or production-company jump does not open, the title metadata may not have resolved that deeper page correctly yet.
 
 ## Related pages
 - [Home](./home.md)
