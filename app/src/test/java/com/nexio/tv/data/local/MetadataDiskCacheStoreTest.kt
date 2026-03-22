@@ -1,9 +1,12 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.google.gson.JsonObject
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.testutil.InMemorySharedPreferences
@@ -91,6 +94,7 @@ class MetadataDiskCacheStoreTest {
                 "collectionName": null
               },
               "languageEpoch": 0,
+              "tmdbSchemaVersion": 1,
               "updatedAtMs": 1
             }
             """.trimIndent()
@@ -148,6 +152,61 @@ class MetadataDiskCacheStoreTest {
         val enrichment = store.readTmdbEnrichment("123:MOVIE", "en", "native")
 
         assertNull(enrichment)
+    }
+
+    @Test
+    fun `mergeTmdbEnrichmentCollections preserves parsed values when raw keys are unavailable`() {
+        val parsed = TmdbEnrichment(
+            localizedTitle = "Release Build",
+            description = null,
+            genres = emptyList(),
+            backdrop = null,
+            logo = null,
+            poster = null,
+            directorMembers = listOf(
+                MetaCastMember(name = "Director", character = "Director", photo = "director-photo", tmdbId = 11)
+            ),
+            writerMembers = listOf(
+                MetaCastMember(name = "Writer", character = "Writer", photo = "writer-photo", tmdbId = 12)
+            ),
+            castMembers = listOf(
+                MetaCastMember(name = "Actor", character = "Lead", photo = "actor-photo", tmdbId = 13)
+            ),
+            releaseInfo = null,
+            rating = null,
+            runtimeMinutes = null,
+            director = listOf("Director"),
+            writer = listOf("Writer"),
+            productionCompanies = listOf(
+                MetaCompany(
+                    tmdbId = 21,
+                    name = "Studio",
+                    logo = "studio-logo",
+                    kind = MetaCompanyKind.COMPANY
+                )
+            ),
+            networks = listOf(
+                MetaCompany(
+                    tmdbId = 22,
+                    name = "Network",
+                    logo = "network-logo",
+                    kind = MetaCompanyKind.NETWORK
+                )
+            ),
+            ageRating = null,
+            countries = null,
+            language = null,
+            collectionId = null,
+            collectionName = null
+        )
+
+        val merged = mergeTmdbEnrichmentCollections(parsed, JsonObject())
+
+        assertEquals(parsed.directorMembers, merged.directorMembers)
+        assertEquals(parsed.writerMembers, merged.writerMembers)
+        assertEquals(parsed.castMembers, merged.castMembers)
+        assertEquals(parsed.productionCompanies, merged.productionCompanies)
+        assertEquals(parsed.networks, merged.networks)
     }
 
     private fun meta(id: String): Meta {
