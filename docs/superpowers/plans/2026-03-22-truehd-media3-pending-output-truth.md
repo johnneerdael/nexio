@@ -8,6 +8,20 @@
 
 **Tech Stack:** Android Kotlin, Media3 `AudioSink`, JNI/C++, custom Kodi-derived TrueHD native sink, OpenSpec, ADB passthrough validator
 
+## Execution Model
+
+- Work only in grouped batches, not isolated micro-fixes.
+- Each batch may include a few tightly related edits, but it must ship as one validated unit.
+- After each successful `.37` validation, commit the batch immediately before starting the next one.
+- If a batch regresses transport or the outer playback contract, inspect the bundle first, identify which edit inside the batch touched that boundary, and rework or remove only that part before retrying.
+- Do not stack a new hypothesis on top of an unvalidated batch.
+
+## Current Rollback Anchor
+
+- Worktree branch: `codex/truehd-audio-quality-parity`
+- Current accepted commit before the next batch: `efa01c04c`
+- Device baseline bundle on `.37`: `/tmp/transport-validation-truehd-1774146543766.zip`
+
 ---
 
 ## File Map
