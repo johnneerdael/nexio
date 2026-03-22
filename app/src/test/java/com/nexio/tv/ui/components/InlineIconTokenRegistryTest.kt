@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.components
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,6 +31,22 @@ class InlineIconTokenRegistryTest {
         }
 
         assertEquals("TITLE_PROMINENT", scaleClassValue.toString())
+    }
+
+    @Test
+    fun `token registry resolves audio and visual inline badges`() {
+        assertNotNull(InlineIconTokenRegistry.resolve("atmos"))
+        assertNotNull(InlineIconTokenRegistry.resolve("truehd"))
+        assertNotNull(InlineIconTokenRegistry.resolve("ddp"))
+        assertNotNull(InlineIconTokenRegistry.resolve("dd"))
+        assertNotNull(InlineIconTokenRegistry.resolve("dts"))
+        assertNotNull(InlineIconTokenRegistry.resolve("dtshd"))
+        assertNotNull(InlineIconTokenRegistry.resolve("dtsx"))
+        assertNotNull(InlineIconTokenRegistry.resolve("stereo"))
+        assertNotNull(InlineIconTokenRegistry.resolve("dovi"))
+        assertNotNull(InlineIconTokenRegistry.resolve("hdr10"))
+        assertEquals(ScaleClass.INLINE, InlineIconTokenRegistry.resolve("atmos")?.scaleClass)
+        assertEquals(ScaleClass.INLINE, InlineIconTokenRegistry.resolve("dovi")?.scaleClass)
     }
 
     @Test

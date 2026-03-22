@@ -125,8 +125,14 @@
                 <div class="relative z-10 flex min-h-[310px] items-end p-6 md:p-8">
                   <div class="w-full max-w-3xl rounded-2xl border border-white/10 bg-black/55 p-5 shadow-2xl shadow-black/40 backdrop-blur-md">
                     <div v-if="formattedOutput" class="space-y-2">
-                      <h3 class="text-xl font-bold leading-tight text-white md:text-2xl">{{ formattedOutput.title }}</h3>
-                      <p class="whitespace-pre-line text-sm leading-relaxed text-zinc-200 md:text-base">{{ formattedOutput.description }}</p>
+                      <h3 class="text-xl font-bold leading-tight text-white md:text-2xl">
+                        <FormatterRichText :text="formattedOutput.title" variant="title" />
+                      </h3>
+                      <div class="space-y-1 text-sm leading-relaxed text-zinc-200 md:text-base">
+                        <p v-for="(line, index) in formattedDescriptionLines" :key="`${index}-${line}`" class="whitespace-pre-wrap">
+                          <FormatterRichText :text="line" variant="detail" />
+                        </p>
+                      </div>
                     </div>
                     <div v-else class="space-y-2">
                       <h3 class="text-lg font-bold text-white">Preview unavailable</h3>
@@ -334,6 +340,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from 'vue'
+import FormatterRichText from '~/components/portal/formatter/FormatterRichText.vue'
 import * as constants from '~/formatter/constants'
 import { CustomFormatter } from '~/formatter/custom'
 import { SNIPPETS } from '~/formatter/constants'
@@ -435,6 +442,11 @@ const currentNameTemplate = computed(() =>
 
 const currentDescriptionTemplate = computed(() =>
   isCustomSelected.value ? customDraft.value.descriptionTemplate : (selectedTemplate.value?.descriptionTemplate || ''),
+)
+
+const formattedDescriptionLines = computed(() =>
+  (formattedOutput.value?.description || '')
+    .split('\n'),
 )
 
 const hasDraftChanges = computed(() => {
