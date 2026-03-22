@@ -239,6 +239,37 @@ Reason:
 - media commit before Batch 1: `d4e7d5c8a3`
 - accepted `.37` baseline bundle: `/tmp/transport-validation-truehd-1774151306697.zip`
 
+## Four-Batch Teardown Batch 3 Status
+
+Files touched:
+
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.h`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/media/libraries/exoplayer_kodi_cpp_audiosink/src/main/jni/src/KodiTrueHdAEEngine.cpp`
+- `/Users/jneerdael/Scripts/nexio/.worktrees/codex-truehd-audio-quality/app/src/test/java/com/nexio/tv/debug/passthrough/KodiTrueHdAEEngineSourceStructureTest.kt`
+
+What changed:
+
+- removed the now-dead steady-state helper declaration `ComputeSteadyStateRetryBackoffUsLocked(...)`
+- removed the matching dead helper definition from the native engine source
+- added a structure test to lock that helper out of the steady-state surface going forward
+
+Grounded read:
+
+- this helper was already unused in control flow after Batch 2
+- the code change is therefore structural cleanup, not a live steady-state behavior rewrite
+
+Validation caveat:
+
+- the follow-up `.37` validator run after install completed, but export reused the old bundle name `/tmp/transport-validation-truehd-1774154048961.zip`
+- logcat showed `Export requested without an active transport validation session snapshot`
+- that run is not trustworthy enough to use as Batch 3 runtime evidence
+
+Decision:
+
+- keep the code change as low-risk dead-code cleanup
+- do not treat the reused bundle as a validation result
+- revalidate from the main workspace before making a behavioral claim about Batch 3
+
 ## Four-Batch Teardown - Batch 1
 
 Scope:

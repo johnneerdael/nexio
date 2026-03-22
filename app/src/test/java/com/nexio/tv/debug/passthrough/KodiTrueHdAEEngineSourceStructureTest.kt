@@ -101,6 +101,15 @@ class KodiTrueHdAEEngineSourceStructureTest {
     }
 
     @Test
+    fun steadyStateRetryBackoffHelperIsRemoved() {
+        val headerSource = loadHeaderSource()
+        val engineSource = loadSource()
+
+        assertFalse(headerSource.contains("ComputeSteadyStateRetryBackoffUsLocked("))
+        assertFalse(engineSource.contains("KodiTrueHdAEEngine::ComputeSteadyStateRetryBackoffUsLocked("))
+    }
+
+    @Test
     fun trueHdEngineKeepsStartupRetryStateIsolated() {
         val headerSource = loadHeaderSource()
 
