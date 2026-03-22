@@ -13,6 +13,7 @@ Nexio is an Android TV media player built around the Stremio addon ecosystem, a 
 - Google Gemini integration for realtime subtitle translation
 - Custom Formatter with feature parity against the excellent parser/formatter from @viren070
 - Advanced Media3-based playback pipeline with Dolby Vision work and Fire OS compatibility improvements
+- Custom FFmpeg build included for AC-4 and VC-1 software decoding
 - In-app updater backed by GitHub Releases
 
 ## Project Structure
