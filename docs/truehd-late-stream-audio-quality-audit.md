@@ -254,3 +254,25 @@ The next investigation or implementation pass should be Media3-first and steady-
 - focus on making steady-state output behave more like one pending encoded truth and less like repeated packet retry episodes
 
 That is now the highest-signal parity boundary from the active code and the latest valid late-stream bundle.
+
+## Post-Pass Status
+
+After completing the three-pass Media3-first structural refactor, the accepted `.37` rollback anchor is now:
+
+- `/tmp/transport-validation-truehd-1774151306697.zip`
+
+What changed in that accepted post-pass state:
+
+- Java is no longer responsible for steady-state handoff work once startup is already complete
+- the accepted Batch 3 explicitly does **not** change `hasPendingData()` semantics after startup completion
+
+What did not change:
+
+- transport remains clean
+- route remains stable after startup
+- playback still reaches `ENDED`
+- late-stream audio is still degraded by native steady-state zero-write churn
+
+So the structural Media3-first pass is complete, and the next boundary should stay below the contract surface:
+
+- native late-stream steady-state cadence / recovery only

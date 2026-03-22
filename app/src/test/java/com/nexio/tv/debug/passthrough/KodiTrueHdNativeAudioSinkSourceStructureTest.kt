@@ -42,6 +42,31 @@ class KodiTrueHdNativeAudioSinkSourceStructureTest {
         assertTrue(source.contains("\"nativeHandoffReady\""))
     }
 
+    @Test
+    fun handleBufferBecomesObservationalAfterTrueHdStartupCompletes() {
+        val source = loadSource()
+        val handleBufferMethod =
+            extractMethod(
+                source,
+                "public boolean handleBuffer(ByteBuffer buffer, long presentationTimeUs, int encodedAccessUnitCount)",
+            )
+
+        assertTrue(
+            handleBufferMethod.contains(
+                "if (trueHdStartupCompleted) {\n"
+                    + "        recordTrueHdPathDecision(\"steady_state_path\", false, false);\n"
+                    + "        return handleTrueHdSteadyStateBuffer(buffer, presentationTimeUs, encodedAccessUnitCount);\n"
+                    + "      }"
+            )
+        )
+        assertTrue(
+            handleBufferMethod.contains(
+                "refreshTrueHdNativeHandoffReady();\n"
+                    + "      boolean handoffTriggered = syncTrueHdStartupStateFromNative(\"handleBuffer\");"
+            )
+        )
+    }
+
     private fun loadSource(): String {
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val relativePath =
