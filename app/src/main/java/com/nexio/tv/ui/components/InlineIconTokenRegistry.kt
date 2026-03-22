@@ -13,7 +13,8 @@ data class InlineIconToken(
     val id: String,
     @DrawableRes val drawableRes: Int,
     val fallbackLabel: String,
-    val scaleClass: ScaleClass
+    val scaleClass: ScaleClass,
+    val aspectRatio: Float = 1f
 )
 
 sealed interface InlineIconSegment {
@@ -34,11 +35,21 @@ object InlineIconTokenRegistry {
         InlineIconToken("paramount", R.drawable.formatter_icon_paramount, "Paramount+", ScaleClass.INLINE),
         InlineIconToken("peacock", R.drawable.formatter_icon_peacock, "Peacock", ScaleClass.INLINE),
         InlineIconToken("crunchyroll", R.drawable.formatter_icon_crunchyroll, "Crunchyroll", ScaleClass.INLINE),
-        InlineIconToken("4k", R.drawable.formatter_icon_4k, "4K", ScaleClass.TITLE_PROMINENT),
-        InlineIconToken("2k", R.drawable.formatter_icon_2k, "2K", ScaleClass.TITLE_PROMINENT),
-        InlineIconToken("fullhd", R.drawable.formatter_icon_fullhd, "Full HD", ScaleClass.TITLE_PROMINENT),
-        InlineIconToken("hd", R.drawable.formatter_icon_hd, "HD", ScaleClass.TITLE_PROMINENT),
-        InlineIconToken("sd", R.drawable.formatter_icon_sd, "SD", ScaleClass.TITLE_PROMINENT)
+        InlineIconToken("atmos", R.drawable.formatter_icon_atmos, "Dolby Atmos", ScaleClass.INLINE, aspectRatio = 200f / 75f),
+        InlineIconToken("truehd", R.drawable.formatter_icon_truehd, "Dolby TrueHD", ScaleClass.INLINE, aspectRatio = 200f / 49f),
+        InlineIconToken("ddp", R.drawable.formatter_icon_ddp, "Dolby Digital+", ScaleClass.INLINE, aspectRatio = 200f / 47f),
+        InlineIconToken("dd", R.drawable.formatter_icon_dd, "Dolby Digital", ScaleClass.INLINE, aspectRatio = 200f / 60f),
+        InlineIconToken("dts", R.drawable.formatter_icon_dts, "DTS", ScaleClass.INLINE, aspectRatio = 200f / 83f),
+        InlineIconToken("dtshd", R.drawable.formatter_icon_dtshd, "DTS-MA", ScaleClass.INLINE, aspectRatio = 200f / 69f),
+        InlineIconToken("dtsx", R.drawable.formatter_icon_dtsx, "DTS:X", ScaleClass.INLINE, aspectRatio = 200f / 71f),
+        InlineIconToken("stereo", R.drawable.formatter_icon_stereo, "Stereo", ScaleClass.INLINE, aspectRatio = 200f / 203f),
+        InlineIconToken("dovi", R.drawable.formatter_icon_dovi, "Dolby Vision", ScaleClass.INLINE, aspectRatio = 200f / 74f),
+        InlineIconToken("hdr10", R.drawable.formatter_icon_hdr10, "HDR10", ScaleClass.INLINE, aspectRatio = 200f / 43f),
+        InlineIconToken("4k", R.drawable.formatter_icon_4k, "4K", ScaleClass.TITLE_PROMINENT, aspectRatio = 109f / 72f),
+        InlineIconToken("2k", R.drawable.formatter_icon_2k, "2K", ScaleClass.TITLE_PROMINENT, aspectRatio = 104f / 72f),
+        InlineIconToken("fullhd", R.drawable.formatter_icon_fullhd, "Full HD", ScaleClass.TITLE_PROMINENT, aspectRatio = 93f / 72f),
+        InlineIconToken("hd", R.drawable.formatter_icon_hd, "HD", ScaleClass.TITLE_PROMINENT, aspectRatio = 93f / 72f),
+        InlineIconToken("sd", R.drawable.formatter_icon_sd, "SD", ScaleClass.TITLE_PROMINENT, aspectRatio = 90f / 72f)
     ).associateBy { it.id }
 
     fun resolve(id: String): InlineIconToken? = tokens[id.trim().lowercase(Locale.US)]

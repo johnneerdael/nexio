@@ -1,0 +1,3 @@
+/Users/jneerdael/Scripts/nexio/.cxx-build/RelWithDebInfo/64i185b3/x86_64/CMakeFiles/dovi_bridge.dir
+/Users/jneerdael/Scripts/nexio/.cxx-build/RelWithDebInfo/64i185b3/x86_64/CMakeFiles/edit_cache.dir
+/Users/jneerdael/Scripts/nexio/.cxx-build/RelWithDebInfo/64i185b3/x86_64/CMakeFiles/rebuild_cache.dir

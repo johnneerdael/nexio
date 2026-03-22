@@ -89,5 +89,8 @@ class AioTemplateFormatterTest {
         assertTrue(titleLine.contains("[[icon:4k]]"))
         assertFalse(titleLine.startsWith("⭐"))
         assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
+        assertTrue(detailLine.contains("[[icon:atmos]]"))
+        assertTrue(detailLine.contains("[[icon:truehd]]"))
+        assertTrue(detailLine.contains("7.1"))
     }
 }
