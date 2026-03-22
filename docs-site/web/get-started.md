@@ -45,4 +45,4 @@ A fully functional admin workspace with addons, catalogs, integrations, and a cu
 - **Integration fails**: Check network connectivity and API keys.
 
 ## Next step
-Read the advanced formatter reference at [formatter.md](docs-site/web/admin-workspaces/formatter.md).
+Read the advanced formatter reference at [formatter.md](/web/admin-workspaces/formatter).
