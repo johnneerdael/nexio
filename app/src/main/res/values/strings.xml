@@ -721,6 +721,7 @@
     <string name="profile_pin_overlay_set_support">This PIN will be required before opening this profile.</string>
     <string name="profile_pin_overlay_confirm_support">Re-enter the same 4 digits to finish setup.</string>
     <string name="profile_pin_overlay_mismatch">PINs did not match. Enter a new PIN again.</string>
+    <string name="profile_pin_overlay_forgot_hint">Forgot PIN? Reset it from your Nuvio account on nuvio website.</string>
     <string name="profile_pin_overlay_back_hint">Press back to cancel</string>
 
 

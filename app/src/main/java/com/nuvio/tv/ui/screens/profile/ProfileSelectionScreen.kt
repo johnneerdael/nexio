@@ -1772,6 +1772,22 @@ private fun ProfilePinOverlay(
                 lineHeight = 24.sp
             )
 
+            if (state is ProfilePinOverlayState.Unlock ||
+                state is ProfilePinOverlayState.VerifyCurrentForChange ||
+                state is ProfilePinOverlayState.VerifyCurrentForRemove
+            ) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.profile_pin_overlay_forgot_hint),
+                    modifier = Modifier.widthIn(max = ProfileSelectionSpacing.PinSupportMaxWidth),
+                    color = NuvioColors.TextTertiary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+            }
+
             Spacer(modifier = Modifier.height(backHintGap))
 
             Text(
