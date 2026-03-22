@@ -2,6 +2,9 @@
 
 Catalog Inventory is where you shape the Home screen. It controls the order of rails and whether a catalog is visible enough to matter.
 
+![Catalog inventory](/images/management-portal/catalog-inventory.webp)
+*Catalog Inventory is the place to reorder rails, trim overlap, and decide which discovery rows are visible on Home.*
+
 ## What it does
 - Reorders the rails that appear on Home.
 - Lets you disable a catalog without deleting the addon that provided it.

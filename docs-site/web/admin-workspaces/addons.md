@@ -2,6 +2,9 @@
 
 Addon Manager is where you add and organize the providers that feed Nexio. Think of it as the source layer for content and stream metadata.
 
+![Addon Manager](/images/management-portal/addon-manager.webp)
+*Addon Manager combines install, ordering, parser selection, and enable or disable controls in one account-wide source workspace.*
+
 ## What it does
 - Installs addons from a URL.
 - Keeps the addon list ordered.

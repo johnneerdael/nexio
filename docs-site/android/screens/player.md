@@ -1,5 +1,8 @@
 # Playback Interface
 
+![Playback overlay](/images/tv-app/player-overlay.webp)
+*The main playback overlay keeps core controls, progress, title context, and quick access to audio and subtitles on the same remote-friendly surface.*
+
 ## What the player is for
 The player is where Nexio turns a chosen stream into a viewing session. It is built around TV remote use, so the most important actions are always one or two clicks away.
 
@@ -20,6 +23,9 @@ The player is where Nexio turns a chosen stream into a viewing session. It is bu
 - The subtitle dialog has two jobs: choose a subtitle source and adjust subtitle delay.
 - Episode and source side panels are where you change streams without leaving playback.
 - The pause overlay, skip-intro card, and next-episode card appear only when they are relevant.
+
+![Stream picker](/images/tv-app/player-stream-picker.webp)
+*The stream picker is where Nexio's formatted stream cards, grouped entries, service indicators, and badges become visible during real playback selection.*
 
 ## How Back behaves
 Back is intentionally layered. It closes the topmost active surface before it leaves playback.
@@ -53,6 +59,9 @@ If none of those are open, Back exits the player.
 - Subtitle styling is shared across the normal subtitle view and the AI subtitle overlay, so size, boldness, color, outline, and vertical offset stay consistent.
 - If you switch from a regular subtitle to an AI-translated one, Nexio keeps the same style settings and just swaps the text source.
 
+![Subtitle selection](/images/tv-app/player-subtitles.webp)
+*The subtitle dialog separates normal subtitle selection from translation controls, so you can stay with built-in tracks, choose add-on subtitles, or switch into AI translation when Gemini is available.*
+
 ## AI subtitles and Gemini
 - The `AI subtitles` chip only appears when Gemini is enabled and a Gemini API key is configured in [Settings](./settings.md).
 - Before using it, set your preferred subtitle language to the language you want the translated subtitles to appear in.
@@ -61,6 +70,20 @@ If none of those are open, Back exits the player.
 - Built-in AI translation only works for text-only cues, so image-based built-in subtitles are not a fit for that path.
 - The subtitle dialog can show translation progress or errors while Gemini is working, and the selection stays on the translated subtitle once it finishes.
 - If you turn AI subtitles off, Nexio returns to the last regular subtitle source when one was selected.
+
+![AI subtitle mode](/images/tv-app/player-ai-subtitles.webp)
+*When `Auto-Translate` is available, Nexio can keep the usual subtitle workflow while routing the selected subtitle source through Gemini translation.*
+
+![AI subtitle result](/images/tv-app/player-ai-translation-result.webp)
+*Translated subtitle output still appears in the normal viewing flow, so AI translation feels like a subtitle mode rather than a separate playback experience.*
+
+## Audio track selection
+- Nexio lets you switch audio tracks without leaving playback, which is useful for multilingual releases, commentary tracks, and compatibility fallbacks.
+- A compatibility track may be safer for older audio hardware, while a lossless or Atmos track is the better choice when your playback chain supports passthrough and advanced codecs.
+- Manual track switching is also a practical way to compare a compatibility track against a premium track when you are diagnosing audio transport issues.
+
+![Audio track selection](/images/tv-app/player-audio-track.webp)
+*Audio track selection lets you choose between compatibility and premium mixes during playback, including Dolby Atmos and fallback tracks when both are present.*
 
 ## How it behaves when playback changes state
 - Playback pauses when the app moves to the background.
