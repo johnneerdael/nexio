@@ -1,7 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
 import android.os.SystemClock
-import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.TraktSettingsDataStore
@@ -37,7 +36,6 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicLong
 
 private const val CW_MAX_RECENT_PROGRESS_ITEMS = 300
 private const val CW_MAX_NEXT_UP_LOOKUPS = 24
@@ -45,10 +43,6 @@ private const val CW_MAX_NEXT_UP_CONCURRENCY = 4
 private const val CW_MAX_ENRICHMENT_CONCURRENCY = 4
 private const val CW_PROGRESS_DEBOUNCE_MS = 500L
 private const val CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS = 7L
-private const val CW_DEBUG_TAG = "HomeViewModel/CW"
-private const val CW_SLOW_PHASE_MS = 1_500L
-private const val CW_SLOW_META_MS = 1_200L
-private val cwDebugCycleCounter = AtomicLong(0L)
 
 private data class ContinueWatchingSettingsSnapshot(
     val items: List<WatchProgress>,
@@ -82,302 +76,43 @@ internal data class NextUpResolution(
 )
 
 private class CwDebugSession {
-    private val cycleId = cwDebugCycleCounter.incrementAndGet()
-    private val startedAtMs = SystemClock.elapsedRealtime()
-    private val metaResolveCalls = AtomicInteger(0)
-    private val metaCacheHits = AtomicInteger(0)
-    private val metaRepoCalls = AtomicInteger(0)
-    private val metaSuccesses = AtomicInteger(0)
-    private val metaMisses = AtomicInteger(0)
-    private val metaTimeouts = AtomicInteger(0)
-    private val metaErrors = AtomicInteger(0)
-    private val metaResolveTotalMs = AtomicLong(0L)
-    private val metaResolveMaxMs = AtomicLong(0L)
-    private val tmdbCalls = AtomicInteger(0)
-    private val tmdbSuccesses = AtomicInteger(0)
-    private val tmdbFailures = AtomicInteger(0)
-    private val tmdbTotalMs = AtomicLong(0L)
-    private val tmdbMaxMs = AtomicLong(0L)
-    private val tmdbIdLookupCalls = AtomicInteger(0)
-    private val tmdbIdLookupMisses = AtomicInteger(0)
-    private val tmdbIdCacheHits = AtomicInteger(0)
-    private val nextUpAttempts = AtomicInteger(0)
-    private val nextUpResolved = AtomicInteger(0)
-    private val nextUpDroppedMissingMeta = AtomicInteger(0)
-    private val nextUpDroppedNoCandidate = AtomicInteger(0)
-    private val nextUpDroppedOther = AtomicInteger(0)
-    private val nextUpLookupTotalMs = AtomicLong(0L)
-    private val nextUpLookupMaxMs = AtomicLong(0L)
-    private val nextUpCacheHits = AtomicInteger(0)
-
-    @Volatile
-    private var phase: String = "created"
-    @Volatile
-    private var snapshotItems: Int = 0
-    @Volatile
-    private var snapshotSeeds: Int = 0
-    @Volatile
-    private var recentItems: Int = 0
-    @Volatile
-    private var recentSeeds: Int = 0
-    @Volatile
-    private var inProgressItems: Int = 0
-    @Volatile
-    private var nextUpItems: Int = 0
-    @Volatile
-    private var finalItems: Int = 0
-    @Volatile
-    private var initialItems: Int = 0
-    @Volatile
-    private var enrichmentDelayMs: Long = 0L
-    @Volatile
-    private var lightweightRenderMs: Long = -1L
-    @Volatile
-    private var initialRenderMs: Long = -1L
-    @Volatile
-    private var partialRenderMs: Long = -1L
-    @Volatile
-    private var partialItems: Int = 0
-    @Volatile
-    private var nextUpBuildMs: Long = -1L
-    @Volatile
-    private var enrichMs: Long = -1L
-    @Volatile
-    private var cycleCompleted = false
-
-    fun markPhase(value: String) {
-        phase = value
-    }
-
+    fun markPhase(value: String) = Unit
     fun logStart(
         snapshot: ContinueWatchingSettingsSnapshot,
         recentItemsCount: Int,
         recentSeedsCount: Int,
         cutoffMs: Long?
-    ) {
-        snapshotItems = snapshot.items.size
-        snapshotSeeds = snapshot.nextUpSeeds.size
-        recentItems = recentItemsCount
-        recentSeeds = recentSeedsCount
-        phase = "snapshot"
-        log(
-            "cycle#$cycleId start snapshotItems=$snapshotItems snapshotSeeds=$snapshotSeeds " +
-                "recentItems=$recentItems recentSeeds=$recentSeeds daysCap=${snapshot.daysCap} " +
-                "showUnaired=${snapshot.showUnairedNextUp} dismissed=${snapshot.dismissedNextUp.size} " +
-                "cutoffMs=${cutoffMs ?: "all"} debounceMs=$CW_PROGRESS_DEBOUNCE_MS"
-        )
-    }
-
-    fun recordInProgressCount(count: Int) {
-        inProgressItems = count
-    }
-
-    fun recordNextUpBuildComplete(count: Int, elapsedMs: Long) {
-        nextUpItems = count
-        nextUpBuildMs = elapsedMs
-        log("cycle#$cycleId next-up-built count=$count elapsed=${elapsedMs}ms")
-    }
-
-    fun recordLightweightRendered(count: Int, elapsedMs: Long) {
-        finalItems = count
-        lightweightRenderMs = elapsedMs
-        log("cycle#$cycleId lightweight-rendered items=$count elapsed=${elapsedMs}ms")
-    }
-
-    fun recordInitialRendered(count: Int, elapsedMs: Long) {
-        initialItems = count
-        initialRenderMs = elapsedMs
-        log("cycle#$cycleId initial-rendered items=$count elapsed=${elapsedMs}ms")
-    }
-
-    fun recordPartialRendered(count: Int, elapsedMs: Long) {
-        partialItems = count
-        partialRenderMs = elapsedMs
-        log("cycle#$cycleId partial-rendered items=$count elapsed=${elapsedMs}ms")
-    }
-
-    fun recordEnrichmentDelay(delayMs: Long) {
-        enrichmentDelayMs = delayMs
-        if (delayMs > 0L) {
-            log("cycle#$cycleId waiting-enrichment-grace=${delayMs}ms")
-        }
-    }
-
-    fun recordEnrichmentComplete(elapsedMs: Long, changed: Boolean) {
-        enrichMs = elapsedMs
-        cycleCompleted = true
-        log("cycle#$cycleId enrichment-complete changed=$changed elapsed=${elapsedMs}ms")
-    }
-
-    fun recordMetaCacheHit(progress: WatchProgress) {
-        metaResolveCalls.incrementAndGet()
-        metaCacheHits.incrementAndGet()
-        log("cycle#$cycleId meta-cache-hit key=${progress.contentType}:${progress.contentId}")
-    }
-
+    ) = Unit
+    fun recordInProgressCount(count: Int) = Unit
+    fun recordNextUpBuildComplete(count: Int, elapsedMs: Long) = Unit
+    fun recordLightweightRendered(count: Int, elapsedMs: Long) = Unit
+    fun recordInitialRendered(count: Int, elapsedMs: Long) = Unit
+    fun recordPartialRendered(count: Int, elapsedMs: Long) = Unit
+    fun recordEnrichmentDelay(delayMs: Long) = Unit
+    fun recordEnrichmentComplete(elapsedMs: Long, changed: Boolean) = Unit
+    fun recordMetaCacheHit(progress: WatchProgress) = Unit
     fun recordMetaAttempt(
         progress: WatchProgress,
         type: String,
         candidateId: String,
         elapsedMs: Long,
         outcome: String
-    ) {
-        metaRepoCalls.incrementAndGet()
-        if (elapsedMs >= CW_SLOW_META_MS) {
-            log(
-                "cycle#$cycleId meta-attempt-slow key=${progress.contentType}:${progress.contentId} " +
-                    "type=$type candidateId=$candidateId elapsed=${elapsedMs}ms outcome=$outcome"
-            )
-        } else {
-            log(
-                "cycle#$cycleId meta-attempt key=${progress.contentType}:${progress.contentId} " +
-                    "type=$type candidateId=$candidateId elapsed=${elapsedMs}ms outcome=$outcome"
-            )
-        }
-    }
-
+    ) = Unit
     fun recordMetaResolveFinished(
         progress: WatchProgress,
         elapsedMs: Long,
         success: Boolean,
         attempts: Int
-    ) {
-        metaResolveCalls.incrementAndGet()
-        if (success) {
-            metaSuccesses.incrementAndGet()
-        } else {
-            metaMisses.incrementAndGet()
-        }
-        metaResolveTotalMs.addAndGet(elapsedMs)
-        updateMax(metaResolveMaxMs, elapsedMs)
-        val level = if (elapsedMs >= CW_SLOW_META_MS) "meta-resolve-slow" else "meta-resolve"
-        log(
-            "cycle#$cycleId $level key=${progress.contentType}:${progress.contentId} " +
-                "success=$success attempts=$attempts elapsed=${elapsedMs}ms"
-        )
-    }
-
-    fun recordMetaTimeout() {
-        metaTimeouts.incrementAndGet()
-    }
-
-    fun recordMetaError() {
-        metaErrors.incrementAndGet()
-    }
-
-    fun recordTmdbIdLookup(progress: WatchProgress, candidateCount: Int, resolved: Boolean, elapsedMs: Long) {
-        tmdbIdLookupCalls.incrementAndGet()
-        if (!resolved) {
-            tmdbIdLookupMisses.incrementAndGet()
-        }
-        log(
-            "cycle#$cycleId tmdb-id-lookup key=${progress.contentType}:${progress.contentId} " +
-                "candidateCount=$candidateCount resolved=$resolved elapsed=${elapsedMs}ms"
-        )
-    }
-
-    fun recordTmdbIdCacheHit(progress: WatchProgress, resolved: Boolean) {
-        tmdbIdCacheHits.incrementAndGet()
-        log(
-            "cycle#$cycleId tmdb-id-cache-hit key=${progress.contentType}:${progress.contentId} " +
-                "resolved=$resolved"
-        )
-    }
-
-    fun recordTmdbCall(kind: String, elapsedMs: Long, success: Boolean) {
-        tmdbCalls.incrementAndGet()
-        if (success) {
-            tmdbSuccesses.incrementAndGet()
-        } else {
-            tmdbFailures.incrementAndGet()
-        }
-        tmdbTotalMs.addAndGet(elapsedMs)
-        updateMax(tmdbMaxMs, elapsedMs)
-        log("cycle#$cycleId tmdb-call kind=$kind success=$success elapsed=${elapsedMs}ms")
-    }
-
-    fun recordNextUpAttempt(progress: WatchProgress) {
-        nextUpAttempts.incrementAndGet()
-        log(
-            "cycle#$cycleId next-up-attempt contentId=${progress.contentId} " +
-                "seed=${progress.season}x${progress.episode} source=${progress.source}"
-        )
-    }
-
-    fun recordNextUpResult(progress: WatchProgress, reason: String, elapsedMs: Long, resolved: Boolean) {
-        if (resolved) {
-            nextUpResolved.incrementAndGet()
-        } else {
-            when (reason) {
-                "no-meta-for-seed" -> nextUpDroppedMissingMeta.incrementAndGet()
-                "no-next-video-after-seed" -> nextUpDroppedNoCandidate.incrementAndGet()
-                else -> nextUpDroppedOther.incrementAndGet()
-            }
-        }
-        nextUpLookupTotalMs.addAndGet(elapsedMs)
-        updateMax(nextUpLookupMaxMs, elapsedMs)
-        log(
-            "cycle#$cycleId next-up-result contentId=${progress.contentId} " +
-                "resolved=$resolved reason=$reason elapsed=${elapsedMs}ms"
-        )
-    }
-
-    fun recordNextUpCacheHit(progress: WatchProgress, resolved: Boolean, showUnairedNextUp: Boolean) {
-        nextUpCacheHits.incrementAndGet()
-        log(
-            "cycle#$cycleId next-up-cache-hit contentId=${progress.contentId} " +
-                "seed=${progress.season}x${progress.episode} showUnaired=$showUnairedNextUp resolved=$resolved"
-        )
-    }
-
-    fun logSummary(cancelled: Boolean = false) {
-        val totalElapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-        val suspects = buildList {
-            if (enrichmentDelayMs > 0L) add("enrichment_grace=${enrichmentDelayMs}ms")
-            if (initialRenderMs >= CW_SLOW_PHASE_MS) add("slow_initial_render=${initialRenderMs}ms")
-            if (partialRenderMs >= CW_SLOW_PHASE_MS) add("slow_partial_render=${partialRenderMs}ms")
-            if (lightweightRenderMs >= CW_SLOW_PHASE_MS) add("slow_lightweight_render=${lightweightRenderMs}ms")
-            if (nextUpBuildMs >= CW_SLOW_PHASE_MS) add("slow_next_up_build=${nextUpBuildMs}ms")
-            if (enrichMs >= CW_SLOW_PHASE_MS) add("slow_enrichment=${enrichMs}ms")
-            if (metaTimeouts.get() > 0) add("meta_timeouts=${metaTimeouts.get()}")
-            if (metaRepoCalls.get() > 12) add("high_meta_repo_calls=${metaRepoCalls.get()}")
-            if (metaResolveMaxMs.get() >= CW_SLOW_META_MS) add("slow_meta_max=${metaResolveMaxMs.get()}ms")
-            if (tmdbCalls.get() > 0) add("tmdb_calls=${tmdbCalls.get()}")
-            if (nextUpDroppedMissingMeta.get() > 0) add("next_up_missing_meta=${nextUpDroppedMissingMeta.get()}")
-            if (nextUpDroppedNoCandidate.get() > 0) add("next_up_no_candidate=${nextUpDroppedNoCandidate.get()}")
-        }
-        log(
-            "cycle#$cycleId summary cancelled=$cancelled phase=$phase total=${totalElapsedMs}ms " +
-                "snapshotItems=$snapshotItems snapshotSeeds=$snapshotSeeds recentItems=$recentItems recentSeeds=$recentSeeds " +
-                "inProgress=$inProgressItems initialItems=$initialItems partialItems=$partialItems nextUp=$nextUpItems finalItems=$finalItems " +
-                "initialRender=${initialRenderMs}ms partialRender=${partialRenderMs}ms lightweight=${lightweightRenderMs}ms nextUpBuild=${nextUpBuildMs}ms enrich=${enrichMs}ms " +
-                "metaResolveCalls=${metaResolveCalls.get()} metaCacheHits=${metaCacheHits.get()} " +
-                "metaRepoCalls=${metaRepoCalls.get()} metaSuccesses=${metaSuccesses.get()} " +
-                "metaMisses=${metaMisses.get()} metaTimeouts=${metaTimeouts.get()} metaErrors=${metaErrors.get()} " +
-                "metaTotal=${metaResolveTotalMs.get()}ms metaMax=${metaResolveMaxMs.get()}ms " +
-                "tmdbCalls=${tmdbCalls.get()} tmdbSuccesses=${tmdbSuccesses.get()} tmdbFailures=${tmdbFailures.get()} " +
-                "tmdbIdLookups=${tmdbIdLookupCalls.get()} tmdbIdMisses=${tmdbIdLookupMisses.get()} " +
-                "tmdbIdCacheHits=${tmdbIdCacheHits.get()} " +
-                "tmdbTotal=${tmdbTotalMs.get()}ms tmdbMax=${tmdbMaxMs.get()}ms " +
-                "nextUpAttempts=${nextUpAttempts.get()} nextUpResolved=${nextUpResolved.get()} " +
-                "nextUpMissingMeta=${nextUpDroppedMissingMeta.get()} nextUpNoCandidate=${nextUpDroppedNoCandidate.get()} " +
-                "nextUpOtherDrops=${nextUpDroppedOther.get()} nextUpCacheHits=${nextUpCacheHits.get()} " +
-                "nextUpTotal=${nextUpLookupTotalMs.get()}ms " +
-                "nextUpMax=${nextUpLookupMaxMs.get()}ms suspects=${suspects.ifEmpty { listOf("none") }.joinToString()}"
-        )
-    }
-
-    private fun updateMax(target: AtomicLong, value: Long) {
-        while (true) {
-            val current = target.get()
-            if (value <= current) return
-            if (target.compareAndSet(current, value)) return
-        }
-    }
-
-    private fun log(message: String) {
-        Log.d(CW_DEBUG_TAG, message)
-    }
+    ) = Unit
+    fun recordMetaTimeout() = Unit
+    fun recordMetaError() = Unit
+    fun recordTmdbIdLookup(progress: WatchProgress, candidateCount: Int, resolved: Boolean, elapsedMs: Long) = Unit
+    fun recordTmdbIdCacheHit(progress: WatchProgress, resolved: Boolean) = Unit
+    fun recordTmdbCall(kind: String, elapsedMs: Long, success: Boolean) = Unit
+    fun recordNextUpAttempt(progress: WatchProgress) = Unit
+    fun recordNextUpResult(progress: WatchProgress, reason: String, elapsedMs: Long, resolved: Boolean) = Unit
+    fun recordNextUpCacheHit(progress: WatchProgress, resolved: Boolean, showUnairedNextUp: Boolean) = Unit
+    fun logSummary(cancelled: Boolean = false) = Unit
 }
 
 @OptIn(kotlinx.coroutines.FlowPreview::class)
@@ -1322,8 +1057,6 @@ private fun HomeViewModel.persistLocalContinueWatchingMetadata(
         if (persistable.isEmpty()) return@launch
         runCatching {
             watchProgressRepository.saveProgressBatch(persistable, syncRemote = false)
-        }.onFailure { error ->
-            Log.w(CW_DEBUG_TAG, "Failed to persist local CW metadata batch (${persistable.size} items)", error)
         }
     }
 }
