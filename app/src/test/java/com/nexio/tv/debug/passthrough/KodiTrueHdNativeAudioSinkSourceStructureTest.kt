@@ -3,6 +3,7 @@ package com.nexio.tv.debug.passthrough
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,14 +11,16 @@ import org.junit.Test
 class KodiTrueHdNativeAudioSinkSourceStructureTest {
 
     @Test
-    fun handleBufferPassivelySyncsTrueHdStartupOwnershipFromNative() {
+    fun onlyHandleBufferMutatesTrueHdStartupOwnership() {
         val source = loadSource()
 
-        assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"handleBuffer\")"))
-        assertTrue(source.contains("syncTrueHdStartupStateFromNative(\"handleBuffer\")"))
-        assertTrue(source.contains("nIsTrueHdStartupComplete(nativeHandle)"))
+        assertTrue(source.contains("maybeExitTrueHdStartupOwnership(\"handleBuffer\")"))
         assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"play\")"))
         assertFalse(source.contains("maybeExitTrueHdStartupOwnership(\"playToEndOfStream\")"))
+        assertEquals(
+            1,
+            Regex("""maybeExitTrueHdStartupOwnership\(\"""").findAll(source).count(),
+        )
     }
 
     @Test
@@ -30,6 +33,14 @@ class KodiTrueHdNativeAudioSinkSourceStructureTest {
 
         assertFalse(startupMethod.contains("return writeBufferDirect("))
         assertFalse(startupMethod.contains("handleTrueHdSteadyStateBuffer("))
+    }
+
+    @Test
+    fun trueHdDiagnosticsObserveNativeHandoffReadyTruth() {
+        val source = loadSource()
+
+        assertTrue(source.contains("nIsTrueHdSteadyStateHandoffReady(nativeHandle)"))
+        assertTrue(source.contains("\"nativeHandoffReady\""))
     }
 
     private fun loadSource(): String {
