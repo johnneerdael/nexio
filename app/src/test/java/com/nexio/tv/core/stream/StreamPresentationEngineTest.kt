@@ -13,18 +13,20 @@ class StreamPresentationEngineTest {
     fun `shrinking filename maps to clean aio style title and details`() {
         val stream = stream(
             filename = "Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv",
-            name = "⚡ PM"
+            name = "⚡ PM",
+            addonName = "Torrentio",
+            videoSizeBytes = 10L * 1024L * 1024L * 1024L
         )
 
         val item = organize(stream)
 
-        assertEquals("Shrinking 🎬 S03 - E06 ⚡️ FHD", item.title)
+        assertEquals("⭐⭐⭐☆☆ FHD - Shrinking (Season 03 Episode 06)", item.title)
         assertEquals(
             listOf(
-                "🖥 WEB-DL | 🎞️ AVC",
-                "🎧 Atmos | DD+ | 🔊 5.1",
-                "📦 2.7 GB | EN • IT",
-                "Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
+                "🎥 Streaming  • 🔊 Dolby Atmos Dolby Digital+ 5.1 • ⏱️ Unknown",
+                "💾 10.74 GB • 💎 Cached (Debrid) • ☁️ Premiumize • Torrentio",
+                "🗣️ 🇬🇧 🇮🇹 • 👤 TheShrink",
+                "📄 Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
             ),
             item.detailLines
         )
@@ -34,17 +36,43 @@ class StreamPresentationEngineTest {
     fun `shelter filename maps to clean movie title and languages`() {
         val stream = stream(
             filename = "Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv",
-            name = "⚡ RD"
+            name = "⚡ RD",
+            addonName = "Torrentio",
+            videoSizeBytes = 10L * 1024L * 1024L * 1024L
         )
 
         val item = organize(stream)
 
-        assertEquals("Shelter 🎬 2026 ⚡️ 4K", item.title)
+        assertEquals("⭐⭐⭐⭐⭐ 4K UHD - Shelter (2026)", item.title)
         assertEquals(
             listOf(
-                "🖥 WEB-DL | 🎞️ HEVC | HDR",
-                "📦 11 GB | MULTI • FR",
-                "Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv"
+                "🎥 Streaming  • 🔊 Stereo • ⏱️ Unknown",
+                "💾 10.74 GB • 💎 Cached (Debrid) • ☁️ Real-Debrid • Torrentio",
+                "🗣️ 🌎 🇫🇷 • 👤 Slay3R",
+                "📄 Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv"
+            ),
+            item.detailLines
+        )
+    }
+
+    @Test
+    fun `universal template renders full aio style movie card details`() {
+        val stream = stream(
+            filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv",
+            name = "⚡ RD",
+            addonName = "Torrentio",
+            videoSizeBytes = 10L * 1024L * 1024L * 1024L
+        )
+
+        val item = organize(stream)
+
+        assertEquals("⭐⭐⭐⭐⭐ 4K UHD - Movie Title (2023)", item.title)
+        assertEquals(
+            listOf(
+                "🎥 Blu-ray  • 🔊 Dolby Atmos Dolby TrueHD 7.1 • ⏱️ Unknown",
+                "💾 10.74 GB • 💎 Cached (Debrid) • ☁️ Real-Debrid • Torrentio",
+                "🗣️ 🇬🇧 🇮🇹 • 👤 GROUP",
+                "📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
             ),
             item.detailLines
         )
@@ -62,6 +90,61 @@ class StreamPresentationEngineTest {
 
         assertEquals(null, item.subtitle)
         assertTrue(item.detailLines.none { it.contains("PM • DL") })
+    }
+
+    @Test
+    fun `uniform formatting uses selected built in template when provided`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv",
+                    name = "⚡ RD"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(selectedTemplateId = "prism")
+            ),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        val item = result.items.single()
+        assertEquals("🔥4K UHD", item.title)
+        assertEquals(listOf("🎬 Movie Title (2023)"), item.detailLines)
+    }
+
+    @Test
+    fun `uniform formatting uses custom synced template when selected`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv",
+                    name = "⚡ RD"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(
+                    selectedTemplateId = "custom",
+                    customTemplate = AioCustomTemplateSelection(
+                        label = "Compact",
+                        nameTemplate = "{stream.title::upper}",
+                        descriptionTemplate = "{stream.year::exists[\"{stream.year}\"||\"?\"]}"
+                    )
+                )
+            ),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        val item = result.items.single()
+        assertEquals("MOVIE TITLE", item.title)
+        assertEquals(listOf("2023"), item.detailLines)
     }
 
     @Test
@@ -238,6 +321,75 @@ class StreamPresentationEngineTest {
 
         assertEquals(2, result.items.size)
         assertEquals(0, result.diagnostics.droppedDeduplicateCount)
+    }
+
+    @Test
+    fun `dedupe keeps one cached duplicate per service`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ RD",
+                    description = "⚡ RD"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon B",
+                    name = "⚡ Real-Debrid",
+                    description = "⚡ Real-Debrid"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon C",
+                    name = "⚡ PM",
+                    description = "⚡ PM"
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B", "Addon C"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(listOf("PM", "RD"), result.items.mapNotNull { it.parsed.serviceId }.sorted())
+    }
+
+    @Test
+    fun `dedupe keeps uncached fallback when cached duplicate is only available on another service`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ RD",
+                    description = "⚡ RD"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon B",
+                    name = "download PM",
+                    description = "download PM"
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(
+            listOf(StreamTransportKind.CACHED, StreamTransportKind.UNCACHED),
+            result.items.map { it.parsed.transportKind }.sortedBy { it.name }
+        )
     }
 
     @Test

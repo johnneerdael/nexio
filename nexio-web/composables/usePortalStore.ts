@@ -38,12 +38,14 @@ type MDBListDiscoveryState = {
   error: string | null
   personalLists: MDBListListOption[]
   topLists: MDBListListOption[]
+  searchResults: MDBListListOption[]
 }
 
 type TraktDiscoveryState = {
   loading: boolean
   error: string | null
   popularLists: TraktPopularListOption[]
+  searchResults: TraktPopularListOption[]
 }
 
 type StoreState = {
@@ -171,9 +173,13 @@ function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): str
     addons: addons.map((addon) => ({
       url: addon.url,
       manifestUrl: addon.manifestUrl,
+      parserPreset: addon.parserPreset,
       name: addon.name,
       description: addon.description ?? '',
       enabled: addon.enabled,
+      publicQueryParams: addon.publicQueryParams,
+      installKind: addon.installKind,
+      secretRef: addon.secretRef,
       sortOrder: addon.sortOrder
     }))
   })
@@ -181,16 +187,19 @@ function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): str
 
 function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSettings {
   const defaults = defaultSettings()
+  const legacyInput = input as Partial<{
+    layout: PortalSettings['catalogs']['home']
+    trakt: PortalSettings['catalogs']['trakt']
+    integrations: {
+      mdblist: PortalSettings['integrations']['mdblist'] & PortalSettings['catalogs']['mdblist']
+    }
+  }>
 
   return {
-    appearance: {
-      ...defaults.appearance,
-      ...(input?.appearance ?? {})
-    },
-    layout: {
-      ...defaults.layout,
-      ...(input?.layout ?? {})
-    },
+    schemaVersion:
+      typeof input?.schemaVersion === 'number'
+        ? input.schemaVersion
+        : defaults.schemaVersion,
     integrations: {
       debrid: {
         premiumize: {
@@ -208,7 +217,18 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
       },
       mdblist: {
         ...defaults.integrations.mdblist,
-        ...(input?.integrations?.mdblist ?? {})
+        enabled: input?.integrations?.mdblist?.enabled ?? defaults.integrations.mdblist.enabled,
+        showTrakt: input?.integrations?.mdblist?.showTrakt ?? defaults.integrations.mdblist.showTrakt,
+        showImdb: input?.integrations?.mdblist?.showImdb ?? defaults.integrations.mdblist.showImdb,
+        showTmdb: input?.integrations?.mdblist?.showTmdb ?? defaults.integrations.mdblist.showTmdb,
+        showLetterboxd:
+          input?.integrations?.mdblist?.showLetterboxd ?? defaults.integrations.mdblist.showLetterboxd,
+        showTomatoes:
+          input?.integrations?.mdblist?.showTomatoes ?? defaults.integrations.mdblist.showTomatoes,
+        showAudience:
+          input?.integrations?.mdblist?.showAudience ?? defaults.integrations.mdblist.showAudience,
+        showMetacritic:
+          input?.integrations?.mdblist?.showMetacritic ?? defaults.integrations.mdblist.showMetacritic
       },
       animeSkip: {
         ...defaults.integrations.animeSkip,
@@ -227,107 +247,53 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
         ...(input?.integrations?.traktAuth ?? {})
       }
     },
-    playback: {
-      general: {
-        loadingOverlayEnabled:
-          input?.playback?.general?.loadingOverlayEnabled ?? defaults.playback.general.loadingOverlayEnabled,
-        pauseOverlayEnabled:
-          input?.playback?.general?.pauseOverlayEnabled ?? defaults.playback.general.pauseOverlayEnabled,
-        osdClockEnabled:
-          input?.playback?.general?.osdClockEnabled ?? defaults.playback.general.osdClockEnabled,
-        skipIntroEnabled:
-          input?.playback?.general?.skipIntroEnabled ?? defaults.playback.general.skipIntroEnabled,
-        frameRateMatchingMode:
-          input?.playback?.general?.frameRateMatchingMode ?? defaults.playback.general.frameRateMatchingMode,
-        resolutionMatchingEnabled:
-          input?.playback?.general?.resolutionMatchingEnabled ?? defaults.playback.general.resolutionMatchingEnabled
+    catalogs: {
+      home: {
+        heroCatalogKeys:
+          input?.catalogs?.home?.heroCatalogKeys
+          ?? legacyInput.layout?.heroCatalogKeys
+          ?? defaults.catalogs.home.heroCatalogKeys,
+        homeCatalogOrderKeys:
+          input?.catalogs?.home?.homeCatalogOrderKeys
+          ?? legacyInput.layout?.homeCatalogOrderKeys
+          ?? defaults.catalogs.home.homeCatalogOrderKeys,
+        disabledHomeCatalogKeys:
+          input?.catalogs?.home?.disabledHomeCatalogKeys
+          ?? legacyInput.layout?.disabledHomeCatalogKeys
+          ?? defaults.catalogs.home.disabledHomeCatalogKeys
       },
-      streamSelection: {
-        streamReuseLastLinkEnabled:
-          input?.playback?.streamSelection?.streamReuseLastLinkEnabled
-          ?? defaults.playback.streamSelection.streamReuseLastLinkEnabled,
-        streamReuseLastLinkCacheHours:
-          input?.playback?.streamSelection?.streamReuseLastLinkCacheHours
-          ?? defaults.playback.streamSelection.streamReuseLastLinkCacheHours,
-        uniformStreamFormattingEnabled:
-          input?.playback?.streamSelection?.uniformStreamFormattingEnabled
-          ?? defaults.playback.streamSelection.uniformStreamFormattingEnabled,
-        groupStreamsAcrossAddonsEnabled:
-          input?.playback?.streamSelection?.groupStreamsAcrossAddonsEnabled
-          ?? defaults.playback.streamSelection.groupStreamsAcrossAddonsEnabled,
-        deduplicateGroupedStreamsEnabled:
-          input?.playback?.streamSelection?.deduplicateGroupedStreamsEnabled
-          ?? defaults.playback.streamSelection.deduplicateGroupedStreamsEnabled,
-        filterEpisodeMismatchStreamsEnabled:
-          input?.playback?.streamSelection?.filterEpisodeMismatchStreamsEnabled
-          ?? defaults.playback.streamSelection.filterEpisodeMismatchStreamsEnabled,
-        filterMovieYearMismatchStreamsEnabled:
-          input?.playback?.streamSelection?.filterMovieYearMismatchStreamsEnabled
-          ?? defaults.playback.streamSelection.filterMovieYearMismatchStreamsEnabled,
-        streamAutoPlayMode:
-          input?.playback?.streamSelection?.streamAutoPlayMode
-          ?? defaults.playback.streamSelection.streamAutoPlayMode,
-        streamAutoPlaySource:
-          input?.playback?.streamSelection?.streamAutoPlaySource
-          ?? defaults.playback.streamSelection.streamAutoPlaySource,
-        streamAutoPlaySelectedAddons:
-          input?.playback?.streamSelection?.streamAutoPlaySelectedAddons
-          ?? defaults.playback.streamSelection.streamAutoPlaySelectedAddons,
-        streamAutoPlayRegex:
-          input?.playback?.streamSelection?.streamAutoPlayRegex
-          ?? defaults.playback.streamSelection.streamAutoPlayRegex,
-        streamAutoPlayNextEpisodeEnabled:
-          input?.playback?.streamSelection?.streamAutoPlayNextEpisodeEnabled
-          ?? defaults.playback.streamSelection.streamAutoPlayNextEpisodeEnabled,
-        streamAutoPlayPreferBingeGroupForNextEpisode:
-          input?.playback?.streamSelection?.streamAutoPlayPreferBingeGroupForNextEpisode
-          ?? defaults.playback.streamSelection.streamAutoPlayPreferBingeGroupForNextEpisode,
-        nextEpisodeThresholdMode:
-          input?.playback?.streamSelection?.nextEpisodeThresholdMode
-          ?? defaults.playback.streamSelection.nextEpisodeThresholdMode,
-        nextEpisodeThresholdPercent:
-          input?.playback?.streamSelection?.nextEpisodeThresholdPercent
-          ?? defaults.playback.streamSelection.nextEpisodeThresholdPercent,
-        nextEpisodeThresholdMinutesBeforeEnd:
-          input?.playback?.streamSelection?.nextEpisodeThresholdMinutesBeforeEnd
-          ?? defaults.playback.streamSelection.nextEpisodeThresholdMinutesBeforeEnd
+      trakt: {
+        catalogEnabledSet:
+          input?.catalogs?.trakt?.catalogEnabledSet
+          ?? legacyInput.trakt?.catalogEnabledSet
+          ?? defaults.catalogs.trakt.catalogEnabledSet,
+        catalogOrder:
+          input?.catalogs?.trakt?.catalogOrder
+          ?? legacyInput.trakt?.catalogOrder
+          ?? defaults.catalogs.trakt.catalogOrder,
+        selectedPopularListKeys:
+          input?.catalogs?.trakt?.selectedPopularListKeys
+          ?? legacyInput.trakt?.selectedPopularListKeys
+          ?? defaults.catalogs.trakt.selectedPopularListKeys
       },
-      audio: {
-        preferredAudioLanguage:
-          input?.playback?.audio?.preferredAudioLanguage ?? defaults.playback.audio.preferredAudioLanguage,
-        secondaryPreferredAudioLanguage:
-          input?.playback?.audio?.secondaryPreferredAudioLanguage ?? defaults.playback.audio.secondaryPreferredAudioLanguage,
-        skipSilence:
-          input?.playback?.audio?.skipSilence ?? defaults.playback.audio.skipSilence,
-        decoderPriority:
-          input?.playback?.audio?.decoderPriority ?? defaults.playback.audio.decoderPriority,
-        tunnelingEnabled:
-          input?.playback?.audio?.tunnelingEnabled ?? defaults.playback.audio.tunnelingEnabled,
-        experimentalDv7ToDv81Enabled:
-          input?.playback?.audio?.experimentalDv7ToDv81Enabled ?? defaults.playback.audio.experimentalDv7ToDv81Enabled,
-        experimentalDtsIecPassthroughEnabled:
-          input?.playback?.audio?.experimentalDtsIecPassthroughEnabled ?? defaults.playback.audio.experimentalDtsIecPassthroughEnabled,
-        experimentalDv7ToDv81PreserveMappingEnabled:
-          input?.playback?.audio?.experimentalDv7ToDv81PreserveMappingEnabled ?? defaults.playback.audio.experimentalDv7ToDv81PreserveMappingEnabled,
-        experimentalDv5ToDv81Enabled:
-          input?.playback?.audio?.experimentalDv5ToDv81Enabled ?? defaults.playback.audio.experimentalDv5ToDv81Enabled
-      },
-      subtitles: {
-        ...defaults.playback.subtitles,
-        ...(input?.playback?.subtitles ?? {})
-      },
-      bufferNetwork: {
-        ...defaults.playback.bufferNetwork,
-        ...(input?.playback?.bufferNetwork ?? {})
+      mdblist: {
+        hiddenPersonalListKeys:
+          input?.catalogs?.mdblist?.hiddenPersonalListKeys
+          ?? legacyInput.integrations?.mdblist?.hiddenPersonalListKeys
+          ?? defaults.catalogs.mdblist.hiddenPersonalListKeys,
+        selectedTopListKeys:
+          input?.catalogs?.mdblist?.selectedTopListKeys
+          ?? legacyInput.integrations?.mdblist?.selectedTopListKeys
+          ?? defaults.catalogs.mdblist.selectedTopListKeys,
+        catalogOrder:
+          input?.catalogs?.mdblist?.catalogOrder
+          ?? legacyInput.integrations?.mdblist?.catalogOrder
+          ?? defaults.catalogs.mdblist.catalogOrder
       }
     },
-    trakt: {
-      ...defaults.trakt,
-      ...(input?.trakt ?? {})
-    },
-    debug: {
-      ...defaults.debug,
-      ...(input?.debug ?? {})
+    formatter: {
+      ...defaults.formatter,
+      ...(input?.formatter ?? {})
     }
   }
 }
@@ -356,12 +322,14 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
       valid: false,
       error: null,
       personalLists: [],
-      topLists: []
+      topLists: [],
+      searchResults: []
     }),
     traktDiscovery: clone(source.traktDiscovery ?? {
       loading: false,
       error: null,
-      popularLists: []
+      popularLists: [],
+      searchResults: []
     })
   }
 }
@@ -438,7 +406,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
 }
 
 function orderedCatalogs(catalogs: AddonCatalogRecord[], settings: PortalSettings): AddonCatalogRecord[] {
-  const order = settings.layout.homeCatalogOrderKeys
+  const order = settings.catalogs.home.homeCatalogOrderKeys
   const orderIndex = new Map(order.map((key, index) => [key, index]))
   const uniqueCatalogs = new Map(catalogs.map((catalog) => [catalog.key, catalog]))
 
@@ -464,8 +432,8 @@ function buildTraktCatalogs(state: StoreState): AddonCatalogRecord[] {
     return []
   }
 
-  const enabledBuiltIns = state.settings.trakt.catalogOrder
-    .filter((key) => state.settings.trakt.catalogEnabledSet.includes(key))
+  const enabledBuiltIns = state.settings.catalogs.trakt.catalogOrder
+    .filter((key) => state.settings.catalogs.trakt.catalogEnabledSet.includes(key))
     .map((key) => ({
       key,
       disableKey: '',
@@ -480,7 +448,7 @@ function buildTraktCatalogs(state: StoreState): AddonCatalogRecord[] {
     }))
 
   const selectedPopular = state.traktDiscovery.popularLists
-    .filter((list) => state.settings.trakt.selectedPopularListKeys.includes(list.key))
+    .filter((list) => state.settings.catalogs.trakt.selectedPopularListKeys.includes(list.key))
     .map((list) => ({
       key: list.key,
       disableKey: '',
@@ -499,7 +467,7 @@ function buildTraktCatalogs(state: StoreState): AddonCatalogRecord[] {
 
 function buildMDBListCatalogs(state: StoreState): AddonCatalogRecord[] {
   const visiblePersonal = state.mdblistDiscovery.personalLists
-    .filter((list) => !state.settings.integrations.mdblist.hiddenPersonalListKeys.includes(list.key))
+    .filter((list) => !state.settings.catalogs.mdblist.hiddenPersonalListKeys.includes(list.key))
     .map((list) => ({
       key: list.key,
       disableKey: '',
@@ -514,7 +482,7 @@ function buildMDBListCatalogs(state: StoreState): AddonCatalogRecord[] {
     }))
 
   const selectedTop = state.mdblistDiscovery.topLists
-    .filter((list) => state.settings.integrations.mdblist.selectedTopListKeys.includes(list.key))
+    .filter((list) => state.settings.catalogs.mdblist.selectedTopListKeys.includes(list.key))
     .map((list) => ({
       key: list.key,
       disableKey: '',
@@ -869,12 +837,14 @@ export function usePortalStore() {
       valid: false,
       error: null,
       personalLists: [],
-      topLists: []
+      topLists: [],
+      searchResults: []
     }
     state.value.traktDiscovery = {
       loading: false,
       error: null,
-      popularLists: []
+      popularLists: [],
+      searchResults: []
     }
     stopRealtimeSubscription()
     remoteSignature = ''
@@ -1008,6 +978,25 @@ export function usePortalStore() {
     state.value.addons = next.map((addon, itemIndex) => ({ ...addon, sortOrder: itemIndex }))
   }
 
+  function reorderAddons(orderedIds: string[]) {
+    const currentAddons = [...state.value.addons]
+    const nextOrder: AddonRecord[] = []
+    const addonMap = new Map(currentAddons.map((a) => [a.id, a]))
+
+    for (const id of orderedIds) {
+      const addon = addonMap.get(id)
+      if (addon) {
+        nextOrder.push(addon)
+        addonMap.delete(id)
+      }
+    }
+
+    // Append any unreferenced addons to the end to prevent data loss
+    nextOrder.push(...addonMap.values())
+
+    state.value.addons = nextOrder.map((addon, index) => ({ ...addon, sortOrder: index }))
+  }
+
   function toggleAddon(id: string) {
     state.value.addons = state.value.addons.map((addon) =>
       addon.id === id ? { ...addon, enabled: !addon.enabled } : addon
@@ -1028,8 +1017,8 @@ export function usePortalStore() {
     }
 
     const fullOrder = [
-      ...state.value.settings.layout.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
-      ...availableKeys.filter((catalogKey) => !state.value.settings.layout.homeCatalogOrderKeys.includes(catalogKey))
+      ...state.value.settings.catalogs.home.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
+      ...availableKeys.filter((catalogKey) => !state.value.settings.catalogs.home.homeCatalogOrderKeys.includes(catalogKey))
     ]
     const currentIndex = fullOrder.indexOf(key)
     if (currentIndex === -1) {
@@ -1043,7 +1032,7 @@ export function usePortalStore() {
 
     const nextOrder = [...fullOrder]
     ;[nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]]
-    state.value.settings.layout.homeCatalogOrderKeys = nextOrder
+    state.value.settings.catalogs.home.homeCatalogOrderKeys = nextOrder
   }
 
   function reorderCatalogs(orderedVisibleKeys: string[]) {
@@ -1054,8 +1043,8 @@ export function usePortalStore() {
     }
 
     const fullOrder = [
-      ...state.value.settings.layout.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
-      ...availableKeys.filter((catalogKey) => !state.value.settings.layout.homeCatalogOrderKeys.includes(catalogKey))
+      ...state.value.settings.catalogs.home.homeCatalogOrderKeys.filter((catalogKey) => availableKeys.includes(catalogKey)),
+      ...availableKeys.filter((catalogKey) => !state.value.settings.catalogs.home.homeCatalogOrderKeys.includes(catalogKey))
     ]
     const visibleKeySet = new Set(visibleKeys)
     const hiddenKeys = fullOrder.filter((key) => !visibleKeySet.has(key))
@@ -1075,11 +1064,11 @@ export function usePortalStore() {
 
     const trailingVisible = visibleKeys.slice(visibleIndex)
     const trailingHidden = hiddenKeys.slice(hiddenIndex)
-    state.value.settings.layout.homeCatalogOrderKeys = [...nextOrder, ...trailingVisible, ...trailingHidden]
+    state.value.settings.catalogs.home.homeCatalogOrderKeys = [...nextOrder, ...trailingVisible, ...trailingHidden]
   }
 
   function toggleCatalog(identifier: string, legacyKey?: string) {
-    const disabled = new Set(state.value.settings.layout.disabledHomeCatalogKeys)
+    const disabled = new Set(state.value.settings.catalogs.home.disabledHomeCatalogKeys)
     const canonicalKey = identifier.trim()
     const fallbackKey = legacyKey?.trim() || ''
 
@@ -1095,7 +1084,7 @@ export function usePortalStore() {
     } else {
       disabled.add(canonicalKey)
     }
-    state.value.settings.layout.disabledHomeCatalogKeys = [...disabled]
+    state.value.settings.catalogs.home.disabledHomeCatalogKeys = [...disabled]
   }
 
   async function unlinkDevice(deviceUserId: string) {
@@ -1312,7 +1301,8 @@ export function usePortalStore() {
         valid: response.valid,
         error: null,
         personalLists: response.personalLists,
-        topLists: response.topLists
+        topLists: response.topLists,
+        searchResults: previous.searchResults
       }
     } catch (error) {
       state.value.mdblistDiscovery = {
@@ -1320,30 +1310,51 @@ export function usePortalStore() {
         valid: previous.valid,
         error: cleanErrorMessage(error, 'MDBList validation failed.'),
         personalLists: previous.personalLists,
-        topLists: previous.topLists
+        topLists: previous.topLists,
+        searchResults: previous.searchResults
       }
       throw error
     }
   }
 
+  async function searchMDBListLists(query: string) {
+    if (!query) {
+      state.value.mdblistDiscovery.searchResults = []
+      return
+    }
+
+    const token = accessToken(state.value.session)
+    if (!token) return
+
+    try {
+      const response = await apiFetch<{ lists: MDBListListOption[] }>('/api/integrations/mdblist/search-lists', {
+        method: 'POST',
+        body: JSON.stringify({ query })
+      }, token)
+      state.value.mdblistDiscovery.searchResults = response.lists
+    } catch {
+      state.value.mdblistDiscovery.searchResults = []
+    }
+  }
+
   function setMDBListPersonalListEnabled(key: string, enabled: boolean) {
-    const next = new Set(state.value.settings.integrations.mdblist.hiddenPersonalListKeys)
+    const next = new Set(state.value.settings.catalogs.mdblist.hiddenPersonalListKeys)
     if (enabled) {
       next.delete(key)
     } else {
       next.add(key)
     }
-    state.value.settings.integrations.mdblist.hiddenPersonalListKeys = [...next]
+    state.value.settings.catalogs.mdblist.hiddenPersonalListKeys = [...next]
   }
 
   function setMDBListTopListSelected(key: string, selected: boolean) {
-    const next = new Set(state.value.settings.integrations.mdblist.selectedTopListKeys)
+    const next = new Set(state.value.settings.catalogs.mdblist.selectedTopListKeys)
     if (selected) {
       next.add(key)
     } else {
       next.delete(key)
     }
-    state.value.settings.integrations.mdblist.selectedTopListKeys = [...next]
+    state.value.settings.catalogs.mdblist.selectedTopListKeys = [...next]
   }
 
   async function saveDraftSecret(secretType: SecretType, secretRef: string, payloadFactory?: (value: string) => Record<string, unknown>) {
@@ -1612,26 +1623,48 @@ export function usePortalStore() {
       state.value.traktDiscovery = {
         loading: false,
         error: null,
-        popularLists: response.lists
+        popularLists: response.lists,
+        searchResults: previous.searchResults
       }
     } catch (error) {
       state.value.traktDiscovery = {
         loading: false,
         error: cleanErrorMessage(error, 'Failed to load Trakt lists.'),
-        popularLists: previous.popularLists
+        popularLists: previous.popularLists,
+        searchResults: previous.searchResults
       }
       throw error
     }
   }
 
+  async function searchTraktLists(query: string) {
+    if (!query) {
+      state.value.traktDiscovery.searchResults = []
+      return
+    }
+
+    const token = accessToken(state.value.session)
+    if (!token || !state.value.settings.integrations.traktAuth.connected) return
+
+    try {
+      const response = await apiFetch<{ lists: TraktPopularListOption[] }>('/api/integrations/trakt/search-lists', {
+        method: 'POST',
+        body: JSON.stringify({ query })
+      }, token)
+      state.value.traktDiscovery.searchResults = response.lists
+    } catch {
+      state.value.traktDiscovery.searchResults = []
+    }
+  }
+
   function toggleTraktPopularList(key: string) {
-    const next = new Set(state.value.settings.trakt.selectedPopularListKeys)
+    const next = new Set(state.value.settings.catalogs.trakt.selectedPopularListKeys)
     if (next.has(key)) {
       next.delete(key)
     } else {
       next.add(key)
     }
-    state.value.settings.trakt.selectedPopularListKeys = [...next]
+    state.value.settings.catalogs.trakt.selectedPopularListKeys = [...next]
   }
 
   function disconnectTrakt() {
@@ -1649,7 +1682,8 @@ export function usePortalStore() {
     state.value.traktDiscovery = {
       loading: false,
       error: null,
-      popularLists: []
+      popularLists: [],
+      searchResults: []
     }
   }
 
@@ -1794,6 +1828,7 @@ export function usePortalStore() {
     addAddon,
     removeAddon,
     moveAddon,
+    reorderAddons,
     toggleAddon,
     updateAddonParserPreset,
     moveCatalog,
@@ -1812,6 +1847,7 @@ export function usePortalStore() {
     deleteSecret,
     approveTvLogin,
     validateMDBList,
+    searchMDBListLists,
     setMDBListPersonalListEnabled,
     setMDBListTopListSelected,
     startTraktDeviceFlow,
@@ -1819,6 +1855,7 @@ export function usePortalStore() {
     startRealDebridDeviceFlow,
     completeRealDebridDeviceFlow,
     refreshTraktPopularLists,
+    searchTraktLists,
     toggleTraktPopularList,
     disconnectTrakt,
     disconnectRealDebrid

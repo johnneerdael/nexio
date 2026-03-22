@@ -1,25 +1,37 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;700&family=Open+Sans:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Inter:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 :root {
   color-scheme: dark;
-  --page-bg: #07131d;
-  --panel: rgba(10, 23, 36, 0.72);
-  --panel-strong: rgba(7, 17, 29, 0.92);
-  --panel-soft: rgba(255, 255, 255, 0.05);
-  --stroke: rgba(152, 201, 255, 0.14);
-  --stroke-strong: rgba(152, 201, 255, 0.28);
-  --text: #edf7ff;
-  --text-soft: rgba(237, 247, 255, 0.74);
-  --text-dim: rgba(237, 247, 255, 0.48);
-  --accent: #7bffd3;
-  --accent-2: #ffbf69;
+  --surface: #0e0e0e;
+  --surface-container-lowest: #000000;
+  --surface-container-low: #131313;
+  --surface-container: #1a1a1a;
+  --surface-variant: rgba(38, 38, 38, 0.6);
+  --surface-bright: #333333;
+  --primary: #ba9eff;
+  --primary-dim: #8455ef;
+  --secondary: #53ddfc;
+  --tertiary: #ff97b5;
+  --on-surface: #ffffff;
+  --on-surface-variant: #adaaaa;
+  --outline-variant: #494847;
+  
+  --stroke: rgba(73, 72, 71, 0.15);
+  --stroke-strong: var(--outline-variant);
+  --text: var(--on-surface);
+  --text-soft: var(--on-surface-variant);
+  --text-dim: rgba(173, 170, 170, 0.5);
+  --accent: var(--primary);
+  --accent-2: var(--secondary);
   --danger: #ff7b82;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
-  --radius-xl: 28px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --font-display: 'Inter', 'Segoe UI', sans-serif;
-  --font-body: 'DM Sans', 'Segoe UI', sans-serif;
+  --shadow: 0 0 40px rgba(186, 158, 255, 0.06);
+  
+  --radius-xl: 0.75rem;
+  --radius-lg: 0.5rem;
+  --radius-md: 0.35rem;
+  --font-display: 'Manrope', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Segoe UI', sans-serif;
 }
 
 html,
@@ -30,10 +42,7 @@ body,
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(123, 255, 211, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(255, 191, 105, 0.18), transparent 28%),
-    linear-gradient(180deg, #08131f 0%, #050a10 100%);
+  background: var(--surface-container-lowest);
   color: var(--text);
   font-family: var(--font-body);
 }
@@ -79,8 +88,8 @@ button {
   width: 24rem;
   height: 24rem;
   border-radius: 999px;
-  background: rgba(123, 255, 211, 0.16);
-  filter: blur(60px);
+  background: rgba(83, 221, 252, 0.08);
+  filter: blur(100px);
 }
 
 .portal-page::after {
@@ -89,8 +98,8 @@ button {
   width: 28rem;
   height: 28rem;
   border-radius: 999px;
-  background: rgba(255, 191, 105, 0.14);
-  filter: blur(72px);
+  background: rgba(186, 158, 255, 0.08);
+  filter: blur(100px);
 }
 
 .portal-shell {
@@ -101,14 +110,26 @@ button {
 }
 
 .glass {
-  background: var(--panel);
+  background: var(--surface-variant);
   border: 1px solid var(--stroke);
-  backdrop-filter: blur(22px);
+  backdrop-filter: blur(20px);
   box-shadow: var(--shadow);
 }
 
+.glass-panel {
+  background: rgba(38, 38, 38, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-block;
+  line-height: 1;
+}
+
 .surface {
-  background: var(--panel-strong);
+  background: var(--surface-container);
   border: 1px solid var(--stroke);
   box-shadow: var(--shadow);
 }
@@ -125,9 +146,11 @@ button {
   padding: 0.55rem 0.8rem;
   border-radius: 999px;
   border: 1px solid var(--stroke);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-container-low);
   color: var(--text-soft);
   font-size: 0.86rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .badge strong {
@@ -145,15 +168,21 @@ button {
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, var(--accent), #9be7ff);
-  color: #031018;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dim));
+  color: #ffffff;
   font-weight: 700;
+  transition: all 0.3s ease;
+}
+
+.primary-btn:hover {
+  box-shadow: 0 0 0 2px rgba(186, 158, 255, 0.2);
 }
 
 .secondary-btn {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-container);
   color: var(--text);
-  border: 1px solid var(--stroke);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .ghost-btn {

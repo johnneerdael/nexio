@@ -1,5 +1,7 @@
 package com.nexio.tv.debug.passthrough
 
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -311,16 +313,28 @@ class TransportValidationRuntimeCollector @Inject constructor() {
     private fun ActiveRuntimeSession.detach() {
         capturePlaybackStatsSummary()
         positionPollJob?.cancel()
-        attachedPlayer?.let { player ->
-            playerListener?.let(player::removeListener)
-            analyticsListener?.let(player::removeAnalyticsListener)
-            playbackStatsListener?.let(player::removeAnalyticsListener)
-        }
+        val player = attachedPlayer
+        val playerListenerToRemove = playerListener
+        val analyticsListenerToRemove = analyticsListener
+        val playbackStatsListenerToRemove = playbackStatsListener
         positionPollJob = null
         attachedPlayer = null
         playerListener = null
         analyticsListener = null
         playbackStatsListener = null
+        player?.let { attached ->
+            val removeListeners: () -> Unit = {
+                playerListenerToRemove?.let(attached::removeListener)
+                analyticsListenerToRemove?.let(attached::removeAnalyticsListener)
+                playbackStatsListenerToRemove?.let(attached::removeAnalyticsListener)
+                Unit
+            }
+            if (Looper.myLooper() == attached.applicationLooper) {
+                removeListeners()
+            } else {
+                Handler(attached.applicationLooper).post(removeListeners)
+            }
+        }
     }
 
     private data class ActiveRuntimeSession(

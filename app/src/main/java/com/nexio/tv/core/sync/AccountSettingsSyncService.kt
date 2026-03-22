@@ -30,6 +30,8 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
+import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
+import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
@@ -44,6 +46,8 @@ import com.nexio.tv.data.remote.supabase.AudioSettings
 import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
+import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
+import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.LayoutSettings
@@ -134,46 +138,22 @@ class AccountSettingsSyncService @Inject constructor(
 
     private fun observeLocalChanges() {
         scope.launch {
-            merge(
-                themeDataStore.selectedTheme.drop(1).map { Unit },
-                themeDataStore.selectedFont.drop(1).map { Unit },
-                AppLocaleResolver.observeStoredLocaleTag(context).drop(1).map { Unit },
-                layoutPreferenceDataStore.selectedLayout.drop(1).map { Unit },
-                layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
-                layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
-                layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
-                layoutPreferenceDataStore.sidebarCollapsedByDefault.drop(1).map { Unit },
-                layoutPreferenceDataStore.modernSidebarEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.modernSidebarBlurEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.modernLandscapePostersEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.heroSectionEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.searchDiscoverEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.posterLabelsEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.catalogAddonNameEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.catalogTypeSuffixEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.drop(1).map { Unit },
-                layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds.drop(1).map { Unit },
-                layoutPreferenceDataStore.posterCardWidthDp.drop(1).map { Unit },
-                layoutPreferenceDataStore.posterCardCornerRadiusDp.drop(1).map { Unit },
-                layoutPreferenceDataStore.blurUnwatchedEpisodes.drop(1).map { Unit },
-                layoutPreferenceDataStore.preferExternalMetaAddonDetail.drop(1).map { Unit },
-                layoutPreferenceDataStore.hideUnreleasedContent.drop(1).map { Unit },
-                tmdbSettingsDataStore.settings.drop(1).map { Unit },
-                mdbListSettingsDataStore.settings.drop(1).map { Unit },
-                mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
-                animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
-                animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
-                geminiSettingsDataStore.settings.drop(1).map { Unit },
-                posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
-                premiumizeSettingsDataStore.settings.drop(1).map { Unit },
-                realDebridAuthDataStore.state.drop(1).map { Unit },
-                traktAuthDataStore.state.drop(1).map { Unit },
-                traktSettingsDataStore.continueWatchingDaysCap.drop(1).map { Unit },
-                traktSettingsDataStore.showUnairedNextUp.drop(1).map { Unit },
-                traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
-                debugSettingsDataStore.accountTabEnabled.drop(1).map { Unit },
-                debugSettingsDataStore.syncCodeFeaturesEnabled.drop(1).map { Unit },
-                playerSettingsDataStore.playerSettings.drop(1).map { Unit }
+            observeAccountConfigSyncChanges(
+                heroCatalogSelections = layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
+                homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
+                disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
+                tmdbSettings = tmdbSettingsDataStore.settings.drop(1).map { Unit },
+                mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
+                mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
+                animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
+                animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
+                geminiSettings = geminiSettingsDataStore.settings.drop(1).map { Unit },
+                posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
+                premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
+                premiumizeAccountState = premiumizeService.observeAccountState().drop(1).map { Unit },
+                realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
+                traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
+                traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit }
             ).collect {
                 schedulePush()
             }
@@ -207,13 +187,12 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             val payload = buildLocalPayload()
-            val params = buildJsonObject {
-                put("p_settings_payload", Json.encodeToJsonElement(AccountSettingsPayload.serializer(), payload))
-                put("p_source", "app")
-            }
 
             withJwtRefreshRetry {
-                postgrest.rpc("sync_push_account_settings", params).decodeList<AccountSyncMutationResult>()
+                postgrest.rpc(
+                    "sync_push_account_settings",
+                    buildAccountConfigSyncPushParams(payload)
+                ).decodeList<AccountSyncMutationResult>()
             }
 
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
@@ -235,43 +214,38 @@ class AccountSettingsSyncService @Inject constructor(
     suspend fun pullFromRemoteAndApply(): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
             val snapshot = withJwtRefreshRetry {
-                postgrest.rpc("sync_pull_account_snapshot").decodeAs<AccountSnapshotRpcResponse>()
+                postgrest.rpc(
+                    "sync_pull_account_snapshot",
+                    buildAccountConfigSyncPullParams()
+                ).decodeAs<AccountConfigSnapshotRpcResponse>()
             }
 
             isApplyingRemote = true
             try {
-                applyRemoteSettings(snapshot.settings)
+                applyAccountConfigSyncSettings(
+                    settings = snapshot.settings,
+                    layoutPreferenceDataStore = layoutPreferenceDataStore,
+                    tmdbSettingsDataStore = tmdbSettingsDataStore,
+                    mdbListSettingsDataStore = mdbListSettingsDataStore,
+                    animeSkipSettingsDataStore = animeSkipSettingsDataStore,
+                    geminiSettingsDataStore = geminiSettingsDataStore,
+                    posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
+                    traktSettingsDataStore = traktSettingsDataStore,
+                    playerSettingsDataStore = playerSettingsDataStore
+                )
                 applyRemoteSecrets(snapshot.settings)
             } finally {
                 isApplyingRemote = false
             }
 
-            Result.success(
-                snapshot.addons
-                    .sortedBy { it.sortOrder }
-                    .filter { it.enabled }
-                    .mapNotNull { addon ->
-                        resolveRemoteAddonUrl(addon).getOrNull()
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { url ->
-                                AddonPreferences.AddonInstallConfig(
-                                    url = url,
-                                    parserPreset = runCatching {
-                                        enumValueOf<AddonParserPreset>(addon.parserPreset.trim().uppercase())
-                                    }.getOrDefault(AddonParserPreset.GENERIC)
-                                )
-                            }
-                    }
-            )
+            Result.success(buildRemoteAddonInstallConfigs(snapshot.addons, ::resolveRemoteAddonUrl))
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull account snapshot from remote", e)
             Result.failure(e)
         }
     }
 
-    private suspend fun buildLocalPayload(): AccountSettingsPayload {
-        val theme = themeDataStore.selectedTheme.first()
-        val font = themeDataStore.selectedFont.first()
+    private suspend fun buildLocalPayload(): AccountConfigSyncPayload {
         val tmdb = tmdbSettingsDataStore.settings.first()
         val mdbList = mdbListSettingsDataStore.settings.first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
@@ -279,41 +253,14 @@ class AccountSettingsSyncService @Inject constructor(
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
         val gemini = geminiSettingsDataStore.settings.first()
         val posterRatings = posterRatingsSettingsDataStore.settings.first()
+        val playerSettings = playerSettingsDataStore.playerSettings.first()
         val premiumize = premiumizeSettingsDataStore.settings.first()
         val premiumizeAccount = premiumizeService.observeAccountState().first()
         val realDebrid = realDebridAuthDataStore.state.first()
         val traktAuth = traktAuthDataStore.state.first()
-        val player = playerSettingsDataStore.playerSettings.first()
         val traktCatalogPrefs = traktSettingsDataStore.catalogPreferences.first()
 
-        return AccountSettingsPayload(
-            appearance = AppearanceSettings(
-                theme = theme.name,
-                font = font.name,
-                localeTag = AppLocaleResolver.getStoredLocaleTag(context) ?: "system"
-            ),
-            layout = LayoutSettings(
-                selectedLayout = layoutPreferenceDataStore.selectedLayout.first().name,
-                modernLandscapePostersEnabled = layoutPreferenceDataStore.modernLandscapePostersEnabled.first(),
-                heroCatalogKeys = layoutPreferenceDataStore.heroCatalogSelections.first(),
-                homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.first(),
-                disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.first(),
-                sidebarCollapsedByDefault = layoutPreferenceDataStore.sidebarCollapsedByDefault.first(),
-                modernSidebarEnabled = layoutPreferenceDataStore.modernSidebarEnabled.first(),
-                modernSidebarBlurEnabled = layoutPreferenceDataStore.modernSidebarBlurEnabled.first(),
-                heroSectionEnabled = layoutPreferenceDataStore.heroSectionEnabled.first(),
-                searchDiscoverEnabled = layoutPreferenceDataStore.searchDiscoverEnabled.first(),
-                posterLabelsEnabled = layoutPreferenceDataStore.posterLabelsEnabled.first(),
-                catalogAddonNameEnabled = layoutPreferenceDataStore.catalogAddonNameEnabled.first(),
-                catalogTypeSuffixEnabled = layoutPreferenceDataStore.catalogTypeSuffixEnabled.first(),
-                hideUnreleasedContent = layoutPreferenceDataStore.hideUnreleasedContent.first(),
-                blurUnwatchedEpisodes = layoutPreferenceDataStore.blurUnwatchedEpisodes.first(),
-                preferExternalMetaAddonDetail = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first(),
-                focusedPosterBackdropExpandEnabled = layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled.first(),
-                focusedPosterBackdropExpandDelaySeconds = layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds.first(),
-                posterCardWidthDp = layoutPreferenceDataStore.posterCardWidthDp.first(),
-                posterCardCornerRadiusDp = layoutPreferenceDataStore.posterCardCornerRadiusDp.first()
-            ),
+        return buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
                 debrid = DebridSyncSettings(
                     premiumize = PremiumizeSyncSettings(
@@ -350,10 +297,7 @@ class AccountSettingsSyncService @Inject constructor(
                     showLetterboxd = mdbList.showLetterboxd,
                     showTomatoes = mdbList.showTomatoes,
                     showAudience = mdbList.showAudience,
-                    showMetacritic = mdbList.showMetacritic,
-                    hiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
-                    selectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
-                    catalogOrder = mdbListPrefs.catalogOrder
+                    showMetacritic = mdbList.showMetacritic
                 ),
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
@@ -374,75 +318,29 @@ class AccountSettingsSyncService @Inject constructor(
                     pending = traktAuth.deviceCode != null && !traktAuth.isAuthenticated
                 )
             ),
-            playback = PlaybackSettings(
-                general = PlaybackGeneralSettings(
-                    loadingOverlayEnabled = player.loadingOverlayEnabled,
-                    pauseOverlayEnabled = player.pauseOverlayEnabled,
-                    osdClockEnabled = player.osdClockEnabled,
-                    skipIntroEnabled = player.skipIntroEnabled,
-                    frameRateMatchingMode = player.frameRateMatchingMode.name,
-                    resolutionMatchingEnabled = player.resolutionMatchingEnabled
-                ),
-                streamSelection = StreamSelectionSettings(
-                    streamReuseLastLinkEnabled = player.streamReuseLastLinkEnabled,
-                    streamReuseLastLinkCacheHours = player.streamReuseLastLinkCacheHours,
-                    uniformStreamFormattingEnabled = player.uniformStreamFormattingEnabled,
-                    groupStreamsAcrossAddonsEnabled = true,
-                    deduplicateGroupedStreamsEnabled = player.deduplicateGroupedStreamsEnabled,
-                    filterEpisodeMismatchStreamsEnabled = player.filterEpisodeMismatchStreamsEnabled,
-                    filterMovieYearMismatchStreamsEnabled = player.filterMovieYearMismatchStreamsEnabled,
-                    streamAutoPlayMode = player.streamAutoPlayMode.name,
-                    streamAutoPlaySource = player.streamAutoPlaySource.name,
-                    streamAutoPlaySelectedAddons = player.streamAutoPlaySelectedAddons.toList(),
-                    streamAutoPlayRegex = player.streamAutoPlayRegex,
-                    streamAutoPlayNextEpisodeEnabled = player.streamAutoPlayNextEpisodeEnabled,
-                    streamAutoPlayPreferBingeGroupForNextEpisode = player.streamAutoPlayPreferBingeGroupForNextEpisode,
-                    nextEpisodeThresholdMode = player.nextEpisodeThresholdMode.name,
-                    nextEpisodeThresholdPercent = player.nextEpisodeThresholdPercent,
-                    nextEpisodeThresholdMinutesBeforeEnd = player.nextEpisodeThresholdMinutesBeforeEnd
-                ),
-                audio = AudioSettings(
-                    preferredAudioLanguage = player.preferredAudioLanguage,
-                    secondaryPreferredAudioLanguage = player.secondaryPreferredAudioLanguage,
-                    skipSilence = player.skipSilence,
-                    decoderPriority = player.decoderPriority,
-                    tunnelingEnabled = player.tunnelingEnabled
-                ),
-                subtitles = SubtitleSyncSettings(
-                    preferredLanguage = player.subtitleStyle.preferredLanguage,
-                    secondaryPreferredLanguage = player.subtitleStyle.secondaryPreferredLanguage,
-                    subtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE.name,
-                    addonSubtitleStartupMode = player.addonSubtitleStartupMode.name,
-                    size = player.subtitleStyle.size,
-                    verticalOffset = player.subtitleStyle.verticalOffset,
-                    bold = player.subtitleStyle.bold,
-                    textColor = player.subtitleStyle.textColor,
-                    backgroundColor = player.subtitleStyle.backgroundColor,
-                    outlineEnabled = player.subtitleStyle.outlineEnabled,
-                    outlineColor = player.subtitleStyle.outlineColor,
-                    useLibass = player.useLibass
-                ),
-                bufferNetwork = BufferNetworkSettings(
-                    minBufferMs = player.bufferSettings.minBufferMs,
-                    maxBufferMs = player.bufferSettings.maxBufferMs,
-                    bufferForPlaybackMs = player.bufferSettings.bufferForPlaybackMs,
-                    bufferForPlaybackAfterRebufferMs = player.bufferSettings.bufferForPlaybackAfterRebufferMs,
-                    targetBufferSizeMb = player.bufferSettings.targetBufferSizeMb,
-                    backBufferDurationMs = player.bufferSettings.backBufferDurationMs,
-                    enableBufferLogs = player.enableBufferLogs
-                )
-            ),
-            trakt = TraktSettingsPayload(
-                continueWatchingDaysCap = traktSettingsDataStore.continueWatchingDaysCap.first(),
-                showUnairedNextUp = traktSettingsDataStore.showUnairedNextUp.first(),
-                catalogEnabledSet = traktCatalogPrefs.enabledCatalogs.toList(),
-                catalogOrder = traktCatalogPrefs.catalogOrder,
-                selectedPopularListKeys = traktCatalogPrefs.selectedPopularListKeys.toList()
-            ),
-            debug = DebugSettingsPayload(
-                accountTabEnabled = debugSettingsDataStore.accountTabEnabled.first(),
-                syncCodeFeaturesEnabled = debugSettingsDataStore.syncCodeFeaturesEnabled.first(),
-                bufferLogsEnabled = player.enableBufferLogs
+            heroCatalogKeys = layoutPreferenceDataStore.heroCatalogSelections.first(),
+            homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.first(),
+            disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.first(),
+            traktCatalogEnabledSet = traktCatalogPrefs.enabledCatalogs.toList(),
+            traktCatalogOrder = traktCatalogPrefs.catalogOrder,
+            traktSelectedPopularListKeys = traktCatalogPrefs.selectedPopularListKeys.toList(),
+            mdbListHiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
+            mdbListSelectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
+            mdbListCatalogOrder = mdbListPrefs.catalogOrder,
+            formatter = FormatterSyncSettings(
+                enabled = playerSettings.syncedFormatterTemplate.enabled,
+                selectedTemplateId = playerSettings.syncedFormatterTemplate.selectedTemplateId,
+                customTemplate = playerSettings.syncedFormatterTemplate.customNameTemplate
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let {
+                        CustomFormatterSyncTemplate(
+                            id = "custom",
+                            label = playerSettings.syncedFormatterTemplate.customTemplateLabel ?: "Custom",
+                            nameTemplate = it,
+                            descriptionTemplate = playerSettings.syncedFormatterTemplate.customDescriptionTemplate.orEmpty()
+                        )
+                    }
+                    ?.takeIf { it.descriptionTemplate.isNotBlank() }
             )
         )
     }
@@ -757,7 +655,7 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteSecrets(settings: AccountSettingsPayload) {
+    private suspend fun applyRemoteSecrets(settings: AccountConfigSyncPayload) {
         tmdbSettingsDataStore.setApiKey(resolveApiKeySecret(TMDB_SECRET_TYPE, TMDB_SECRET_REF))
         mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
         geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
@@ -785,7 +683,7 @@ class AccountSettingsSyncService @Inject constructor(
         return payload?.apiKey?.trim().orEmpty()
     }
 
-    private suspend fun applyRemoteTraktSecrets(settings: AccountSettingsPayload) {
+    private suspend fun applyRemoteTraktSecrets(settings: AccountConfigSyncPayload) {
         val accessPayload = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
@@ -837,7 +735,7 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun applyRemoteRealDebridSecrets(settings: AccountSettingsPayload) {
+    private suspend fun applyRemoteRealDebridSecrets(settings: AccountConfigSyncPayload) {
         val accessPayload = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(

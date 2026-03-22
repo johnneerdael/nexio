@@ -6,13 +6,17 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
+import com.nexio.tv.core.stream.AioCustomTemplateSelection
+import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.StreamFeatureFlags
+import com.nexio.tv.core.stream.StreamBingeGroupResolver
 import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.SyncedFormatterTemplateSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
@@ -27,12 +31,15 @@ import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -261,7 +268,7 @@ class StreamScreenViewModel @Inject constructor(
                                 season = season,
                                 episode = episode,
                                 episodeTitle = episodeName,
-                                bingeGroup = null,
+                                bingeGroup = cached.bingeGroup,
                                 rememberedAudioLanguage = cached.rememberedAudioLanguage,
                                 rememberedAudioName = cached.rememberedAudioName,
                                 filename = cached.filename,
@@ -397,16 +404,25 @@ class StreamScreenViewModel @Inject constructor(
                 val organizerJob = launch {
                     organizeRequests
                         .filterNotNull()
-                        .collectLatest { request ->
-                            val organizedResult = runCatching {
+                        .collect { request ->
+                            val organizedResult = try {
                                 buildOrganizedPayload(request.addonStreamGroups)
-                            }.onFailure { error ->
+                            } catch (error: CancellationException) {
+                                if (streamDiagnosticsEnabled) {
+                                    Log.d(
+                                        TAG,
+                                        "Incremental organize cancelled version=${request.version}: ${error.message}"
+                                    )
+                                }
+                                null
+                            } catch (error: Exception) {
                                 Log.w(TAG, "Failed to organize streams incrementally: ${error.message}")
-                            }.getOrNull()
+                                null
+                            }
                             if (organizedResult != null) {
                                 applyOrganizedPayload(organizedResult)
+                                appliedPresentationVersion.set(request.version)
                             }
-                            appliedPresentationVersion.set(request.version)
                         }
                 }
 
@@ -456,15 +472,20 @@ class StreamScreenViewModel @Inject constructor(
                         }
                     }
                 }
-                val pendingVersion = queuedPresentationVersion.get()
-                if (pendingVersion > 0L) {
-                    var waitCycles = 0
-                    while (appliedPresentationVersion.get() < pendingVersion && waitCycles < 250) {
-                        delay(16L)
-                        waitCycles += 1
+                val finalPendingRequest = organizeRequests.value
+                organizerJob.cancelAndJoin()
+                if (finalPendingRequest != null &&
+                    appliedPresentationVersion.get() < finalPendingRequest.version
+                ) {
+                    if (streamDiagnosticsEnabled) {
+                        Log.d(
+                            TAG,
+                            "Running final synchronous organize version=${finalPendingRequest.version} " +
+                                "applied=${appliedPresentationVersion.get()}"
+                        )
                     }
+                    applyOrganizedPayload(buildOrganizedPayload(finalPendingRequest.addonStreamGroups))
                 }
-                organizerJob.cancel()
 
                 markRemainingSourceChipsAsError()
 
@@ -732,7 +753,7 @@ class StreamScreenViewModel @Inject constructor(
             season = season,
             episode = episode,
             episodeTitle = episodeName,
-            bingeGroup = stream.behaviorHints?.bingeGroup,
+            bingeGroup = StreamBingeGroupResolver.resolve(stream),
             rememberedAudioLanguage = null,
             rememberedAudioName = null,
             filename = stream.behaviorHints?.filename,
@@ -748,6 +769,7 @@ class StreamScreenViewModel @Inject constructor(
                     url = url,
                     streamName = playbackInfo.streamName,
                     headers = playbackInfo.headers,
+                    bingeGroup = playbackInfo.bingeGroup,
                     filename = playbackInfo.filename,
                     videoHash = playbackInfo.videoHash,
                     videoSize = playbackInfo.videoSize
@@ -770,7 +792,8 @@ class StreamScreenViewModel @Inject constructor(
             year = year ?: _uiState.value.year,
             season = season,
             episode = episode,
-            episodeTitle = episodeName
+            episodeTitle = episodeName,
+            runtimeMinutes = runtime ?: _uiState.value.runtime
         )
     }
 
@@ -808,11 +831,27 @@ private data class PendingOrganizeRequest(
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
     return StreamFeatureFlags(
         uniformFormattingEnabled = uniformStreamFormattingEnabled,
+        uniformFormattingTemplate = syncedFormatterTemplate.toAioFormatterSelection(),
         groupAcrossAddonsEnabled = true,
         deduplicateGroupedStreamsEnabled = deduplicateGroupedStreamsEnabled,
         filterWebDolbyVisionStreamsEnabled = filterWebDolbyVisionStreamsEnabled,
         filterEpisodeMismatchStreamsEnabled = filterEpisodeMismatchStreamsEnabled,
         filterMovieYearMismatchStreamsEnabled = filterMovieYearMismatchStreamsEnabled
+    )
+}
+
+private fun SyncedFormatterTemplateSettings.toAioFormatterSelection(): AioFormatterSelection {
+    return AioFormatterSelection(
+        selectedTemplateId = selectedTemplateId,
+        customTemplate = if (!customNameTemplate.isNullOrBlank() && !customDescriptionTemplate.isNullOrBlank()) {
+            AioCustomTemplateSelection(
+                label = customTemplateLabel,
+                nameTemplate = customNameTemplate,
+                descriptionTemplate = customDescriptionTemplate
+            )
+        } else {
+            null
+        }
     )
 }
 

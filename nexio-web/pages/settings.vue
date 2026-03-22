@@ -1,3 +1,3 @@
 <script setup lang="ts">
-await navigateTo('/account?view=appearance', { redirectCode: 302 })
+await navigateTo('/account?view=integrations', { redirectCode: 302 })
 </script>

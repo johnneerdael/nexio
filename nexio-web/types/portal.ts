@@ -135,173 +135,106 @@ export type PortalSession = {
   }
 }
 
-export type PortalSettings = {
-  appearance: {
-    theme: PortalTheme
-    font: PortalFont
-    localeTag: PortalLocale
-  }
-  layout: {
-    selectedLayout: LayoutMode
-    modernLandscapePostersEnabled: boolean
-    heroCatalogKeys: string[]
-    homeCatalogOrderKeys: string[]
-    disabledHomeCatalogKeys: string[]
-    sidebarCollapsedByDefault: boolean
-    modernSidebarEnabled: boolean
-    modernSidebarBlurEnabled: boolean
-    heroSectionEnabled: boolean
-    searchDiscoverEnabled: boolean
-    posterLabelsEnabled: boolean
-    catalogAddonNameEnabled: boolean
-    catalogTypeSuffixEnabled: boolean
-    hideUnreleasedContent: boolean
-    blurUnwatchedEpisodes: boolean
-    preferExternalMetaAddonDetail: boolean
-    focusedPosterBackdropExpandEnabled: boolean
-    focusedPosterBackdropExpandDelaySeconds: number
-    posterCardWidthDp: number
-    posterCardCornerRadiusDp: number
-  }
-  integrations: {
-    debrid: {
-      premiumize: {
-        configured: boolean
-        customerId: number | null
-      }
-      realDebrid: {
-        connected: boolean
-        username: string
-        pending: boolean
-        deviceCode: string
-        userCode: string
-        verificationUrl: string
-        expiresAt: number | null
-      }
+export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 2
+
+export type PortalIntegrations = {
+  debrid: {
+    premiumize: {
+      configured: boolean
+      customerId: number | null
     }
-    tmdb: {
-      enabled: boolean
-      useArtwork: boolean
-      useBasicInfo: boolean
-      useDetails: boolean
-      useCredits: boolean
-      useProductions: boolean
-      useNetworks: boolean
-      useEpisodes: boolean
-      useMoreLikeThis: boolean
-      useCollections: boolean
-    }
-    mdblist: {
-      enabled: boolean
-      showTrakt: boolean
-      showImdb: boolean
-      showTmdb: boolean
-      showLetterboxd: boolean
-      showTomatoes: boolean
-      showAudience: boolean
-      showMetacritic: boolean
-      hiddenPersonalListKeys: string[]
-      selectedTopListKeys: string[]
-      catalogOrder: string[]
-    }
-    animeSkip: {
-      enabled: boolean
-      clientId: string
-    }
-    gemini: {
-      enabled: boolean
-    }
-    posterRatings: {
-      rpdbEnabled: boolean
-      topPostersEnabled: boolean
-    }
-    traktAuth: {
+    realDebrid: {
       connected: boolean
       username: string
-      userSlug: string
-      connectedAt: string | null
       pending: boolean
+      deviceCode: string
+      userCode: string
+      verificationUrl: string
+      expiresAt: number | null
     }
   }
-  playback: {
-    general: {
-      loadingOverlayEnabled: boolean
-      pauseOverlayEnabled: boolean
-      osdClockEnabled: boolean
-      skipIntroEnabled: boolean
-      frameRateMatchingMode: FrameRateMode
-      resolutionMatchingEnabled: boolean
-    }
-    streamSelection: {
-      streamReuseLastLinkEnabled: boolean
-      streamReuseLastLinkCacheHours: number
-      uniformStreamFormattingEnabled: boolean
-      groupStreamsAcrossAddonsEnabled: boolean
-      deduplicateGroupedStreamsEnabled: boolean
-      filterEpisodeMismatchStreamsEnabled: boolean
-      filterMovieYearMismatchStreamsEnabled: boolean
-      streamAutoPlayMode: StreamAutoPlayMode
-      streamAutoPlaySource: StreamAutoPlaySource
-      streamAutoPlaySelectedAddons: string[]
-      streamAutoPlayRegex: string
-      streamAutoPlayNextEpisodeEnabled: boolean
-      streamAutoPlayPreferBingeGroupForNextEpisode: boolean
-      nextEpisodeThresholdMode: ThresholdMode
-      nextEpisodeThresholdPercent: number
-      nextEpisodeThresholdMinutesBeforeEnd: number
-    }
-    audio: {
-      preferredAudioLanguage: string
-      secondaryPreferredAudioLanguage: string | null
-      skipSilence: boolean
-      decoderPriority: number
-      tunnelingEnabled: boolean
-      experimentalDv7ToDv81Enabled?: boolean
-      experimentalDtsIecPassthroughEnabled?: boolean
-      experimentalDv7ToDv81PreserveMappingEnabled?: boolean
-      experimentalDv5ToDv81Enabled?: boolean
-    }
-    subtitles: {
-      preferredLanguage: string
-      secondaryPreferredLanguage: string | null
-      subtitleOrganizationMode: SubtitleOrganizationMode
-      addonSubtitleStartupMode: AddonSubtitleStartupMode
-      size: number
-      verticalOffset: number
-      bold: boolean
-      textColor: number
-      backgroundColor: number
-      outlineEnabled: boolean
-      outlineColor: number
-      useLibass: boolean
-    }
-    bufferNetwork: {
-      minBufferMs: number
-      maxBufferMs: number
-      bufferForPlaybackMs: number
-      bufferForPlaybackAfterRebufferMs: number
-      targetBufferSizeMb: number
-      backBufferDurationMs: number
-      enableBufferLogs: boolean
-    }
+  tmdb: {
+    enabled: boolean
+    useArtwork: boolean
+    useBasicInfo: boolean
+    useDetails: boolean
+    useCredits: boolean
+    useProductions: boolean
+    useNetworks: boolean
+    useEpisodes: boolean
+    useMoreLikeThis: boolean
+    useCollections: boolean
   }
-  trakt: {
-    continueWatchingDaysCap: number
-    showUnairedNextUp: boolean
-    catalogEnabledSet: CatalogId[]
-    catalogOrder: CatalogId[]
-    selectedPopularListKeys: string[]
+  mdblist: {
+    enabled: boolean
+    showTrakt: boolean
+    showImdb: boolean
+    showTmdb: boolean
+    showLetterboxd: boolean
+    showTomatoes: boolean
+    showAudience: boolean
+    showMetacritic: boolean
   }
-  debug: {
-    accountTabEnabled: boolean
-    syncCodeFeaturesEnabled: boolean
-    bufferLogsEnabled: boolean
+  animeSkip: {
+    enabled: boolean
+    clientId: string
+  }
+  gemini: {
+    enabled: boolean
+  }
+  posterRatings: {
+    rpdbEnabled: boolean
+    topPostersEnabled: boolean
+  }
+  traktAuth: {
+    connected: boolean
+    username: string
+    userSlug: string
+    connectedAt: string | null
+    pending: boolean
   }
 }
 
-export type SyncExclusion = {
-  key: string
-  reason: string
+export type HomeCatalogSyncSettings = {
+  heroCatalogKeys: string[]
+  homeCatalogOrderKeys: string[]
+  disabledHomeCatalogKeys: string[]
+}
+
+export type TraktCatalogSyncSettings = {
+  catalogEnabledSet: CatalogId[]
+  catalogOrder: CatalogId[]
+  selectedPopularListKeys: string[]
+}
+
+export type MDBListCatalogSyncSettings = {
+  hiddenPersonalListKeys: string[]
+  selectedTopListKeys: string[]
+  catalogOrder: string[]
+}
+
+export type PortalCatalogs = {
+  home: HomeCatalogSyncSettings
+  trakt: TraktCatalogSyncSettings
+  mdblist: MDBListCatalogSyncSettings
+}
+
+export type UniformStreamFormattingSettings = {
+  enabled: boolean
+  selectedTemplateId: string
+  customTemplate?: {
+    id: 'custom'
+    label: string
+    nameTemplate: string
+    descriptionTemplate: string
+  } | null
+}
+
+export type PortalSettings = {
+  schemaVersion: number
+  integrations: PortalIntegrations
+  catalogs: PortalCatalogs
+  formatter: UniformStreamFormattingSettings
 }
 
 export type PortalSnapshot = {

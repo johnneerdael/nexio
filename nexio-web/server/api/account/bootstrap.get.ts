@@ -2,6 +2,7 @@ import { bearerToken, okJson, supabaseFetch, supabaseUser } from '~/server/utils
 import { mapSecretRows } from '~/server/utils/account-secrets'
 import { normalizeAddonManifestUrl, normalizeAddonUrl } from '~/server/utils/account-secrets'
 import { defaultAccountAddons, defaultSettings } from '~/utils/portal-defaults'
+import { ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION } from '~/types/portal'
 import type { AddonRecord, BootstrapPayload, LinkedDevice, PortalSettings, SecretType } from '~/types/portal'
 
 type SnapshotRpcPayload = {
@@ -83,7 +84,9 @@ export default defineEventHandler(async (event) => {
   try {
     const snapshot = await supabaseFetch<SnapshotRpcPayload>('/rest/v1/rpc/sync_pull_account_snapshot', {
       method: 'POST',
-      body: JSON.stringify({})
+      body: JSON.stringify({
+        p_contract_version: ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION
+      })
     }, token)
 
     const pulledSettings = snapshot.settings
@@ -99,7 +102,8 @@ export default defineEventHandler(async (event) => {
         method: 'POST',
         body: JSON.stringify({
           p_settings_payload: settings,
-          p_source: 'web-bootstrap'
+          p_source: 'web-bootstrap',
+          p_contract_version: ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION
         })
       }, token)
 

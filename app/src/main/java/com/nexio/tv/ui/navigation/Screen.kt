@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.navigation
 
+import com.nexio.tv.domain.model.MetaCompanyKind
+import com.nexio.tv.domain.model.OrganizationDiscoverType
 import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
@@ -162,6 +164,20 @@ sealed class Screen(val route: String) {
             preferCrew: Boolean = false
         ): String {
             return "cast_detail/$personId/${encode(personName)}?preferCrew=$preferCrew"
+        }
+    }
+
+    data object OrganizationDetail : Screen("organization_detail/{entityId}/{entityName}?kind={kind}&discoverType={discoverType}") {
+        private fun encode(value: String): String =
+            URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+        fun createRoute(
+            entityId: Int,
+            entityName: String,
+            kind: MetaCompanyKind,
+            discoverType: OrganizationDiscoverType
+        ): String {
+            return "organization_detail/$entityId/${encode(entityName)}?kind=${encode(kind.name)}&discoverType=${encode(discoverType.name)}"
         }
     }
 }

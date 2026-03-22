@@ -1,5 +1,5 @@
 <template>
-  <PortalShell :signed-in="signedIn" @sign-out="signOut">
+  <PublicShell :signed-in="signedIn" @sign-out="signOut">
     <section class="glass" style="padding:1.6rem; border-radius: var(--radius-xl); display:grid; gap:1rem;">
       <div>
         <p class="badge">Portal Access</p>
@@ -16,13 +16,13 @@
         <NuxtLink class="secondary-btn" to="/account">Back to account</NuxtLink>
       </div>
     </section>
-  </PortalShell>
+  </PublicShell>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from '#imports'
-import PortalShell from '~/components/portal/PortalShell.vue'
+import PublicShell from '~/components/portal/PublicShell.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
 import type { PortalSession } from '~/types/portal'
 

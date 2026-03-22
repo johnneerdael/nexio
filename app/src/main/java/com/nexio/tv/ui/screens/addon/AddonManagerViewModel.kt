@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.sync.addonCatalogDisableKey
+import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.R
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.qr.QrCodeGenerator
@@ -464,7 +465,7 @@ class AddonManagerViewModel @Inject constructor(
         savedOrderKeys: List<String>,
         disabledKeys: Set<String>
     ): List<QrCatalogEntry> {
-        val defaultEntries = buildDefaultCatalogEntries(addons)
+        val defaultEntries = buildDefaultCatalogEntries(addons, disabledKeys)
         val entryByKey = defaultEntries.associateBy { it.key }
         val defaultOrderKeys = defaultEntries.map { it.key }
         val savedValid = savedOrderKeys
@@ -477,11 +478,14 @@ class AddonManagerViewModel @Inject constructor(
 
         return effectiveOrder.mapNotNull { key ->
             val entry = entryByKey[key] ?: return@mapNotNull null
-            entry.copy(isDisabled = entry.disableKey in disabledKeys || entry.key in disabledKeys)
+            entry.copy(isDisabled = entry.isDisabled || entry.disableKey in disabledKeys || entry.key in disabledKeys)
         }
     }
 
-    private fun buildDefaultCatalogEntries(addons: List<Addon>): List<QrCatalogEntry> {
+    private fun buildDefaultCatalogEntries(
+        addons: List<Addon>,
+        disabledKeys: Set<String>
+    ): List<QrCatalogEntry> {
         val entries = mutableListOf<QrCatalogEntry>()
         val seenKeys = mutableSetOf<String>()
 
@@ -506,7 +510,15 @@ class AddonManagerViewModel @Inject constructor(
                                 ),
                                 catalogName = catalog.name,
                                 addonName = addon.displayName,
-                                typeLabel = catalog.apiType
+                                typeLabel = catalog.apiType,
+                                isDisabled = isAddonCatalogDisabled(
+                                    disabledKeys = disabledKeys,
+                                    addonBaseUrl = addon.baseUrl,
+                                    addonId = addon.id,
+                                    type = catalog.apiType,
+                                    catalogId = catalog.id,
+                                    catalogName = catalog.name
+                                )
                             )
                         )
                     }

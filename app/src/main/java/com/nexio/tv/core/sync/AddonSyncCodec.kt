@@ -75,6 +75,28 @@ fun addonCatalogDisableKey(addonBaseUrl: String, type: String, catalogId: String
     return "${normalizePublicAddonBaseUrl(addonBaseUrl)}_${type}_${catalogId}_${catalogName}"
 }
 
+fun addonCatalogKey(addonId: String, type: String, catalogId: String): String {
+    return "${addonId}_${type}_${catalogId}"
+}
+
+fun isAddonCatalogDisabled(
+    disabledKeys: Set<String>,
+    addonBaseUrl: String,
+    addonId: String,
+    type: String,
+    catalogId: String,
+    catalogName: String
+): Boolean {
+    if (addonCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName) in disabledKeys) {
+        return true
+    }
+    if (addonCatalogKey(addonId, type, catalogId) in disabledKeys) {
+        return true
+    }
+    val disableKeyPrefix = "${normalizePublicAddonBaseUrl(addonBaseUrl)}_${type}_${catalogId}_"
+    return disabledKeys.any { key -> key.startsWith(disableKeyPrefix) }
+}
+
 fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
     val candidate = rawUrl.trim()
     require(candidate.isNotBlank()) { "Addon URL is required." }

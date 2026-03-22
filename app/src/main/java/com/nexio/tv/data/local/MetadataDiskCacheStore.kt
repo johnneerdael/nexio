@@ -3,12 +3,14 @@ package com.nexio.tv.data.local
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +26,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TMDB_PREFIX = "tmdb::"
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
+        private const val TMDB_CACHE_SCHEMA_VERSION = 1
     }
 
     private val gson = Gson()
@@ -81,6 +84,8 @@ class MetadataDiskCacheStore @Inject constructor(
             val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
             val epoch = root.get("languageEpoch")?.asInt ?: 0
             if (epoch != currentLanguageEpoch()) return null
+            val schemaVersion = root.get("tmdbSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != TMDB_CACHE_SCHEMA_VERSION) return null
             decodeTmdbEnrichmentSafely(root)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read TMDB enrichment disk cache entry", error)
@@ -99,6 +104,7 @@ class MetadataDiskCacheStore @Inject constructor(
             val payload = JsonObject().apply {
                 add("value", gson.toJsonTree(enrichment))
                 addProperty("languageEpoch", currentLanguageEpoch())
+                addProperty("tmdbSchemaVersion", TMDB_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
             prefs.edit().putString(key, gson.toJson(payload)).apply()
@@ -333,13 +339,52 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     private fun readCompanies(obj: JsonObject, key: String): List<MetaCompany> {
+        val fallbackKind = if (key == "networks") {
+            MetaCompanyKind.NETWORK
+        } else {
+            MetaCompanyKind.COMPANY
+        }
         return obj.getAsJsonArray(key)
-            ?.mapNotNull { element -> runCatching { gson.fromJson(element, MetaCompany::class.java) }.getOrNull() }
+            ?.mapNotNull { element ->
+                readCompany(element, fallbackKind)
+            }
             ?.mapNotNull { company ->
                 val name = company.name.trim()
                 if (name.isBlank()) null else company.copy(name = name)
             }
             .orEmpty()
+    }
+
+    private fun readCompany(
+        element: JsonElement,
+        fallbackKind: MetaCompanyKind
+    ): MetaCompany? {
+        val obj = runCatching { element.asJsonObject }.getOrNull() ?: return null
+        val name = obj.get("name")?.asString?.trim().orEmpty()
+        if (name.isBlank()) return null
+
+        val logo = obj.get("logo")
+            ?.takeUnless { it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val tmdbId = obj.get("tmdbId")
+            ?.takeUnless { it.isJsonNull }
+            ?.asInt
+        val kind = obj.get("kind")
+            ?.takeUnless { it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { raw -> runCatching { MetaCompanyKind.valueOf(raw) }.getOrNull() }
+            ?: fallbackKind
+
+        return MetaCompany(
+            tmdbId = tmdbId,
+            name = name,
+            logo = logo,
+            kind = kind
+        )
     }
 
     private fun readStringList(obj: JsonObject, key: String): List<String> {

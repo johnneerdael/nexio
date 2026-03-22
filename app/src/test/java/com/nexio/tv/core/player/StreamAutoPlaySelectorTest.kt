@@ -101,7 +101,7 @@ class StreamAutoPlaySelectorTest {
         )
         val regexMatch = stream(
             addonName = "AddonB",
-            url = "https://example.com/b.m3u8",
+            url = "https://example.com/b.m3u8?signature=test",
             name = "2160p Remux"
         )
 
@@ -145,6 +145,63 @@ class StreamAutoPlaySelectorTest {
     }
 
     @Test
+    fun `bingeGroup matching ignores case and surrounding whitespace`() {
+        val preferred = stream(
+            addonName = "AddonA",
+            url = "https://example.com/preferred.m3u8",
+            bingeGroup = " Show:Same-Group "
+        )
+        val fallback = stream(
+            addonName = "AddonB",
+            url = "https://example.com/fallback.m3u8",
+            bingeGroup = "other-group"
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(fallback, preferred),
+            mode = StreamAutoPlayMode.FIRST_STREAM,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AddonA", "AddonB"),
+            selectedAddons = emptySet(),
+            preferredBingeGroup = "show:same-group"
+        )
+
+        assertEquals(preferred, selected)
+    }
+
+    @Test
+    fun `fallback bingeGroup matches equivalent parsed releases when addon omits bingeGroup`() {
+        val current = stream(
+            addonName = "AddonA",
+            url = "https://example.com/current.m3u8",
+            filename = "Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
+        )
+        val preferred = stream(
+            addonName = "AddonA",
+            url = "https://example.com/preferred.m3u8",
+            filename = "Shrinking.S03E07.Somebody.Cries.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
+        )
+        val fallback = stream(
+            addonName = "AddonB",
+            url = "https://example.com/fallback.m3u8",
+            filename = "Shrinking.S03E07.Somebody.Cries.720p.WEB-DL.x264-OtherGroup.mkv"
+        )
+
+        val selected = StreamAutoPlaySelector.selectAutoPlayStream(
+            streams = listOf(fallback, preferred),
+            mode = StreamAutoPlayMode.FIRST_STREAM,
+            regexPattern = "",
+            source = StreamAutoPlaySource.ALL_SOURCES,
+            installedAddonNames = setOf("AddonA", "AddonB"),
+            selectedAddons = emptySet(),
+            preferredBingeGroup = com.nexio.tv.core.stream.StreamBingeGroupResolver.resolve(current)
+        )
+
+        assertEquals(preferred, selected)
+    }
+
+    @Test
     fun `manual mode remains manual even with matching bingeGroup`() {
         val matched = stream(
             addonName = "AddonA",
@@ -169,7 +226,8 @@ class StreamAutoPlaySelectorTest {
         addonName: String,
         url: String? = null,
         name: String? = null,
-        bingeGroup: String? = null
+        bingeGroup: String? = null,
+        filename: String? = null
     ): Stream = Stream(
         name = name,
         title = null,
@@ -183,7 +241,8 @@ class StreamAutoPlaySelectorTest {
             notWebReady = null,
             bingeGroup = bingeGroup,
             countryWhitelist = null,
-            proxyHeaders = null
+            proxyHeaders = null,
+            filename = filename
         ),
         addonName = addonName,
         addonLogo = null

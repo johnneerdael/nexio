@@ -237,7 +237,11 @@ class TraktAuthService @Inject constructor(
             val tokenBody = response.body()
             if (!response.isSuccessful || tokenBody == null) {
                 trace("refreshTokenIfNeeded: failed code=${response.code()}")
-                if (response.code() == 401 || response.code() == 403) {
+                if (response.code() == 400 || response.code() == 401 || response.code() == 403) {
+                    Log.w(
+                        "TraktAuthService",
+                        "Token refresh returned ${response.code()}, clearing auth state"
+                    )
                     traktAuthDataStore.clearAuth()
                     tripCircuit("Token refresh returned ${response.code()}")
                 }

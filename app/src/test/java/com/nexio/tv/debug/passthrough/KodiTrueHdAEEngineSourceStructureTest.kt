@@ -186,6 +186,17 @@ class KodiTrueHdAEEngineSourceStructureTest {
         assertTrue(flushMethod.contains("\"steady_state_packet_duration_backoff\""))
     }
 
+    fun steadyStateDrainDoesNotUsePlayStateWaitingAdmissionReasons() {
+        val flushMethod =
+            extractMethod(
+                loadSource(),
+                "int KodiTrueHdAEEngine::FlushTrueHdPackedQueueToHardwareLocked()",
+            )
+
+        assertFalse(flushMethod.contains("\"steady_state_waiting_for_play_state\""))
+        assertFalse(flushMethod.contains("\"steady_state_resume_pending\""))
+    }
+
     @Test
     fun steadyStateDrainDoesNotGatePendingTruthThroughRetryEligibility() {
         val flushMethod =

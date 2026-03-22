@@ -2,7 +2,7 @@ package com.nexio.tv.core.recommendations
 
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.core.sync.addonCatalogDisableKey
+import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -287,8 +287,14 @@ class AndroidTvFeedCatalogService @Inject constructor(
                 .filterNot { it.isSearchOnlyCatalog() }
                 .forEach { catalog ->
                     val key = catalogGlobalKey(addon.id, catalog.apiType, catalog.id)
-                    val disableKey = addonCatalogDisableKey(addon.baseUrl, catalog.apiType, catalog.id, catalog.name)
-                    val isDisabledOnHome = disableKey in disabledKeys || key in disabledKeys
+                    val isDisabledOnHome = isAddonCatalogDisabled(
+                        disabledKeys = disabledKeys,
+                        addonBaseUrl = addon.baseUrl,
+                        addonId = addon.id,
+                        type = catalog.apiType,
+                        catalogId = catalog.id,
+                        catalogName = catalog.name
+                    )
                     options += AndroidTvFeedOption(
                         key = key,
                         title = catalog.name,
