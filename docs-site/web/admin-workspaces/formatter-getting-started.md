@@ -4,6 +4,9 @@ This guide shows how to shape Nexio stream cards for Android TV and the live web
 
 Nexio’s formatter follows the AIO-style syntax popularized by Viren070’s AIOStreams work, so the same mental model carries across built-in presets and custom templates.
 
+![Stream Formatter workspace overview](/images/management-portal/formatter-overview.webp)
+*The Stream Formatter workspace combines formatter selection, custom templates, and a live preview in one flow.*
+
 ## What the formatter controls
 - The bold title line for each stream card.
 - The supporting description lines underneath it.
@@ -38,6 +41,9 @@ If you try to write everything in one shot, it is harder to tell what caused a b
 
 ## The Universal formatter
 Universal is the best default choice when you want one consistent, cross-addon look.
+
+![Formatter preset selection](/images/management-portal/formatter-preset-picker.webp)
+*Built-in presets give you a fast starting point before you move into a custom template.*
 
 It is designed to:
 - keep the title line compact
@@ -79,10 +85,16 @@ Use them for:
 
 The custom formatter editor also supports import and export, which is useful when you want to move a template between accounts.
 
+![Custom formatter editor](/images/management-portal/formatter-custom-editor.webp)
+*The custom editor is where you write the title and description templates, pull in snippets, and import or export a formatter definition.*
+
 ## Practical preview tips
 - Try a movie, a show, and an anime-style sample before you save.
 - Toggle cached, library, private, and proxied flags to see what the card does in edge cases.
 - Open the advanced preview controls when you want to check scores or SeaDex-related output.
+
+![Formatter live preview](/images/management-portal/formatter-preview.webp)
+*The live preview lets you validate how the active formatter resolves against realistic stream metadata before you sync it to devices.*
 
 ## A simple rule of thumb
 - If the formatter is making cards harder to scan, shorten it.

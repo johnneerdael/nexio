@@ -1,5 +1,8 @@
 # Catalogs and Library
 
+![Catalog reorder screen](/images/tv-app/catalog-reorder.webp)
+*Catalog ordering can also be adjusted directly on TV, which is useful when you want to reshuffle Home rails without opening the Management Portal.*
+
 ## What this page covers
 This page explains the rows you browse from Home and how catalog-backed discovery flows into detail pages and playback.
 

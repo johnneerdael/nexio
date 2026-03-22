@@ -47,6 +47,79 @@ Nexio ships with built-in presets that reflect common formatting styles:
 
 These presets are a good reference even if you plan to write a custom template.
 
+## Inline icon tokens
+Inline icon tokens let you place small branded or technical badges directly inside formatter output. They are especially useful when you want a stream title or description to communicate provider, audio format, HDR format, or headline resolution without adding more words.
+
+Use this syntax:
+
+```text
+[[icon:4k]]
+[[icon:netflix]]
+[[icon:atmos]]
+```
+
+You can place icon tokens anywhere plain text is allowed:
+
+```text
+[[icon:4k]] {stream.title}
+[[icon:dovi]] {stream.visualTags::join(' • ')}
+{service.cached::istrue["[[icon:prime]] Instant"||"[[icon:prime]] Cloud"]}
+```
+
+### How icon tokens behave
+- Tokens are case-insensitive, so `[[icon:4k]]` and `[[icon:4K]]` both resolve.
+- If a token is recognized, Nexio renders the matching icon in the web formatter preview and in the TV app formatter output.
+- If a token is not recognized, Nexio leaves the original text in place instead of silently deleting it.
+- When formatted text is converted to plain text, Nexio uses the icon's fallback label so the output still reads cleanly.
+
+### Available icon tokens
+
+#### Streaming services
+| Token | Meaning |
+| :--- | :--- |
+| `[[icon:netflix]]` | Netflix |
+| `[[icon:disneyplus]]` | Disney+ |
+| `[[icon:hbo]]` | HBO Max |
+| `[[icon:max]]` | Max |
+| `[[icon:prime]]` | Amazon / Prime Video |
+| `[[icon:appletv]]` | Apple TV+ |
+| `[[icon:paramount]]` | Paramount+ |
+| `[[icon:peacock]]` | Peacock |
+| `[[icon:crunchyroll]]` | Crunchyroll |
+
+#### Audio formats
+| Token | Meaning |
+| :--- | :--- |
+| `[[icon:atmos]]` | Dolby Atmos |
+| `[[icon:truehd]]` | Dolby TrueHD |
+| `[[icon:ddp]]` | Dolby Digital+ |
+| `[[icon:dd]]` | Dolby Digital |
+| `[[icon:dts]]` | DTS |
+| `[[icon:dtshd]]` | DTS-HD MA |
+| `[[icon:dtsx]]` | DTS:X |
+| `[[icon:stereo]]` | Stereo |
+
+#### HDR and video badges
+| Token | Meaning |
+| :--- | :--- |
+| `[[icon:dovi]]` | Dolby Vision |
+| `[[icon:hdr10]]` | HDR10 |
+
+#### Headline resolution badges
+| Token | Meaning |
+| :--- | :--- |
+| `[[icon:4k]]` | 4K |
+| `[[icon:2k]]` | 2K |
+| `[[icon:fullhd]]` | Full HD |
+| `[[icon:hd]]` | HD |
+| `[[icon:sd]]` | SD |
+
+### Practical guidance
+- Use icons for information users can scan instantly, such as service branding, premium audio, HDR, and headline resolution.
+- Keep them near the start of a title or the start of a short metadata line so they read like badges rather than decoration.
+- Prefer one or two strong icons over a long chain of small badges.
+- If you need broad compatibility outside icon-aware surfaces, include a text fallback nearby such as `{stream.audioTags::join(' • ')}`.
+
 ## Variables
 
 ### `stream`

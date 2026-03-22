@@ -2,6 +2,9 @@
 
 Integrations are the account-wide services that Nexio syncs between the Management Portal and the TV App. The portal stores the settings, secrets, and catalog choices; the TV app exposes the same stack under `Settings > Integration`.
 
+![Integrations overview](/images/management-portal/integrations-overview.webp)
+*The integrations workspace shows connection health, current status, and the services that are already active for the account.*
+
 ## TV App surface
 
 On TV, integrations are grouped into these sections:

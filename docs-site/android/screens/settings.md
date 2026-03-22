@@ -1,5 +1,8 @@
 # Settings
 
+![Playback settings](/images/tv-app/settings-playback.webp)
+*Settings is organized into TV-friendly categories so playback, integrations, appearance, and catalog behavior stay separated instead of competing on one long page.*
+
 ## What Settings is for
 Settings is where you shape Nexio around your device, your integrations, and the way you like to watch. It is split into TV-friendly categories so you can make one kind of change at a time.
 
@@ -36,6 +39,12 @@ Settings is where you shape Nexio around your device, your integrations, and the
 - Anime Skip enables skip timestamps for supported anime titles.
 - Gemini enables subtitle translation features when available.
 - Poster ratings controls RPDB and TOPPosters.
+
+![Integration categories](/images/tv-app/settings-integrations.webp)
+*The TV App groups integrations by function, so account-linked services such as Debrid, Trakt, TMDB, MDBList, Anime Skip, and Gemini are easy to find from one screen.*
+
+![TMDB enrichment settings](/images/tv-app/settings-tmdb.webp)
+*TMDB enrichment is configurable by metadata type, which makes it clear what the service is adding to artwork, details, and related title surfaces.*
 
 ## Playback settings that matter most
 - Player preference decides whether Nexio uses the built-in player, an external app, or asks every time.

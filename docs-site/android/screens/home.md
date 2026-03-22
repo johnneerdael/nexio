@@ -1,5 +1,8 @@
 # Home
 
+![TV App home screen](/images/tv-app/home-overview.webp)
+*Home combines a featured hero, rich poster badges, and synced catalog rails so you can resume quickly or browse deeper without leaving the main screen.*
+
 ## What Home does
 Home is the main browsing surface. It is the fastest way to get back to what you were watching, jump into featured content, or open a catalog row from your configured addons and integrations.
 

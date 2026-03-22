@@ -3,6 +3,9 @@
 ## Search
 Search is the fastest way to jump to a title by name. It works with a keyboard, and voice search is available when the device supports speech recognition and the microphone permission is granted.
 
+![Search results](/images/tv-app/search-results.webp)
+*Search combines typed and voice input, then groups matching titles into browsable rows so you can move straight from query to detail page.*
+
 ### What users can do
 - Type at least two characters and search across active providers.
 - Use voice search from the microphone button when supported.
