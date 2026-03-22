@@ -86,6 +86,7 @@ import com.nexio.tv.ui.components.SourceChipStatus
 import com.nexio.tv.ui.components.SourceStatusFilterChip
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.components.StreamsSkeletonList
+import com.nexio.tv.ui.components.InlineIconText
 import com.nexio.tv.ui.screens.player.LoadingOverlay
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
@@ -937,10 +938,12 @@ private fun StreamCard(
                 modifier = Modifier.weight(0.8f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
+                InlineIconText(
                     text = streamName,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = NexioColors.TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = NexioColors.TextPrimary
+                    ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -954,10 +957,11 @@ private fun StreamCard(
                 }
 
                 detailLines.forEachIndexed { index, detail ->
-                    Text(
+                    InlineIconText(
                         text = detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NexioTheme.extendedColors.textSecondary,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = NexioTheme.extendedColors.textSecondary
+                        ),
                         maxLines = if (index == detailLines.lastIndex) 1 else 2,
                         overflow = TextOverflow.Ellipsis
                     )

@@ -20,11 +20,11 @@ class StreamPresentationEngineTest {
 
         val item = organize(stream)
 
-        assertEquals("⭐⭐⭐☆☆ FHD - Shrinking (Season 03 Episode 06)", item.title)
+        assertEquals("[[icon:fullhd]] - Shrinking (Season 03 Episode 06)", item.title)
         assertEquals(
             listOf(
                 "🎥 Streaming  • 🔊 Dolby Atmos Dolby Digital+ 5.1 • ⏱️ Unknown",
-                "💾 10.74 GB • 💎 Cached (Debrid) • ☁️ Premiumize • Torrentio",
+                "💾 10.74 GB • ☁️ Premiumize • Torrentio",
                 "🗣️ 🇬🇧 🇮🇹 • 👤 TheShrink",
                 "📄 Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
             ),
@@ -47,7 +47,7 @@ class StreamPresentationEngineTest {
         assertEquals(
             listOf(
                 "🎥 Streaming  • 🔊 Stereo • ⏱️ Unknown",
-                "💾 10.74 GB • 💎 Cached (Debrid) • ☁️ Real-Debrid • Torrentio",
+                "💾 10.74 GB • ☁️ Real-Debrid • Torrentio",
                 "🗣️ 🌎 🇫🇷 • 👤 Slay3R",
                 "📄 Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv"
             ),
