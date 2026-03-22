@@ -4,12 +4,14 @@ Nexio is an Android TV media player built around the Stremio addon ecosystem, a 
 
 ## Highlights
 
-- Android TV and Fire OS focused UX
-- Account-based settings and addon sync through Supabase
-- Web portal for managing settings, addons, catalogs, and TV QR login approval
+- Android TV and Fire OS focused UX, Support for Android Streaming Devices
+- Account-based addon, integration and catalog sync through nexioapp.org
 - Native Trakt integration for auth, scrobble, check-in, and account-managed catalogs
 - Native MDBList integration for ratings and list-backed catalogs
 - TMDB metadata integration with shared account configuration
+- Direct RatingPostersDB and Top-Posters integrations for custom movie posters
+- Google Gemini integration for realtime subtitle translation
+- Custom Formatter with feature parity against the excellent parser/formatter from @viren070
 - Advanced Media3-based playback pipeline with Dolby Vision work and Fire OS compatibility improvements
 - In-app updater backed by GitHub Releases
 
