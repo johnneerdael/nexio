@@ -32,6 +32,7 @@ class StartupSyncService @Inject constructor(
     private val watchProgressSyncService: WatchProgressSyncService,
     private val librarySyncService: LibrarySyncService,
     private val watchedItemsSyncService: WatchedItemsSyncService,
+    private val profileSettingsSyncService: ProfileSettingsSyncService,
     private val profileSyncService: ProfileSyncService,
     private val pluginManager: PluginManager,
     private val addonRepository: AddonRepositoryImpl,
@@ -138,6 +139,16 @@ class StartupSyncService @Inject constructor(
             // Pull profiles list first so profile selection stays up-to-date
             profileSyncService.pullFromRemote().getOrElse { throw it }
             Log.d(TAG, "Pulled profiles from remote")
+
+            // Pull profile-scoped UI/player/settings blob.
+            // If not present, local settings are preserved.
+            profileSettingsSyncService.pullCurrentProfileFromRemote()
+                .onSuccess { applied ->
+                    Log.d(TAG, "Profile settings blob pull completed for profile $profileId (applied=$applied)")
+                }
+                .onFailure { e ->
+                    Log.e(TAG, "Failed to pull profile settings blob, keeping local settings", e)
+                }
 
             pluginManager.isSyncingFromRemote = true
             try {
