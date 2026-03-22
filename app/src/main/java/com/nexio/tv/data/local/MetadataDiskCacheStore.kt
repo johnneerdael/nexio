@@ -314,18 +314,7 @@ class MetadataDiskCacheStore @Inject constructor(
         val value = root.get("value") ?: return null
         val parsed = runCatching { gson.fromJson(value, TmdbEnrichment::class.java) }.getOrNull() ?: return null
         val valueObj = value.asJsonObject
-        val safeDirectorMembers = readCastMembers(valueObj, "directorMembers")
-        val safeWriterMembers = readCastMembers(valueObj, "writerMembers")
-        val safeCastMembers = readCastMembers(valueObj, "castMembers")
-        val safeProductionCompanies = readCompanies(valueObj, "productionCompanies")
-        val safeNetworks = readCompanies(valueObj, "networks")
-        return parsed.copy(
-            directorMembers = safeDirectorMembers,
-            writerMembers = safeWriterMembers,
-            castMembers = safeCastMembers,
-            productionCompanies = safeProductionCompanies,
-            networks = safeNetworks
-        )
+        return mergeTmdbEnrichmentCollections(parsed, valueObj)
     }
 
     private fun readCastMembers(obj: JsonObject, key: String): List<MetaCastMember> {
@@ -393,4 +382,86 @@ class MetadataDiskCacheStore @Inject constructor(
             ?.filter { it.isNotBlank() }
             .orEmpty()
     }
+}
+
+internal fun mergeTmdbEnrichmentCollections(
+    parsed: TmdbEnrichment,
+    valueObj: JsonObject
+): TmdbEnrichment {
+    val safeDirectorMembers = readCastMembersFromJson(valueObj, "directorMembers")
+        .ifEmpty { parsed.directorMembers }
+    val safeWriterMembers = readCastMembersFromJson(valueObj, "writerMembers")
+        .ifEmpty { parsed.writerMembers }
+    val safeCastMembers = readCastMembersFromJson(valueObj, "castMembers")
+        .ifEmpty { parsed.castMembers }
+    val safeProductionCompanies = readCompaniesFromJson(valueObj, "productionCompanies")
+        .ifEmpty { parsed.productionCompanies }
+    val safeNetworks = readCompaniesFromJson(valueObj, "networks")
+        .ifEmpty { parsed.networks }
+    return parsed.copy(
+        directorMembers = safeDirectorMembers,
+        writerMembers = safeWriterMembers,
+        castMembers = safeCastMembers,
+        productionCompanies = safeProductionCompanies,
+        networks = safeNetworks
+    )
+}
+
+private fun readCastMembersFromJson(obj: JsonObject, key: String): List<MetaCastMember> {
+    return obj.getAsJsonArray(key)
+        ?.mapNotNull { element -> runCatching { Gson().fromJson(element, MetaCastMember::class.java) }.getOrNull() }
+        ?.mapNotNull { member ->
+            val name = member.name.trim()
+            if (name.isBlank()) null else member.copy(name = name)
+        }
+        .orEmpty()
+}
+
+private fun readCompaniesFromJson(obj: JsonObject, key: String): List<MetaCompany> {
+    val fallbackKind = if (key == "networks") {
+        MetaCompanyKind.NETWORK
+    } else {
+        MetaCompanyKind.COMPANY
+    }
+    return obj.getAsJsonArray(key)
+        ?.mapNotNull { element ->
+            readCompanyFromJson(element, fallbackKind)
+        }
+        ?.mapNotNull { company ->
+            val name = company.name.trim()
+            if (name.isBlank()) null else company.copy(name = name)
+        }
+        .orEmpty()
+}
+
+private fun readCompanyFromJson(
+    element: JsonElement,
+    fallbackKind: MetaCompanyKind
+): MetaCompany? {
+    val obj = runCatching { element.asJsonObject }.getOrNull() ?: return null
+    val name = obj.get("name")?.asString?.trim().orEmpty()
+    if (name.isBlank()) return null
+
+    val logo = obj.get("logo")
+        ?.takeUnless { it.isJsonNull }
+        ?.asString
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+    val tmdbId = obj.get("tmdbId")
+        ?.takeUnless { it.isJsonNull }
+        ?.asInt
+    val kind = obj.get("kind")
+        ?.takeUnless { it.isJsonNull }
+        ?.asString
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { raw -> runCatching { MetaCompanyKind.valueOf(raw) }.getOrNull() }
+        ?: fallbackKind
+
+    return MetaCompany(
+        tmdbId = tmdbId,
+        name = name,
+        logo = logo,
+        kind = kind
+    )
 }
