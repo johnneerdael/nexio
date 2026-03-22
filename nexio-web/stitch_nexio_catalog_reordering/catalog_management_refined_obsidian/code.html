@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NEXIO | Catalog Reordering</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary-fixed": "#ae8dff",
+              "outline": "#777575",
+              "secondary-fixed-dim": "#48d4f3",
+              "tertiary-fixed-dim": "#f67ca3",
+              "secondary-fixed": "#65e1ff",
+              "surface-variant": "#262626",
+              "surface-tint": "#ba9eff",
+              "surface-container-low": "#131313",
+              "secondary-container": "#00687a",
+              "error-dim": "#d73357",
+              "tertiary": "#ff97b5",
+              "tertiary-container": "#fd81a8",
+              "tertiary-fixed": "#ff8eb0",
+              "on-tertiary-container": "#59002a",
+              "surface-container-high": "#201f1f",
+              "primary-container": "#ae8dff",
+              "on-background": "#ffffff",
+              "primary-dim": "#8455ef",
+              "surface-bright": "#2c2c2c",
+              "inverse-surface": "#fcf8f8",
+              "inverse-on-surface": "#565554",
+              "secondary": "#53ddfc",
+              "outline-variant": "#494847",
+              "on-primary-container": "#2b006e",
+              "primary": "#ba9eff",
+              "on-error-container": "#ffb2b9",
+              "on-surface-variant": "#adaaaa",
+              "on-primary-fixed-variant": "#370086",
+              "background": "#0e0e0e",
+              "secondary-dim": "#40ceed",
+              "on-secondary-fixed": "#003a45",
+              "surface-container-lowest": "#000000",
+              "on-secondary-container": "#ecfaff",
+              "on-secondary": "#004b58",
+              "error-container": "#a70138",
+              "error": "#ff6e84",
+              "on-surface": "#ffffff",
+              "on-primary-fixed": "#000000",
+              "surface": "#0e0e0e",
+              "primary-fixed-dim": "#a27cff",
+              "surface-container-highest": "#262626",
+              "on-tertiary-fixed-variant": "#701039",
+              "on-primary": "#39008c",
+              "on-tertiary-fixed": "#380018",
+              "surface-dim": "#0e0e0e",
+              "on-secondary-fixed-variant": "#005969",
+              "on-error": "#490013",
+              "on-tertiary": "#6a0934",
+              "surface-container": "#1a1919",
+              "inverse-primary": "#6e3bd7",
+              "tertiary-dim": "#f0779d"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0e0e0e; color: #ffffff; }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { background: rgba(38, 38, 38, 0.4); backdrop-filter: blur(20px); }
+        .gradient-border-b { position: relative; }
+        .gradient-border-b::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(186,158,255,0.1), transparent); }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-black/60 backdrop-blur-xl shadow-[0_4px_30px_rgba(186,158,255,0.06)] flex justify-between items-center px-8 h-20 w-full font-['Manrope'] tracking-tight">
+<div class="text-2xl font-black tracking-tighter text-white uppercase">NEXIO</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-zinc-400 hover:text-zinc-200 transition-colors" href="#">Home</a>
+<a class="text-zinc-400 hover:text-zinc-200 transition-colors" href="#">Account</a>
+<a class="text-zinc-400 hover:text-zinc-200 transition-colors" href="#">Sign-out</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="hover:bg-white/5 transition-all duration-300 p-2 rounded-full active:scale-95 duration-200">
+<span class="material-symbols-outlined text-zinc-400">notifications</span>
+</button>
+<button class="hover:bg-white/5 transition-all duration-300 p-2 rounded-full active:scale-95 duration-200">
+<span class="material-symbols-outlined text-zinc-400">settings</span>
+</button>
+</div>
+<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-transparent via-zinc-800/50 to-transparent h-[1px]"></div>
+</nav>
+<!-- SideNavBar -->
+<aside class="hidden lg:flex flex-col gap-2 p-6 h-screen w-72 fixed left-0 top-0 pt-24 bg-[#0e0e0e] font-['Manrope'] font-medium text-sm no-border shadow-2xl shadow-black z-40">
+<div class="mb-8 px-2">
+<div class="text-violet-500 font-bold text-lg">NEXIO Portal</div>
+<div class="text-zinc-500 text-xs flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Sync Active
+            </div>
+</div>
+<div class="space-y-1">
+<a class="flex items-center gap-3 p-3 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 transition-all ease-in-out duration-300" href="#">
+<span class="material-symbols-outlined">extension</span>
+<span>Addons</span>
+</a>
+<a class="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-violet-600/20 to-transparent text-violet-300 border-l-4 border-violet-500 transition-all ease-in-out duration-300" href="#">
+<span class="material-symbols-outlined">auto_stories</span>
+<span>Catalogs</span>
+</a>
+<a class="flex items-center gap-3 p-3 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 transition-all ease-in-out duration-300" href="#">
+<span class="material-symbols-outlined">hub</span>
+<span>Integrations</span>
+</a>
+</div>
+<div class="mt-auto pt-6 border-t border-zinc-900/50 space-y-1">
+<a class="flex items-center gap-3 p-3 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 transition-all ease-in-out duration-300" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 p-3 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 transition-all ease-in-out duration-300" href="#">
+<span class="material-symbols-outlined">help_outline</span>
+<span>Support</span>
+</a>
+<div class="flex items-center gap-3 p-3 mt-4">
+<div class="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
+<img alt="User Account Profile" class="w-full h-full object-cover" data-alt="User profile avatar circle" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxTmatgCI6GO-fwiDvdKWPWsZQDdKfCDeUazGHqvCYBm1o_WK4VgTBINDOa3Fldbrz9nWZrW94O84kP2PvFd3FeC8uBXTXLsjIGZ0c1cG5A2MQbYyEOh7ves0Bk9FjoQLeNofF1E4FGvkju8as8gu9yrKigVbLAjHMik7BKPJ_hF7WkGIKA7gap1Pti14FM_nLUGSXjm5Br1AXdzFuB2FlH5r_wIdBpJp4jB3x0Hsb3ZMIC06XSZKUlbsXdZ87wjG6_R9QHDCHSA"/>
+</div>
+<div class="text-xs">
+<div class="text-zinc-200">Admin Account</div>
+<div class="text-zinc-500">Premium Tier</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="lg:ml-72 pt-28 pb-20 px-4 md:px-12 min-h-screen">
+<!-- Luminescent Scrim Header -->
+<header class="relative mb-12 p-8 rounded-xl overflow-hidden bg-surface-container border-outline-variant/10 border">
+<div class="absolute top-0 right-0 w-96 h-96 bg-secondary/5 blur-[100px] rounded-full -mr-20 -mt-20"></div>
+<div class="relative z-10">
+<h1 class="font-headline text-4xl md:text-5xl font-extrabold tracking-tight text-on-surface mb-2">Catalog &amp; Rail Management</h1>
+<p class="text-on-surface-variant max-w-2xl font-body">Reorder and manage all home rails. Only enabled catalogs can be displayed.</p>
+<div class="flex flex-wrap gap-6 mt-8">
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Total Catalogs</span>
+<span class="text-2xl font-headline font-bold text-on-surface">48</span>
+</div>
+<div class="w-[1px] h-10 bg-outline-variant/30 hidden sm:block"></div>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Active Rails</span>
+<span class="text-2xl font-headline font-bold text-secondary">23</span>
+</div>
+<div class="w-[1px] h-10 bg-outline-variant/30 hidden sm:block"></div>
+<div class="flex flex-col">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Last Sync</span>
+<span class="text-2xl font-headline font-bold text-tertiary">2m ago</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Control Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+<div class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/20">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm p-0 placeholder:text-zinc-600 w-48" placeholder="Filter rails..." type="text"/>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-5 py-2.5 rounded-xl border border-outline-variant/20 text-on-surface-variant text-sm font-semibold hover:bg-surface-container-highest transition-colors">
+                    Reset to Defaults
+                </button>
+<button class="px-6 py-2.5 rounded-xl bg-gradient-to-br from-primary to-primary-dim text-on-primary font-bold shadow-[0_0_20px_rgba(186,158,255,0.2)] hover:shadow-[0_0_30px_rgba(186,158,255,0.4)] active:scale-95 transition-all">
+                    Save Configuration
+                </button>
+</div>
+</div>
+<!-- Rail List Container -->
+<div class="space-y-2">
+<!-- Row 1 -->
+<div class="group relative bg-[#131313]/60 backdrop-blur-md px-6 py-4 rounded-xl border border-white/5 hover:border-primary/30 transition-all duration-300 flex items-center justify-between gap-4">
+<div class="flex items-center gap-8 flex-grow">
+<div class="cursor-grab active:cursor-grabbing text-zinc-600 group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="flex flex-col min-w-[200px]">
+<h3 class="font-headline font-bold text-on-surface text-base">Trending Movies</h3>
+<p class="text-xs text-zinc-500 font-medium">Trakt • built-in</p>
+<p class="text-[10px] text-zinc-600 font-body uppercase tracking-wider mt-0.5">trakt trending movies</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1">
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Drag</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Up</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Down</button>
+</div>
+<div class="min-w-[140px] flex justify-end">
+<span class="px-4 py-1.5 rounded-lg bg-zinc-800/50 text-zinc-300 text-[10px] font-bold border border-white/10 tracking-tight uppercase whitespace-nowrap">
+                            Managed in Trakt
+                        </span>
+</div>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="group relative bg-[#131313]/60 backdrop-blur-md px-6 py-4 rounded-xl border border-white/5 hover:border-primary/30 transition-all duration-300 flex items-center justify-between gap-4">
+<div class="flex items-center gap-8 flex-grow">
+<div class="cursor-grab active:cursor-grabbing text-zinc-600 group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="flex flex-col min-w-[200px]">
+<h3 class="font-headline font-bold text-on-surface text-base">New Releases</h3>
+<p class="text-xs text-zinc-500 font-medium">Local Storage • active</p>
+<p class="text-[10px] text-zinc-600 font-body uppercase tracking-wider mt-0.5">com.local.storage.new_releases</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1">
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Drag</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Up</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Down</button>
+</div>
+<div class="min-w-[140px] flex justify-end">
+<span class="px-4 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 tracking-tight uppercase whitespace-nowrap">
+                            Enabled
+                        </span>
+</div>
+</div>
+</div>
+<!-- Row 3 (Disabled style) -->
+<div class="group relative bg-[#131313]/30 backdrop-blur-md px-6 py-4 rounded-xl border border-white/5 opacity-60 flex items-center justify-between gap-4">
+<div class="flex items-center gap-8 flex-grow">
+<div class="text-zinc-800 flex items-center">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="flex flex-col min-w-[200px]">
+<h3 class="font-headline font-bold text-zinc-500 text-base line-through">Personal Watchlist</h3>
+<p class="text-xs text-zinc-600 font-medium">Disconnected • system</p>
+<p class="text-[10px] text-zinc-700 font-body uppercase tracking-wider mt-0.5">user specific watchlist</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1">
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-700 cursor-not-allowed">Drag</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-700 cursor-not-allowed">Up</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-700 cursor-not-allowed">Down</button>
+</div>
+<div class="min-w-[140px] flex justify-end">
+<span class="px-4 py-1.5 rounded-lg bg-zinc-900 text-zinc-600 text-[10px] font-bold border border-zinc-800 tracking-tight uppercase whitespace-nowrap">
+                            Disabled
+                        </span>
+</div>
+</div>
+</div>
+<!-- Row 4 -->
+<div class="group relative bg-[#131313]/60 backdrop-blur-md px-6 py-4 rounded-xl border border-white/5 hover:border-primary/30 transition-all duration-300 flex items-center justify-between gap-4">
+<div class="flex items-center gap-8 flex-grow">
+<div class="cursor-grab active:cursor-grabbing text-zinc-600 group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined">drag_indicator</span>
+</div>
+<div class="flex flex-col min-w-[200px]">
+<h3 class="font-headline font-bold text-on-surface text-base">AI Recommendations</h3>
+<p class="text-xs text-zinc-500 font-medium">MDBList • personal list</p>
+<p class="text-[10px] text-zinc-600 font-body uppercase tracking-wider mt-0.5">personal:mdblist/trakt-ai-recs</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1">
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Drag</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Up</button>
+<button class="px-3 py-1 text-[10px] font-bold text-zinc-500 hover:text-primary hover:bg-white/5 rounded transition-all">Down</button>
+</div>
+<div class="min-w-[140px] flex justify-end">
+<span class="px-4 py-1.5 rounded-lg bg-violet-950/20 text-violet-400 text-[10px] font-bold border border-violet-500/20 tracking-tight uppercase whitespace-nowrap">
+                            Managed in MDBList
+                        </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Help Area -->
+<footer class="mt-20 flex flex-col md:flex-row justify-between items-center py-8 border-t border-outline-variant/10 text-on-surface-variant text-xs">
+<div class="flex items-center gap-6 mb-4 md:mb-0">
+<span class="hover:text-primary transition-colors cursor-pointer">Security Policy</span>
+<span class="hover:text-primary transition-colors cursor-pointer">API Reference</span>
+<span class="hover:text-primary transition-colors cursor-pointer">System Health</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(83,221,252,0.4)]"></span>
+<span class="font-headline tracking-tighter uppercase font-black text-on-surface/50">NEXIO OS v4.2.0</span>
+</div>
+</footer>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl flex justify-around items-center h-16 z-50 border-t border-zinc-800/50">
+<button class="flex flex-col items-center gap-1 text-zinc-500">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px]">Home</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-violet-400">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="text-[10px]">Catalogs</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-zinc-500">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px]">Account</span>
+</button>
+</nav>
+</body></html>
