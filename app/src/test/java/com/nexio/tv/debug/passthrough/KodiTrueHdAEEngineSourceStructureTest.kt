@@ -86,8 +86,18 @@ class KodiTrueHdAEEngineSourceStructureTest {
     @Test
     fun pendingPackedRetryStateTracksNextEligibleRetryTime() {
         val headerSource = loadHeaderSource()
+        val startupRetryState = extractStruct(headerSource, "struct PendingPackedRetryState")
 
-        assertTrue(headerSource.contains("nextEligibleRetryTimeUs_"))
+        assertTrue(startupRetryState.contains("nextEligibleRetryTimeUs_"))
+    }
+
+    @Test
+    fun steadyStateControlStateDoesNotTrackNextEligibleRetryTime() {
+        val headerSource = loadHeaderSource()
+        val steadyStateControlState =
+            extractStruct(headerSource, "struct PendingSteadyStateControlState")
+
+        assertFalse(steadyStateControlState.contains("nextEligibleRetryTimeUs_"))
     }
 
     @Test
@@ -247,5 +257,27 @@ class KodiTrueHdAEEngineSourceStructureTest {
         }
 
         error("Unterminated method body for signature: $signature")
+    }
+
+    private fun extractStruct(source: String, signature: String): String {
+        val signatureIndex = source.indexOf(signature)
+        require(signatureIndex >= 0) { "Struct not found: $signature" }
+        val bodyStart = source.indexOf('{', signatureIndex)
+        require(bodyStart >= 0) { "No body found for struct: $signature" }
+
+        var depth = 0
+        for (index in bodyStart until source.length) {
+            when (source[index]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) {
+                        return source.substring(signatureIndex, index + 1)
+                    }
+                }
+            }
+        }
+
+        error("Unterminated struct body for signature: $signature")
     }
 }
