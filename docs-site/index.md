@@ -8,25 +8,25 @@ hero:
   image:
     src: /app_logo_mark.webp
     alt: NEXIO Logo
-         actions:
-         - theme: brand
-           text: Custom Formatter
-           link: /web/admin-workspaces/formatter
-         - theme: alt
-           text: Get Started
-           link: /web/
-         - theme: alt
-           text: Android App
-           link: /android/
-         - theme: brand
-           text: Formatter Getting Started
-           link: /web/admin-workspaces/formatter-getting-started.md
-         - theme: brand
-           text: Android Getting Started
-           link: /android/getting-started.md
-         - theme: brand
-           text: Web Getting Started
-           link: /web/get-started.md
+  actions:
+    - theme: brand
+      text: Custom Formatter
+      link: /web/admin-workspaces/formatter
+    - theme: alt
+      text: Get Started
+      link: /web/
+    - theme: alt
+      text: Android App
+      link: /android/
+    - theme: brand
+      text: Formatter Getting Started
+      link: /web/admin-workspaces/formatter-getting-started.md
+    - theme: brand
+      text: Android Getting Started
+      link: /android/getting-started.md
+    - theme: brand
+      text: Web Getting Started
+      link: /web/get-started.md
 
 features:
   - title: Bit-Perfect Audio
