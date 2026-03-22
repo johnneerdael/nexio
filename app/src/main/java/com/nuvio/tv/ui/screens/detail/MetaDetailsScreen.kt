@@ -719,6 +719,9 @@ private fun MetaDetailsContent(
     val collectionTabFocusRequester = remember { FocusRequester() }
     val ratingsTabFocusRequester = remember { FocusRequester() }
     val ratingsContentFocusRequester = remember { FocusRequester() }
+    val castSectionFocusRequester = remember { FocusRequester() }
+    val moreLikeSectionFocusRequester = remember { FocusRequester() }
+    val collectionSectionFocusRequester = remember { FocusRequester() }
     var pendingRestoreType by rememberSaveable { mutableStateOf<RestoreTarget?>(null) }
     var pendingRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingRestoreCastPersonId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -1028,8 +1031,12 @@ private fun MetaDetailsContent(
         else -> null
     }
     val commentsUpFocusRequester = when {
-        hasPeopleTabs -> activePeopleTabFocusRequester
-        hasPeopleSection -> seasonDownFocusRequester ?: heroPlayFocusRequester
+        hasPeopleSection -> when (activePeopleTab) {
+            PeopleSectionTab.CAST -> castSectionFocusRequester
+            PeopleSectionTab.MORE_LIKE_THIS -> moreLikeSectionFocusRequester
+            PeopleSectionTab.COLLECTION -> collectionSectionFocusRequester
+            PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
+        }
         isSeries -> seasonDownFocusRequester ?: heroPlayFocusRequester
         else -> heroPlayFocusRequester
     }
@@ -1351,6 +1358,7 @@ private fun MetaDetailsContent(
                                     title = if (hasPeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
                                     upFocusRequester = if (hasPeopleTabs) castTabFocusRequester else seasonDownFocusRequester,
+                                    sectionFocusRequester = castSectionFocusRequester,
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -1373,6 +1381,7 @@ private fun MetaDetailsContent(
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
                                     upFocusRequester = if (hasPeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester,
+                                    sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -1389,6 +1398,7 @@ private fun MetaDetailsContent(
                                 CollectionSection(
                                     items = collection,
                                     upFocusRequester = if (hasPeopleTabs) collectionTabFocusRequester else seasonDownFocusRequester,
+                                    sectionFocusRequester = collectionSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {

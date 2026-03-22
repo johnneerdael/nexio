@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -91,12 +93,26 @@ fun CommentsSection(
             .fillMaxWidth()
             .padding(top = 20.dp, bottom = 8.dp)
     ) {
-        Text(
-            text = stringResource(R.string.detail_comments_title),
-            style = MaterialTheme.typography.titleLarge,
-            color = NuvioColors.TextPrimary,
-            modifier = Modifier.padding(horizontal = 48.dp)
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.trakt_logo_wordmark),
+                contentDescription = "Trakt",
+                modifier = Modifier
+                    .offset(y = (-1).dp)
+                    .width(47.dp)
+                    .height(20.dp),
+                colorFilter = ColorFilter.tint(NuvioColors.TextPrimary)
+            )
+            Text(
+                text = stringResource(R.string.detail_comments_title),
+                style = MaterialTheme.typography.titleLarge,
+                color = NuvioColors.TextPrimary
+            )
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = stringResource(R.string.detail_comments_subtitle),
@@ -316,6 +332,10 @@ fun CommentOverlay(
 
     LaunchedEffect(review.id) {
         mainContentFocusRequester.requestFocus()
+        withFrameNanos { }
+        commentScrollState.scrollTo(0)
+        withFrameNanos { }
+        commentScrollState.scrollTo(0)
     }
 
     Dialog(
@@ -447,13 +467,14 @@ fun CommentOverlay(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .width(168.dp)
                     .padding(top = 6.dp, end = 4.dp)
                     .focusRequester(primaryFocusRequester)
                     .focusable()
                     .focusProperties {
                         down = mainContentFocusRequester
                     },
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = Alignment.Start,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Image(
@@ -464,6 +485,7 @@ fun CommentOverlay(
                 )
                 Text(
                     text = stringResource(R.string.detail_comments_back_hint),
+                    modifier = Modifier.padding(start = 18.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.34f)
                 )

@@ -61,6 +61,7 @@ fun CastSection(
     title: String = "Cast",
     leadingCast: List<MetaCastMember> = emptyList(),
     upFocusRequester: FocusRequester? = null,
+    sectionFocusRequester: FocusRequester? = null,
     restorePersonId: Int? = null,
     restoreFocusToken: Int = 0,
     onRestoreFocusHandled: () -> Unit = {},
@@ -122,6 +123,7 @@ fun CastSection(
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (sectionFocusRequester != null) Modifier.focusRequester(sectionFocusRequester) else Modifier)
                 .focusRestorer { firstItemFocusRequester },
             state = lazyListState,
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 6.dp),
