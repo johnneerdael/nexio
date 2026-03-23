@@ -49,6 +49,10 @@ export const defaultSettings = (): PortalSettings => ({
     omdb: {
       enabled: false
     },
+    imdb: {
+      enabled: false,
+      baseUrl: ''
+    },
     mdblist: {
       enabled: false,
       showTrakt: true,

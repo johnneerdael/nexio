@@ -1,6 +1,7 @@
 package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -15,6 +16,7 @@ import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
+import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
@@ -23,8 +25,10 @@ import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
+import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineStart
@@ -32,6 +36,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -46,7 +51,7 @@ import org.junit.Test
 class AccountConfigSyncContractTest {
 
     @Test
-    fun `buildAccountConfigSyncPayload serializes integrations catalogs and formatter`() {
+    fun `buildAccountConfigSyncPayload serializes integrations catalogs formatter and imdb`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
                 debrid = DebridSyncSettings(
@@ -55,6 +60,7 @@ class AccountConfigSyncContractTest {
                 ),
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false),
                 omdb = OmdbSyncSettings(enabled = true),
+                imdb = ImdbSyncSettings(enabled = true, baseUrl = "https://custom.imdb.example"),
                 mdblist = MDBListSyncSettings(enabled = true, showImdb = false),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(
                     enabled = true,
@@ -88,8 +94,13 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "formatter"), json.keys)
+        assertEquals(3, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals("true", json["integrations"]?.jsonObject?.get("omdb")?.jsonObject?.get("enabled")?.toString())
+        assertEquals(
+            "https://custom.imdb.example",
+            json["integrations"]?.jsonObject?.get("imdb")?.jsonObject?.get("baseUrl")?.toString()?.trim('"')
+        )
         assertFalse(json.containsKey("appearance"))
         assertFalse(json.containsKey("layout"))
         assertFalse(json.containsKey("playback"))
@@ -98,7 +109,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 2`() {
+    fun `build account config sync rpc params includes contract version 3`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -123,6 +134,37 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `buildImdbSyncSettings reads from the imdb store`() = runTest {
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>()
+        every { imdbSettingsDataStore.settings } returns flowOf(
+            ImdbSettings(
+                enabled = true,
+                baseUrl = "https://custom.imdb.example",
+                apiKey = "secret-key"
+            )
+        )
+
+        val settings = buildImdbSyncSettings(imdbSettingsDataStore)
+
+        assertEquals(true, settings.enabled)
+        assertEquals("https://custom.imdb.example", settings.baseUrl)
+    }
+
+    @Test
+    fun `applyImdbSyncSettings writes enabled and baseUrl into the imdb store`() = runTest {
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
+        val settings = ImdbSyncSettings(
+            enabled = true,
+            baseUrl = "https://custom.imdb.example"
+        )
+
+        applyImdbSyncSettings(settings, imdbSettingsDataStore)
+
+        coVerify(exactly = 1) { imdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { imdbSettingsDataStore.setBaseUrl("https://custom.imdb.example") }
+    }
+
+    @Test
     fun `observeAccountConfigSyncChanges emits for account owned change signals`() = runTest {
         val heroCatalogSelections = MutableSharedFlow<Unit>(replay = 1)
         val homeCatalogOrderKeys = MutableSharedFlow<Unit>(replay = 1)
@@ -134,6 +176,7 @@ class AccountConfigSyncContractTest {
         val animeSkipEnabled = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipClientId = MutableSharedFlow<Unit>(replay = 1)
         val geminiSettings = MutableSharedFlow<Unit>(replay = 1)
+        val imdbSettings = MutableSharedFlow<Unit>(replay = 1)
         val posterRatingsSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeAccountState = MutableSharedFlow<Unit>(replay = 1)
@@ -153,6 +196,7 @@ class AccountConfigSyncContractTest {
                 animeSkipEnabled = animeSkipEnabled,
                 animeSkipClientId = animeSkipClientId,
                 geminiSettings = geminiSettings,
+                imdbSettings = imdbSettings,
                 posterRatingsSettings = posterRatingsSettings,
                 premiumizeSettings = premiumizeSettings,
                 premiumizeAccountState = premiumizeAccountState,
@@ -163,6 +207,38 @@ class AccountConfigSyncContractTest {
         }
 
         heroCatalogSelections.emit(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Unit, emission.await())
+    }
+
+    @Test
+    fun `observeAccountConfigSyncChanges emits when imdb settings change`() = runTest {
+        val imdbSettings = MutableSharedFlow<Unit>(replay = 1)
+
+        val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
+            observeAccountConfigSyncChanges(
+                heroCatalogSelections = MutableSharedFlow<Unit>(),
+                homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
+                disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
+                tmdbSettings = MutableSharedFlow<Unit>(),
+                mdbListSettings = MutableSharedFlow<Unit>(),
+                mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
+                omdbSettings = MutableSharedFlow<Unit>(),
+                animeSkipEnabled = MutableSharedFlow<Unit>(),
+                animeSkipClientId = MutableSharedFlow<Unit>(),
+                geminiSettings = MutableSharedFlow<Unit>(),
+                imdbSettings = imdbSettings,
+                posterRatingsSettings = MutableSharedFlow<Unit>(),
+                premiumizeSettings = MutableSharedFlow<Unit>(),
+                premiumizeAccountState = MutableSharedFlow<Unit>(),
+                realDebridState = MutableSharedFlow<Unit>(),
+                traktAuthState = MutableSharedFlow<Unit>(),
+                traktCatalogPreferences = MutableSharedFlow<Unit>()
+            ).first()
+        }
+
+        imdbSettings.emit(Unit)
         advanceUntilIdle()
 
         assertEquals(Unit, emission.await())
@@ -213,12 +289,14 @@ class AccountConfigSyncContractTest {
         val omdbSettingsDataStore = mockk<OmdbSettingsDataStore>(relaxed = true)
         val animeSkipSettingsDataStore = mockk<AnimeSkipSettingsDataStore>(relaxed = true)
         val geminiSettingsDataStore = mockk<com.nexio.tv.data.local.GeminiSettingsDataStore>(relaxed = true)
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
         val posterRatingsSettingsDataStore = mockk<PosterRatingsSettingsDataStore>(relaxed = true)
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
 
         val settings = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false, useBasicInfo = false),
+                imdb = ImdbSyncSettings(enabled = true, baseUrl = "https://custom.imdb.example"),
                 mdblist = MDBListSyncSettings(
                     enabled = true,
                     showTrakt = false,
@@ -265,6 +343,7 @@ class AccountConfigSyncContractTest {
             omdbSettingsDataStore = omdbSettingsDataStore,
             animeSkipSettingsDataStore = animeSkipSettingsDataStore,
             geminiSettingsDataStore = geminiSettingsDataStore,
+            imdbSettingsDataStore = imdbSettingsDataStore,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore
@@ -274,6 +353,8 @@ class AccountConfigSyncContractTest {
         coVerify(exactly = 1) { layoutPreferenceDataStore.setHomeCatalogOrderKeys(listOf("row-a", "row-b")) }
         coVerify(exactly = 1) { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(listOf("row-c")) }
         coVerify(exactly = 1) { tmdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { imdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { imdbSettingsDataStore.setBaseUrl("https://custom.imdb.example") }
         coVerify(exactly = 1) { omdbSettingsDataStore.setEnabled(true) }
         coVerify(exactly = 1) { mdbListSettingsDataStore.setCatalogPreferences(setOf("personal-hidden"), setOf("top-selected"), listOf("mdb-top")) }
         coVerify(exactly = 1) {

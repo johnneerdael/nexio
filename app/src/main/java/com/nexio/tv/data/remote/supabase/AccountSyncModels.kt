@@ -55,7 +55,7 @@ data class AccountAddonSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 2,
+    val schemaVersion: Int = 3,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val formatter: FormatterSyncSettings = FormatterSyncSettings()
@@ -150,6 +150,8 @@ data class IntegrationSettings(
     val debrid: DebridSyncSettings = DebridSyncSettings(),
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
     val omdb: OmdbSyncSettings = OmdbSyncSettings(),
+    @EncodeDefault
+    val imdb: ImdbSyncSettings = ImdbSyncSettings(),
     val mdblist: MDBListSyncSettings = MDBListSyncSettings(),
     val animeSkip: AnimeSkipSyncSettings = AnimeSkipSyncSettings(),
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
@@ -197,6 +199,12 @@ data class TmdbSyncSettings(
 @Serializable
 data class OmdbSyncSettings(
     val enabled: Boolean = false
+)
+
+@Serializable
+data class ImdbSyncSettings(
+    val enabled: Boolean = false,
+    val baseUrl: String = ""
 )
 
 @Serializable
