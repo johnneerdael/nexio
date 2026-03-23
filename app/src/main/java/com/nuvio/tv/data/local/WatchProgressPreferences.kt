@@ -32,13 +32,6 @@ class WatchProgressPreferences @Inject constructor(
     private val gson = Gson()
     private val watchProgressKey = stringPreferencesKey("watch_progress_map")
 
-    // Maximum items to keep in continue watching
-    private val maxItems = 50
-    
-    private val maxEpisodesPerContent = 25
-   
-    private val maxStoredEntries = 300
-
     /**
      * Get all watch progress items, sorted by last watched (most recent first)
      * For series, only returns the series-level entry (not individual episode entries)
@@ -420,75 +413,6 @@ class WatchProgressPreferences @Inject constructor(
     }
 
     private fun pruneOldItems(map: MutableMap<String, WatchProgress>): Map<String, WatchProgress> {
-        if (map.isEmpty()) return map
-
-        val latestByContent = map.values
-            .groupBy { it.contentId }
-            .mapValues { (_, items) -> items.maxOf { it.lastWatched } }
-
-        val inProgressContentIds = map.values
-            .asSequence()
-            .filter { it.isInProgress() }
-            .map { it.contentId }
-            .toSet()
-
-        val sortedContentIds = latestByContent
-            .entries
-            .sortedByDescending { it.value }
-            .map { it.key }
-
-        val keepContentIds = buildList {
-            sortedContentIds
-                .filter { it in inProgressContentIds }
-                .forEach { add(it) }
-            sortedContentIds
-                .filter { it !in inProgressContentIds }
-                .forEach { add(it) }
-        }
-            .distinct()
-            .take(maxItems)
-
-        val keepContentIdSet = keepContentIds.toSet()
-
-        val filteredByContent = map.filterValues { it.contentId in keepContentIdSet }
-        val boundedByContent = mutableMapOf<String, WatchProgress>()
-
-        keepContentIds.forEach { contentId ->
-            val entriesForContent = filteredByContent.filterValues { it.contentId == contentId }
-
-            // Keep canonical content-level record when present.
-            entriesForContent[contentId]?.let { boundedByContent[contentId] = it }
-
-            val recentEpisodeEntries = entriesForContent
-                .filterKeys { it != contentId }
-                .entries
-                .sortedByDescending { it.value.lastWatched }
-                .take(maxEpisodesPerContent)
-
-            recentEpisodeEntries.forEach { (key, value) ->
-                boundedByContent[key] = value
-            }
-        }
-
-        if (boundedByContent.size <= maxStoredEntries) return boundedByContent
-
-        val pinnedContentKeys = keepContentIds.filter { boundedByContent.containsKey(it) }.toSet()
-        val remainingSlots = (maxStoredEntries - pinnedContentKeys.size).coerceAtLeast(0)
-
-        val limited = mutableMapOf<String, WatchProgress>()
-        pinnedContentKeys.forEach { key ->
-            boundedByContent[key]?.let { limited[key] = it }
-        }
-
-        boundedByContent.entries
-            .asSequence()
-            .filter { (key, _) -> key !in pinnedContentKeys }
-            .sortedByDescending { (_, value) -> value.lastWatched }
-            .take(remainingSlots)
-            .forEach { (key, value) ->
-                limited[key] = value
-            }
-
-        return limited
+        return map
     }
 }

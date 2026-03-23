@@ -1335,8 +1335,8 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
                         is ContinueWatchingItem.NextUp ->
                             nextUpDismissKey(
                                 item.info.contentId,
-                                item.info.season,
-                                item.info.episode
+                                item.info.seedSeason,
+                                item.info.seedEpisode
                             ) == dismissKey
                         is ContinueWatchingItem.InProgress -> false
                     }
