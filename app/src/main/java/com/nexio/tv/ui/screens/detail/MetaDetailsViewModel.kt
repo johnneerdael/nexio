@@ -1057,16 +1057,9 @@ class MetaDetailsViewModel @Inject constructor(
                     tmdbId = tmdbId,
                     seasonNumbers = seasonNumbers
                 )
-                val episodeTmdbIds = episodeEnrichment.mapNotNull { (key, value) ->
-                    value.tmdbEpisodeId?.let { key to it }
+                val ratings = episodeEnrichment.mapNotNull { (key, value) ->
+                    value.voteAverage?.takeIf { it > 0.0 }?.let { key to it }
                 }.toMap()
-
-                val ratings = mdbListRepository.getEpisodeRatingsForMeta(
-                    meta = meta,
-                    fallbackItemId = itemId,
-                    fallbackItemType = itemType,
-                    episodeTmdbIds = episodeTmdbIds
-                )
 
                 _uiState.update { state ->
                     if (state.meta?.id != meta.id) {
