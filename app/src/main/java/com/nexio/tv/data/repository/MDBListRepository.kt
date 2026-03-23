@@ -152,8 +152,7 @@ class MDBListRepository @Inject constructor(
 
         val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
         if (mediaType != "show") return emptyMap()
-
-        val imdbId = resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType) ?: return emptyMap()
+        val cacheNamespace = episodeRatingsCacheNamespace(meta, fallbackItemId)
         val semaphore = Semaphore(3)
 
         return coroutineScope {
@@ -163,7 +162,7 @@ class MDBListRepository @Inject constructor(
                     async {
                         semaphore.withPermit {
                             getEpisodeRatingsForSeason(
-                                imdbId = imdbId,
+                                cacheNamespace = cacheNamespace,
                                 season = season,
                                 apiKey = apiKey,
                                 episodeTmdbIds = entries.toMap()
@@ -247,12 +246,12 @@ class MDBListRepository @Inject constructor(
     }
 
     private suspend fun getEpisodeRatingsForSeason(
-        imdbId: String,
+        cacheNamespace: String,
         season: Int,
         apiKey: String,
         episodeTmdbIds: Map<Pair<Int, Int>, Int>
     ): Map<Pair<Int, Int>, Double> {
-        val cacheKey = "show:$imdbId:$season:${apiKey.hashCode()}"
+        val cacheKey = "show:$cacheNamespace:$season:${apiKey.hashCode()}"
         val now = System.currentTimeMillis()
 
         episodeRatingsCache[cacheKey]?.let { cached ->
@@ -441,6 +440,31 @@ private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair
         destination[pair.first] = pair.second
     }
     return destination
+}
+
+internal fun episodeRatingsCacheNamespace(meta: Meta, fallbackItemId: String): String {
+    return extractEpisodeRatingsImdbId(meta.id)
+        ?: extractEpisodeRatingsImdbId(fallbackItemId)
+        ?: extractEpisodeRatingsTmdbId(meta.id)?.let { "tmdb:$it" }
+        ?: extractEpisodeRatingsTmdbId(fallbackItemId)?.let { "tmdb:$it" }
+        ?: meta.id.trim().takeIf { it.isNotBlank() }
+        ?: fallbackItemId.trim().takeIf { it.isNotBlank() }
+        ?: "unknown"
+}
+
+private fun extractEpisodeRatingsImdbId(rawId: String?): String? {
+    if (rawId.isNullOrBlank()) return null
+    val regex = Regex("tt\\d+")
+    return regex.find(rawId)?.value
+}
+
+private fun extractEpisodeRatingsTmdbId(rawId: String?): Int? {
+    if (rawId.isNullOrBlank()) return null
+    val trimmed = rawId.trim()
+    if (trimmed.startsWith("tmdb:", ignoreCase = true)) {
+        return trimmed.substringAfter(':').substringBefore(':').toIntOrNull()
+    }
+    return null
 }
 
 private fun Any?.toEpisodeTmdbIdOrNull(): Int? {
