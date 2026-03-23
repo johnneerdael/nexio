@@ -82,10 +82,28 @@ class MDBListRepository @Inject constructor(
         val enabledProviders = enabledProviders(settings)
         if (enabledProviders.isEmpty()) return null
 
+        return getRatingsForMeta(
+            meta = meta,
+            fallbackItemId = fallbackItemId,
+            fallbackItemType = fallbackItemType,
+            apiKey = apiKey,
+            providers = enabledProviders
+        )
+    }
+
+    private suspend fun getRatingsForMeta(
+        meta: Meta,
+        fallbackItemId: String,
+        fallbackItemType: String,
+        apiKey: String,
+        providers: List<ProviderType>
+    ): MDBListRatingsResult? {
+        if (providers.isEmpty()) return null
+
         val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
         val imdbId = resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType) ?: return null
 
-        val providerHash = enabledProviders.map { it.apiValue }.sorted().joinToString(",")
+        val providerHash = providers.map { it.apiValue }.sorted().joinToString(",")
         val cacheKey = "$mediaType:$imdbId:$providerHash:${apiKey.hashCode()}"
         val now = System.currentTimeMillis()
 
@@ -103,7 +121,7 @@ class MDBListRepository @Inject constructor(
                         imdbId = imdbId,
                         mediaType = mediaType,
                         apiKey = apiKey,
-                        providers = enabledProviders
+                        providers = providers
                     ).also { result ->
                         cache[cacheKey] = CacheEntry(
                             result = result,
@@ -125,10 +143,18 @@ class MDBListRepository @Inject constructor(
 
     suspend fun enrichPreview(preview: MetaPreview): MetaPreview {
         if (preview.tomatoesRating != null) return preview
+        val settings = settingsDataStore.settings.first()
+        if (!settings.enabled || !settings.showTomatoes) return preview
+
+        val apiKey = settings.apiKey.trim()
+        if (apiKey.isBlank()) return preview
+
         val result = getRatingsForMeta(
             meta = preview.toRatingsMeta(),
             fallbackItemId = preview.id,
-            fallbackItemType = preview.apiType
+            fallbackItemType = preview.apiType,
+            apiKey = apiKey,
+            providers = listOf(ProviderType.TOMATOES)
         ) ?: return preview
 
         return preview.copy(
