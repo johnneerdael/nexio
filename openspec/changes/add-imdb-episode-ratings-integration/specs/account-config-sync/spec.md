@@ -27,6 +27,8 @@ The system SHALL allow Android-side configuration of the account-scoped IMDb int
 #### Scenario: Android sync includes IMDb configuration and secret support
 - **WHEN** an Android client builds or applies an account-config snapshot
 - **THEN** it includes the `integrations.imdb` block in v3 payloads
+- **AND** it reads the payload from the Android IMDb store for `enabled` and `baseUrl`
+- **AND** it applies synced `enabled` and `baseUrl` values back into the Android IMDb store
 - **AND** it participates in `imdb_api_key` secret synchronization for `integration:imdb`
 
 ### Requirement: Contract version compatibility

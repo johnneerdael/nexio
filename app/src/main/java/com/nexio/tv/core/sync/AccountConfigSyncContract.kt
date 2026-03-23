@@ -3,6 +3,8 @@ package com.nexio.tv.core.sync
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.GeminiSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettings
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -21,6 +23,7 @@ import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.merge
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -142,14 +145,22 @@ internal suspend fun buildRemoteAddonInstallConfigs(
         }
 }
 
-internal fun buildImdbSyncSettings(): ImdbSyncSettings {
-    return ImdbSyncSettings()
+internal suspend fun buildImdbSyncSettings(
+    imdbSettingsDataStore: ImdbSettingsDataStore
+): ImdbSyncSettings {
+    val settings: ImdbSettings = imdbSettingsDataStore.settings.first()
+    return ImdbSyncSettings(
+        enabled = settings.enabled,
+        baseUrl = settings.baseUrl
+    )
 }
 
-internal fun applyImdbSyncSettings(settings: ImdbSyncSettings) {
-    if (settings.enabled && settings.baseUrl.isNotBlank()) {
-        // Hook reserved for Task 3's runtime IMDb DataStore integration.
-    }
+internal suspend fun applyImdbSyncSettings(
+    settings: ImdbSyncSettings,
+    imdbSettingsDataStore: ImdbSettingsDataStore
+) {
+    imdbSettingsDataStore.setEnabled(settings.enabled)
+    imdbSettingsDataStore.setBaseUrl(settings.baseUrl)
 }
 
 internal suspend fun applyAccountConfigSyncSettings(
@@ -160,6 +171,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     omdbSettingsDataStore: OmdbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     geminiSettingsDataStore: GeminiSettingsDataStore,
+    imdbSettingsDataStore: ImdbSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
     playerSettingsDataStore: PlayerSettingsDataStore
@@ -216,5 +228,5 @@ internal suspend fun applyAccountConfigSyncSettings(
         nameTemplate = settings.formatter.customTemplate?.nameTemplate,
         descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate
     )
-    applyImdbSyncSettings(settings.integrations.imdb)
+    applyImdbSyncSettings(settings.integrations.imdb, imdbSettingsDataStore)
 }
