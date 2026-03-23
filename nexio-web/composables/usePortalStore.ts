@@ -206,7 +206,7 @@ function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): str
   })
 }
 
-function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSettings {
+export function sanitizePortalSettings(input?: Partial<PortalSettings> | null): PortalSettings {
   const defaults = defaultSettings()
   const legacyInput = input as Partial<{
     layout: PortalSettings['catalogs']['home']
@@ -339,7 +339,7 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
     syncRevision: source.syncRevision ?? 1,
     lastSyncedAt: source.lastSyncedAt ?? new Date().toISOString(),
     session,
-    settings: sanitizeSettings(clone(source.settings ?? defaultSettings())),
+    settings: sanitizePortalSettings(clone(source.settings ?? defaultSettings())),
     addons: clone(source.addons ?? defaultAccountAddons()).map((addon, index) => sanitizeAddonRecord(addon, index)),
     secretStatuses: clone(source.secretStatuses ?? []),
     secretDrafts: {},
@@ -766,7 +766,7 @@ export function usePortalStore() {
       state.value.bootstrapped = true
       state.value.session = resolvedSession
       state.value.demoMode = isDemoModeForSession(resolvedSession)
-      state.value.settings = sanitizeSettings(clone(payload.snapshot.settings))
+      state.value.settings = sanitizePortalSettings(clone(payload.snapshot.settings))
       state.value.addons = clone(payload.snapshot.addons).map((addon, index) => sanitizeAddonRecord(addon, index))
       state.value.secretStatuses = clone(payload.snapshot.secretStatuses)
       state.value.linkedDevices = clone(payload.snapshot.linkedDevices)
