@@ -88,6 +88,7 @@
             @save-secret="saveDraftSecret"
             @delete-secret="deleteSecret"
             @validate-mdblist="validateMDBList"
+            @validate-imdb="handleValidateIMDb"
             @toggle-mdblist-personal-list="(key, currentlyHidden) => setMDBListPersonalListEnabled(key, currentlyHidden)"
             @toggle-mdblist-top-list="(key, shouldSelect) => setMDBListTopListSelected(key, shouldSelect)"
             @search-trakt-lists="searchTraktLists"
@@ -151,6 +152,7 @@ const {
   saveDraftSecret,
   deleteSecret,
   validateMDBList,
+  validateIMDb,
   searchMDBListLists,
   setMDBListPersonalListEnabled,
   setMDBListTopListSelected,
@@ -195,6 +197,10 @@ async function handleSignUp(email: string, password: string) {
 
 function handleGoogle() {
   startGoogleSignIn(route.fullPath)
+}
+
+async function handleValidateIMDb() {
+  await validateIMDb().catch(() => undefined)
 }
 
 onMounted(() => {

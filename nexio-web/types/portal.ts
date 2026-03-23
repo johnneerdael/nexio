@@ -23,6 +23,7 @@ export type SecretType =
   | 'addon_credential'
   | 'tmdb_api_key'
   | 'omdb_api_key'
+  | 'imdb_api_key'
   | 'mdblist_api_key'
   | 'premiumize_api_key'
   | 'gemini_api_key'
@@ -136,7 +137,7 @@ export type PortalSession = {
   }
 }
 
-export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 2
+export const ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 3
 
 export type PortalIntegrations = {
   debrid: {
@@ -168,6 +169,10 @@ export type PortalIntegrations = {
   }
   omdb: {
     enabled: boolean
+  }
+  imdb: {
+    enabled: boolean
+    baseUrl: string
   }
   mdblist: {
     enabled: boolean
