@@ -18,6 +18,8 @@ import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCheckinRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktCheckinResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeSummaryDto
+import com.nexio.tv.data.remote.dto.trakt.TraktHiddenItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
@@ -37,6 +39,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserStatsResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedMovieItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -143,6 +146,12 @@ interface TraktApi {
         @Query("extended") extended: String? = null
     ): Response<List<TraktWatchedMovieItemDto>>
 
+    @GET("sync/watched/shows")
+    suspend fun getWatchedShows(
+        @Header("Authorization") authorization: String,
+        @Query("extended") extended: String? = null
+    ): Response<List<TraktWatchedShowItemDto>>
+
     @GET("sync/history/episodes")
     suspend fun getEpisodeHistory(
         @Header("Authorization") authorization: String,
@@ -171,8 +180,27 @@ interface TraktApi {
         @Path("id") id: String,
         @Query("hidden") hidden: Boolean = false,
         @Query("specials") specials: Boolean = false,
-        @Query("count_specials") countSpecials: Boolean = false
+        @Query("count_specials") countSpecials: Boolean = false,
+        @Query("last_activity") lastActivity: String? = null
     ): Response<TraktShowProgressResponseDto>
+
+    @GET("users/hidden/{section}")
+    suspend fun getHiddenItems(
+        @Header("Authorization") authorization: String,
+        @Path("section") section: String,
+        @Query("type") type: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 100
+    ): Response<List<TraktHiddenItemDto>>
+
+    @GET("shows/{id}/seasons/{season}/episodes/{episode}")
+    suspend fun getEpisodeSummary(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("season") season: Int,
+        @Path("episode") episode: Int,
+        @Query("extended") extended: String? = null
+    ): Response<TraktEpisodeSummaryDto>
 
     @DELETE("sync/playback/{id}")
     suspend fun deletePlayback(

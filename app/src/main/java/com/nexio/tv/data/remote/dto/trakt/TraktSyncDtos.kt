@@ -7,13 +7,22 @@ import com.squareup.moshi.JsonClass
 data class TraktLastActivitiesResponseDto(
     @Json(name = "all") val all: String? = null,
     @Json(name = "movies") val movies: TraktLastActivitiesMediaDto? = null,
-    @Json(name = "episodes") val episodes: TraktLastActivitiesMediaDto? = null
+    @Json(name = "episodes") val episodes: TraktLastActivitiesMediaDto? = null,
+    @Json(name = "shows") val shows: TraktLastActivitiesMediaDto? = null,
+    @Json(name = "seasons") val seasons: TraktLastActivitiesMediaDto? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class TraktLastActivitiesMediaDto(
     @Json(name = "watched_at") val watchedAt: String? = null,
-    @Json(name = "paused_at") val pausedAt: String? = null
+    @Json(name = "collected_at") val collectedAt: String? = null,
+    @Json(name = "rated_at") val ratedAt: String? = null,
+    @Json(name = "watchlisted_at") val watchlistedAt: String? = null,
+    @Json(name = "favorited_at") val favoritedAt: String? = null,
+    @Json(name = "commented_at") val commentedAt: String? = null,
+    @Json(name = "paused_at") val pausedAt: String? = null,
+    @Json(name = "hidden_at") val hiddenAt: String? = null,
+    @Json(name = "dropped_at") val droppedAt: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -36,6 +45,28 @@ data class TraktWatchedMovieItemDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class TraktWatchedShowItemDto(
+    @Json(name = "plays") val plays: Int? = null,
+    @Json(name = "last_watched_at") val lastWatchedAt: String? = null,
+    @Json(name = "last_updated_at") val lastUpdatedAt: String? = null,
+    @Json(name = "show") val show: TraktShowDto? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktHiddenItemDto(
+    @Json(name = "hidden_at") val hiddenAt: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "show") val show: TraktShowDto? = null,
+    @Json(name = "season") val season: TraktSeasonDto? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktSeasonDto(
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class TraktUserEpisodeHistoryItemDto(
     @Json(name = "id") val id: Long? = null,
     @Json(name = "watched_at") val watchedAt: String? = null,
@@ -48,12 +79,20 @@ data class TraktUserEpisodeHistoryItemDto(
 data class TraktShowProgressResponseDto(
     @Json(name = "aired") val aired: Int? = null,
     @Json(name = "completed") val completed: Int? = null,
-    @Json(name = "seasons") val seasons: List<TraktShowSeasonProgressDto>? = null
+    @Json(name = "last_watched_at") val lastWatchedAt: String? = null,
+    @Json(name = "reset_at") val resetAt: String? = null,
+    @Json(name = "seasons") val seasons: List<TraktShowSeasonProgressDto>? = null,
+    @Json(name = "hidden_seasons") val hiddenSeasons: List<TraktSeasonDto>? = null,
+    @Json(name = "next_episode") val nextEpisode: TraktEpisodeDto? = null,
+    @Json(name = "last_episode") val lastEpisode: TraktEpisodeDto? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class TraktShowSeasonProgressDto(
     @Json(name = "number") val number: Int? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "aired") val aired: Int? = null,
+    @Json(name = "completed") val completed: Int? = null,
     @Json(name = "episodes") val episodes: List<TraktShowEpisodeProgressDto>? = null
 )
 
@@ -62,6 +101,21 @@ data class TraktShowEpisodeProgressDto(
     @Json(name = "number") val number: Int? = null,
     @Json(name = "completed") val completed: Boolean? = null,
     @Json(name = "last_watched_at") val lastWatchedAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TraktEpisodeSummaryDto(
+    @Json(name = "season") val season: Int? = null,
+    @Json(name = "number") val number: Int? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "ids") val ids: TraktIdsDto? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "first_aired") val firstAired: String? = null,
+    @Json(name = "updated_at") val updatedAt: String? = null,
+    @Json(name = "rating") val rating: Double? = null,
+    @Json(name = "votes") val votes: Int? = null,
+    @Json(name = "comment_count") val commentCount: Int? = null,
+    @Json(name = "runtime") val runtime: Int? = null
 )
 
 @JsonClass(generateAdapter = true)

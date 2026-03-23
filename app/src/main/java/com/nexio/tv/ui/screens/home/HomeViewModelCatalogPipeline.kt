@@ -569,10 +569,9 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
 internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
 ) {
-    val traktUpNextItems = _uiState.value.continueWatchingItems
-        .filterIsInstance<ContinueWatchingItem.NextUp>()
+    val traktUpNextItems = _uiState.value.traktUpNextItems
         .take(20)
-        .map { nextUpToMetaPreview(it) }
+        .map(::nextUpToMetaPreview)
     val traktPrefsSnapshot = traktCatalogPreferences
     val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedTraktGroups: List<PersistedSyntheticCatalogGroup>? = null
@@ -1068,7 +1067,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         traktPrefs = traktPrefs,
         traktSnapshot = effectiveTraktSnapshot,
-        hasTraktUpNextItems = continueWatchingItems.any { it is ContinueWatchingItem.NextUp },
+        hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty(),
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot
     )
@@ -1444,7 +1443,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         traktPrefs = traktCatalogPreferences,
         traktSnapshot = traktDiscoverySnapshot,
-        hasTraktUpNextItems = _uiState.value.continueWatchingItems.any { it is ContinueWatchingItem.NextUp },
+        hasTraktUpNextItems = _uiState.value.traktUpNextItems.isNotEmpty(),
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot
     )

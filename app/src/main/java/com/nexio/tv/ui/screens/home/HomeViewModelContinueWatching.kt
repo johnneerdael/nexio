@@ -3,7 +3,11 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
+import com.nexio.tv.data.repository.ContinueWatchingResumeRef
+import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.TraktScrobbleItem
+import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
@@ -21,64 +25,30 @@ import java.util.Locale
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
         continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
-            val items = buildList {
-                snapshot.movieProgressItems.forEach { progress ->
-                    val displayMetadata = snapshot.displayMetadataByItemKey[
-                        homeDisplayItemKey(progress.contentType, progress.contentId)
-                    ]
-                    add(
-                        ContinueWatchingItem.InProgress(
-                            progress = progress,
-                            displayMetadata = displayMetadata,
-                            episodeDescription = displayMetadata?.description,
-                            episodeImdbRating = displayMetadata?.imdbRating,
-                            genres = displayMetadata?.genres.orEmpty(),
-                            releaseInfo = displayMetadata?.releaseInfo
-                        )
-                    )
+            val timeline = buildMixedContinueWatchingTimeline(
+                resumeItems = snapshot.resumeItems,
+                nextUpItems = snapshot.nextUpItems,
+                resumeRef = ::resumeRefForContinueWatching,
+                nextUpRef = ::nextUpRefForContinueWatching
+            )
+            val items = timeline.map { row ->
+                when (row) {
+                    is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
+                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
                 }
-                snapshot.nextUpItems.forEach { entry ->
-                    val releaseDate = parseEpisodeReleaseDate(entry.firstAired)
-                    val hasAired = releaseDate?.let { !it.isAfter(LocalDate.now(ZoneId.systemDefault())) } ?: true
-                    val displayMetadata = snapshot.displayMetadataByItemKey[
-                        homeDisplayItemKey(entry.contentType, entry.contentId)
-                    ]
-                    add(
-                        ContinueWatchingItem.NextUp(
-                            NextUpInfo(
-                                contentId = entry.contentId,
-                                contentType = entry.contentType,
-                                name = displayMetadata?.title ?: entry.name,
-                                poster = displayMetadata?.poster ?: entry.poster,
-                                backdrop = displayMetadata?.backdrop ?: entry.backdrop,
-                                logo = displayMetadata?.logo ?: entry.logo,
-                                displayMetadata = displayMetadata,
-                                videoId = entry.videoId,
-                                season = entry.season,
-                                episode = entry.episode,
-                                episodeTitle = entry.episodeTitle,
-                                episodeDescription = displayMetadata?.description,
-                                thumbnail = null,
-                                released = entry.firstAired,
-                                hasAired = hasAired,
-                                airDateLabel = releaseDate
-                                    ?.takeIf { !hasAired }
-                                    ?.let(::formatEpisodeAirDateLabel),
-                                lastWatched = entry.firstAiredMs,
-                                imdbRating = displayMetadata?.imdbRating,
-                                genres = displayMetadata?.genres.orEmpty(),
-                                releaseInfo = displayMetadata?.releaseInfo
-                            )
-                        )
-                    )
-                }
+            }
+            val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
+                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
             }
 
             _uiState.update { state ->
-                if (state.continueWatchingItems == items) {
+                if (state.continueWatchingItems == items && state.traktUpNextItems == traktUpNextItems) {
                     state
                 } else {
-                    state.copy(continueWatchingItems = items)
+                    state.copy(
+                        continueWatchingItems = items,
+                        traktUpNextItems = traktUpNextItems
+                    )
                 }
             }
         }
@@ -135,6 +105,9 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
                             nextUpDismissKey(item.info.contentId) == targetId
                         is ContinueWatchingItem.InProgress -> false
                     }
+                },
+                traktUpNextItems = state.traktUpNextItems.filterNot { item ->
+                    nextUpDismissKey(item.info.contentId) == targetId
                 }
             )
         }
@@ -156,8 +129,8 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
         )
         watchProgressRepository.removeProgress(
             contentId = contentId,
-            season = null,
-            episode = null
+            season = season,
+            episode = episode
         )
         continueWatchingSnapshotService.ensureFresh(force = true)
     }
@@ -171,6 +144,9 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
                 continueWatchingItems = state.continueWatchingItems.filterNot { current ->
                     current is ContinueWatchingItem.NextUp &&
                         nextUpDismissKey(current.info.contentId) == targetId
+                },
+                traktUpNextItems = state.traktUpNextItems.filterNot { current ->
+                    nextUpDismissKey(current.info.contentId) == targetId
                 }
             )
         }
@@ -232,11 +208,27 @@ private fun buildTraktScrobbleItemForContinueWatching(item: ContinueWatchingItem
         is ContinueWatchingItem.InProgress -> {
             val ids = parseTraktIdsForContinueWatching(item.progress.contentId)
             if (!ids.hasAnyId()) return null
-            TraktScrobbleItem.Movie(
-                title = item.progress.name,
-                year = null,
-                ids = ids
-            )
+            if (
+                (item.progress.contentType.equals("series", ignoreCase = true) ||
+                    item.progress.contentType.equals("tv", ignoreCase = true)) &&
+                item.progress.season != null &&
+                item.progress.episode != null
+            ) {
+                TraktScrobbleItem.Episode(
+                    showTitle = item.progress.name,
+                    showYear = null,
+                    showIds = ids,
+                    season = item.progress.season,
+                    number = item.progress.episode,
+                    episodeTitle = item.progress.episodeTitle
+                )
+            } else {
+                TraktScrobbleItem.Movie(
+                    title = item.progress.name,
+                    year = null,
+                    ids = ids
+                )
+            }
         }
 
         is ContinueWatchingItem.NextUp -> {
@@ -252,6 +244,75 @@ private fun buildTraktScrobbleItemForContinueWatching(item: ContinueWatchingItem
             )
         }
     }
+}
+
+private fun resumeRefForContinueWatching(progress: WatchProgress): ContinueWatchingResumeRef {
+    val suppressNextUp = progress.season != null &&
+        progress.episode != null &&
+        (progress.contentType.equals("series", ignoreCase = true) || progress.contentType.equals("tv", ignoreCase = true))
+    return ContinueWatchingResumeRef(
+        contentId = progress.contentId,
+        activityAtMs = progress.lastWatched,
+        suppressNextUp = suppressNextUp
+    )
+}
+
+private fun nextUpRefForContinueWatching(
+    entry: com.nexio.tv.data.repository.TraktProgressService.NextUpEntry
+): ContinueWatchingNextUpRef {
+    return ContinueWatchingNextUpRef(
+        contentId = entry.contentId,
+        activityAtMs = entry.activityAtMs,
+        firstAiredMs = entry.firstAiredMs
+    )
+}
+
+private fun WatchProgress.toContinueWatchingInProgress(
+    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+): ContinueWatchingItem.InProgress {
+    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
+    return ContinueWatchingItem.InProgress(
+        progress = this,
+        displayMetadata = displayMetadata,
+        episodeDescription = displayMetadata?.description,
+        episodeImdbRating = displayMetadata?.imdbRating,
+        genres = displayMetadata?.genres.orEmpty(),
+        releaseInfo = displayMetadata?.releaseInfo
+    )
+}
+
+private fun com.nexio.tv.data.repository.TraktProgressService.NextUpEntry.toContinueWatchingNextUp(
+    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+): ContinueWatchingItem.NextUp {
+    val releaseDate = parseEpisodeReleaseDate(firstAired)
+    val hasAired = releaseDate?.let { !it.isAfter(LocalDate.now(ZoneId.systemDefault())) } ?: true
+    val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
+    return ContinueWatchingItem.NextUp(
+        NextUpInfo(
+            contentId = contentId,
+            contentType = contentType,
+            name = displayMetadata?.title ?: name,
+            poster = displayMetadata?.poster ?: poster,
+            backdrop = displayMetadata?.backdrop ?: backdrop,
+            logo = displayMetadata?.logo ?: logo,
+            displayMetadata = displayMetadata,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            episodeTitle = episodeTitle,
+            episodeDescription = displayMetadata?.description,
+            thumbnail = null,
+            released = firstAired,
+            hasAired = hasAired,
+            airDateLabel = releaseDate
+                ?.takeIf { !hasAired }
+                ?.let(::formatEpisodeAirDateLabel),
+            lastWatched = activityAtMs,
+            imdbRating = displayMetadata?.imdbRating,
+            genres = displayMetadata?.genres.orEmpty(),
+            releaseInfo = displayMetadata?.releaseInfo
+        )
+    )
 }
 
 private fun parseTraktIdsForContinueWatching(contentId: String): TraktIdsDto {

@@ -102,6 +102,34 @@ class HomeViewModelPresentationPipelineTest {
 
         assertEquals(71.0, updated.trendingMovieItems.first().tomatoesRating ?: 0.0, 0.0)
     }
+
+    @Test
+    fun `nextUpToMetaPreview builds trakt up next preview from next up item`() {
+        val preview = nextUpToMetaPreview(
+            ContinueWatchingItem.NextUp(
+                NextUpInfo(
+                    contentId = "show-a",
+                    contentType = "series",
+                    name = "Show A",
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    videoId = "show-a:2:4",
+                    season = 2,
+                    episode = 4,
+                    episodeTitle = "Episode 4",
+                    thumbnail = null,
+                    released = "2026-03-23T00:00:00.000Z",
+                    lastWatched = 1_000L
+                )
+            )
+        )
+
+        assertEquals(ContentType.SERIES, preview.type)
+        assertEquals("Show A • S2E4 Episode 4", preview.name)
+        assertEquals(PosterShape.LANDSCAPE, preview.posterShape)
+    }
+
     private fun testPreview(id: String, title: String): MetaPreview {
         return MetaPreview(
             id = id,

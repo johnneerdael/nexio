@@ -8,6 +8,7 @@ import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -23,7 +24,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
         private const val TAG = "ContinueWatchingStore"
         private const val PREFS_NAME = "continue_watching_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 2
+        private const val SCHEMA_VERSION = 3
     }
 
     private val gson = Gson()
@@ -45,8 +46,9 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
-                add("movieProgressItems", gson.toJsonTree(snapshot.movieProgressItems))
+                add("resumeItems", gson.toJsonTree(snapshot.resumeItems))
                 add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
+                add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
                 add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
@@ -68,7 +70,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     private fun decode(raw: String): ContinueWatchingSnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-        if (schemaVersion in 1 until SCHEMA_VERSION) {
+        if (schemaVersion > SCHEMA_VERSION) {
             return null
         }
         val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
@@ -76,15 +78,21 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             return null
         }
         val canonical = ContinueWatchingSnapshot(
-            movieProgressItems = decodeArray(root, "movieProgressItems"),
+            resumeItems = decodeArray<WatchProgress>(root, "resumeItems").ifEmpty {
+                decodeArray(root, "movieProgressItems")
+            },
             nextUpItems = decodeNextUpItems(root, "nextUpItems"),
+            traktUpNextItems = decodeNextUpItems(root, "traktUpNextItems").ifEmpty {
+                decodeNextUpItems(root, "nextUpItems")
+            },
             displayMetadataByItemKey = decodeDisplayMetadata(root, "displayMetadataByItemKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
         if (
             canonical.updatedAtMs > 0L ||
-            canonical.movieProgressItems.isNotEmpty() ||
+            canonical.resumeItems.isNotEmpty() ||
             canonical.nextUpItems.isNotEmpty() ||
+            canonical.traktUpNextItems.isNotEmpty() ||
             canonical.displayMetadataByItemKey.isNotEmpty()
         ) {
             return canonical
@@ -102,7 +110,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     }
 
     private fun encodeNextUpItems(
-        items: List<TraktProgressService.CalendarShowEntry>
+        items: List<TraktProgressService.NextUpEntry>
     ): JsonArray {
         return JsonArray().apply {
             items.forEach { entry ->
@@ -126,6 +134,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
                         )
                         entry.firstAired?.let { addProperty("firstAired", it) }
                         addProperty("firstAiredMs", entry.firstAiredMs)
+                        addProperty("activityAtMs", entry.activityAtMs)
                         entry.poster?.let { addProperty("poster", it) }
                         entry.backdrop?.let { addProperty("backdrop", it) }
                         entry.logo?.let { addProperty("logo", it) }
@@ -140,7 +149,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     private fun decodeNextUpItems(
         root: JsonObject,
         key: String
-    ): List<TraktProgressService.CalendarShowEntry> {
+    ): List<TraktProgressService.NextUpEntry> {
         val array = root.getAsJsonArray(key) ?: return emptyList()
         if (array.size() == 0) return emptyList()
 
@@ -152,9 +161,9 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             return canonical
         }
 
-        val legacyType = object : TypeToken<List<TraktProgressService.CalendarShowEntry>>() {}.type
+        val legacyType = object : TypeToken<List<TraktProgressService.NextUpEntry>>() {}.type
         val legacy = runCatching {
-            gson.fromJson<List<TraktProgressService.CalendarShowEntry>>(array, legacyType).orEmpty()
+            gson.fromJson<List<TraktProgressService.NextUpEntry>>(array, legacyType).orEmpty()
         }.getOrDefault(emptyList())
         return legacy.mapNotNull(::normalizeNextUpEntry)
     }
@@ -170,7 +179,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
 
     private fun decodeNextUpItemObject(
         obj: JsonObject
-    ): TraktProgressService.CalendarShowEntry? {
+    ): TraktProgressService.NextUpEntry? {
         val contentId = obj.stringOrNull("contentId")?.trim().orEmpty()
         if (contentId.isBlank()) return null
 
@@ -187,7 +196,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             ?.takeIf { it.isNotBlank() }
             ?: "$contentId:$season:$episode"
 
-        return TraktProgressService.CalendarShowEntry(
+        return TraktProgressService.NextUpEntry(
             contentId = contentId,
             contentType = contentType,
             name = name,
@@ -197,6 +206,9 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             videoId = videoId,
             firstAired = obj.stringOrNull("firstAired"),
             firstAiredMs = obj.longOrNull("firstAiredMs") ?: 0L,
+            activityAtMs = obj.longOrNull("activityAtMs")
+                ?: obj.longOrNull("firstAiredMs")
+                ?: 0L,
             poster = obj.stringOrNull("poster"),
             backdrop = obj.stringOrNull("backdrop"),
             logo = obj.stringOrNull("logo"),
@@ -206,8 +218,8 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     }
 
     private fun normalizeNextUpEntry(
-        entry: TraktProgressService.CalendarShowEntry
-    ): TraktProgressService.CalendarShowEntry? {
+        entry: TraktProgressService.NextUpEntry
+    ): TraktProgressService.NextUpEntry? {
         return try {
             val contentId = entry.contentId.trim()
             if (contentId.isBlank()) return null
