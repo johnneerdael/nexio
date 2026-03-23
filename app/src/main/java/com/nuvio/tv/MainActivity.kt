@@ -112,6 +112,7 @@ import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
+import com.nuvio.tv.core.sync.ProfileSettingsSyncService
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
@@ -172,6 +173,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var startupSyncService: StartupSyncService
+
+    @Inject
+    lateinit var profileSettingsSyncService: ProfileSettingsSyncService
 
     @Inject
     lateinit var profileSyncService: ProfileSyncService
@@ -519,7 +523,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = true
-        startupSyncService.requestSyncNow()
+        startupSyncService.requestSyncNow(includeProfileSettings = false)
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }
@@ -532,6 +536,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        profileSettingsSyncService.requestForegroundPull()
     }
 }
 
