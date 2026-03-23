@@ -1,6 +1,5 @@
 import { createError } from 'h3'
 import { secretRefs } from '~/server/utils/account-secrets'
-
 export function normalizeImdbBaseUrl(rawBaseUrl: string): string {
   return rawBaseUrl.trim().replace(/\/$/, '')
 }
