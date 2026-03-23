@@ -144,6 +144,14 @@ export const accountGroups: Record<string, PortalGroup[]> = {
       ]
     },
     {
+      id: 'omdb',
+      title: 'OMDB',
+      subtitle: 'IMDb episode ratings provider for episode rows and season ratings tab. The API key is stored separately as a secret.',
+      fields: [
+        { path: 'integrations.omdb.enabled', label: 'Enable OMDB', description: 'Turns OMDB IMDb episode ratings on.', kind: 'toggle' }
+      ]
+    },
+    {
       id: 'mdblist',
       title: 'MDBList',
       subtitle: 'Ratings, catalog curation, and personal list controls. The API key is stored separately as a secret.',

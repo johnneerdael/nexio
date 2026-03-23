@@ -46,6 +46,9 @@ export const defaultSettings = (): PortalSettings => ({
       useMoreLikeThis: true,
       useCollections: true
     },
+    omdb: {
+      enabled: false
+    },
     mdblist: {
       enabled: false,
       showTrakt: true,

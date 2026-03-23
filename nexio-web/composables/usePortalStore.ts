@@ -236,6 +236,10 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
         ...defaults.integrations.tmdb,
         ...(input?.integrations?.tmdb ?? {})
       },
+      omdb: {
+        ...defaults.integrations.omdb,
+        ...(input?.integrations?.omdb ?? {})
+      },
       mdblist: {
         ...defaults.integrations.mdblist,
         enabled: input?.integrations?.mdblist?.enabled ?? defaults.integrations.mdblist.enabled,
@@ -690,6 +694,9 @@ export function usePortalStore() {
 
     for (let index = 0; index < nextAddons.length; index += 1) {
       const addon = nextAddons[index]
+      if (!addon) {
+        continue
+      }
       const parsed = parseAddonInstallUrl(addonInstallCandidate(addon))
       const needsSanitizing =
         parsed.addon.url !== addon.url ||
@@ -920,6 +927,9 @@ export function usePortalStore() {
     }
 
     const leaf = keys[keys.length - 1]
+    if (leaf === undefined) {
+      return
+    }
     if (Array.isArray(cursor[leaf]) && typeof nextValue === 'string') {
       cursor[leaf] = nextValue
         .split(',')
@@ -1002,6 +1012,9 @@ export function usePortalStore() {
     }
 
     const [item] = next.splice(index, 1)
+    if (!item) {
+      return
+    }
     next.splice(target, 0, item)
     state.value.addons = next.map((addon, itemIndex) => ({ ...addon, sortOrder: itemIndex }))
   }
@@ -1059,7 +1072,13 @@ export function usePortalStore() {
     }
 
     const nextOrder = [...fullOrder]
-    ;[nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]]
+    const currentValue = nextOrder[currentIndex]
+    const targetValue = nextOrder[targetIndex]
+    if (currentValue === undefined || targetValue === undefined) {
+      return
+    }
+    nextOrder[currentIndex] = targetValue
+    nextOrder[targetIndex] = currentValue
     state.value.settings.catalogs.home.homeCatalogOrderKeys = nextOrder
   }
 
@@ -1412,6 +1431,19 @@ export function usePortalStore() {
     }
   }
 
+  async function validateOMDB() {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before validating OMDB.')
+    }
+
+    const apiKey = state.value.secretDrafts[secretRefs.omdb]?.trim() || undefined
+    await apiFetch<{ valid: boolean }>('/api/integrations/omdb/validate', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey })
+    }, token)
+  }
+
   async function searchMDBListLists(query: string) {
     if (!query) {
       state.value.mdblistDiscovery.searchResults = []
@@ -1467,21 +1499,33 @@ export function usePortalStore() {
     if (secretType === 'mdblist_api_key') {
       await validateMDBList().catch(() => undefined)
     }
+
+    if (secretType === 'omdb_api_key') {
+      await validateOMDB().catch(() => undefined)
+    }
   }
 
   async function startTraktDeviceFlow() {
     state.value.error = null
     const token = accessToken(state.value.session)
     if (!token) {
-      throw new Error('Sign in before starting Trakt authentication.')
+      state.value.error = 'Sign in before starting Trakt authentication.'
+      return
     }
-    const flow = await apiFetch<TraktDeviceFlow>('/api/integrations/trakt/device-code', {
-      method: 'POST',
-      body: JSON.stringify({})
-    }, token)
-    state.value.traktFlow = flow
-    state.value.settings.integrations.traktAuth.pending = true
-    scheduleTraktAutoPoll(flow.interval * 1000)
+
+    try {
+      const flow = await apiFetch<TraktDeviceFlow>('/api/integrations/trakt/device-code', {
+        method: 'POST',
+        body: JSON.stringify({})
+      }, token)
+      state.value.traktFlow = flow
+      state.value.settings.integrations.traktAuth.pending = true
+      scheduleTraktAutoPoll(flow.interval * 1000)
+    } catch (error) {
+      state.value.settings.integrations.traktAuth.pending = false
+      state.value.traktFlow = null
+      state.value.error = cleanErrorMessage(error, 'Failed to start Trakt authentication.')
+    }
   }
 
   function clearTraktPendingFlow() {
@@ -1658,6 +1702,13 @@ export function usePortalStore() {
       return
     }
 
+    const token = accessToken(state.value.session)
+    if (!token) {
+      clearTraktPendingFlow()
+      state.value.error = 'Sign in before completing Trakt authentication.'
+      return
+    }
+
     traktPollInFlight = true
     let shouldRetry = false
 
@@ -1669,7 +1720,7 @@ export function usePortalStore() {
       }>('/api/integrations/trakt/device-token', {
         method: 'POST',
         body: JSON.stringify({ deviceCode })
-      }, accessToken(state.value.session))
+      }, token)
 
       if (response.approved && response.traktAuth) {
         clearTraktPollTimer()
@@ -1686,11 +1737,13 @@ export function usePortalStore() {
         clearTraktPendingFlow()
       }
     } catch (error) {
-      if (!options.auto) {
-        throw error
+      const message = cleanErrorMessage(error, 'Failed to check Trakt approval.')
+      state.value.error = message
+      if (options.auto) {
+        shouldRetry = true
+      } else {
+        clearTraktPendingFlow()
       }
-      state.value.error = cleanErrorMessage(error, 'Failed to check Trakt approval.')
-      shouldRetry = true
     } finally {
       traktPollInFlight = false
     }

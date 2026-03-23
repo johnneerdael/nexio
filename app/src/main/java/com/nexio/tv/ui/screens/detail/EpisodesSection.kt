@@ -206,7 +206,7 @@ fun SeasonTabs(
 fun EpisodesRow(
     episodes: List<Video>,
     episodeProgressMap: Map<Pair<Int, Int>, com.nexio.tv.domain.model.WatchProgress> = emptyMap(),
-    episodeRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
+    episodeRatings: Map<Pair<Int, Int>, EpisodeRating> = emptyMap(),
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean = false,
@@ -240,6 +240,12 @@ fun EpisodesRow(
     val imdbLogoRequest = remember(context) {
         ImageRequest.Builder(context)
             .data(R.raw.imdb_logo_2016)
+            .crossfade(false)
+            .build()
+    }
+    val tmdbLogoRequest = remember(context) {
+        ImageRequest.Builder(context)
+            .data(R.raw.mdblist_tmdb)
             .crossfade(false)
             .build()
     }
@@ -303,7 +309,7 @@ fun EpisodesRow(
                 episode.season?.let { s -> episode.episode?.let { e -> s to e } }
             }
             val progress = remember(seasonEp, episodeProgressMap) { seasonEp?.let { episodeProgressMap[it] } }
-            val imdbRating = remember(seasonEp, episodeRatings) { seasonEp?.let { episodeRatings[it] } }
+            val episodeRating = remember(seasonEp, episodeRatings) { seasonEp?.let { episodeRatings[it] } }
             val isMarkedWatched = remember(seasonEp, watchedEpisodes) { seasonEp?.let { watchedEpisodes.contains(it) } ?: false }
             val episodeFocusRequester = remember(episode.id) { episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() } }
             val episodeOnClick = remember(episode.id) { { onEpisodeClick(episode) } }
@@ -316,7 +322,7 @@ fun EpisodesRow(
             EpisodeCard(
                 episode = episode,
                 watchProgress = progress,
-                imdbRating = imdbRating,
+                episodeRating = episodeRating,
                 isMarkedWatched = isMarkedWatched,
                 blurUnwatched = blurUnwatchedEpisodes,
                 cardMetrics = cardMetrics,
@@ -325,6 +331,7 @@ fun EpisodesRow(
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = downFocusRequester,
                 imdbLogoRequest = imdbLogoRequest,
+                tmdbLogoRequest = tmdbLogoRequest,
                 focusRequester = episodeFocusRequester,
                 onFocused = episodeOnFocused,
                 onFocusRestored = episodeOnFocusRestored
@@ -389,11 +396,12 @@ fun EpisodesRow(
 private fun EpisodeCard(
     episode: Video,
     watchProgress: com.nexio.tv.domain.model.WatchProgress? = null,
-    imdbRating: Double? = null,
+    episodeRating: EpisodeRating? = null,
     isMarkedWatched: Boolean = false,
     blurUnwatched: Boolean = false,
     cardMetrics: EpisodeCardMetrics,
     imdbLogoRequest: ImageRequest,
+    tmdbLogoRequest: ImageRequest,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     upFocusRequester: FocusRequester,
@@ -410,8 +418,11 @@ private fun EpisodeCard(
     val runtimeLabel = remember(episode.runtime) {
         episode.runtime?.takeIf { it > 0 }?.let(::formatEpisodeRuntime)
     }
-    val ratingLabel = remember(imdbRating) {
-        imdbRating?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
+    val ratingLabel = remember(episodeRating) {
+        episodeRating?.value?.takeIf { it > 0.0 }?.let { String.format(Locale.US, "%.1f", it) }
+    }
+    val ratingBadge = remember(episodeRating?.source) {
+        episodeRating?.source?.let(::episodeRatingBadge)
     }
     val description = remember(episode.overview) { episode.overview?.trim().orEmpty() }
     val isWatched = watchProgress?.isCompleted() == true || isMarkedWatched
@@ -643,8 +654,8 @@ private fun EpisodeCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 AsyncImage(
-                                    model = imdbLogoRequest,
-                                    contentDescription = null,
+                                    model = if (episodeRating?.source == EpisodeRatingSource.TMDB) tmdbLogoRequest else imdbLogoRequest,
+                                    contentDescription = ratingBadge?.contentDescription,
                                     modifier = Modifier
                                         .width(cardMetrics.imdbLogoWidth)
                                         .height(cardMetrics.imdbLogoHeight),

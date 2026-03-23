@@ -45,7 +45,7 @@ data class MetaDetailsUiState(
     val reviewsError: String? = null,
     val collection: List<MetaPreview> = emptyList(),
     val collectionName: String? = null,
-    val episodeImdbRatings: Map<Pair<Int, Int>, Double> = emptyMap(),
+    val episodeRatings: Map<Pair<Int, Int>, EpisodeRating> = emptyMap(),
     val isEpisodeRatingsLoading: Boolean = false,
     val episodeRatingsError: String? = null,
     val mdbListRatings: MDBListRatings? = null,

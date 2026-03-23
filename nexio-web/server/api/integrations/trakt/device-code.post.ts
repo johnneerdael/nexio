@@ -32,7 +32,29 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!response.ok) {
-    throw createError({ statusCode: response.status, statusMessage: await response.text() })
+    const responseText = await response.text()
+    const cfRay = response.headers.get('cf-ray') || response.headers.get('CF-RAY')
+    const contentType = response.headers.get('content-type') || ''
+    const blockedByCloudflare =
+      contentType.toLowerCase().indexOf('text/html') >= 0
+      && /cloudflare|you have been blocked|attention required/i.test(responseText)
+
+    console.error('[trakt][device-code] upstream error', {
+      status: response.status,
+      cfRay,
+      contentType,
+      blockedByCloudflare,
+      bodyPreview: responseText.slice(0, 400)
+    })
+
+    if (blockedByCloudflare) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: `Trakt is temporarily unreachable from this server due to upstream protection. Retry later.${cfRay ? ` Cloudflare Ray ID: ${cfRay}` : ''}`
+      })
+    }
+
+    throw createError({ statusCode: response.status, statusMessage: responseText })
   }
 
   const payload = await response.json() as DeviceCodeResponse
