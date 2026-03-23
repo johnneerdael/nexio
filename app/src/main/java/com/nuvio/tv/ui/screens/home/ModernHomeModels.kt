@@ -209,7 +209,13 @@ internal fun buildContinueWatchingItem(
             )
         }
         is ContinueWatchingItem.NextUp -> {
-            if (!item.info.hasAired) {
+            if (item.info.isReleaseAlert) {
+                if (item.info.isNewSeasonRelease) {
+                    context.getString(R.string.cw_new_season)
+                } else {
+                    context.getString(R.string.cw_new_episode)
+                }
+            } else if (!item.info.hasAired) {
                 item.info.airDateLabel?.let { context.getString(R.string.cw_airs_date, it) }
                     ?: context.getString(R.string.cw_upcoming)
             } else {
