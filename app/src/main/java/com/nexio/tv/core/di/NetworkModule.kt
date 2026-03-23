@@ -8,10 +8,12 @@ import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
 import com.nexio.tv.data.remote.api.ArmApi
+import com.nexio.tv.data.remote.CustomImdbClient
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.MDBListApi
+import com.nexio.tv.data.remote.OkHttpCustomImdbClient
 import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
@@ -358,6 +360,16 @@ object NetworkModule {
     @Singleton
     fun provideOmdbApi(@Named("omdb") retrofit: Retrofit): OmdbApi =
         retrofit.create(OmdbApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideCustomImdbClient(
+        okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): CustomImdbClient = OkHttpCustomImdbClient(
+        okHttpClient = okHttpClient,
+        moshi = moshi
+    )
 
     // --- Debrid APIs ---
 

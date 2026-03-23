@@ -12,8 +12,8 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
+import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
-import com.nexio.tv.data.repository.OmdbEpisodeRatingsRepository
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -83,7 +83,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val mdbListRepository: MDBListRepository,
-    private val omdbEpisodeRatingsRepository: OmdbEpisodeRatingsRepository,
+    private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
@@ -1053,29 +1053,12 @@ class MetaDetailsViewModel @Inject constructor(
                 .mapValues { (_, episodes) -> episodes.toSet() }
 
             try {
-                val tmdbLookupType = resolveTmdbContentType(meta).toApiString()
-                val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                    ?: tmdbService.ensureTmdbId(itemId, itemType)
-
-                val tmdbRatings = if (tmdbId != null) {
-                    tmdbMetadataService.fetchEpisodeEnrichment(
-                        tmdbId = tmdbId,
-                        seasonNumbers = seasonNumbers
-                    ).mapNotNull { (key, value) ->
-                        value.voteAverage?.takeIf { it > 0.0 }?.let { key to it }
-                    }.toMap()
-                } else {
-                    emptyMap()
-                }
-
-                val omdbRatings = omdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
+                val ratings = episodeRatingsSelectionRepository.getEpisodeRatings(
                     meta = meta,
                     fallbackItemId = itemId,
                     fallbackItemType = itemType,
                     episodesBySeason = episodesBySeason
                 )
-
-                val ratings = resolveEpisodeRatings(tmdbRatings, omdbRatings)
 
                 _uiState.update { state ->
                     if (state.meta?.id != meta.id) {

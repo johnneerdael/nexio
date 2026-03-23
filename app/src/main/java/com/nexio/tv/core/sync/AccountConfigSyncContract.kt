@@ -3,7 +3,6 @@ package com.nexio.tv.core.sync
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.GeminiSettingsDataStore
-import com.nexio.tv.data.local.ImdbSettings
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -22,6 +21,7 @@ import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
+import com.nexio.tv.domain.model.ImdbSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.merge

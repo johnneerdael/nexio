@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.domain.model.ImdbSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -16,15 +17,6 @@ import javax.inject.Singleton
 private val Context.imdbSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "imdb_settings"
 )
-
-data class ImdbSettings(
-    val enabled: Boolean = false,
-    val baseUrl: String = "",
-    val apiKey: String = ""
-) {
-    val isActive: Boolean
-        get() = enabled && baseUrl.isNotBlank() && apiKey.isNotBlank()
-}
 
 @Singleton
 class ImdbSettingsDataStore @Inject constructor(
