@@ -50,6 +50,8 @@
     <string name="continue_watching">Continue Watching</string>
     <string name="cw_upcoming">Upcoming</string>
     <string name="cw_next_up">Next Up</string>
+    <string name="cw_new_episode">New Episode</string>
+    <string name="cw_new_season">New Season</string>
     <string name="cw_resume">Resume</string>
     <string name="cw_percent_watched">%1$d%% watched</string>
     <string name="cw_hours_min_left">%1$dh %2$dm left</string>

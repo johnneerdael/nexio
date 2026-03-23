@@ -33,16 +33,14 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-private const val CW_MAX_RECENT_PROGRESS_ITEMS = 300
-private const val CW_MAX_NEXT_UP_LOOKUPS = 24
+private const val CW_MAX_RECENT_PROGRESS_ITEMS = 150
+private const val CW_MAX_NEXT_UP_LOOKUPS = 15
 private const val CW_MAX_NEXT_UP_CONCURRENCY = 4
 private const val CW_MAX_ENRICHMENT_CONCURRENCY = 4
 private const val CW_PROGRESS_DEBOUNCE_MS = 500L
-private const val CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS = 7L
 
 private data class ContinueWatchingSettingsSnapshot(
     val items: List<WatchProgress>,
@@ -73,6 +71,13 @@ internal data class NextUpResolution(
     val hasAired: Boolean,
     val airDateLabel: String?,
     val lastWatched: Long
+)
+
+private data class NextUpReleaseState(
+    val sortTimestamp: Long,
+    val releaseTimestamp: Long?,
+    val isReleaseAlert: Boolean,
+    val isNewSeasonRelease: Boolean
 )
 
 private class CwDebugSession {
@@ -503,7 +508,9 @@ private suspend fun HomeViewModel.buildLightweightNextUpItems(
             chosen
         }
         .filter { it.contentId !in inProgressIds }
-        .filter { progress -> nextUpDismissKey(progress.contentId) !in dismissedNextUp }
+        .filter { progress ->
+            nextUpDismissKey(progress.contentId, progress.season, progress.episode) !in dismissedNextUp
+        }
         .sortedByDescending { it.lastWatched }
         .take(CW_MAX_NEXT_UP_LOOKUPS)
 
@@ -601,7 +608,7 @@ private fun mergeContinueWatchingItems(
 
     val combined = mutableListOf<Pair<Long, ContinueWatchingItem>>()
     inProgressItems.forEach { combined.add(it.progress.lastWatched to it) }
-    filteredNextUpItems.forEach { combined.add(it.info.lastWatched to it) }
+    filteredNextUpItems.forEach { combined.add(it.info.sortTimestamp to it) }
 
     return combined
         .sortedByDescending { it.first }
@@ -629,6 +636,12 @@ private suspend fun HomeViewModel.buildNextUpItem(
     val name = progress.name.trim().takeIf { it.isNotEmpty() }
         ?: seedMeta?.name
         ?: progress.contentId
+    val releaseState = resolveNextUpReleaseState(
+        seedProgress = progress,
+        nextSeason = nextUp.season,
+        nextReleased = nextUp.released,
+        hasAired = nextUp.hasAired
+    )
     val info = NextUpInfo(
         contentId = progress.contentId,
         contentType = progress.contentType,
@@ -649,6 +662,10 @@ private suspend fun HomeViewModel.buildNextUpItem(
         imdbRating = null,
         genres = emptyList(),
         releaseInfo = null,
+        sortTimestamp = releaseState.sortTimestamp,
+        releaseTimestamp = releaseState.releaseTimestamp,
+        isReleaseAlert = releaseState.isReleaseAlert,
+        isNewSeasonRelease = releaseState.isNewSeasonRelease,
         seedSeason = progress.season,
         seedEpisode = progress.episode
     )
@@ -716,6 +733,12 @@ private suspend fun HomeViewModel.enrichNextUpItem(
     val releaseDate = parseEpisodeReleaseDate(released)
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
     val hasAired = releaseDate?.let { !it.isAfter(todayLocal) } ?: item.info.hasAired
+    val releaseState = resolveNextUpReleaseState(
+        seedProgress = progressSeed,
+        nextSeason = video?.season ?: item.info.season,
+        nextReleased = released,
+        hasAired = hasAired
+    )
 
     val enrichedInfo = item.info.copy(
         name = tmdbData?.name ?: meta.name,
@@ -737,7 +760,11 @@ private suspend fun HomeViewModel.enrichNextUpItem(
         airDateLabel = if (hasAired || releaseDate == null) null else formatEpisodeAirDateLabel(releaseDate),
         imdbRating = meta.imdbRating ?: item.info.imdbRating,
         genres = meta.genres.take(3).ifEmpty { item.info.genres },
-        releaseInfo = meta.releaseInfo?.takeIf { it.isNotBlank() } ?: item.info.releaseInfo
+        releaseInfo = meta.releaseInfo?.takeIf { it.isNotBlank() } ?: item.info.releaseInfo,
+        sortTimestamp = releaseState.sortTimestamp,
+        releaseTimestamp = releaseState.releaseTimestamp,
+        isReleaseAlert = releaseState.isReleaseAlert,
+        isNewSeasonRelease = releaseState.isNewSeasonRelease
     )
     if (shouldTraceNextUpSeries(progressSeed)) {
         logNextUpDecision(
@@ -895,19 +922,7 @@ private fun resolveNextUpVideoFromMeta(
             if (!releaseDate.isAfter(todayLocal)) {
                 return@firstOrNull true
             }
-            if (!showUnairedNextUp) {
-                return@firstOrNull false
-            }
-
-            val daysUntilRelease = ChronoUnit.DAYS.between(todayLocal, releaseDate)
-            val withinWindow = daysUntilRelease <= CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS
-            if (!withinWindow) {
-                logNextUpDecision(
-                    "skip contentId=${progress.contentId} name=${progress.name} reason=unaired-next-season-too-far " +
-                        "seed=${seedSeason}x${seedEpisode} next=${video.season}x${video.episode} daysUntil=$daysUntilRelease"
-                )
-            }
-            return@firstOrNull withinWindow
+            return@firstOrNull false
         }
 
         val isUnaired = releaseDate?.isAfter(todayLocal) == true
@@ -1107,6 +1122,26 @@ private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
     }.getOrNull()
 }
 
+private fun parseEpisodeReleaseInstant(raw: String?): Instant? {
+    if (raw.isNullOrBlank()) return null
+    val value = raw.trim()
+    val zone = ZoneId.systemDefault()
+
+    return runCatching {
+        Instant.parse(value)
+    }.getOrNull() ?: runCatching {
+        OffsetDateTime.parse(value).toInstant()
+    }.getOrNull() ?: runCatching {
+        LocalDateTime.parse(value).atZone(zone).toInstant()
+    }.getOrNull() ?: runCatching {
+        LocalDate.parse(value).atStartOfDay(zone).toInstant()
+    }.getOrNull() ?: runCatching {
+        val datePortion = Regex("\\b\\d{4}-\\d{2}-\\d{2}\\b").find(value)?.value
+            ?: return@runCatching null
+        LocalDate.parse(datePortion).atStartOfDay(zone).toInstant()
+    }.getOrNull()
+}
+
 private suspend fun HomeViewModel.resolveNextUpTmdbData(
     progress: WatchProgress,
     meta: Meta,
@@ -1249,12 +1284,40 @@ private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {
     )
 }
 
+private fun resolveNextUpReleaseState(
+    seedProgress: WatchProgress,
+    nextSeason: Int,
+    nextReleased: String?,
+    hasAired: Boolean
+): NextUpReleaseState {
+    val releaseTimestamp = parseEpisodeReleaseInstant(nextReleased)?.toEpochMilli()
+    val isReleaseAlert = hasAired &&
+        releaseTimestamp != null &&
+        releaseTimestamp > seedProgress.lastWatched
+    return NextUpReleaseState(
+        sortTimestamp = if (isReleaseAlert) releaseTimestamp else seedProgress.lastWatched,
+        releaseTimestamp = releaseTimestamp,
+        isReleaseAlert = isReleaseAlert,
+        isNewSeasonRelease = isReleaseAlert && seedProgress.season != null && nextSeason != seedProgress.season
+    )
+}
+
 private fun String?.normalizeImageUrl(): String? = this
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
 
-private fun nextUpDismissKey(contentId: String): String {
-    return contentId.trim()
+private fun nextUpDismissKey(
+    contentId: String,
+    season: Int?,
+    episode: Int?
+): String {
+    return buildString {
+        append(contentId.trim())
+        append("|")
+        append(season ?: -1)
+        append("|")
+        append(episode ?: -1)
+    }
 }
 
 internal fun HomeViewModel.removeContinueWatchingPipeline(
@@ -1264,13 +1327,17 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
     isNextUp: Boolean = false
 ) {
     if (isNextUp) {
-        val dismissKey = nextUpDismissKey(contentId)
+        val dismissKey = nextUpDismissKey(contentId, season, episode)
         _uiState.update { state ->
             state.copy(
                 continueWatchingItems = state.continueWatchingItems.filterNot { item ->
                     when (item) {
                         is ContinueWatchingItem.NextUp ->
-                            nextUpDismissKey(item.info.contentId) == dismissKey
+                            nextUpDismissKey(
+                                item.info.contentId,
+                                item.info.season,
+                                item.info.episode
+                            ) == dismissKey
                         is ContinueWatchingItem.InProgress -> false
                     }
                 }
