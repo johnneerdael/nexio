@@ -176,6 +176,7 @@ class AccountConfigSyncContractTest {
         val animeSkipEnabled = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipClientId = MutableSharedFlow<Unit>(replay = 1)
         val geminiSettings = MutableSharedFlow<Unit>(replay = 1)
+        val imdbSettings = MutableSharedFlow<Unit>(replay = 1)
         val posterRatingsSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeAccountState = MutableSharedFlow<Unit>(replay = 1)
@@ -195,6 +196,7 @@ class AccountConfigSyncContractTest {
                 animeSkipEnabled = animeSkipEnabled,
                 animeSkipClientId = animeSkipClientId,
                 geminiSettings = geminiSettings,
+                imdbSettings = imdbSettings,
                 posterRatingsSettings = posterRatingsSettings,
                 premiumizeSettings = premiumizeSettings,
                 premiumizeAccountState = premiumizeAccountState,
@@ -205,6 +207,38 @@ class AccountConfigSyncContractTest {
         }
 
         heroCatalogSelections.emit(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Unit, emission.await())
+    }
+
+    @Test
+    fun `observeAccountConfigSyncChanges emits when imdb settings change`() = runTest {
+        val imdbSettings = MutableSharedFlow<Unit>(replay = 1)
+
+        val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
+            observeAccountConfigSyncChanges(
+                heroCatalogSelections = MutableSharedFlow<Unit>(),
+                homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
+                disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
+                tmdbSettings = MutableSharedFlow<Unit>(),
+                mdbListSettings = MutableSharedFlow<Unit>(),
+                mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
+                omdbSettings = MutableSharedFlow<Unit>(),
+                animeSkipEnabled = MutableSharedFlow<Unit>(),
+                animeSkipClientId = MutableSharedFlow<Unit>(),
+                geminiSettings = MutableSharedFlow<Unit>(),
+                imdbSettings = imdbSettings,
+                posterRatingsSettings = MutableSharedFlow<Unit>(),
+                premiumizeSettings = MutableSharedFlow<Unit>(),
+                premiumizeAccountState = MutableSharedFlow<Unit>(),
+                realDebridState = MutableSharedFlow<Unit>(),
+                traktAuthState = MutableSharedFlow<Unit>(),
+                traktCatalogPreferences = MutableSharedFlow<Unit>()
+            ).first()
+        }
+
+        imdbSettings.emit(Unit)
         advanceUntilIdle()
 
         assertEquals(Unit, emission.await())
