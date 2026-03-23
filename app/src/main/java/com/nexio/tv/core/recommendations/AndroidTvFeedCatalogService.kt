@@ -11,12 +11,16 @@ import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
+import com.nexio.tv.data.repository.ContinueWatchingResumeRef
+import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -346,7 +350,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         continueWatchingSnapshot: ContinueWatchingSnapshot?
     ): List<CatalogRow> {
         val nextUpItems = continueWatchingSnapshot
-            ?.nextUpItems
+            ?.traktUpNextItems
             ?.map { nextUp -> nextUp.toMetaPreview() }
             .orEmpty()
 
@@ -444,12 +448,15 @@ class AndroidTvFeedCatalogService @Inject constructor(
     }
 
     private fun buildContinueWatchingItems(snapshot: ContinueWatchingSnapshot): List<MetaPreview> {
-        return buildList {
-            snapshot.movieProgressItems.forEach { progress ->
-                add(progress.toContinueWatchingMetaPreview())
-            }
-            snapshot.nextUpItems.forEach { nextUp ->
-                add(nextUp.toMetaPreview())
+        return buildMixedContinueWatchingTimeline(
+            resumeItems = snapshot.resumeItems,
+            nextUpItems = snapshot.nextUpItems,
+            resumeRef = ::resumeRefForAndroidTvFeed,
+            nextUpRef = ::nextUpRefForAndroidTvFeed
+        ).map { row ->
+            when (row) {
+                is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingMetaPreview()
+                is ContinueWatchingTimelineRow.NextUp -> row.value.toMetaPreview()
             }
         }
     }
@@ -479,7 +486,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         )
     }
 
-    private fun com.nexio.tv.data.repository.TraktProgressService.CalendarShowEntry.toMetaPreview(): MetaPreview {
+    private fun com.nexio.tv.data.repository.TraktProgressService.NextUpEntry.toMetaPreview(): MetaPreview {
         val episodeSuffix = buildString {
             append("S")
             append(season)
@@ -503,6 +510,27 @@ class AndroidTvFeedCatalogService @Inject constructor(
             releaseInfo = firstAired,
             imdbRating = null,
             genres = emptyList()
+        )
+    }
+
+    private fun resumeRefForAndroidTvFeed(progress: WatchProgress): ContinueWatchingResumeRef {
+        val suppressNextUp = progress.season != null &&
+            progress.episode != null &&
+            (progress.contentType.equals("series", ignoreCase = true) || progress.contentType.equals("tv", ignoreCase = true))
+        return ContinueWatchingResumeRef(
+            contentId = progress.contentId,
+            activityAtMs = progress.lastWatched,
+            suppressNextUp = suppressNextUp
+        )
+    }
+
+    private fun nextUpRefForAndroidTvFeed(
+        entry: com.nexio.tv.data.repository.TraktProgressService.NextUpEntry
+    ): ContinueWatchingNextUpRef {
+        return ContinueWatchingNextUpRef(
+            contentId = entry.contentId,
+            activityAtMs = entry.activityAtMs,
+            firstAiredMs = entry.firstAiredMs
         )
     }
 

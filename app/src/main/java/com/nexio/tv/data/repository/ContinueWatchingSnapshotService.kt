@@ -36,8 +36,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class ContinueWatchingSnapshot(
-    val movieProgressItems: List<WatchProgress> = emptyList(),
-    val nextUpItems: List<TraktProgressService.CalendarShowEntry> = emptyList(),
+    val resumeItems: List<WatchProgress> = emptyList(),
+    val nextUpItems: List<TraktProgressService.NextUpEntry> = emptyList(),
+    val traktUpNextItems: List<TraktProgressService.NextUpEntry> = emptyList(),
     val displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap(),
     val updatedAtMs: Long = 0L
 )
@@ -83,6 +84,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     snapshot.copy(
                         nextUpItems = snapshot.nextUpItems.filter { entry ->
                             entry.contentId.trim() !in dismissedKeys
+                        },
+                        traktUpNextItems = snapshot.traktUpNextItems.filter { entry ->
+                            entry.contentId.trim() !in dismissedKeys
                         }
                     )
                 }
@@ -111,14 +115,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         combine(
                             traktProgressService.observeRemoteSnapshotLoaded(),
                             watchProgressRepository.allProgress,
-                            traktProgressService.observeMyShowsCalendar()
-                        ) { hasLoadedRemoteSnapshot, allProgress, calendarEntries ->
+                            traktProgressService.observeContinueWatchingNextUp(),
+                            traktProgressService.observeSyntheticContinueWatchingNextUp()
+                        ) { hasLoadedRemoteSnapshot, allProgress, nextUpEntries, traktUpNextEntries ->
                             if (!hasLoadedRemoteSnapshot) {
                                 null
                             } else {
                                 buildRawSnapshot(
                                     allProgress = allProgress,
-                                    calendarEntries = calendarEntries
+                                    nextUpEntries = nextUpEntries,
+                                    traktUpNextEntries = traktUpNextEntries
                                 )
                             }
                         }
@@ -166,6 +172,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         if (target.isBlank()) return
         val updated = rawSnapshotState.value.copy(
             nextUpItems = rawSnapshotState.value.nextUpItems.filterNot { it.contentId == target },
+            traktUpNextItems = rawSnapshotState.value.traktUpNextItems.filterNot { it.contentId == target },
             updatedAtMs = System.currentTimeMillis()
         )
         persistRawSnapshot(updated)
@@ -181,68 +188,104 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun buildRawSnapshot(
         allProgress: List<WatchProgress>,
-        calendarEntries: List<TraktProgressService.CalendarShowEntry>
+        nextUpEntries: List<TraktProgressService.NextUpEntry>,
+        traktUpNextEntries: List<TraktProgressService.NextUpEntry>
     ): ContinueWatchingSnapshot {
-        val movieItems = allProgress
+        val resumeItems = allProgress
             .asSequence()
-            .filter { it.contentType.equals("movie", ignoreCase = true) }
-            .filter { shouldTreatAsMovieResumeForContinueWatching(it) }
-            .filter { it.contentId.isNotBlank() && it.videoId.isNotBlank() }
+            .filter(::shouldTreatAsResumeForContinueWatching)
+            .mapNotNull(::normalizeResumeItem)
             .sortedByDescending { it.lastWatched }
-            .toList()
-        val nextUpItems = calendarEntries
-            .asSequence()
-            .mapNotNull(::normalizeNextUpEntry)
-            .sortedByDescending { it.firstAiredMs }
             .distinctBy { it.contentId }
             .toList()
+        val normalizedNextUpItems = nextUpEntries
+            .asSequence()
+            .mapNotNull(::normalizeNextUpEntry)
+            .sortedByDescending { it.activityAtMs }
+            .distinctBy { it.contentId }
+            .toList()
+        val nextUpItems = splitNextUpCandidatesForContinueWatching(
+            resumes = resumeItems.map(::resumeRefForProgress),
+            nextUpItems = normalizedNextUpItems,
+            nextUpRef = ::nextUpRefForEntry,
+            nowMs = System.currentTimeMillis()
+        ).mainFeedItems
+        val normalizedTraktUpNextItems = traktUpNextEntries
+            .asSequence()
+            .mapNotNull(::normalizeNextUpEntry)
+            .sortedByDescending { it.activityAtMs }
+            .distinctBy { it.contentId }
+            .toList()
+        val traktUpNextItems = splitNextUpCandidatesForContinueWatching(
+            resumes = resumeItems.map(::resumeRefForProgress),
+            nextUpItems = normalizedTraktUpNextItems,
+            nextUpRef = ::nextUpRefForEntry,
+            nowMs = System.currentTimeMillis()
+        ).syntheticRailItems
 
         return ContinueWatchingSnapshot(
-            movieProgressItems = movieItems,
+            resumeItems = resumeItems,
             nextUpItems = nextUpItems,
+            traktUpNextItems = traktUpNextItems,
             updatedAtMs = System.currentTimeMillis()
         )
     }
 
-    private fun shouldTreatAsMovieResumeForContinueWatching(progress: WatchProgress): Boolean {
-        if (!progress.contentType.equals("movie", ignoreCase = true)) return false
+    private fun shouldTreatAsResumeForContinueWatching(progress: WatchProgress): Boolean {
         if (progress.isInProgress()) return true
         if (progress.isCompleted()) return false
         return progress.position > 0L || progress.progressPercent?.let { it > 0f } == true
     }
 
     private fun sanitizeSnapshot(snapshot: ContinueWatchingSnapshot): ContinueWatchingSnapshot {
-        val movieItems = snapshot.movieProgressItems.filter { progress ->
-            runCatching {
-                progress.contentId.isNotBlank() &&
-                    progress.videoId.isNotBlank() &&
-                    shouldTreatAsMovieResumeForContinueWatching(progress)
-            }.getOrDefault(false)
-        }
+        val resumeItems = snapshot.resumeItems
+            .mapNotNull(::normalizeResumeItem)
+            .sortedByDescending { it.lastWatched }
+            .distinctBy { it.contentId }
         val nextUpItems = snapshot.nextUpItems
             .mapNotNull(::normalizeNextUpEntry)
-            .sortedByDescending { it.firstAiredMs }
+            .sortedByDescending { it.activityAtMs }
             .distinctBy { it.contentId }
+        val mainFeedNextUpItems = splitNextUpCandidatesForContinueWatching(
+            resumes = resumeItems.map(::resumeRefForProgress),
+            nextUpItems = nextUpItems,
+            nextUpRef = ::nextUpRefForEntry,
+            nowMs = System.currentTimeMillis()
+        ).mainFeedItems
+        val traktUpNextItems = snapshot.traktUpNextItems
+            .mapNotNull(::normalizeNextUpEntry)
+            .sortedByDescending { it.activityAtMs }
+            .distinctBy { it.contentId }
+        val sanitizedTraktUpNextItems = splitNextUpCandidatesForContinueWatching(
+            resumes = resumeItems.map(::resumeRefForProgress),
+            nextUpItems = traktUpNextItems,
+            nextUpRef = ::nextUpRefForEntry,
+            nowMs = System.currentTimeMillis()
+        ).syntheticRailItems
         val activeItemKeys = buildSet {
-            movieItems.forEach { progress ->
+            resumeItems.forEach { progress ->
                 add(homeDisplayItemKey(progress.contentType, progress.contentId))
             }
-            nextUpItems.forEach { entry ->
+            mainFeedNextUpItems.forEach { entry ->
+                add(homeDisplayItemKey(entry.contentType, entry.contentId))
+            }
+            sanitizedTraktUpNextItems.forEach { entry ->
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
         }
         val updatedAtMs = if (snapshot.updatedAtMs > 0L) snapshot.updatedAtMs else System.currentTimeMillis()
         return ContinueWatchingSnapshot(
-            movieProgressItems = movieItems,
-            nextUpItems = nextUpItems,
+            resumeItems = resumeItems,
+            nextUpItems = mainFeedNextUpItems,
+            traktUpNextItems = sanitizedTraktUpNextItems,
             displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
             updatedAtMs = updatedAtMs
         )
     }
 
     private fun normalizeNextUpEntry(
-        entry: TraktProgressService.CalendarShowEntry
-    ): TraktProgressService.CalendarShowEntry? {
+        entry: TraktProgressService.NextUpEntry
+    ): TraktProgressService.NextUpEntry? {
         return try {
             val contentId = entry.contentId.trim()
             if (contentId.isBlank()) return null
@@ -266,10 +309,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
             fallbackMetadata = rawSnapshotState.value.displayMetadataByItemKey
         )
         val referencedItemKeys = buildSet {
-            hydrated.movieProgressItems.forEach { progress ->
+            hydrated.resumeItems.forEach { progress ->
                 add(homeDisplayItemKey(progress.contentType, progress.contentId))
             }
             hydrated.nextUpItems.forEach { entry ->
+                add(homeDisplayItemKey(entry.contentType, entry.contentId))
+            }
+            hydrated.traktUpNextItems.forEach { entry ->
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
         }
@@ -292,11 +338,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
         fallbackMetadata: Map<String, HomeDisplayMetadata>
     ): ContinueWatchingSnapshot {
         val itemKeys = linkedMapOf<String, Pair<String, String>>()
-        snapshot.movieProgressItems.forEach { progress ->
+        snapshot.resumeItems.forEach { progress ->
             itemKeys[homeDisplayItemKey(progress.contentType, progress.contentId)] =
                 progress.contentType to progress.contentId
         }
         snapshot.nextUpItems.forEach { entry ->
+            itemKeys[homeDisplayItemKey(entry.contentType, entry.contentId)] =
+                entry.contentType to entry.contentId
+        }
+        snapshot.traktUpNextItems.forEach { entry ->
             itemKeys[homeDisplayItemKey(entry.contentType, entry.contentId)] =
                 entry.contentType to entry.contentId
         }
@@ -375,12 +425,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
         snapshot: ContinueWatchingSnapshot
     ): HomeDisplayMetadata {
         val episodeMetadata = if (contentType.equals("series", ignoreCase = true) || contentType.equals("tv", ignoreCase = true)) {
-            val progressEntry = snapshot.movieProgressItems.firstOrNull {
-                it.contentId == contentId && it.season != null && it.episode != null
-            }
+            val progressEntry = snapshot.resumeItems
+                .filter { it.contentId == contentId && it.season != null && it.episode != null }
+                .maxByOrNull { it.lastWatched }
             val nextUpEntry = snapshot.nextUpItems.firstOrNull { it.contentId == contentId }
-            val season = progressEntry?.season ?: nextUpEntry?.season
-            val episode = progressEntry?.episode ?: nextUpEntry?.episode
+            val traktUpNextEntry = snapshot.traktUpNextItems.firstOrNull { it.contentId == contentId }
+            val season = progressEntry?.season ?: nextUpEntry?.season ?: traktUpNextEntry?.season
+            val episode = progressEntry?.episode ?: nextUpEntry?.episode ?: traktUpNextEntry?.episode
             if (season != null && episode != null) {
                 meta.videos.firstOrNull { it.season == season && it.episode == episode }
             } else {
@@ -396,6 +447,38 @@ class ContinueWatchingSnapshotService @Inject constructor(
             runtime = episodeMetadata?.runtime?.let { "${it}m" } ?: metaDisplay.runtime,
             poster = metaDisplay.poster,
             backdrop = metaDisplay.backdrop ?: episodeMetadata?.thumbnail
+        )
+    }
+
+    private fun normalizeResumeItem(progress: WatchProgress): WatchProgress? {
+        val contentId = progress.contentId.trim()
+        val videoId = progress.videoId.trim()
+        if (contentId.isBlank() || videoId.isBlank()) return null
+        if (!shouldTreatAsResumeForContinueWatching(progress)) return null
+        return progress.copy(
+            contentId = contentId,
+            videoId = videoId,
+            contentType = progress.contentType.takeIf { it.isNotBlank() } ?: if (progress.season != null && progress.episode != null) "series" else "movie",
+            name = progress.name.takeIf { it.isNotBlank() } ?: contentId
+        )
+    }
+
+    private fun resumeRefForProgress(progress: WatchProgress): ContinueWatchingResumeRef {
+        val suppressNextUp = progress.season != null &&
+            progress.episode != null &&
+            (progress.contentType.equals("series", ignoreCase = true) || progress.contentType.equals("tv", ignoreCase = true))
+        return ContinueWatchingResumeRef(
+            contentId = progress.contentId,
+            activityAtMs = progress.lastWatched,
+            suppressNextUp = suppressNextUp
+        )
+    }
+
+    private fun nextUpRefForEntry(entry: TraktProgressService.NextUpEntry): ContinueWatchingNextUpRef {
+        return ContinueWatchingNextUpRef(
+            contentId = entry.contentId,
+            activityAtMs = entry.activityAtMs,
+            firstAiredMs = entry.firstAiredMs
         )
     }
 }

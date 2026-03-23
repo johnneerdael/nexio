@@ -14,6 +14,7 @@ import com.nexio.tv.domain.model.WatchProgress
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
+    val traktUpNextItems: List<ContinueWatchingItem.NextUp> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedItemId: String? = null,
