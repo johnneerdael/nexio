@@ -1023,15 +1023,77 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadEpisodeRatingsAsync(meta: Meta) {
         episodeRatingsJob?.cancel()
+        val isSeries = meta.apiType in listOf("series", "tv", "show", "tvshow")
+        val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct().sorted()
+
         _uiState.update { state ->
             if (state.meta == null || state.meta.id != meta.id) {
                 state
             } else {
                 state.copy(
                     episodeImdbRatings = emptyMap(),
-                    isEpisodeRatingsLoading = false,
+                    isEpisodeRatingsLoading = isSeries && seasonNumbers.isNotEmpty(),
                     episodeRatingsError = null
                 )
+            }
+        }
+
+        if (!isSeries || seasonNumbers.isEmpty()) return
+
+        episodeRatingsJob = viewModelScope.launch {
+            val tmdbLookupType = resolveTmdbContentType(meta).toApiString()
+            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                ?: tmdbService.ensureTmdbId(itemId, itemType)
+
+            if (tmdbId == null) {
+                _uiState.update { state ->
+                    if (state.meta?.id != meta.id) state else state.copy(isEpisodeRatingsLoading = false)
+                }
+                return@launch
+            }
+
+            try {
+                val episodeEnrichment = tmdbMetadataService.fetchEpisodeEnrichment(
+                    tmdbId = tmdbId,
+                    seasonNumbers = seasonNumbers
+                )
+                val episodeTmdbIds = episodeEnrichment.mapNotNull { (key, value) ->
+                    value.tmdbEpisodeId?.let { key to it }
+                }.toMap()
+
+                val ratings = mdbListRepository.getEpisodeRatingsForMeta(
+                    meta = meta,
+                    fallbackItemId = itemId,
+                    fallbackItemType = itemType,
+                    episodeTmdbIds = episodeTmdbIds
+                )
+
+                _uiState.update { state ->
+                    if (state.meta?.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            episodeImdbRatings = ratings,
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = null
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to load episode ratings for ${meta.id}: ${error.message}", error)
+                _uiState.update { state ->
+                    if (state.meta?.id != meta.id) {
+                        state
+                    } else {
+                        state.copy(
+                            episodeImdbRatings = emptyMap(),
+                            isEpisodeRatingsLoading = false,
+                            episodeRatingsError = context.getString(R.string.ratings_unavailable)
+                        )
+                    }
+                }
             }
         }
     }
