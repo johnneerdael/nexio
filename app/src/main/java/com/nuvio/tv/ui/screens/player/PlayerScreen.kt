@@ -87,6 +87,7 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.media3.common.MimeTypes
 import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -490,6 +491,27 @@ fun PlayerScreen(
         viewModel.exoPlayer?.let { player ->
             val subtitleStyle = uiState.subtitleStyle
             val resizeMode = uiState.resizeMode
+            val selectedAddonSubtitle = uiState.selectedAddonSubtitle
+            val selectedAddonSubtitleMimeType = selectedAddonSubtitle?.let { subtitle ->
+                PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
+            }
+            val shouldApplyExternalWebVttCompensation =
+                selectedAddonSubtitle != null && selectedAddonSubtitleMimeType == MimeTypes.TEXT_VTT
+
+            LaunchedEffect(
+                selectedAddonSubtitle?.id,
+                selectedAddonSubtitleMimeType,
+                shouldApplyExternalWebVttCompensation
+            ) {
+                selectedAddonSubtitle?.let { subtitle ->
+                    Log.d(
+                        "PlayerScreen",
+                        "Subtitle compensation check: id=${subtitle.id} " +
+                            "mime=$selectedAddonSubtitleMimeType " +
+                            "applyWebVttCompensation=$shouldApplyExternalWebVttCompensation"
+                    )
+                }
+            }
             
             AndroidView(
                 factory = { context ->
@@ -541,12 +563,25 @@ fun PlayerScreen(
                         
                         // Apply vertical offset (-20 = very bottom, 0 = default, 50 = middle)
                         // Convert percentage to fraction for bottom padding
-                        val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
+                        val webVttCompensationFraction = if (shouldApplyExternalWebVttCompensation) 0.08f else 0f
+                        val bottomPaddingFraction = (
+                            0.06f +
+                                (subtitleStyle.verticalOffset / 250f) +
+                                webVttCompensationFraction
+                            ).coerceIn(0f, 0.4f)
                         setBottomPaddingFraction(bottomPaddingFraction)
 
                         // Also apply explicit bottom padding based on view height for stronger offset effect
                         post {
-                            val extraPadding = (height * (subtitleStyle.verticalOffset / 400f)).toInt().coerceAtLeast(0)
+                            val webVttCompensationPadding = if (shouldApplyExternalWebVttCompensation) {
+                                (height * 0.08f).toInt()
+                            } else {
+                                0
+                            }
+                            val extraPadding = (
+                                (height * (subtitleStyle.verticalOffset / 400f)).toInt() +
+                                    webVttCompensationPadding
+                                ).coerceAtLeast(0)
                             setPadding(paddingLeft, paddingTop, paddingRight, extraPadding)
                         }
                     }
