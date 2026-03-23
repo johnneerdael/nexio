@@ -417,7 +417,7 @@ internal fun mapEpisodeRatings(
 ): Map<Pair<Int, Int>, Double> {
     if (ratingItems.isEmpty() || episodeIdsByKey.isEmpty()) return emptyMap()
     val ratingById = ratingItems.associateNotNull { item ->
-        val id = item.id
+        val id = item.id.toEpisodeTmdbIdOrNull()
         val rating = item.rating
         if (id == null || rating == null) null else id to rating
     }
@@ -441,4 +441,15 @@ private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair
         destination[pair.first] = pair.second
     }
     return destination
+}
+
+private fun Any?.toEpisodeTmdbIdOrNull(): Int? {
+    return when (this) {
+        is Int -> this
+        is Long -> toInt()
+        is Double -> toInt()
+        is Float -> toInt()
+        is String -> toIntOrNull()
+        else -> null
+    }
 }
