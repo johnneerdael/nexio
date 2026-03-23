@@ -7,6 +7,14 @@ import org.junit.Test
 class EpisodeRatingBadgeSupportTest {
 
     @Test
+    fun `episode badge uses imdb branding for custom imdb ratings`() {
+        val badge = episodeRatingBadge(EpisodeRatingSource.IMDB)
+
+        assertEquals(R.raw.imdb_logo_2016, badge.logoRes)
+        assertEquals("IMDb", badge.contentDescription)
+    }
+
+    @Test
     fun `episode badge uses imdb branding for omdb ratings`() {
         val badge = episodeRatingBadge(EpisodeRatingSource.OMDB)
 

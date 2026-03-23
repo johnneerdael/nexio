@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.detail
 import com.nexio.tv.R
 
 enum class EpisodeRatingSource {
+    IMDB,
     OMDB,
     TMDB
 }
@@ -39,6 +40,10 @@ internal fun resolveEpisodeRatingValues(
 
 internal fun episodeRatingBadge(source: EpisodeRatingSource): EpisodeRatingBadgeUi {
     return when (source) {
+        EpisodeRatingSource.IMDB -> EpisodeRatingBadgeUi(
+            logoRes = R.raw.imdb_logo_2016,
+            contentDescription = "IMDb"
+        )
         EpisodeRatingSource.OMDB -> EpisodeRatingBadgeUi(
             logoRes = R.raw.imdb_logo_2016,
             contentDescription = "IMDb"

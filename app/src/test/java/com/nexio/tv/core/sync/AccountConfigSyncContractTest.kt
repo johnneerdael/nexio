@@ -1,7 +1,6 @@
 package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
-import com.nexio.tv.data.local.ImdbSettings
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -26,6 +25,7 @@ import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
+import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import io.mockk.coVerify
 import io.mockk.every
