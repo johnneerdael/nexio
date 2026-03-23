@@ -242,6 +242,7 @@ class AccountSettingsSyncService @Inject constructor(
                     omdbSettingsDataStore = omdbSettingsDataStore,
                     animeSkipSettingsDataStore = animeSkipSettingsDataStore,
                     geminiSettingsDataStore = geminiSettingsDataStore,
+                    imdbSettingsDataStore = imdbSettingsDataStore,
                     posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
                     traktSettingsDataStore = traktSettingsDataStore,
                     playerSettingsDataStore = playerSettingsDataStore
@@ -315,7 +316,7 @@ class AccountSettingsSyncService @Inject constructor(
                 omdb = OmdbSyncSettings(
                     enabled = omdbSettingsDataStore.settings.first().enabled
                 ),
-                imdb = buildImdbSyncSettings(),
+                imdb = buildImdbSyncSettings(imdbSettingsDataStore),
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
                     clientId = animeSkipClientId
@@ -677,6 +678,7 @@ class AccountSettingsSyncService @Inject constructor(
         mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
         omdbSettingsDataStore.setApiKey(resolveApiKeySecret(OMDB_SECRET_TYPE, OMDB_SECRET_REF))
         imdbSettingsDataStore.setApiKey(resolveApiKeySecret(IMDB_SECRET_TYPE, IMDB_SECRET_REF))
+        imdbSettingsDataStore.setBaseUrl(settings.integrations.imdb.baseUrl)
         geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
         posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
         posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))

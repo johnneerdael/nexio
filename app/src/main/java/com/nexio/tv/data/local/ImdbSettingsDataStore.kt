@@ -19,6 +19,7 @@ private val Context.imdbSettingsDataStore: DataStore<Preferences> by preferences
 
 data class ImdbSettings(
     val enabled: Boolean = false,
+    val baseUrl: String = "",
     val apiKey: String = ""
 )
 
@@ -30,17 +31,23 @@ class ImdbSettingsDataStore @Inject constructor(
     private fun store() = dataStore
 
     private val enabledKey = booleanPreferencesKey("imdb_enabled")
+    private val baseUrlKey = stringPreferencesKey("imdb_base_url")
     private val apiKeyKey = stringPreferencesKey("imdb_api_key")
 
     val settings: Flow<ImdbSettings> = dataStore.data.map { prefs ->
         ImdbSettings(
             enabled = prefs[enabledKey] ?: false,
+            baseUrl = prefs[baseUrlKey] ?: "",
             apiKey = prefs[apiKeyKey] ?: ""
         )
     }
 
     suspend fun setEnabled(enabled: Boolean) {
         store().edit { it[enabledKey] = enabled }
+    }
+
+    suspend fun setBaseUrl(baseUrl: String) {
+        store().edit { it[baseUrlKey] = baseUrl.trim() }
     }
 
     suspend fun setApiKey(apiKey: String) {

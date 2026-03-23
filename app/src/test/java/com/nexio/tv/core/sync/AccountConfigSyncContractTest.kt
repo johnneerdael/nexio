@@ -1,6 +1,8 @@
 package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettings
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -26,6 +28,7 @@ import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineStart
@@ -33,6 +36,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -130,6 +134,37 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `buildImdbSyncSettings reads from the imdb store`() = runTest {
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>()
+        every { imdbSettingsDataStore.settings } returns flowOf(
+            ImdbSettings(
+                enabled = true,
+                baseUrl = "https://custom.imdb.example",
+                apiKey = "secret-key"
+            )
+        )
+
+        val settings = buildImdbSyncSettings(imdbSettingsDataStore)
+
+        assertEquals(true, settings.enabled)
+        assertEquals("https://custom.imdb.example", settings.baseUrl)
+    }
+
+    @Test
+    fun `applyImdbSyncSettings writes enabled and baseUrl into the imdb store`() = runTest {
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
+        val settings = ImdbSyncSettings(
+            enabled = true,
+            baseUrl = "https://custom.imdb.example"
+        )
+
+        applyImdbSyncSettings(settings, imdbSettingsDataStore)
+
+        coVerify(exactly = 1) { imdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { imdbSettingsDataStore.setBaseUrl("https://custom.imdb.example") }
+    }
+
+    @Test
     fun `observeAccountConfigSyncChanges emits for account owned change signals`() = runTest {
         val heroCatalogSelections = MutableSharedFlow<Unit>(replay = 1)
         val homeCatalogOrderKeys = MutableSharedFlow<Unit>(replay = 1)
@@ -220,6 +255,7 @@ class AccountConfigSyncContractTest {
         val omdbSettingsDataStore = mockk<OmdbSettingsDataStore>(relaxed = true)
         val animeSkipSettingsDataStore = mockk<AnimeSkipSettingsDataStore>(relaxed = true)
         val geminiSettingsDataStore = mockk<com.nexio.tv.data.local.GeminiSettingsDataStore>(relaxed = true)
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
         val posterRatingsSettingsDataStore = mockk<PosterRatingsSettingsDataStore>(relaxed = true)
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
 
@@ -273,6 +309,7 @@ class AccountConfigSyncContractTest {
             omdbSettingsDataStore = omdbSettingsDataStore,
             animeSkipSettingsDataStore = animeSkipSettingsDataStore,
             geminiSettingsDataStore = geminiSettingsDataStore,
+            imdbSettingsDataStore = imdbSettingsDataStore,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore
@@ -282,6 +319,8 @@ class AccountConfigSyncContractTest {
         coVerify(exactly = 1) { layoutPreferenceDataStore.setHomeCatalogOrderKeys(listOf("row-a", "row-b")) }
         coVerify(exactly = 1) { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(listOf("row-c")) }
         coVerify(exactly = 1) { tmdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { imdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { imdbSettingsDataStore.setBaseUrl("https://custom.imdb.example") }
         coVerify(exactly = 1) { omdbSettingsDataStore.setEnabled(true) }
         coVerify(exactly = 1) { mdbListSettingsDataStore.setCatalogPreferences(setOf("personal-hidden"), setOf("top-selected"), listOf("mdb-top")) }
         coVerify(exactly = 1) {
