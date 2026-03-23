@@ -940,6 +940,7 @@ data class TmdbEnrichment(
 
 data class TmdbEpisodeEnrichment(
     val tmdbEpisodeId: Int?,
+    val voteAverage: Double?,
     val title: String?,
     val overview: String?,
     val thumbnail: String?,
@@ -954,6 +955,7 @@ private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
     val airDate = airDate?.takeIf { it.isNotBlank() }
     return TmdbEpisodeEnrichment(
         tmdbEpisodeId = id,
+        voteAverage = voteAverage,
         title = title,
         overview = overview,
         thumbnail = thumbnail,
