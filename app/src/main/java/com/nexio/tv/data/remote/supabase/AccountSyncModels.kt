@@ -149,6 +149,7 @@ data class LayoutSettings(
 data class IntegrationSettings(
     val debrid: DebridSyncSettings = DebridSyncSettings(),
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
+    val omdb: OmdbSyncSettings = OmdbSyncSettings(),
     val mdblist: MDBListSyncSettings = MDBListSyncSettings(),
     val animeSkip: AnimeSkipSyncSettings = AnimeSkipSyncSettings(),
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
@@ -191,6 +192,11 @@ data class TmdbSyncSettings(
     val useEpisodes: Boolean = true,
     val useMoreLikeThis: Boolean = true,
     val useCollections: Boolean = true
+)
+
+@Serializable
+data class OmdbSyncSettings(
+    val enabled: Boolean = false
 )
 
 @Serializable

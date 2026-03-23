@@ -22,6 +22,7 @@ export type CatalogId =
 export type SecretType =
   | 'addon_credential'
   | 'tmdb_api_key'
+  | 'omdb_api_key'
   | 'mdblist_api_key'
   | 'premiumize_api_key'
   | 'gemini_api_key'
@@ -164,6 +165,9 @@ export type PortalIntegrations = {
     useEpisodes: boolean
     useMoreLikeThis: boolean
     useCollections: boolean
+  }
+  omdb: {
+    enabled: boolean
   }
   mdblist: {
     enabled: boolean

@@ -59,6 +59,28 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!tokenResponse.ok) {
+    const responseText = await tokenResponse.text()
+    const cfRay = tokenResponse.headers.get('cf-ray') || tokenResponse.headers.get('CF-RAY')
+    const contentType = tokenResponse.headers.get('content-type') || ''
+    const blockedByCloudflare =
+      contentType.toLowerCase().indexOf('text/html') >= 0
+      && /cloudflare|you have been blocked|attention required/i.test(responseText)
+
+    console.error('[trakt][device-token] upstream token error', {
+      status: tokenResponse.status,
+      cfRay,
+      contentType,
+      blockedByCloudflare,
+      bodyPreview: responseText.slice(0, 400)
+    })
+
+    if (blockedByCloudflare) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: `Trakt is temporarily unreachable from this server due to upstream protection. Retry later.${cfRay ? ` Cloudflare Ray ID: ${cfRay}` : ''}`
+      })
+    }
+
     return okJson({
       status: tokenResponse.status,
       pending: tokenResponse.status === 400 || tokenResponse.status === 429,
@@ -72,7 +94,29 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!userSettingsResponse.ok) {
-    throw createError({ statusCode: userSettingsResponse.status, statusMessage: await userSettingsResponse.text() })
+    const responseText = await userSettingsResponse.text()
+    const cfRay = userSettingsResponse.headers.get('cf-ray') || userSettingsResponse.headers.get('CF-RAY')
+    const contentType = userSettingsResponse.headers.get('content-type') || ''
+    const blockedByCloudflare =
+      contentType.toLowerCase().indexOf('text/html') >= 0
+      && /cloudflare|you have been blocked|attention required/i.test(responseText)
+
+    console.error('[trakt][device-token] upstream user-settings error', {
+      status: userSettingsResponse.status,
+      cfRay,
+      contentType,
+      blockedByCloudflare,
+      bodyPreview: responseText.slice(0, 400)
+    })
+
+    if (blockedByCloudflare) {
+      throw createError({
+        statusCode: 502,
+        statusMessage: `Trakt is temporarily unreachable from this server due to upstream protection. Retry later.${cfRay ? ` Cloudflare Ray ID: ${cfRay}` : ''}`
+      })
+    }
+
+    throw createError({ statusCode: userSettingsResponse.status, statusMessage: responseText })
   }
 
   const userSettings = await userSettingsResponse.json() as UserSettingsResponse
