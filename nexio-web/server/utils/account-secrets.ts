@@ -4,6 +4,7 @@ import type { AddonRecord, SecretMetadata, SecretType } from '~/types/portal'
 export const secretRefs = {
   tmdb: 'integration:tmdb',
   omdb: 'integration:omdb',
+  imdb: 'integration:imdb',
   mdblist: 'integration:mdblist',
   premiumize: 'integration:premiumize',
   gemini: 'integration:gemini',

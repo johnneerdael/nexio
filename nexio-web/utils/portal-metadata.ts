@@ -152,6 +152,15 @@ export const accountGroups: Record<string, PortalGroup[]> = {
       ]
     },
     {
+      id: 'imdb',
+      title: 'IMDb',
+      subtitle: 'Primary IMDb episode-ratings provider for the portal. The API key is stored separately as a secret and the base URL is synced with the account.',
+      fields: [
+        { path: 'integrations.imdb.enabled', label: 'Enable IMDb', description: 'Turns the primary IMDb episode-ratings provider on account-wide.', kind: 'toggle' },
+        { path: 'integrations.imdb.baseUrl', label: 'Provider base URL', description: 'Set the provider URL used for IMDb stats validation. Preserve any path prefix.', kind: 'text', placeholder: 'https://ratings.example.com' }
+      ]
+    },
+    {
       id: 'mdblist',
       title: 'MDBList',
       subtitle: 'Ratings, catalog curation, and personal list controls. The API key is stored separately as a secret.',

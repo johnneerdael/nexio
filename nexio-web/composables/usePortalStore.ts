@@ -240,6 +240,10 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
         ...defaults.integrations.omdb,
         ...(input?.integrations?.omdb ?? {})
       },
+      imdb: {
+        ...defaults.integrations.imdb,
+        ...(input?.integrations?.imdb ?? {})
+      },
       mdblist: {
         ...defaults.integrations.mdblist,
         enabled: input?.integrations?.mdblist?.enabled ?? defaults.integrations.mdblist.enabled,
@@ -1444,6 +1448,33 @@ export function usePortalStore() {
     }, token)
   }
 
+  async function validateIMDb() {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before validating IMDb.')
+    }
+
+    state.value.error = null
+
+    try {
+      const apiKey = state.value.secretDrafts[secretRefs.imdb]?.trim() || undefined
+      const response = await apiFetch<{ valid: boolean; baseUrl: string }>('/api/integrations/imdb/validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: state.value.settings.integrations.imdb.baseUrl,
+          apiKey
+        })
+      }, token)
+
+      if (response.baseUrl) {
+        state.value.settings.integrations.imdb.baseUrl = response.baseUrl
+      }
+    } catch (error) {
+      state.value.error = cleanErrorMessage(error, 'IMDb validation failed.')
+      throw error
+    }
+  }
+
   async function searchMDBListLists(query: string) {
     if (!query) {
       state.value.mdblistDiscovery.searchResults = []
@@ -1502,6 +1533,10 @@ export function usePortalStore() {
 
     if (secretType === 'omdb_api_key') {
       await validateOMDB().catch(() => undefined)
+    }
+
+    if (secretType === 'imdb_api_key') {
+      await validateIMDb().catch(() => undefined)
     }
   }
 
@@ -1995,6 +2030,7 @@ export function usePortalStore() {
     deleteSecret,
     approveTvLogin,
     validateMDBList,
+    validateIMDb,
     searchMDBListLists,
     setMDBListPersonalListEnabled,
     setMDBListTopListSelected,
