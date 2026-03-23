@@ -21,7 +21,10 @@ data class ImdbSettings(
     val enabled: Boolean = false,
     val baseUrl: String = "",
     val apiKey: String = ""
-)
+) {
+    val isActive: Boolean
+        get() = enabled && baseUrl.isNotBlank() && apiKey.isNotBlank()
+}
 
 @Singleton
 class ImdbSettingsDataStore @Inject constructor(
@@ -47,10 +50,14 @@ class ImdbSettingsDataStore @Inject constructor(
     }
 
     suspend fun setBaseUrl(baseUrl: String) {
-        store().edit { it[baseUrlKey] = baseUrl.trim() }
+        store().edit { it[baseUrlKey] = normalizeCustomImdbBaseUrl(baseUrl) }
     }
 
     suspend fun setApiKey(apiKey: String) {
         store().edit { it[apiKeyKey] = apiKey.trim() }
     }
+}
+
+private fun normalizeCustomImdbBaseUrl(baseUrl: String): String {
+    return baseUrl.trim().trimEnd('/')
 }
