@@ -5,6 +5,7 @@ import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.remote.api.MDBListApi
 import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingRequestDto
+import com.nexio.tv.data.remote.dto.mdblist.MDBListRatingItemDto
 import com.nexio.tv.domain.model.MDBListRatings
 import com.nexio.tv.domain.model.MDBListRatingsResult
 import com.nexio.tv.domain.model.MDBListSettings
@@ -28,6 +29,9 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal const val EPISODE_RATINGS_COMPLETE_TTL_MS = 7L * 24L * 60L * 60L * 1000L
+internal const val EPISODE_RATINGS_RETRY_TTL_MS = 30L * 60L * 1000L
+
 @Singleton
 class MDBListRepository @Inject constructor(
     private val api: MDBListApi,
@@ -36,6 +40,11 @@ class MDBListRepository @Inject constructor(
 ) {
     private data class CacheEntry(
         val result: MDBListRatingsResult?,
+        val expiresAtMs: Long
+    )
+
+    private data class EpisodeRatingsCacheEntry(
+        val result: Map<Pair<Int, Int>, Double>,
         val expiresAtMs: Long
     )
 
@@ -53,6 +62,9 @@ class MDBListRepository @Inject constructor(
     private val cache = ConcurrentHashMap<String, CacheEntry>()
     private val inFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<MDBListRatingsResult?>>()
     private val inFlightMutex = Mutex()
+    private val episodeRatingsCache = ConcurrentHashMap<String, EpisodeRatingsCacheEntry>()
+    private val episodeRatingsInFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<Map<Pair<Int, Int>, Double>>>()
+    private val episodeRatingsInFlightMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun getRatingsForMeta(
@@ -123,6 +135,46 @@ class MDBListRepository @Inject constructor(
         )
     }
 
+    suspend fun getEpisodeRatingsForMeta(
+        meta: Meta,
+        fallbackItemId: String,
+        fallbackItemType: String,
+        episodeTmdbIds: Map<Pair<Int, Int>, Int>
+    ): Map<Pair<Int, Int>, Double> {
+        if (episodeTmdbIds.isEmpty()) return emptyMap()
+
+        val settings = settingsDataStore.settings.first()
+        if (!settings.enabled) return emptyMap()
+
+        val apiKey = settings.apiKey.trim()
+        if (apiKey.isBlank()) return emptyMap()
+
+        val mediaType = normalizeMediaType(meta.apiType.ifBlank { fallbackItemType })
+        if (mediaType != "show") return emptyMap()
+
+        val imdbId = resolveImdbId(meta, fallbackItemId, fallbackItemType, mediaType) ?: return emptyMap()
+        val semaphore = Semaphore(3)
+
+        return coroutineScope {
+            episodeTmdbIds.entries
+                .groupBy(keySelector = { it.key.first }, valueTransform = { it.key to it.value })
+                .map { (season, entries) ->
+                    async {
+                        semaphore.withPermit {
+                            getEpisodeRatingsForSeason(
+                                imdbId = imdbId,
+                                season = season,
+                                apiKey = apiKey,
+                                episodeTmdbIds = entries.toMap()
+                            )
+                        }
+                    }
+                }
+                .awaitAll()
+                .fold(emptyMap()) { acc, seasonRatings -> acc + seasonRatings }
+        }
+    }
+
     private suspend fun fetchRatings(
         imdbId: String,
         mediaType: String,
@@ -190,6 +242,81 @@ class MDBListRepository @Inject constructor(
         } catch (e: Exception) {
             Log.w(tag, "Error fetching ${provider.apiValue}", e)
             provider to null
+        }
+    }
+
+    private suspend fun getEpisodeRatingsForSeason(
+        imdbId: String,
+        season: Int,
+        apiKey: String,
+        episodeTmdbIds: Map<Pair<Int, Int>, Int>
+    ): Map<Pair<Int, Int>, Double> {
+        val cacheKey = "show:$imdbId:$season:${apiKey.hashCode()}"
+        val now = System.currentTimeMillis()
+
+        episodeRatingsCache[cacheKey]?.let { cached ->
+            if (cached.expiresAtMs > now) {
+                return cached.result
+            }
+            episodeRatingsCache.remove(cacheKey)
+        }
+
+        val deferred = episodeRatingsInFlightMutex.withLock {
+            episodeRatingsInFlight[cacheKey] ?: scope.async {
+                try {
+                    fetchEpisodeRatingsForSeason(
+                        apiKey = apiKey,
+                        episodeTmdbIds = episodeTmdbIds
+                    ).also { result ->
+                        val ttlMs = episodeRatingsCacheTtlMs(
+                            expectedCount = episodeTmdbIds.size,
+                            actualCount = result.size
+                        )
+                        episodeRatingsCache[cacheKey] = EpisodeRatingsCacheEntry(
+                            result = result,
+                            expiresAtMs = System.currentTimeMillis() + ttlMs
+                        )
+                    }
+                } finally {
+                    episodeRatingsInFlightMutex.withLock {
+                        episodeRatingsInFlight.remove(cacheKey)
+                    }
+                }
+            }.also { created ->
+                episodeRatingsInFlight[cacheKey] = created
+            }
+        }
+
+        return deferred.await()
+    }
+
+    private suspend fun fetchEpisodeRatingsForSeason(
+        apiKey: String,
+        episodeTmdbIds: Map<Pair<Int, Int>, Int>
+    ): Map<Pair<Int, Int>, Double> {
+        return try {
+            val response = api.getRating(
+                mediaType = "show",
+                ratingType = "imdb",
+                apiKey = apiKey,
+                body = MDBListRatingRequestDto(
+                    ids = episodeTmdbIds.values.distinct(),
+                    provider = "tmdb"
+                )
+            )
+
+            if (!response.isSuccessful) {
+                Log.w(tag, "Failed episode imdb ratings (${response.code()})")
+                return emptyMap()
+            }
+
+            mapEpisodeRatings(
+                ratingItems = response.body()?.ratings.orEmpty(),
+                episodeIdsByKey = episodeTmdbIds
+            )
+        } catch (e: Exception) {
+            Log.w(tag, "Error fetching episode imdb ratings", e)
+            emptyMap()
         }
     }
 
@@ -281,4 +408,36 @@ class MDBListRepository @Inject constructor(
             trailerYtIds = trailerYtIds
         )
     }
+}
+
+internal fun mapEpisodeRatings(
+    ratingItems: List<MDBListRatingItemDto>,
+    episodeIdsByKey: Map<Pair<Int, Int>, Int>
+): Map<Pair<Int, Int>, Double> {
+    if (ratingItems.isEmpty() || episodeIdsByKey.isEmpty()) return emptyMap()
+    val ratingById = ratingItems.associateNotNull { item ->
+        val id = item.id
+        val rating = item.rating
+        if (id == null || rating == null) null else id to rating
+    }
+    return episodeIdsByKey.mapNotNull { (key, tmdbEpisodeId) ->
+        ratingById[tmdbEpisodeId]?.let { key to it }
+    }.toMap()
+}
+
+internal fun episodeRatingsCacheTtlMs(expectedCount: Int, actualCount: Int): Long {
+    return if (expectedCount > 0 && actualCount == expectedCount) {
+        EPISODE_RATINGS_COMPLETE_TTL_MS
+    } else {
+        EPISODE_RATINGS_RETRY_TTL_MS
+    }
+}
+
+private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair<K, V>?): Map<K, V> {
+    val destination = LinkedHashMap<K, V>()
+    for (element in this) {
+        val pair = transform(element) ?: continue
+        destination[pair.first] = pair.second
+    }
+    return destination
 }

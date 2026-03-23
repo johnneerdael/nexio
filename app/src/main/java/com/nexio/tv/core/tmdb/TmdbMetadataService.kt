@@ -939,6 +939,7 @@ data class TmdbEnrichment(
 )
 
 data class TmdbEpisodeEnrichment(
+    val tmdbEpisodeId: Int?,
     val title: String?,
     val overview: String?,
     val thumbnail: String?,
@@ -952,6 +953,7 @@ private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
     val thumbnail = stillPath?.takeIf { it.isNotBlank() }?.let { "https://image.tmdb.org/t/p/w500$it" }
     val airDate = airDate?.takeIf { it.isNotBlank() }
     return TmdbEpisodeEnrichment(
+        tmdbEpisodeId = id,
         title = title,
         overview = overview,
         thumbnail = thumbnail,
