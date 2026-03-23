@@ -593,6 +593,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         _uiState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
                             userPausedManually = false
+                            playbackIdleGateState.onPlaybackResumed()
                             cancelPauseOverlay()
                             startProgressUpdates()
                             startWatchProgressSaving()

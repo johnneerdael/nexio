@@ -33,6 +33,16 @@ class PlaybackIdleGateState @Inject constructor() {
         }
     }
 
+    fun onPlaybackResumed() {
+        _snapshot.update { current ->
+            if (!current.hasActiveSession) {
+                current
+            } else {
+                current.copy(isPausedByUser = false)
+            }
+        }
+    }
+
     fun onPlayerSessionEnded() {
         _snapshot.value = PlaybackIdleGateSnapshot()
     }
