@@ -81,15 +81,33 @@
           <div class="w-12 h-12 rounded-lg bg-[#0d253f]/50 flex items-center justify-center border border-white/5">
             <img src="/integrations/tmdb.webp" alt="TMDB Logo" class="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">
-            Connected
+          <div :class="['flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', integrationEnabled('tmdb') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-surface-container-highest/60 text-on-surface-variant border-outline-variant/20']">
+            {{ integrationEnabled('tmdb') ? 'Connected' : 'Configured' }}
           </div>
         </div>
         <h3 class="text-xl font-bold font-headline mb-1 text-on-surface">TMDB</h3>
         <p class="text-sm text-on-surface-variant font-body mb-6">Primary metadata provider for movie and television show information.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.tmdb.enabled', false)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5 text-red-400 hover:bg-red-500/20"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('update', 'integrations.tmdb.enabled', !settings.integrations.tmdb.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('tmdb') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+        </div>
+      </div>
+
+      <!-- OMDB Card -->
+      <div v-if="isConfigured.omdb" @click="activeModal = 'omdb'" class="glass-card p-6 rounded-xl border border-outline-variant/10 hover:border-amber-500/30 hover:bg-surface-container-high transition-all duration-300 group cursor-pointer bg-surface-container">
+        <div class="flex justify-between items-start mb-6">
+          <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5 text-amber-300 font-black text-xs tracking-wide">
+            OMDB
+          </div>
+          <div :class="['flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', integrationEnabled('omdb') ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-surface-container-highest/60 text-on-surface-variant border-outline-variant/20']">
+            {{ integrationEnabled('omdb') ? 'Active' : 'Configured' }}
+          </div>
+        </div>
+        <h3 class="text-xl font-bold font-headline mb-1 text-on-surface">OMDB</h3>
+        <p class="text-sm text-on-surface-variant font-body mb-6">IMDb episode ratings source for episode rows and season rating views.</p>
+        <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
+          <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
+          <button @click.stop="emit('update', 'integrations.omdb.enabled', !settings.integrations.omdb.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('omdb') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
         </div>
       </div>
 
@@ -99,15 +117,15 @@
           <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5">
             <img src="/integrations/mdblist.webp" alt="MDBList Logo" class="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity grayscale-[0.2]" />
           </div>
-          <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider border border-primary/20">
-            Active
+          <div :class="['flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', integrationEnabled('mdblist') ? 'bg-primary/10 text-primary border-primary/20' : 'bg-surface-container-highest/60 text-on-surface-variant border-outline-variant/20']">
+            {{ integrationEnabled('mdblist') ? 'Active' : 'Configured' }}
           </div>
         </div>
         <h3 class="text-xl font-bold font-headline mb-1 text-on-surface">MDBList</h3>
         <p class="text-sm text-on-surface-variant font-body mb-6">Advanced rating aggregation and dynamic movie list synchronization.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.mdblist.enabled', false)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5 text-red-400 hover:bg-red-500/20"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('update', 'integrations.mdblist.enabled', !settings.integrations.mdblist.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('mdblist') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
         </div>
       </div>
 
@@ -117,15 +135,15 @@
           <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5">
             <img src="/integrations/anime-skip.svg" alt="Anime-Skip Logo" class="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">
-            Operational
+          <div :class="['flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', integrationEnabled('animeskip') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-surface-container-highest/60 text-on-surface-variant border-outline-variant/20']">
+            {{ integrationEnabled('animeskip') ? 'Operational' : 'Configured' }}
           </div>
         </div>
         <h3 class="text-xl font-bold font-headline mb-1 text-on-surface">Anime-Skip</h3>
         <p class="text-sm text-on-surface-variant font-body mb-6">Skip intros, outros, and filler episodes automatically for anime titles.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.animeSkip.enabled', false)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5 text-red-400 hover:bg-red-500/20"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('update', 'integrations.animeSkip.enabled', !settings.integrations.animeSkip.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('animeskip') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
         </div>
       </div>
 
@@ -135,15 +153,15 @@
           <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5">
             <img src="/integrations/gemini.webp" alt="Google Gemini Logo" class="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" />
           </div>
-          <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">
-            Active
+          <div :class="['flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', integrationEnabled('gemini') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-surface-container-highest/60 text-on-surface-variant border-outline-variant/20']">
+            {{ integrationEnabled('gemini') ? 'Active' : 'Configured' }}
           </div>
         </div>
         <h3 class="text-xl font-bold font-headline mb-1 text-on-surface">Google Gemini</h3>
         <p class="text-sm text-on-surface-variant font-body mb-6">AI-powered native subtitle translation across workflows.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.gemini.enabled', false)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5 text-red-400 hover:bg-red-500/20"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('update', 'integrations.gemini.enabled', !settings.integrations.gemini.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('gemini') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
         </div>
       </div>
 
@@ -217,6 +235,11 @@
               <div v-if="!isConfigured.tmdb" @click="activeModal = 'tmdb'" class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container hover:bg-surface-container-high hover:border-tertiary/30 cursor-pointer transition-all group">
                 <div class="w-12 h-12 rounded-lg bg-[#0d253f]/50 flex items-center justify-center border border-white/5"><img src="/integrations/tmdb.webp" class="w-6 h-6 object-contain" /></div>
                 <div><h4 class="font-bold text-white group-hover:text-tertiary transition-colors">TMDB</h4><p class="text-[11px] text-on-surface-variant line-clamp-1">Primary metadata and artwork</p></div>
+              </div>
+
+              <div v-if="!isConfigured.omdb" @click="activeModal = 'omdb'" class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container hover:bg-surface-container-high hover:border-amber-500/30 cursor-pointer transition-all group">
+                <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5 text-amber-300 font-black text-xs tracking-wide">OMDB</div>
+                <div><h4 class="font-bold text-white group-hover:text-amber-300 transition-colors">OMDB</h4><p class="text-[11px] text-on-surface-variant line-clamp-1">IMDb episode ratings provider</p></div>
               </div>
 
               <div v-if="!isConfigured.mdblist" @click="activeModal = 'mdblist'" class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container hover:bg-surface-container-high hover:border-primary/30 cursor-pointer transition-all group">
@@ -514,13 +537,14 @@
                    <img v-if="activeModal === 'realdebrid'" src="/integrations/real-debrid.webp" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'premiumize'" src="/integrations/premiumize.svg" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'tmdb'" src="/integrations/tmdb.webp" class="w-6 h-6 object-contain" />
+                   <span v-else-if="activeModal === 'omdb'" class="text-amber-300 font-black text-xs tracking-wide">OMDB</span>
                    <img v-else-if="activeModal === 'animeskip'" src="/integrations/anime-skip.svg" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'gemini'" src="/integrations/gemini.webp" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'rpdb'" src="/integrations/rpdb.webp" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'topposters'" src="/integrations/topposter.svg" class="w-6 h-6 object-contain" />
                 </div>
                 <h2 class="text-xl font-headline font-bold text-white capitalize">
-                  {{ activeModal === 'animeskip' ? 'Anime-Skip' : activeModal === 'topposters' ? 'TOP Posters' : activeModal === 'realdebrid' ? 'Real-Debrid' : activeModal === 'tmdb' ? 'TMDB' : activeModal === 'rpdb' ? 'RPDB' : activeModal === 'gemini' ? 'Google Gemini' : activeModal }} Settings
+                  {{ activeModal === 'animeskip' ? 'Anime-Skip' : activeModal === 'topposters' ? 'TOP Posters' : activeModal === 'realdebrid' ? 'Real-Debrid' : activeModal === 'tmdb' ? 'TMDB' : activeModal === 'omdb' ? 'OMDB' : activeModal === 'rpdb' ? 'RPDB' : activeModal === 'gemini' ? 'Google Gemini' : activeModal }} Settings
                 </h2>
               </div>
               <button @click="closeModal" class="w-8 h-8 rounded-full hover:bg-surface-bright flex items-center justify-center"><span class="material-symbols-outlined text-sm">close</span></button>
@@ -550,7 +574,7 @@
                 <div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-outline-variant/10" v-if="activeModal && hasEnableToggle(activeModal)">
                   <span class="text-sm font-bold capitalize">Enable Integration</span>
                   <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" :checked="isConfigured[activeModal as keyof typeof isConfigured]" @change="toggleGenericIntegration(activeModal)" class="sr-only peer">
+                    <input type="checkbox" :checked="integrationEnabled(activeModal)" @change="toggleGenericIntegration(activeModal)" class="sr-only peer">
                     <div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                   </label>
                 </div>
@@ -691,6 +715,7 @@ const isConfigured = computed(() => {
     realdebrid: props.settings.integrations.debrid.realDebrid.connected || props.settings.integrations.debrid.realDebrid.pending,
     premiumize: !!props.settings.integrations.debrid.premiumize.customerId || !!props.secretStatuses['integration:premiumize'],
     tmdb: props.settings.integrations.tmdb.enabled || !!props.secretStatuses['integration:tmdb'],
+    omdb: props.settings.integrations.omdb.enabled || !!props.secretStatuses['integration:omdb'],
     mdblist: props.settings.integrations.mdblist.enabled || !!props.secretStatuses['integration:mdblist'],
     animeskip: props.settings.integrations.animeSkip.enabled,
     gemini: props.settings.integrations.gemini.enabled || !!props.secretStatuses['integration:gemini'],
@@ -699,11 +724,23 @@ const isConfigured = computed(() => {
   }
 })
 
-const hasEnableToggle = (id: string) => ['tmdb', 'mdblist', 'animeskip', 'gemini'].includes(id)
-const requiresSecret = (id: string) => ['tmdb', 'mdblist', 'gemini', 'premiumize', 'rpdb', 'topposters'].includes(id)
+const hasEnableToggle = (id: string) => ['tmdb', 'omdb', 'mdblist', 'animeskip', 'gemini'].includes(id)
+const requiresSecret = (id: string) => ['tmdb', 'omdb', 'mdblist', 'gemini', 'premiumize', 'rpdb', 'topposters'].includes(id)
+
+function integrationEnabled(id: string) {
+  if (id === 'tmdb') return props.settings.integrations.tmdb.enabled
+  if (id === 'omdb') return props.settings.integrations.omdb.enabled
+  if (id === 'mdblist') return props.settings.integrations.mdblist.enabled
+  if (id === 'animeskip') return props.settings.integrations.animeSkip.enabled
+  if (id === 'gemini') return props.settings.integrations.gemini.enabled
+  if (id === 'rpdb') return props.settings.integrations.posterRatings.rpdbEnabled
+  if (id === 'topposters') return props.settings.integrations.posterRatings.topPostersEnabled
+  return false
+}
 
 function toggleGenericIntegration(id: string) {
   if (id === 'tmdb') emit('update', 'integrations.tmdb.enabled', !props.settings.integrations.tmdb.enabled)
+  else if (id === 'omdb') emit('update', 'integrations.omdb.enabled', !props.settings.integrations.omdb.enabled)
   else if (id === 'animeskip') emit('update', 'integrations.animeSkip.enabled', !props.settings.integrations.animeSkip.enabled)
   else if (id === 'gemini') emit('update', 'integrations.gemini.enabled', !props.settings.integrations.gemini.enabled)
   else if (id === 'rpdb') emit('update', 'integrations.posterRatings.rpdbEnabled', !props.settings.integrations.posterRatings.rpdbEnabled)
@@ -713,6 +750,7 @@ function toggleGenericIntegration(id: string) {
 function saveGenericSecret(id: string) {
   if (id === 'tmdb') emit('save-secret', 'tmdb_api_key', 'integration:tmdb')
   if (id === 'gemini') emit('save-secret', 'gemini_api_key', 'integration:gemini')
+  if (id === 'omdb') emit('save-secret', 'omdb_api_key', 'integration:omdb')
   if (id === 'mdblist') emit('save-secret', 'mdblist_api_key', 'integration:mdblist')
   if (id === 'rpdb') emit('save-secret', 'rpdb_api_key', 'integration:rpdb')
   if (id === 'topposters') emit('save-secret', 'top_posters_api_key', 'integration:topposters')
@@ -741,6 +779,7 @@ const apiLinkMap: Record<string, string> = {
   rpdb: 'https://ratingposterdb.com/login',
   topposters: 'https://api.top-streaming.stream/user/dashboard',
   tmdb: 'https://www.themoviedb.org/settings/api',
+  omdb: 'https://www.omdbapi.com/apikey.aspx',
   mdblist: 'https://mdblist.com/preferences/',
   animeskip: 'https://anime-skip.com/account/api-clients'
 }

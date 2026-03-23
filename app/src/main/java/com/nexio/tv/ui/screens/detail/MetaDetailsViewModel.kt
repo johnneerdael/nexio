@@ -13,6 +13,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.OmdbEpisodeRatingsRepository
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
@@ -82,6 +83,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val mdbListRepository: MDBListRepository,
+    private val omdbEpisodeRatingsRepository: OmdbEpisodeRatingsRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
@@ -321,7 +323,7 @@ class MetaDetailsViewModel @Inject constructor(
                 it.copy(
                     isLoading = true,
                     error = null,
-                    episodeImdbRatings = emptyMap(),
+                    episodeRatings = emptyMap(),
                     isEpisodeRatingsLoading = false,
                     episodeRatingsError = null,
                     mdbListRatings = null,
@@ -1031,7 +1033,7 @@ class MetaDetailsViewModel @Inject constructor(
                 state
             } else {
                 state.copy(
-                    episodeImdbRatings = emptyMap(),
+                    episodeRatings = emptyMap(),
                     isEpisodeRatingsLoading = isSeries && seasonNumbers.isNotEmpty(),
                     episodeRatingsError = null
                 )
@@ -1041,32 +1043,46 @@ class MetaDetailsViewModel @Inject constructor(
         if (!isSeries || seasonNumbers.isEmpty()) return
 
         episodeRatingsJob = viewModelScope.launch {
-            val tmdbLookupType = resolveTmdbContentType(meta).toApiString()
-            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                ?: tmdbService.ensureTmdbId(itemId, itemType)
-
-            if (tmdbId == null) {
-                _uiState.update { state ->
-                    if (state.meta?.id != meta.id) state else state.copy(isEpisodeRatingsLoading = false)
+            val episodesBySeason = meta.videos
+                .mapNotNull { video ->
+                    val season = video.season
+                    val episode = video.episode
+                    if (season != null && episode != null) season to episode else null
                 }
-                return@launch
-            }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, episodes) -> episodes.toSet() }
 
             try {
-                val episodeEnrichment = tmdbMetadataService.fetchEpisodeEnrichment(
-                    tmdbId = tmdbId,
-                    seasonNumbers = seasonNumbers
+                val tmdbLookupType = resolveTmdbContentType(meta).toApiString()
+                val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                    ?: tmdbService.ensureTmdbId(itemId, itemType)
+
+                val tmdbRatings = if (tmdbId != null) {
+                    tmdbMetadataService.fetchEpisodeEnrichment(
+                        tmdbId = tmdbId,
+                        seasonNumbers = seasonNumbers
+                    ).mapNotNull { (key, value) ->
+                        value.voteAverage?.takeIf { it > 0.0 }?.let { key to it }
+                    }.toMap()
+                } else {
+                    emptyMap()
+                }
+
+                val omdbRatings = omdbEpisodeRatingsRepository.getEpisodeRatingsForMeta(
+                    meta = meta,
+                    fallbackItemId = itemId,
+                    fallbackItemType = itemType,
+                    episodesBySeason = episodesBySeason
                 )
-                val ratings = episodeEnrichment.mapNotNull { (key, value) ->
-                    value.voteAverage?.takeIf { it > 0.0 }?.let { key to it }
-                }.toMap()
+
+                val ratings = resolveEpisodeRatings(tmdbRatings, omdbRatings)
 
                 _uiState.update { state ->
                     if (state.meta?.id != meta.id) {
                         state
                     } else {
                         state.copy(
-                            episodeImdbRatings = ratings,
+                            episodeRatings = ratings,
                             isEpisodeRatingsLoading = false,
                             episodeRatingsError = null
                         )
@@ -1081,7 +1097,7 @@ class MetaDetailsViewModel @Inject constructor(
                         state
                     } else {
                         state.copy(
-                            episodeImdbRatings = emptyMap(),
+                            episodeRatings = emptyMap(),
                             isEpisodeRatingsLoading = false,
                             episodeRatingsError = context.getString(R.string.ratings_unavailable)
                         )
@@ -1896,11 +1912,12 @@ class MetaDetailsViewModel @Inject constructor(
             }
             toTraktIds(merged)
         }
+        
         if (!ids.hasAnyId()) {
             showMessage(message = "Missing Trakt IDs for check-in", isError = true)
             return
         }
-
+        
         viewModelScope.launch {
             runCatching {
                 traktScrobbleService.checkin(

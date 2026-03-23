@@ -12,6 +12,7 @@ import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.MDBListApi
+import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.RpdbApi
@@ -340,6 +341,23 @@ object NetworkModule {
     @Singleton
     fun provideMDBListApi(@Named("mdblist") retrofit: Retrofit): MDBListApi =
         retrofit.create(MDBListApi::class.java)
+
+    // --- OMDB API ---
+
+    @Provides
+    @Singleton
+    @Named("omdb")
+    fun provideOmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://www.omdbapi.com/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideOmdbApi(@Named("omdb") retrofit: Retrofit): OmdbApi =
+        retrofit.create(OmdbApi::class.java)
 
     // --- Debrid APIs ---
 
