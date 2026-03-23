@@ -197,7 +197,7 @@ class MDBListRepository @Inject constructor(
                     }
                 }
                 .awaitAll()
-                .fold(emptyMap()) { acc, seasonRatings -> acc + seasonRatings }
+                .fold(emptyMap<Pair<Int, Int>, Double>()) { acc, seasonRatings -> acc + seasonRatings }
         }
     }
 

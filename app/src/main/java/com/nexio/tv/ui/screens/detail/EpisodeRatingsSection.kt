@@ -264,12 +264,10 @@ fun EpisodeRatingsSection(
 
 private fun ratingColor(value: Double): androidx.compose.ui.graphics.Color {
     return when {
-        value >= 9.0 -> androidx.compose.ui.graphics.Color(0xFF186A3B)
         value >= 8.0 -> androidx.compose.ui.graphics.Color(0xFF28B463)
-        value >= 7.5 -> androidx.compose.ui.graphics.Color(0xFFF4D03F)
-        value >= 7.0 -> androidx.compose.ui.graphics.Color(0xFFF39C12)
-        value >= 6.0 -> androidx.compose.ui.graphics.Color(0xFFE74C3C)
-        else -> androidx.compose.ui.graphics.Color(0xFF633974)
+        value >= 7.0 -> androidx.compose.ui.graphics.Color(0xFFF4D03F)
+        value >= 6.0 -> androidx.compose.ui.graphics.Color(0xFFF39C12)
+        else -> androidx.compose.ui.graphics.Color(0xFFC0392B)
     }
 }
 
@@ -287,4 +285,3 @@ private data class EpisodeRatingChipUi(
     val chipColor: Color,
     val chipTextColor: Color
 )
-
