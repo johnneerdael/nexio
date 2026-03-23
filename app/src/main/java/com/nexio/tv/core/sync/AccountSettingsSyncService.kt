@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
@@ -123,6 +124,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val omdbSettingsDataStore: OmdbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val geminiSettingsDataStore: GeminiSettingsDataStore,
+    private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val premiumizeService: PremiumizeService,
@@ -206,6 +208,7 @@ class AccountSettingsSyncService @Inject constructor(
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, geminiSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
             syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
@@ -673,6 +676,7 @@ class AccountSettingsSyncService @Inject constructor(
         tmdbSettingsDataStore.setApiKey(resolveApiKeySecret(TMDB_SECRET_TYPE, TMDB_SECRET_REF))
         mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
         omdbSettingsDataStore.setApiKey(resolveApiKeySecret(OMDB_SECRET_TYPE, OMDB_SECRET_REF))
+        imdbSettingsDataStore.setApiKey(resolveApiKeySecret(IMDB_SECRET_TYPE, IMDB_SECRET_REF))
         geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
         posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
         posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))

@@ -13,6 +13,22 @@ The system SHALL support a dedicated account-scoped IMDb integration under `inte
 - **THEN** the response excludes `integrations.imdb`
 - **AND** the existing supported account-config fields are still returned
 
+### Requirement: Web configuration support
+The system SHALL allow web-side configuration of the account-scoped IMDb integration through the same `integrations.imdb` contract fields used by Android sync.
+
+#### Scenario: Web-updated IMDb settings are retained in sync
+- **WHEN** a web client updates `integrations.imdb.enabled` or `integrations.imdb.baseUrl`
+- **THEN** the values are retained in account-config sync
+- **AND** subsequent snapshots return the updated IMDb configuration for v3 clients
+
+### Requirement: Android configuration support
+The system SHALL allow Android-side configuration of the account-scoped IMDb integration through the same `integrations.imdb` contract fields and the `imdb_api_key` secret.
+
+#### Scenario: Android sync includes IMDb configuration and secret support
+- **WHEN** an Android client builds or applies an account-config snapshot
+- **THEN** it includes the `integrations.imdb` block in v3 payloads
+- **AND** it participates in `imdb_api_key` secret synchronization for `integration:imdb`
+
 ### Requirement: Contract version compatibility
 The system SHALL accept contract versions 2 and 3 for account-config sync requests, SHALL emit version 3 for current clients, and SHALL keep version 2 support active for older requests.
 
