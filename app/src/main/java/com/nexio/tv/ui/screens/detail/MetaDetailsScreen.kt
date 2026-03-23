@@ -356,7 +356,7 @@ fun MetaDetailsScreen(
                     reviewsError = uiState.reviewsError,
                     collection = uiState.collection,
                     collectionName = uiState.collectionName,
-                    episodeImdbRatings = uiState.episodeImdbRatings,
+                    episodeRatings = uiState.episodeRatings,
                     isEpisodeRatingsLoading = uiState.isEpisodeRatingsLoading,
                     episodeRatingsError = uiState.episodeRatingsError,
                     mdbListRatings = uiState.mdbListRatings,
@@ -567,7 +567,7 @@ private fun MetaDetailsContent(
     reviewsError: String?,
     collection: List<MetaPreview>,
     collectionName: String?,
-    episodeImdbRatings: Map<Pair<Int, Int>, Double>,
+    episodeRatings: Map<Pair<Int, Int>, EpisodeRating>,
     isEpisodeRatingsLoading: Boolean,
     episodeRatingsError: String?,
     mdbListRatings: MDBListRatings?,
@@ -1192,7 +1192,7 @@ private fun MetaDetailsContent(
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
-                        episodeRatings = episodeImdbRatings,
+                        episodeRatings = episodeRatings,
                         watchedEpisodes = watchedEpisodes,
                         episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
@@ -1330,7 +1330,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.RATINGS -> {
                                 EpisodeRatingsSection(
                                     episodes = meta.videos,
-                                    ratings = episodeImdbRatings,
+                                    ratings = resolveEpisodeRatingValues(episodeRatings),
                                     isLoading = isEpisodeRatingsLoading,
                                     error = episodeRatingsError,
                                     title = if (hasPeopleTabs) "" else strTabRatings,

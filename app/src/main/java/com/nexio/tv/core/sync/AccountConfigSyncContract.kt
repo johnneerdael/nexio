@@ -5,6 +5,7 @@ import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -34,6 +35,7 @@ internal fun observeAccountConfigSyncChanges(
     tmdbSettings: Flow<Unit>,
     mdbListSettings: Flow<Unit>,
     mdbListCatalogPreferences: Flow<Unit>,
+    omdbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     geminiSettings: Flow<Unit>,
@@ -51,6 +53,7 @@ internal fun observeAccountConfigSyncChanges(
         tmdbSettings,
         mdbListSettings,
         mdbListCatalogPreferences,
+        omdbSettings,
         animeSkipEnabled,
         animeSkipClientId,
         geminiSettings,
@@ -143,6 +146,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     layoutPreferenceDataStore: LayoutPreferenceDataStore,
     tmdbSettingsDataStore: TmdbSettingsDataStore,
     mdbListSettingsDataStore: MDBListSettingsDataStore,
+    omdbSettingsDataStore: OmdbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     geminiSettingsDataStore: GeminiSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
@@ -177,6 +181,8 @@ internal suspend fun applyAccountConfigSyncSettings(
         selectedTopListKeys = settings.catalogs.mdblist.selectedTopListKeys.toSet(),
         catalogOrder = settings.catalogs.mdblist.catalogOrder
     )
+
+    omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
 
     animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
     animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)

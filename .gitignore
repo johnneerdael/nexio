@@ -45,7 +45,8 @@ bugs/
 .worktrees/
 d
 docs/
-nexio-web/
+nexio-web/ecosystem.config.cjs
+nexio-web/.env
 openspec/
 screenshots/
 scripts/

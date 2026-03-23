@@ -146,6 +146,7 @@
     <string name="settings_integrations_section">Integrations</string>
     <string name="settings_integrations_section_subtitle">Configure external metadata and poster integrations</string>
     <string name="settings_tmdb_subtitle">Metadata enrichment controls</string>
+    <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
     <string name="settings_animeskip_subtitle">Anime intro/outro skip timestamps</string>
     <string name="settings_gemini_subtitle">AI subtitle translation with Gemini</string>
@@ -504,6 +505,18 @@
     <string name="mdblist_personal_list_badge">Personal list</string>
     <string name="mdblist_top_list_badge">Top list</string>
     <string name="mdblist_list_item_count_subtitle">%1$d items</string>
+
+    <!-- OmdbSettingsScreen -->
+    <string name="omdb_title">OMDB Episode Ratings</string>
+    <string name="omdb_subtitle">Use OMDB IMDb ratings for episode cards and season ratings, with two-way sync to your account</string>
+    <string name="omdb_enable_title">Enable OMDB ratings</string>
+    <string name="omdb_enable_subtitle">Prefer OMDB IMDb episode ratings when enabled and an API key is configured</string>
+    <string name="omdb_api_key_title">OMDB API Key</string>
+    <string name="omdb_api_key_subtitle">Configure here or on web. Changes sync both ways through your account.</string>
+    <string name="omdb_dialog_title">OMDB API Key</string>
+    <string name="omdb_dialog_subtitle">Enter your OMDB API key to fetch IMDb episode ratings</string>
+    <string name="omdb_dialog_placeholder">Enter OMDB API key</string>
+    <string name="omdb_invalid_api_key">Invalid OMDB API key</string>
 
     <!-- DebridSettingsContent -->
     <string name="debrid_title">Debrid</string>

@@ -3,6 +3,7 @@ package com.nexio.tv.core.sync
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -16,6 +17,7 @@ import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
+import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
 import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
@@ -52,6 +54,7 @@ class AccountConfigSyncContractTest {
                     realDebrid = RealDebridSyncSettings(connected = true, username = "rd-user")
                 ),
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false),
+                omdb = OmdbSyncSettings(enabled = true),
                 mdblist = MDBListSyncSettings(enabled = true, showImdb = false),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(
                     enabled = true,
@@ -86,6 +89,7 @@ class AccountConfigSyncContractTest {
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "formatter"), json.keys)
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
+        assertEquals("true", json["integrations"]?.jsonObject?.get("omdb")?.jsonObject?.get("enabled")?.toString())
         assertFalse(json.containsKey("appearance"))
         assertFalse(json.containsKey("layout"))
         assertFalse(json.containsKey("playback"))
@@ -126,6 +130,7 @@ class AccountConfigSyncContractTest {
         val tmdbSettings = MutableSharedFlow<Unit>(replay = 1)
         val mdbListSettings = MutableSharedFlow<Unit>(replay = 1)
         val mdbListCatalogPreferences = MutableSharedFlow<Unit>(replay = 1)
+        val omdbSettings = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipEnabled = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipClientId = MutableSharedFlow<Unit>(replay = 1)
         val geminiSettings = MutableSharedFlow<Unit>(replay = 1)
@@ -144,6 +149,7 @@ class AccountConfigSyncContractTest {
                 tmdbSettings = tmdbSettings,
                 mdbListSettings = mdbListSettings,
                 mdbListCatalogPreferences = mdbListCatalogPreferences,
+                omdbSettings = omdbSettings,
                 animeSkipEnabled = animeSkipEnabled,
                 animeSkipClientId = animeSkipClientId,
                 geminiSettings = geminiSettings,
@@ -204,6 +210,7 @@ class AccountConfigSyncContractTest {
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>(relaxed = true)
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
         val mdbListSettingsDataStore = mockk<MDBListSettingsDataStore>(relaxed = true)
+        val omdbSettingsDataStore = mockk<OmdbSettingsDataStore>(relaxed = true)
         val animeSkipSettingsDataStore = mockk<AnimeSkipSettingsDataStore>(relaxed = true)
         val geminiSettingsDataStore = mockk<com.nexio.tv.data.local.GeminiSettingsDataStore>(relaxed = true)
         val posterRatingsSettingsDataStore = mockk<PosterRatingsSettingsDataStore>(relaxed = true)
@@ -222,6 +229,7 @@ class AccountConfigSyncContractTest {
                     showAudience = false,
                     showMetacritic = true
                 ),
+                omdb = OmdbSyncSettings(enabled = true),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(enabled = true, clientId = "anime-client"),
                 gemini = GeminiSyncSettings(enabled = true),
                 posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = false)
@@ -254,6 +262,7 @@ class AccountConfigSyncContractTest {
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             mdbListSettingsDataStore = mdbListSettingsDataStore,
+            omdbSettingsDataStore = omdbSettingsDataStore,
             animeSkipSettingsDataStore = animeSkipSettingsDataStore,
             geminiSettingsDataStore = geminiSettingsDataStore,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
@@ -265,6 +274,7 @@ class AccountConfigSyncContractTest {
         coVerify(exactly = 1) { layoutPreferenceDataStore.setHomeCatalogOrderKeys(listOf("row-a", "row-b")) }
         coVerify(exactly = 1) { layoutPreferenceDataStore.setDisabledHomeCatalogKeys(listOf("row-c")) }
         coVerify(exactly = 1) { tmdbSettingsDataStore.setEnabled(true) }
+        coVerify(exactly = 1) { omdbSettingsDataStore.setEnabled(true) }
         coVerify(exactly = 1) { mdbListSettingsDataStore.setCatalogPreferences(setOf("personal-hidden"), setOf("top-selected"), listOf("mdb-top")) }
         coVerify(exactly = 1) {
             traktSettingsDataStore.setCatalogPreferences(
