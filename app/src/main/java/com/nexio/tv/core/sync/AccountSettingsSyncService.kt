@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
@@ -95,6 +96,8 @@ private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
 private const val OMDB_SECRET_TYPE = "omdb_api_key"
 private const val OMDB_SECRET_REF = "integration:omdb"
+private const val IMDB_SECRET_TYPE = "imdb_api_key"
+private const val IMDB_SECRET_REF = "integration:imdb"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
 private const val GEMINI_SECRET_REF = "integration:gemini"
 private const val RPDB_SECRET_TYPE = "rpdb_api_key"
@@ -121,6 +124,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val omdbSettingsDataStore: OmdbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val geminiSettingsDataStore: GeminiSettingsDataStore,
+    private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val premiumizeService: PremiumizeService,
@@ -154,6 +158,7 @@ class AccountSettingsSyncService @Inject constructor(
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
                 geminiSettings = geminiSettingsDataStore.settings.drop(1).map { Unit },
+                imdbSettings = imdbSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeAccountState = premiumizeService.observeAccountState().drop(1).map { Unit },
@@ -204,6 +209,7 @@ class AccountSettingsSyncService @Inject constructor(
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, geminiSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
             syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
@@ -237,6 +243,7 @@ class AccountSettingsSyncService @Inject constructor(
                     omdbSettingsDataStore = omdbSettingsDataStore,
                     animeSkipSettingsDataStore = animeSkipSettingsDataStore,
                     geminiSettingsDataStore = geminiSettingsDataStore,
+                    imdbSettingsDataStore = imdbSettingsDataStore,
                     posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
                     traktSettingsDataStore = traktSettingsDataStore,
                     playerSettingsDataStore = playerSettingsDataStore
@@ -310,6 +317,7 @@ class AccountSettingsSyncService @Inject constructor(
                 omdb = OmdbSyncSettings(
                     enabled = omdbSettingsDataStore.settings.first().enabled
                 ),
+                imdb = buildImdbSyncSettings(imdbSettingsDataStore),
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
                     clientId = animeSkipClientId
@@ -670,6 +678,8 @@ class AccountSettingsSyncService @Inject constructor(
         tmdbSettingsDataStore.setApiKey(resolveApiKeySecret(TMDB_SECRET_TYPE, TMDB_SECRET_REF))
         mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
         omdbSettingsDataStore.setApiKey(resolveApiKeySecret(OMDB_SECRET_TYPE, OMDB_SECRET_REF))
+        imdbSettingsDataStore.setApiKey(resolveApiKeySecret(IMDB_SECRET_TYPE, IMDB_SECRET_REF))
+        imdbSettingsDataStore.setBaseUrl(settings.integrations.imdb.baseUrl)
         geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
         posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
         posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))

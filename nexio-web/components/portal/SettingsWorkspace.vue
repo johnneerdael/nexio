@@ -111,6 +111,24 @@
         </div>
       </div>
 
+      <!-- IMDb Card -->
+      <div v-if="isConfigured.imdb" @click="activeModal = 'imdb'" class="glass-card p-6 rounded-xl border border-outline-variant/10 hover:border-amber-400/30 hover:bg-surface-container-high transition-all duration-300 group cursor-pointer bg-surface-container">
+        <div class="flex justify-between items-start mb-6">
+          <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5 text-white font-black text-[11px] tracking-[0.25em]">
+            IMDb
+          </div>
+          <div :class="['flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border', integrationEnabled('imdb') ? 'bg-amber-500/10 text-amber-200 border-amber-500/20' : 'bg-surface-container-highest/60 text-on-surface-variant border-outline-variant/20']">
+            {{ integrationEnabled('imdb') ? 'Active' : 'Configured' }}
+          </div>
+        </div>
+        <h3 class="text-xl font-bold font-headline mb-1 text-on-surface">IMDb</h3>
+        <p class="text-sm text-on-surface-variant font-body mb-6">Primary IMDb episode-ratings provider for the portal.</p>
+        <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
+          <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
+          <button @click.stop="emit('update', 'integrations.imdb.enabled', !settings.integrations.imdb.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('imdb') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+        </div>
+      </div>
+
       <!-- MDBList Card -->
       <div v-if="isConfigured.mdblist" @click="activeModal = 'mdblist'" class="glass-card p-6 rounded-xl border border-outline-variant/10 hover:border-primary/30 hover:bg-surface-container-high transition-all duration-300 group cursor-pointer bg-surface-container">
         <div class="flex justify-between items-start mb-6">
@@ -240,6 +258,11 @@
               <div v-if="!isConfigured.omdb" @click="activeModal = 'omdb'" class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container hover:bg-surface-container-high hover:border-amber-500/30 cursor-pointer transition-all group">
                 <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5 text-amber-300 font-black text-xs tracking-wide">OMDB</div>
                 <div><h4 class="font-bold text-white group-hover:text-amber-300 transition-colors">OMDB</h4><p class="text-[11px] text-on-surface-variant line-clamp-1">IMDb episode ratings provider</p></div>
+              </div>
+
+              <div v-if="!isConfigured.imdb" @click="activeModal = 'imdb'" class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container hover:bg-surface-container-high hover:border-amber-400/30 cursor-pointer transition-all group">
+                <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5 text-white font-black text-[10px] tracking-[0.2em]">IMDb</div>
+                <div><h4 class="font-bold text-white group-hover:text-amber-200 transition-colors">IMDb</h4><p class="text-[11px] text-on-surface-variant line-clamp-1">Primary episode-ratings provider for the portal</p></div>
               </div>
 
               <div v-if="!isConfigured.mdblist" @click="activeModal = 'mdblist'" class="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/10 bg-surface-container hover:bg-surface-container-high hover:border-primary/30 cursor-pointer transition-all group">
@@ -538,13 +561,14 @@
                    <img v-else-if="activeModal === 'premiumize'" src="/integrations/premiumize.svg" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'tmdb'" src="/integrations/tmdb.webp" class="w-6 h-6 object-contain" />
                    <span v-else-if="activeModal === 'omdb'" class="text-amber-300 font-black text-xs tracking-wide">OMDB</span>
+                   <span v-else-if="activeModal === 'imdb'" class="text-white font-black text-[10px] tracking-[0.2em]">IMDb</span>
                    <img v-else-if="activeModal === 'animeskip'" src="/integrations/anime-skip.svg" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'gemini'" src="/integrations/gemini.webp" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'rpdb'" src="/integrations/rpdb.webp" class="w-6 h-6 object-contain" />
                    <img v-else-if="activeModal === 'topposters'" src="/integrations/topposter.svg" class="w-6 h-6 object-contain" />
                 </div>
                 <h2 class="text-xl font-headline font-bold text-white capitalize">
-                  {{ activeModal === 'animeskip' ? 'Anime-Skip' : activeModal === 'topposters' ? 'TOP Posters' : activeModal === 'realdebrid' ? 'Real-Debrid' : activeModal === 'tmdb' ? 'TMDB' : activeModal === 'omdb' ? 'OMDB' : activeModal === 'rpdb' ? 'RPDB' : activeModal === 'gemini' ? 'Google Gemini' : activeModal }} Settings
+                  {{ activeModal === 'animeskip' ? 'Anime-Skip' : activeModal === 'topposters' ? 'TOP Posters' : activeModal === 'realdebrid' ? 'Real-Debrid' : activeModal === 'tmdb' ? 'TMDB' : activeModal === 'omdb' ? 'OMDB' : activeModal === 'imdb' ? 'IMDb' : activeModal === 'rpdb' ? 'RPDB' : activeModal === 'gemini' ? 'Google Gemini' : activeModal }} Settings
                 </h2>
               </div>
               <button @click="closeModal" class="w-8 h-8 rounded-full hover:bg-surface-bright flex items-center justify-center"><span class="material-symbols-outlined text-sm">close</span></button>
@@ -579,8 +603,49 @@
                   </label>
                 </div>
 
+                <div v-if="activeModal === 'imdb'" class="space-y-4">
+                  <div class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/10">
+                    <p class="text-sm text-on-surface-variant">
+                      Configure the primary IMDb episode-ratings provider used by the portal. The API key is stored as a secret and the base URL is synced with your account.
+                    </p>
+                  </div>
+
+                  <div class="space-y-2">
+                    <label class="flex justify-between items-center text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+                      <span>Provider base URL</span>
+                    </label>
+                    <input
+                      :value="settings.integrations.imdb.baseUrl"
+                      @input="emit('update', 'integrations.imdb.baseUrl', ($event.target as HTMLInputElement).value)"
+                      class="w-full bg-surface-container-lowest border border-outline-variant/20 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-3 text-sm placeholder:text-on-surface-variant/40"
+                      placeholder="https://ratings.example.com"
+                    >
+                    <p class="text-[10px] text-on-surface-variant">
+                      Any trailing slash is normalized when the provider is validated.
+                    </p>
+                  </div>
+
+                  <div class="space-y-2">
+                    <label class="flex justify-between items-center text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+                      <span>IMDb API key</span>
+                    </label>
+                    <input
+                      :value="secretDrafts['integration:imdb'] || ''"
+                      @input="emit('update-secret-draft', 'integration:imdb', ($event.target as HTMLInputElement).value)"
+                      class="w-full bg-surface-container-lowest border border-outline-variant/20 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-3 text-sm font-mono placeholder:text-on-surface-variant/40"
+                      placeholder="Enter IMDb API key"
+                    >
+                    <div class="flex gap-2 flex-wrap">
+                      <button class="px-4 py-1.5 bg-surface-bright hover:bg-surface-container-highest rounded border border-outline-variant/10 text-xs font-semibold active:scale-95 transition-all" @click="emit('save-secret', 'imdb_api_key', 'integration:imdb')">Save key</button>
+                      <button v-if="secretStatuses['integration:imdb']" class="px-4 py-1.5 bg-surface-bright hover:bg-surface-container-highest rounded border border-outline-variant/10 text-xs font-semibold active:scale-95 transition-all text-error" @click="emit('delete-secret', 'imdb_api_key', 'integration:imdb')">Delete key</button>
+                      <button class="px-4 py-1.5 bg-primary/10 hover:bg-primary/20 rounded border border-primary/20 text-xs font-semibold active:scale-95 transition-all text-primary" @click="emit('validate-imdb')">Validate provider</button>
+                    </div>
+                    <p v-if="secretStatuses['integration:imdb']?.maskedPreview" class="text-[10px] text-primary/70 mt-1">Stored: {{ secretStatuses['integration:imdb']?.maskedPreview }}</p>
+                  </div>
+                </div>
+
                 <!-- Generic API Key Input -->
-                <div class="space-y-2" v-if="activeModal && requiresSecret(activeModal)">
+                <div class="space-y-2" v-if="activeModal && requiresSecret(activeModal) && activeModal !== 'imdb'">
                   <label class="flex justify-between items-center text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">
                     <span>API / Secret Key</span>
                     <a v-if="apiLinkMap[activeModal]" :href="apiLinkMap[activeModal]" target="_blank" class="text-primary hover:text-primary-dim lowercase tracking-normal flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">open_in_new</span> get api key</a>
@@ -676,6 +741,7 @@ const emit = defineEmits<{
   'save-secret': [secretType: SecretType, secretRef: string]
   'delete-secret': [secretType: SecretType, secretRef: string]
   'validate-mdblist': []
+  'validate-imdb': []
   'toggle-mdblist-personal-list': [key: string, currentlyHidden: boolean]
   'toggle-mdblist-top-list': [key: string, shouldSelect: boolean]
   'search-trakt-lists': [query: string]
@@ -716,6 +782,10 @@ const isConfigured = computed(() => {
     premiumize: !!props.settings.integrations.debrid.premiumize.customerId || !!props.secretStatuses['integration:premiumize'],
     tmdb: props.settings.integrations.tmdb.enabled || !!props.secretStatuses['integration:tmdb'],
     omdb: props.settings.integrations.omdb.enabled || !!props.secretStatuses['integration:omdb'],
+    imdb:
+      props.settings.integrations.imdb.enabled ||
+      !!props.settings.integrations.imdb.baseUrl.trim() ||
+      !!props.secretStatuses['integration:imdb'],
     mdblist: props.settings.integrations.mdblist.enabled || !!props.secretStatuses['integration:mdblist'],
     animeskip: props.settings.integrations.animeSkip.enabled,
     gemini: props.settings.integrations.gemini.enabled || !!props.secretStatuses['integration:gemini'],
@@ -724,12 +794,13 @@ const isConfigured = computed(() => {
   }
 })
 
-const hasEnableToggle = (id: string) => ['tmdb', 'omdb', 'mdblist', 'animeskip', 'gemini'].includes(id)
-const requiresSecret = (id: string) => ['tmdb', 'omdb', 'mdblist', 'gemini', 'premiumize', 'rpdb', 'topposters'].includes(id)
+const hasEnableToggle = (id: string) => ['tmdb', 'omdb', 'imdb', 'mdblist', 'animeskip', 'gemini'].includes(id)
+const requiresSecret = (id: string) => ['tmdb', 'omdb', 'imdb', 'mdblist', 'gemini', 'premiumize', 'rpdb', 'topposters'].includes(id)
 
 function integrationEnabled(id: string) {
   if (id === 'tmdb') return props.settings.integrations.tmdb.enabled
   if (id === 'omdb') return props.settings.integrations.omdb.enabled
+  if (id === 'imdb') return props.settings.integrations.imdb.enabled
   if (id === 'mdblist') return props.settings.integrations.mdblist.enabled
   if (id === 'animeskip') return props.settings.integrations.animeSkip.enabled
   if (id === 'gemini') return props.settings.integrations.gemini.enabled
@@ -741,6 +812,7 @@ function integrationEnabled(id: string) {
 function toggleGenericIntegration(id: string) {
   if (id === 'tmdb') emit('update', 'integrations.tmdb.enabled', !props.settings.integrations.tmdb.enabled)
   else if (id === 'omdb') emit('update', 'integrations.omdb.enabled', !props.settings.integrations.omdb.enabled)
+  else if (id === 'imdb') emit('update', 'integrations.imdb.enabled', !props.settings.integrations.imdb.enabled)
   else if (id === 'animeskip') emit('update', 'integrations.animeSkip.enabled', !props.settings.integrations.animeSkip.enabled)
   else if (id === 'gemini') emit('update', 'integrations.gemini.enabled', !props.settings.integrations.gemini.enabled)
   else if (id === 'rpdb') emit('update', 'integrations.posterRatings.rpdbEnabled', !props.settings.integrations.posterRatings.rpdbEnabled)
@@ -751,6 +823,7 @@ function saveGenericSecret(id: string) {
   if (id === 'tmdb') emit('save-secret', 'tmdb_api_key', 'integration:tmdb')
   if (id === 'gemini') emit('save-secret', 'gemini_api_key', 'integration:gemini')
   if (id === 'omdb') emit('save-secret', 'omdb_api_key', 'integration:omdb')
+  if (id === 'imdb') emit('save-secret', 'imdb_api_key', 'integration:imdb')
   if (id === 'mdblist') emit('save-secret', 'mdblist_api_key', 'integration:mdblist')
   if (id === 'rpdb') emit('save-secret', 'rpdb_api_key', 'integration:rpdb')
   if (id === 'topposters') emit('save-secret', 'top_posters_api_key', 'integration:topposters')
@@ -780,6 +853,7 @@ const apiLinkMap: Record<string, string> = {
   topposters: 'https://api.top-streaming.stream/user/dashboard',
   tmdb: 'https://www.themoviedb.org/settings/api',
   omdb: 'https://www.omdbapi.com/apikey.aspx',
+  imdb: 'https://www.imdb.com/',
   mdblist: 'https://mdblist.com/preferences/',
   animeskip: 'https://anime-skip.com/account/api-clients'
 }

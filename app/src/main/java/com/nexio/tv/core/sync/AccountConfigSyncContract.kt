@@ -3,6 +3,7 @@ package com.nexio.tv.core.sync
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.GeminiSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
@@ -15,18 +16,21 @@ import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
+import com.nexio.tv.domain.model.ImdbSettings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.merge
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 2
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 3
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -39,6 +43,7 @@ internal fun observeAccountConfigSyncChanges(
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     geminiSettings: Flow<Unit>,
+    imdbSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
@@ -57,6 +62,7 @@ internal fun observeAccountConfigSyncChanges(
         animeSkipEnabled,
         animeSkipClientId,
         geminiSettings,
+        imdbSettings,
         posterRatingsSettings,
         premiumizeSettings,
         premiumizeAccountState,
@@ -141,6 +147,24 @@ internal suspend fun buildRemoteAddonInstallConfigs(
         }
 }
 
+internal suspend fun buildImdbSyncSettings(
+    imdbSettingsDataStore: ImdbSettingsDataStore
+): ImdbSyncSettings {
+    val settings: ImdbSettings = imdbSettingsDataStore.settings.first()
+    return ImdbSyncSettings(
+        enabled = settings.enabled,
+        baseUrl = settings.baseUrl
+    )
+}
+
+internal suspend fun applyImdbSyncSettings(
+    settings: ImdbSyncSettings,
+    imdbSettingsDataStore: ImdbSettingsDataStore
+) {
+    imdbSettingsDataStore.setEnabled(settings.enabled)
+    imdbSettingsDataStore.setBaseUrl(settings.baseUrl)
+}
+
 internal suspend fun applyAccountConfigSyncSettings(
     settings: AccountConfigSyncPayload,
     layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -149,6 +173,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     omdbSettingsDataStore: OmdbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     geminiSettingsDataStore: GeminiSettingsDataStore,
+    imdbSettingsDataStore: ImdbSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
     playerSettingsDataStore: PlayerSettingsDataStore
@@ -205,4 +230,5 @@ internal suspend fun applyAccountConfigSyncSettings(
         nameTemplate = settings.formatter.customTemplate?.nameTemplate,
         descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate
     )
+    applyImdbSyncSettings(settings.integrations.imdb, imdbSettingsDataStore)
 }

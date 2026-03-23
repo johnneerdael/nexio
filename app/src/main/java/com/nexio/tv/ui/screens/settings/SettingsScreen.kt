@@ -72,6 +72,7 @@ private enum class IntegrationSettingsSection {
     Trakt,
     Tmdb,
     Omdb,
+    Imdb,
     MdbList,
     AnimeSkip,
     Gemini,
@@ -197,6 +198,7 @@ fun SettingsScreen(
     val integrationTraktFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationOmdbFocusRequester = remember { FocusRequester() }
+    val integrationImdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
     val integrationGeminiFocusRequester = remember { FocusRequester() }
@@ -379,6 +381,7 @@ fun SettingsScreen(
                             traktFocusRequester = integrationTraktFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             omdbFocusRequester = integrationOmdbFocusRequester,
+                            imdbFocusRequester = integrationImdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                             geminiFocusRequester = integrationGeminiFocusRequester,
@@ -439,6 +442,7 @@ private fun IntegrationSettingsContent(
     traktFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
     omdbFocusRequester: FocusRequester,
+    imdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
     geminiFocusRequester: FocusRequester,
@@ -458,6 +462,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Trakt -> traktFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.Omdb -> omdbFocusRequester
+            IntegrationSettingsSection.Imdb -> imdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
             IntegrationSettingsSection.Gemini -> geminiFocusRequester
@@ -514,6 +519,13 @@ private fun IntegrationSettingsContent(
                                 onClick = { onSelectSection(IntegrationSettingsSection.Omdb) }
                             )
                         }
+                        item(key = "integration_hub_imdb") {
+                            SettingsActionRow(
+                                title = "IMDb Ratings API",
+                                subtitle = stringResource(R.string.settings_imdb_subtitle),
+                                onClick = { onSelectSection(IntegrationSettingsSection.Imdb) }
+                            )
+                        }
                         item(key = "integration_hub_mdblist") {
                             SettingsActionRow(
                                 title = "MDBList",
@@ -568,6 +580,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Omdb -> {
             OmdbSettingsContent(
                 initialFocusRequester = omdbFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.Imdb -> {
+            ImdbSettingsContent(
+                initialFocusRequester = imdbFocusRequester
             )
         }
 

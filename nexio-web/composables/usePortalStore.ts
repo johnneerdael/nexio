@@ -206,7 +206,7 @@ function snapshotSignature(settings: PortalSettings, addons: AddonRecord[]): str
   })
 }
 
-function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSettings {
+export function sanitizePortalSettings(input?: Partial<PortalSettings> | null): PortalSettings {
   const defaults = defaultSettings()
   const legacyInput = input as Partial<{
     layout: PortalSettings['catalogs']['home']
@@ -239,6 +239,10 @@ function sanitizeSettings(input?: Partial<PortalSettings> | null): PortalSetting
       omdb: {
         ...defaults.integrations.omdb,
         ...(input?.integrations?.omdb ?? {})
+      },
+      imdb: {
+        ...defaults.integrations.imdb,
+        ...(input?.integrations?.imdb ?? {})
       },
       mdblist: {
         ...defaults.integrations.mdblist,
@@ -335,7 +339,7 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
     syncRevision: source.syncRevision ?? 1,
     lastSyncedAt: source.lastSyncedAt ?? new Date().toISOString(),
     session,
-    settings: sanitizeSettings(clone(source.settings ?? defaultSettings())),
+    settings: sanitizePortalSettings(clone(source.settings ?? defaultSettings())),
     addons: clone(source.addons ?? defaultAccountAddons()).map((addon, index) => sanitizeAddonRecord(addon, index)),
     secretStatuses: clone(source.secretStatuses ?? []),
     secretDrafts: {},
@@ -762,7 +766,7 @@ export function usePortalStore() {
       state.value.bootstrapped = true
       state.value.session = resolvedSession
       state.value.demoMode = isDemoModeForSession(resolvedSession)
-      state.value.settings = sanitizeSettings(clone(payload.snapshot.settings))
+      state.value.settings = sanitizePortalSettings(clone(payload.snapshot.settings))
       state.value.addons = clone(payload.snapshot.addons).map((addon, index) => sanitizeAddonRecord(addon, index))
       state.value.secretStatuses = clone(payload.snapshot.secretStatuses)
       state.value.linkedDevices = clone(payload.snapshot.linkedDevices)
@@ -1444,6 +1448,33 @@ export function usePortalStore() {
     }, token)
   }
 
+  async function validateIMDb() {
+    const token = accessToken(state.value.session)
+    if (!token) {
+      throw new Error('Sign in before validating IMDb.')
+    }
+
+    state.value.error = null
+
+    try {
+      const apiKey = state.value.secretDrafts[secretRefs.imdb]?.trim() || undefined
+      const response = await apiFetch<{ valid: boolean; baseUrl: string }>('/api/integrations/imdb/validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: state.value.settings.integrations.imdb.baseUrl,
+          apiKey
+        })
+      }, token)
+
+      if (response.baseUrl) {
+        state.value.settings.integrations.imdb.baseUrl = response.baseUrl
+      }
+    } catch (error) {
+      state.value.error = cleanErrorMessage(error, 'IMDb validation failed.')
+      throw error
+    }
+  }
+
   async function searchMDBListLists(query: string) {
     if (!query) {
       state.value.mdblistDiscovery.searchResults = []
@@ -1502,6 +1533,10 @@ export function usePortalStore() {
 
     if (secretType === 'omdb_api_key') {
       await validateOMDB().catch(() => undefined)
+    }
+
+    if (secretType === 'imdb_api_key') {
+      await validateIMDb().catch(() => undefined)
     }
   }
 
@@ -1995,6 +2030,7 @@ export function usePortalStore() {
     deleteSecret,
     approveTvLogin,
     validateMDBList,
+    validateIMDb,
     searchMDBListLists,
     setMDBListPersonalListEnabled,
     setMDBListTopListSelected,
