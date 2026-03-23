@@ -15,6 +15,7 @@ import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
+import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.MDBListSyncSettings
 import com.nexio.tv.data.remote.supabase.OmdbSyncSettings
@@ -46,7 +47,7 @@ import org.junit.Test
 class AccountConfigSyncContractTest {
 
     @Test
-    fun `buildAccountConfigSyncPayload serializes integrations catalogs and formatter`() {
+    fun `buildAccountConfigSyncPayload serializes integrations catalogs formatter and imdb`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
                 debrid = DebridSyncSettings(
@@ -55,6 +56,7 @@ class AccountConfigSyncContractTest {
                 ),
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false),
                 omdb = OmdbSyncSettings(enabled = true),
+                imdb = ImdbSyncSettings(enabled = true, baseUrl = "https://custom.imdb.example"),
                 mdblist = MDBListSyncSettings(enabled = true, showImdb = false),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(
                     enabled = true,
@@ -88,8 +90,13 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "formatter"), json.keys)
+        assertEquals(3, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals("true", json["integrations"]?.jsonObject?.get("omdb")?.jsonObject?.get("enabled")?.toString())
+        assertEquals(
+            "https://custom.imdb.example",
+            json["integrations"]?.jsonObject?.get("imdb")?.jsonObject?.get("baseUrl")?.toString()?.trim('"')
+        )
         assertFalse(json.containsKey("appearance"))
         assertFalse(json.containsKey("layout"))
         assertFalse(json.containsKey("playback"))
@@ -98,7 +105,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 2`() {
+    fun `build account config sync rpc params includes contract version 3`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -219,6 +226,7 @@ class AccountConfigSyncContractTest {
         val settings = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false, useBasicInfo = false),
+                imdb = ImdbSyncSettings(enabled = true, baseUrl = "https://custom.imdb.example"),
                 mdblist = MDBListSyncSettings(
                     enabled = true,
                     showTrakt = false,

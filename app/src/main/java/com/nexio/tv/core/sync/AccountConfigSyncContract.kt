@@ -15,6 +15,7 @@ import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.HomeCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
+import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
@@ -26,7 +27,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 2
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 3
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -141,6 +142,16 @@ internal suspend fun buildRemoteAddonInstallConfigs(
         }
 }
 
+internal fun buildImdbSyncSettings(): ImdbSyncSettings {
+    return ImdbSyncSettings()
+}
+
+internal fun applyImdbSyncSettings(settings: ImdbSyncSettings) {
+    if (settings.enabled && settings.baseUrl.isNotBlank()) {
+        // Hook reserved for Task 3's runtime IMDb DataStore integration.
+    }
+}
+
 internal suspend fun applyAccountConfigSyncSettings(
     settings: AccountConfigSyncPayload,
     layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -205,4 +216,5 @@ internal suspend fun applyAccountConfigSyncSettings(
         nameTemplate = settings.formatter.customTemplate?.nameTemplate,
         descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate
     )
+    applyImdbSyncSettings(settings.integrations.imdb)
 }
