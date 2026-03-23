@@ -3,7 +3,7 @@ package com.nexio.tv.data.remote.dto.mdblist
 import com.squareup.moshi.Json
 
 data class MDBListRatingRequestDto(
-    val ids: List<String>,
+    val ids: List<Any>,
     val provider: String
 )
 
