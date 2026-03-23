@@ -69,6 +69,8 @@ import com.nuvio.tv.ui.util.localizeEpisodeTitle
 private val CwCardShape = RoundedCornerShape(12.dp)
 private val CwClipShape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
 private val BadgeShape = RoundedCornerShape(4.dp)
+private val CwNewEpisodeBadgeColor = Color(0xFF1D4ED8)
+private val CwNewSeasonBadgeColor = Color(0xFFB45309)
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -238,12 +240,16 @@ fun ContinueWatchingCard(
     val strAirsDate = stringResource(R.string.cw_airs_date, nextUp?.airDateLabel ?: "")
     val strUpcoming = stringResource(R.string.cw_upcoming)
     val strNextUp = stringResource(R.string.cw_next_up)
+    val strNewEpisode = stringResource(R.string.cw_new_episode)
+    val strNewSeason = stringResource(R.string.cw_new_season)
     val strResume = stringResource(R.string.cw_resume)
     val strPercentWatched = stringResource(R.string.cw_percent_watched)
     val strHoursMinLeft = stringResource(R.string.cw_hours_min_left)
     val strMinLeft = stringResource(R.string.cw_min_left)
     val nextUpBadgeText = nextUp?.let { info ->
-        if (!info.hasAired) {
+        if (info.isReleaseAlert) {
+            if (info.isNewSeasonRelease) strNewSeason else strNewEpisode
+        } else if (!info.hasAired) {
             info.airDateLabel?.let { strAirsDate } ?: strUpcoming
         } else {
             strNextUp
@@ -309,7 +315,13 @@ fun ContinueWatchingCard(
     }
 
     val bgColor = NuvioColors.Background
-    val badgeBackground = remember(bgColor) { bgColor.copy(alpha = 0.8f) }
+    val badgeBackground = remember(bgColor, nextUp) {
+        when {
+            nextUp?.isNewSeasonRelease == true -> CwNewSeasonBadgeColor
+            nextUp?.isReleaseAlert == true -> CwNewEpisodeBadgeColor
+            else -> bgColor.copy(alpha = 0.8f)
+        }
+    }
     
     val bgCardColor = NuvioColors.BackgroundCard
     val backgroundPainter = remember(bgCardColor) { androidx.compose.ui.graphics.painter.ColorPainter(bgCardColor) }

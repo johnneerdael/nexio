@@ -89,6 +89,10 @@ data class NextUpInfo(
     val imdbRating: Float? = null,
     val genres: List<String> = emptyList(),
     val releaseInfo: String? = null,
+    val sortTimestamp: Long,
+    val releaseTimestamp: Long? = null,
+    val isReleaseAlert: Boolean = false,
+    val isNewSeasonRelease: Boolean = false,
     val seedSeason: Int? = null,
     val seedEpisode: Int? = null
 )
