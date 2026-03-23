@@ -12,5 +12,6 @@ data class MDBListRatingResponseDto(
 )
 
 data class MDBListRatingItemDto(
+    @Json(name = "id") val id: Int? = null,
     @Json(name = "rating") val rating: Double? = null
 )
