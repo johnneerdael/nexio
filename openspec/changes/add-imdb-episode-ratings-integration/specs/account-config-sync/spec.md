@@ -30,7 +30,6 @@ The system SHALL allow Android-side configuration of the account-scoped IMDb int
 - **AND** it reads the payload from the Android IMDb store for `enabled` and `baseUrl`
 - **AND** it applies synced `enabled` and `baseUrl` values back into the Android IMDb store
 - **AND** it participates in `imdb_api_key` secret synchronization for `integration:imdb`
-
 ### Requirement: Contract version compatibility
 The system SHALL accept contract versions 2 and 3 for account-config sync requests, SHALL emit version 3 for current clients, and SHALL keep version 2 support active for older requests.
 

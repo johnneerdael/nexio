@@ -147,6 +147,7 @@ internal suspend fun buildRemoteAddonInstallConfigs(
         }
 }
 
+<<<<<<< HEAD
 internal suspend fun buildImdbSyncSettings(
     imdbSettingsDataStore: ImdbSettingsDataStore
 ): ImdbSyncSettings {
@@ -163,6 +164,7 @@ internal suspend fun applyImdbSyncSettings(
 ) {
     imdbSettingsDataStore.setEnabled(settings.enabled)
     imdbSettingsDataStore.setBaseUrl(settings.baseUrl)
+}
 }
 
 internal suspend fun applyAccountConfigSyncSettings(
