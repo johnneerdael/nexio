@@ -52,7 +52,6 @@ class ImdbSettingsDataStore @Inject constructor(
     suspend fun setBaseUrl(baseUrl: String) {
         store().edit { it[baseUrlKey] = normalizeCustomImdbBaseUrl(baseUrl) }
     }
-
     suspend fun setApiKey(apiKey: String) {
         store().edit { it[apiKeyKey] = apiKey.trim() }
     }
