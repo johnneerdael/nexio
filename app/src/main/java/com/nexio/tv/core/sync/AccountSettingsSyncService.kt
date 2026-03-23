@@ -95,6 +95,8 @@ private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
 private const val OMDB_SECRET_TYPE = "omdb_api_key"
 private const val OMDB_SECRET_REF = "integration:omdb"
+private const val IMDB_SECRET_TYPE = "imdb_api_key"
+private const val IMDB_SECRET_REF = "integration:imdb"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
 private const val GEMINI_SECRET_REF = "integration:gemini"
 private const val RPDB_SECRET_TYPE = "rpdb_api_key"
@@ -310,6 +312,7 @@ class AccountSettingsSyncService @Inject constructor(
                 omdb = OmdbSyncSettings(
                     enabled = omdbSettingsDataStore.settings.first().enabled
                 ),
+                imdb = buildImdbSyncSettings(),
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
                     clientId = animeSkipClientId
