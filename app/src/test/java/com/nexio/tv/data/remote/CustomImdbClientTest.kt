@@ -13,6 +13,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,25 +71,48 @@ class CustomImdbClientTest {
     }
 
     @Test
-    fun `fetchEpisodeRatings posts identifiers and maps nested episode payload`() = runTest {
+    fun `fetchEpisodeRatings calls single title ratings endpoint with episodes query and maps wrapper payload`() = runTest {
         var capturedPath = ""
-        var capturedBody = ""
+        var capturedEpisodesQuery: String? = null
+        var capturedMethod = ""
+        var capturedRequestBody: String? = null
         val client = OkHttpCustomImdbClient(
             okHttpClient = okHttpClient { chain ->
                 capturedPath = chain.request().url.encodedPath
-                capturedBody = chain.request().body!!.readUtf8()
+                capturedEpisodesQuery = chain.request().url.queryParameter("episodes")
+                capturedMethod = chain.request().method
+                capturedRequestBody = chain.request().body?.readUtf8()
                 jsonResponse(
                     chain,
                     """
                     {
-                      "items": [
+                      "requestTconst": "tt27444205",
+                      "rating": { "tconst": "tt27444205", "averageRating": 8.8, "numVotes": 1200 },
+                      "episodesParentTconst": "tt27444205",
+                      "episodes": [
                         {
-                          "identifier": "tt27444205",
-                          "episodes": [
-                            { "seasonNumber": 1, "episodeNumber": 1, "averageRating": 8.3 },
-                            { "seasonNumber": 1, "episodeNumber": 2, "averageRating": 0.0 },
-                            { "seasonNumber": 2, "episodeNumber": 1, "averageRating": 7.5 }
-                          ]
+                          "tconst": "tt1000001",
+                          "parentTconst": "tt27444205",
+                          "seasonNumber": 1,
+                          "episodeNumber": 1,
+                          "averageRating": 8.3,
+                          "numVotes": 200
+                        },
+                        {
+                          "tconst": "tt1000002",
+                          "parentTconst": "tt27444205",
+                          "seasonNumber": 1,
+                          "episodeNumber": 2,
+                          "averageRating": 0.0,
+                          "numVotes": 20
+                        },
+                        {
+                          "tconst": "tt1000003",
+                          "parentTconst": "tt27444205",
+                          "seasonNumber": 2,
+                          "episodeNumber": 1,
+                          "averageRating": 7.5,
+                          "numVotes": 180
                         }
                       ]
                     }
@@ -101,17 +125,17 @@ class CustomImdbClientTest {
         val result = client.fetchEpisodeRatings(
             baseUrl = "https://ratings.example.com/custom",
             apiKey = "secret-key",
-            identifiers = listOf("tt27444205")
+            tconst = "tt27444205"
         )
 
-        assertEquals("/custom/v1/series/bulk/episode-ratings", capturedPath)
-        assertEquals("""{"identifiers":["tt27444205"]}""", capturedBody)
+        assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
+        assertEquals("true", capturedEpisodesQuery)
+        assertEquals("GET", capturedMethod)
+        assertNull(capturedRequestBody)
         assertEquals(
             mapOf(
-                "tt27444205" to mapOf(
-                    (1 to 1) to 8.3,
-                    (2 to 1) to 7.5
-                )
+                (1 to 1) to 8.3,
+                (2 to 1) to 7.5
             ),
             result
         )
@@ -127,12 +151,16 @@ class CustomImdbClientTest {
                     chain,
                     """
                     {
-                      "items": [
+                      "requestTconst": "tt27444205",
+                      "episodesParentTconst": "tt27444205",
+                      "episodes": [
                         {
-                          "identifier": "tt27444205",
-                          "episodes": [
-                            { "seasonNumber": 1, "episodeNumber": 1, "averageRating": 8.3 }
-                          ]
+                          "tconst": "tt1000001",
+                          "parentTconst": "tt27444205",
+                          "seasonNumber": 1,
+                          "episodeNumber": 1,
+                          "averageRating": 8.3,
+                          "numVotes": 200
                         }
                       ]
                     }
@@ -145,11 +173,11 @@ class CustomImdbClientTest {
         val result = client.fetchEpisodeRatings(
             baseUrl = "https://ratings.example.com/custom/v1/",
             apiKey = "secret-key",
-            identifiers = listOf("tt27444205")
+            tconst = "tt27444205"
         )
 
-        assertEquals("/custom/v1/series/bulk/episode-ratings", capturedPath)
-        assertEquals(mapOf("tt27444205" to mapOf((1 to 1) to 8.3)), result)
+        assertEquals("/custom/v1/ratings/tt27444205", capturedPath)
+        assertEquals(mapOf((1 to 1) to 8.3), result)
     }
 
     @Test
