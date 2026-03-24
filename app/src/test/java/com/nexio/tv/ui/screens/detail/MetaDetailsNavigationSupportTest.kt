@@ -185,6 +185,23 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
+    fun terminalCompletedEpisodeFallsBackToOlderInProgressBeforeGapFallback() {
+        val result = buildSeriesNextToWatchCandidate(
+            episodes = episodesForSeasons(1..1, episodeCount = 4),
+            progressMap = mapOf(
+                1 to 2 to inProgressProgress("show:1:2", 1, 2, 1_000L),
+                1 to 4 to completedProgress("show:1:4", 1, 4, 2_000L)
+            ),
+            metaId = "show"
+        )
+
+        assertEquals("show:1:2", result.nextVideoId)
+        assertEquals(1, result.nextSeason)
+        assertEquals(2, result.nextEpisode)
+        assertEquals(true, result.isResume)
+    }
+
+    @Test
     fun autoTargetedSeasonUsesTheCtaEpisodeWhenThereIsNoStoredPerSeasonFocus() {
         val meta = buildSeriesMeta(
             *episodesForSeasons(1..3, episodeCount = 10).toTypedArray()
