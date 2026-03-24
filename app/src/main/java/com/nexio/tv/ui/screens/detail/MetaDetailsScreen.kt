@@ -340,6 +340,7 @@ fun MetaDetailsScreen(
                     ),
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
+                    manualSeasonOverrideActive = uiState.manualSeasonOverrideActive,
                     episodesForSeason = uiState.episodesForSeason,
                     isInLibrary = uiState.isInLibrary,
                     librarySourceMode = uiState.librarySourceMode,
@@ -551,6 +552,7 @@ private fun MetaDetailsContent(
     detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
     seasons: List<Int>,
     selectedSeason: Int,
+    manualSeasonOverrideActive: Boolean,
     episodesForSeason: List<Video>,
     isInLibrary: Boolean,
     librarySourceMode: LibrarySourceMode,
@@ -914,12 +916,32 @@ private fun MetaDetailsContent(
         byEpisodeId.keys.retainAll(episodesForSeason.map { it.id }.toSet())
         byEpisodeId
     }
-    val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, lastFocusedEpisodeIdBySeason[selectedSeason], nextToWatch) {
-        val nextEpisodeId = nextToWatch?.nextVideoId
-            ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
-        val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
-            ?: nextEpisodeId?.takeIf { episodesForSeason.any { ep -> ep.id == it } }
-        (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
+    val seasonNextToWatchCandidate = remember(nextToWatch) {
+        SeriesNextToWatchCandidate(
+            watchProgress = nextToWatch?.watchProgress,
+            isResume = nextToWatch?.isResume == true,
+            nextVideoId = nextToWatch?.nextVideoId,
+            nextSeason = nextToWatch?.nextSeason,
+            nextEpisode = nextToWatch?.nextEpisode
+        )
+    }
+    val seasonEntryEpisodeId = remember(
+        meta,
+        selectedSeason,
+        manualSeasonOverrideActive,
+        nextToWatch,
+        lastFocusedEpisodeIdBySeason[selectedSeason]
+    ) {
+        resolveSeasonEntryEpisodeId(
+            meta = meta,
+            selectedSeason = selectedSeason,
+            nextToWatch = seasonNextToWatchCandidate,
+            lastFocusedEpisodeIdBySeason = lastFocusedEpisodeIdBySeason,
+            manualSeasonOverride = manualSeasonOverrideActive
+        )
+    }
+    val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, seasonEntryEpisodeId) {
+        seasonEntryEpisodeId?.let { seasonEpisodeFocusRequesters[it] }
             ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
     }
 
@@ -1217,8 +1239,7 @@ private fun MetaDetailsContent(
                             lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                         },
                         scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
-                            nextToWatch?.nextVideoId
-                                ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
+                            seasonEntryEpisodeId
                         } else null
                     )
                 }
