@@ -91,13 +91,13 @@
             @toggle-trakt-list="toggleTraktPopularList"
             @update-secret-draft="setSecretDraft"
             @save-secret="saveDraftSecret"
-            @delete-secret="deleteSecret"
             @validate-mdblist="validateMDBList"
             @validate-imdb="handleValidateIMDb"
             @toggle-mdblist-personal-list="(key, currentlyHidden) => setMDBListPersonalListEnabled(key, currentlyHidden)"
             @toggle-mdblist-top-list="(key, shouldSelect) => setMDBListTopListSelected(key, shouldSelect)"
             @search-trakt-lists="searchTraktLists"
             @search-mdblist-lists="searchMDBListLists"
+            @delete-integration="deleteIntegration"
           />
           <FormatterWorkspace
             v-else-if="activeView === 'formatter'"
@@ -157,7 +157,7 @@ const {
   refreshPremiumizeStatus,
   setSecretDraft,
   saveDraftSecret,
-  deleteSecret,
+  deleteIntegration,
   validateMDBList,
   validateIMDb,
   searchMDBListLists,

@@ -89,7 +89,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">Primary metadata provider for movie and television show information.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.tmdb.enabled', !settings.integrations.tmdb.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('tmdb') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', 'tmdb')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" aria-label="Delete TMDB integration"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -107,7 +107,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">IMDb episode ratings source for episode rows and season rating views.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.omdb.enabled', !settings.integrations.omdb.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('omdb') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', 'omdb')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" aria-label="Delete OMDB integration"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -125,7 +125,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">Primary IMDb episode-ratings provider for the portal.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.imdb.enabled', !settings.integrations.imdb.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('imdb') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', 'imdb')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" aria-label="Delete IMDb integration"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -143,7 +143,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">Advanced rating aggregation and dynamic movie list synchronization.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.mdblist.enabled', !settings.integrations.mdblist.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('mdblist') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', 'mdblist')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" aria-label="Delete MDBList integration"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -161,7 +161,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">Skip intros, outros, and filler episodes automatically for anime titles.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.animeSkip.enabled', !settings.integrations.animeSkip.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('animeskip') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', 'animeskip')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" aria-label="Delete Anime-Skip integration"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -179,7 +179,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">AI-powered native subtitle translation across workflows.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', 'integrations.gemini.enabled', !settings.integrations.gemini.enabled)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5" :class="integrationEnabled('gemini') ? 'text-red-400 hover:bg-red-500/20' : 'text-emerald-400 hover:bg-emerald-500/20'"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', 'gemini')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" aria-label="Delete Google Gemini integration"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -197,7 +197,7 @@
         <p class="text-sm text-on-surface-variant font-body mb-6">High quality rating posters to replace standard metadata artwork.</p>
         <div class="flex items-center gap-2 pt-4 border-t border-outline-variant/10">
           <button class="flex-1 bg-surface-container-highest/60 hover:bg-surface-container-highest text-white text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5">Settings</button>
-          <button @click.stop="emit('update', isConfigured.rpdb ? 'integrations.posterRatings.rpdbEnabled' : 'integrations.posterRatings.topPostersEnabled', false)" class="px-3 bg-surface-container-highest/60 hover:bg-surface-container-highest text-xs font-semibold py-2.5 rounded-lg transition-colors border border-white/5 text-red-400 hover:bg-red-500/20"><span class="material-symbols-outlined text-[18px]">power_settings_new</span></button>
+          <button @click.stop="emit('delete-integration', isConfigured.rpdb ? 'rpdb' : 'topposters')" class="px-3 bg-surface-container-highest/60 hover:bg-error/15 text-xs font-semibold py-2.5 rounded-lg transition-colors border border-error/20 text-red-400 hover:text-red-300" :aria-label="`Delete ${isConfigured.rpdb ? 'RPDB' : 'TOP Posters'} integration`"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
       </div>
 
@@ -637,7 +637,6 @@
                     >
                     <div class="flex gap-2 flex-wrap">
                       <button class="px-4 py-1.5 bg-surface-bright hover:bg-surface-container-highest rounded border border-outline-variant/10 text-xs font-semibold active:scale-95 transition-all" @click="emit('save-secret', 'imdb_api_key', 'integration:imdb')">Save key</button>
-                      <button v-if="secretStatuses['integration:imdb']" class="px-4 py-1.5 bg-surface-bright hover:bg-surface-container-highest rounded border border-outline-variant/10 text-xs font-semibold active:scale-95 transition-all text-error" @click="emit('delete-secret', 'imdb_api_key', 'integration:imdb')">Delete key</button>
                       <button class="px-4 py-1.5 bg-primary/10 hover:bg-primary/20 rounded border border-primary/20 text-xs font-semibold active:scale-95 transition-all text-primary disabled:opacity-60 disabled:cursor-wait" :disabled="imdbValidating" @click="emit('validate-imdb')">
                         {{ imdbValidating ? 'Validating...' : 'Validate provider' }}
                       </button>
@@ -695,6 +694,7 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import PortalField from '~/components/portal/PortalField.vue'
 import { accountGroups, fieldValue, traktCatalogLabels, type PortalGroup } from '~/utils/portal-metadata'
+import type { DeletableIntegrationId } from '~/utils/integration-delete'
 import type { CatalogId, MDBListListOption, PortalSettings, SecretMetadata, SecretType, TraktDeviceFlow, TraktPopularListOption } from '~/types/portal'
 
 const props = withDefaults(defineProps<{
@@ -746,7 +746,7 @@ const emit = defineEmits<{
   'clear-tmdb-key': []
   'update-secret-draft': [secretRef: string, value: string]
   'save-secret': [secretType: SecretType, secretRef: string]
-  'delete-secret': [secretType: SecretType, secretRef: string]
+  'delete-integration': [id: DeletableIntegrationId]
   'validate-mdblist': []
   'validate-imdb': []
   'toggle-mdblist-personal-list': [key: string, currentlyHidden: boolean]
