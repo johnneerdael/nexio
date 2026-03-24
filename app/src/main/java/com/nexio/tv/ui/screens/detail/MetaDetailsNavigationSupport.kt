@@ -33,28 +33,26 @@ internal fun buildSeriesNextToWatchCandidate(
 
     val regularEpisodes = orderedEpisodes.filter { (it.season ?: 0) > 0 }
     val episodePool = if (regularEpisodes.isNotEmpty()) regularEpisodes else orderedEpisodes
-    val episodePoolKeys = episodePool.mapTo(mutableSetOf()) { it.season to it.episode }
-    val progressPool = progressMap.filterKeys { it in episodePoolKeys }.values
 
-    val latestInProgress = progressPool
+    val latestInProgress = progressMap.values
         .filter { it.isInProgress() }
         .maxByOrNull { it.lastWatched }
 
     if (latestInProgress != null) {
         return buildResumeCandidate(
             progress = latestInProgress,
-            episodes = episodePool,
+            episodes = orderedEpisodes,
             fallbackVideoId = latestInProgress.videoId
         )
     }
 
-    val latestCompleted = progressPool
+    val latestCompleted = progressMap.values
         .filter { it.isCompleted() }
         .maxByOrNull { it.lastWatched }
 
     if (latestCompleted != null) {
         val nextEpisode = nextEpisodeAfter(
-            episodes = episodePool,
+            episodes = orderedEpisodes,
             season = latestCompleted.season,
             episode = latestCompleted.episode
         )
