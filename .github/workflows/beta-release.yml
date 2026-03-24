@@ -110,8 +110,6 @@ jobs:
 
       - name: Preview beta release
         if: ${{ inputs.release_mode == 'dry_run' }}
-        env:
-          CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
           args=(python3 scripts/release_beta.py --dry-run)
           if [ "${{ inputs.manual_release }}" = "true" ]; then
@@ -128,8 +126,8 @@ jobs:
               args+=(--release-title "${{ inputs.release_title }}")
             fi
           fi
-          if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
-            printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
+          if [ -n "${{ inputs.custom_release_notes }}" ]; then
+            printf '%s\n' '${{ inputs.custom_release_notes }}' > "$RUNNER_TEMP/custom-release-notes.md"
             args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
           fi
           if [ -n "${{ inputs.downloader_code }}" ]; then
@@ -151,7 +149,6 @@ jobs:
         if: ${{ inputs.release_mode != 'dry_run' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          CUSTOM_RELEASE_NOTES: ${{ inputs.custom_release_notes }}
         run: |
           args=(python3 scripts/release_beta.py)
           case "${{ inputs.release_mode }}" in
@@ -172,8 +169,8 @@ jobs:
               args+=(--release-title "${{ inputs.release_title }}")
             fi
           fi
-          if [ -n "$CUSTOM_RELEASE_NOTES" ]; then
-            printf '%s' "$CUSTOM_RELEASE_NOTES" > "$RUNNER_TEMP/custom-release-notes.md"
+          if [ -n "${{ inputs.custom_release_notes }}" ]; then
+            printf '%s\n' '${{ inputs.custom_release_notes }}' > "$RUNNER_TEMP/custom-release-notes.md"
             args+=(--custom-notes-file "$RUNNER_TEMP/custom-release-notes.md")
           fi
           if [ -n "${{ inputs.downloader_code }}" ]; then
