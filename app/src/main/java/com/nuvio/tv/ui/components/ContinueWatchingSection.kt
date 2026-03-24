@@ -84,7 +84,8 @@ fun ContinueWatchingSection(
     onPlayManually: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1,
-    onItemFocused: (itemIndex: Int) -> Unit = {}
+    onItemFocused: (itemIndex: Int) -> Unit = {},
+    blurUnwatchedEpisodes: Boolean = false
 ) {
     if (items.isEmpty()) return
 
@@ -163,6 +164,7 @@ fun ContinueWatchingSection(
                     item = progress,
                     onClick = { onItemClick(progress) },
                     onLongPress = { optionsItem = progress },
+                    blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     modifier = Modifier
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused && lastFocusedIndex != index) {
@@ -228,7 +230,8 @@ fun ContinueWatchingCard(
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     cardWidth: Dp = 288.dp,
-    imageHeight: Dp = 162.dp
+    imageHeight: Dp = 162.dp,
+    blurUnwatchedEpisodes: Boolean = false
 ) {
     var longPressTriggered by remember { mutableStateOf(false) }
 
@@ -270,7 +273,7 @@ fun ContinueWatchingCard(
         remainingText ?: nextUpBadgeText ?: strNextUp
     }
     val progressFraction = remember(progress) { progress?.progressPercentage ?: 0f }
-    val imageModel = remember(nextUp, progress) {
+    val imageModel = remember(nextUp, progress, item) {
         when {
             nextUp != null && !nextUp.hasAired -> firstNonBlank(
                 nextUp.backdrop,
@@ -279,12 +282,15 @@ fun ContinueWatchingCard(
                 progress?.backdrop,
                 progress?.poster
             )
+            nextUp != null -> firstNonBlank(
+                nextUp.thumbnail,
+                nextUp.backdrop,
+                nextUp.poster
+            )
             else -> firstNonBlank(
-                nextUp?.thumbnail,
+                (item as? ContinueWatchingItem.InProgress)?.episodeThumbnail,
                 progress?.backdrop,
-                progress?.poster,
-                nextUp?.backdrop,
-                nextUp?.poster
+                progress?.poster
             )
         }
     }
@@ -305,12 +311,16 @@ fun ContinueWatchingCard(
     val requestHeightPx = remember(imageHeight, density) {
         with(density) { imageHeight.roundToPx() }
     }
-    val imageRequest = remember(imageModel, requestWidthPx, requestHeightPx) {
+    val shouldBlur = blurUnwatchedEpisodes && nextUp != null
+    val imageRequest = remember(imageModel, requestWidthPx, requestHeightPx, shouldBlur) {
         ImageRequest.Builder(context)
             .data(imageModel)
             .crossfade(false)
             .memoryCacheKey("${imageModel}_${requestWidthPx}x${requestHeightPx}")
             .size(width = requestWidthPx, height = requestHeightPx)
+            .apply {
+                if (shouldBlur) transformations(com.nuvio.tv.ui.util.BlurTransformation())
+            }
             .build()
     }
 

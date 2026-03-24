@@ -161,6 +161,7 @@ class HomeViewModel @Inject constructor(
         loadDisabledHomeCatalogPreference()
         observeLibraryState()
         observeTmdbSettings()
+        observeBlurUnwatchedEpisodes()
         observeStartupAuthNotice()
         loadContinueWatching()
         observeInstalledAddons()
@@ -185,6 +186,16 @@ class HomeViewModel @Inject constructor(
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
 
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
+
+    private fun observeBlurUnwatchedEpisodes() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.blurUnwatchedEpisodes
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    _uiState.update { it.copy(blurUnwatchedEpisodes = enabled) }
+                }
+        }
+    }
 
     fun requestTrailerPreview(item: MetaPreview) = requestTrailerPreviewPipeline(item)
 

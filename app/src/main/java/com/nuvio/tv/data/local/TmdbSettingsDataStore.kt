@@ -25,6 +25,7 @@ class TmdbSettingsDataStore @Inject constructor(
 
     private val enabledKey = booleanPreferencesKey("tmdb_enabled")
     private val modernHomeEnabledKey = booleanPreferencesKey("tmdb_modern_home_enabled")
+    private val enrichContinueWatchingKey = booleanPreferencesKey("tmdb_enrich_continue_watching")
     private val languageKey = stringPreferencesKey("tmdb_language")
     private val useArtworkKey = booleanPreferencesKey("tmdb_use_artwork")
     private val useBasicInfoKey = booleanPreferencesKey("tmdb_use_basic_info")
@@ -41,6 +42,7 @@ class TmdbSettingsDataStore @Inject constructor(
             TmdbSettings(
                 enabled = prefs[enabledKey] ?: false,
                 modernHomeEnabled = prefs[modernHomeEnabledKey] ?: false,
+                enrichContinueWatching = prefs[enrichContinueWatchingKey] ?: true,
                 language = prefs[languageKey] ?: "en",
                 useArtwork = prefs[useArtworkKey] ?: true,
                 useBasicInfo = prefs[useBasicInfoKey] ?: true,
@@ -61,6 +63,10 @@ class TmdbSettingsDataStore @Inject constructor(
 
     suspend fun setModernHomeEnabled(enabled: Boolean) {
         store().edit { it[modernHomeEnabledKey] = enabled }
+    }
+
+    suspend fun setEnrichContinueWatching(enabled: Boolean) {
+        store().edit { it[enrichContinueWatchingKey] = enabled }
     }
 
     suspend fun setLanguage(language: String) {
