@@ -62,6 +62,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val blurUnwatchedEpisodesKey = booleanPreferencesKey("blur_unwatched_episodes")
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
+    private val modernHeroFullScreenBackdropKey = booleanPreferencesKey("modern_hero_full_screen_backdrop")
     private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
     private val showFullReleaseDateKey = booleanPreferencesKey("show_full_release_date")
 
@@ -128,6 +129,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val modernLandscapePostersEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[modernLandscapePostersEnabledKey] ?: false
+    }
+
+    val modernHeroFullScreenBackdropEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[modernHeroFullScreenBackdropKey] ?: false
     }
 
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -290,6 +295,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setModernLandscapePostersEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[modernLandscapePostersEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setModernHeroFullScreenBackdropEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[modernHeroFullScreenBackdropKey] = enabled
         }
     }
 

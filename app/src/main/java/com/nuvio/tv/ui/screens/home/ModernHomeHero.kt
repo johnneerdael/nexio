@@ -132,12 +132,13 @@ internal fun ModernHeroMediaLayer(
 @Composable
 internal fun ModernHeroGradientLayer(
     bgColor: Color,
+    isFullScreen: Boolean = false,
     modifier: Modifier
 ) {
     Box(
         modifier = modifier
             .drawWithCache {
-                val horizontalFadeEndX = size.width * 0.45f
+                val horizontalFadeEndX = size.width * if (isFullScreen) 0.55f else 0.45f
                 val horizontalGradient = Brush.horizontalGradient(
                     colorStops = arrayOf(
                         0.0f to bgColor,
@@ -184,6 +185,7 @@ internal fun HeroTitleBlock(
     preview: HeroPreview?,
     enrichmentActive: Boolean = false,
     portraitMode: Boolean,
+    trailerPlaying: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var stablePreview by remember { mutableStateOf<HeroPreview?>(null) }
@@ -196,14 +198,15 @@ internal fun HeroTitleBlock(
         modifier = modifier,
         contentAlignment = Alignment.BottomStart
     ) {
-        HeroTitleContent(preview = stablePreview!!, portraitMode = portraitMode)
+        HeroTitleContent(preview = stablePreview!!, portraitMode = portraitMode, trailerPlaying = trailerPlaying)
     }
 }
 
 @Composable
 private fun HeroTitleContent(
     preview: HeroPreview?,
-    portraitMode: Boolean
+    portraitMode: Boolean,
+    trailerPlaying: Boolean = false
 ) {
     if (preview == null) return
     val descriptionMaxLines = if (portraitMode) 4 else 5
@@ -236,6 +239,12 @@ private fun HeroTitleContent(
             .decoderFactory(SvgDecoder.Factory())
             .build()
     }
+
+    val metaAlpha by animateFloatAsState(
+        targetValue = if (trailerPlaying) 0f else 1f,
+        animationSpec = tween(durationMillis = 480),
+        label = "heroMetaFade"
+    )
     val scaledTitleStyle = remember(headlineLarge, titleScale) {
         headlineLarge.copy(
             fontSize = headlineLarge.fontSize * titleScale,
@@ -324,7 +333,7 @@ private fun HeroTitleContent(
             (preview.isSeries || hasSecondaryBadge || secondaryHighlightText != null)
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = metaAlpha },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(metaSpacing)
         ) {
@@ -401,7 +410,7 @@ private fun HeroTitleContent(
 
         if (secondaryHighlightText != null || ageRatingBadge != null || showImdbInSecondary || statusBadge != null || secondaryDetails.isNotEmpty()) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = metaAlpha },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(metaSpacing)
             ) {
@@ -478,7 +487,8 @@ private fun HeroTitleContent(
                 style = scaledDescriptionStyle,
                 color = NuvioColors.TextPrimary,
                 maxLines = descriptionMaxLines,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.graphicsLayer { alpha = metaAlpha }
             )
         }
     }

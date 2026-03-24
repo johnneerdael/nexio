@@ -112,6 +112,7 @@ import com.nuvio.tv.data.repository.TraktProgressService
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.AuthState
+import com.nuvio.tv.core.sync.ProfileSettingsSyncService
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.core.sync.StartupSyncService
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
@@ -174,6 +175,9 @@ class MainActivity : ComponentActivity() {
     lateinit var startupSyncService: StartupSyncService
 
     @Inject
+    lateinit var profileSettingsSyncService: ProfileSettingsSyncService
+
+    @Inject
     lateinit var profileSyncService: ProfileSyncService
 
     @Inject
@@ -234,6 +238,21 @@ class MainActivity : ComponentActivity() {
             val profiles by profileManager.profiles.collectAsState()
             val activeProfile = remember(activeProfileId, profiles) {
                 profiles.firstOrNull { it.id == activeProfileId }
+            }
+            var profilePinStates by remember { mutableStateOf<Map<Int, Boolean>>(emptyMap()) }
+
+            LaunchedEffect(authState, profiles) {
+                if (authState is AuthState.FullAccount) {
+                    profileSyncService.pullProfileLockStates()
+                        .onSuccess { profilePinStates = it }
+                        .onFailure { profilePinStates = emptyMap() }
+                } else {
+                    profilePinStates = emptyMap()
+                }
+            }
+
+            val activeProfileHasPin = remember(activeProfileId, profilePinStates) {
+                profilePinStates[activeProfileId] == true
             }
             var avatarCatalog by remember { mutableStateOf(emptyList<com.nuvio.tv.data.remote.supabase.AvatarCatalogItem>()) }
 
@@ -334,7 +353,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val shouldShowProfileSelection =
-                        !hasSelectedProfileThisSession && profiles.size > 1
+                        !hasSelectedProfileThisSession && (profiles.size > 1 || activeProfileHasPin)
 
                     if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
@@ -504,7 +523,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::jankStats.isInitialized) jankStats.isTrackingEnabled = true
-        startupSyncService.requestSyncNow()
+        startupSyncService.requestSyncNow(includeProfileSettings = false)
         lifecycleScope.launch {
             traktProgressService.refreshNow()
         }
@@ -517,6 +536,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        profileSettingsSyncService.requestForegroundPull()
     }
 }
 

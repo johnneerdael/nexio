@@ -14,12 +14,14 @@ import com.nuvio.tv.domain.model.WatchProgress
 data class HomeUiState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
+    val cwIsLoading: Boolean = true,
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedItemId: String? = null,
     val installedAddonsCount: Int = 0,
     val homeLayout: HomeLayout = HomeLayout.MODERN,
     val modernLandscapePostersEnabled: Boolean = false,
+    val modernHeroFullScreenBackdropEnabled: Boolean = false,
     val heroItems: List<MetaPreview> = emptyList(),
     val heroCatalogKeys: List<String> = emptyList(),
     val heroSectionEnabled: Boolean = true,
@@ -49,6 +51,7 @@ data class HomeUiState(
     val gridItems: List<GridItem> = emptyList(),
     val hideUnreleasedContent: Boolean = false,
     val showFullReleaseDate: Boolean = true,
+    val blurUnwatchedEpisodes: Boolean = false,
     val startupAuthNotice: StartupAuthNotice? = null
 )
 
@@ -89,6 +92,10 @@ data class NextUpInfo(
     val imdbRating: Float? = null,
     val genres: List<String> = emptyList(),
     val releaseInfo: String? = null,
+    val sortTimestamp: Long,
+    val releaseTimestamp: Long? = null,
+    val isReleaseAlert: Boolean = false,
+    val isNewSeasonRelease: Boolean = false,
     val seedSeason: Int? = null,
     val seedEpisode: Int? = null
 )

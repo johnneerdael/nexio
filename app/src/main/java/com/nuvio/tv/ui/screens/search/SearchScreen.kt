@@ -404,6 +404,7 @@ fun SearchScreen(
                         submitCurrentQuery(uiState.query.trim())
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
+                    isVoiceListening = isVoiceListening,
                     onVoiceSearch = launchVoiceSearch,
                     onMoveToResults = { focusResults = true },
                     onOpenDiscover = onOpenDiscover,
@@ -443,6 +444,7 @@ fun SearchScreen(
                             submitCurrentQuery(uiState.query.trim())
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
+                        isVoiceListening = isVoiceListening,
                         onVoiceSearch = launchVoiceSearch,
                         onMoveToResults = {
                             focusResults = true
@@ -562,6 +564,7 @@ private fun SearchInputField(
     onQueryChanged: (String) -> Unit,
     onSubmit: () -> Unit,
     showVoiceSearch: Boolean,
+    isVoiceListening: Boolean,
     onVoiceSearch: () -> Unit,
     onMoveToResults: () -> Unit,
     onOpenDiscover: () -> Unit,
@@ -615,19 +618,19 @@ private fun SearchInputField(
                     .onFocusChanged { isVoiceButtonFocused = it.isFocused }
                     .size(56.dp)
                     .border(
-                        width = if (isVoiceButtonFocused) 2.dp else 1.dp,
-                        color = if (isVoiceButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
+                        width = if (isVoiceButtonFocused || isVoiceListening) 2.dp else 1.dp,
+                        color = if (isVoiceListening) NuvioColors.Primary else if (isVoiceButtonFocused) NuvioColors.FocusRing else NuvioColors.Border,
                         shape = RoundedCornerShape(12.dp)
                     )
                     .background(
-                        color = NuvioColors.BackgroundCard,
+                        color = if (isVoiceListening) NuvioColors.Primary.copy(alpha = 0.2f) else NuvioColors.BackgroundCard,
                         shape = RoundedCornerShape(12.dp)
                     )
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Voice search",
-                    tint = NuvioColors.TextPrimary
+                    tint = if (isVoiceListening) NuvioColors.Primary else NuvioColors.TextPrimary
                 )
             }
 

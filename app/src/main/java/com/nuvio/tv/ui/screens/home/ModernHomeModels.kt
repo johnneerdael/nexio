@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.nuvio.tv.domain.model.CatalogRow
 import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.R
@@ -143,6 +144,51 @@ internal data class CachedCarouselItem(
     val carouselItem: ModernCarouselItem
 )
 
+@Immutable
+internal data class ModernCatalogCardMetrics(
+    val width: androidx.compose.ui.unit.Dp,
+    val height: androidx.compose.ui.unit.Dp
+)
+
+internal fun ModernCarouselItem.catalogCardMetrics(
+    useLandscapePosters: Boolean,
+    portraitCardWidth: androidx.compose.ui.unit.Dp,
+    portraitCardHeight: androidx.compose.ui.unit.Dp,
+    landscapeCardWidth: androidx.compose.ui.unit.Dp,
+    landscapeCardHeight: androidx.compose.ui.unit.Dp
+): ModernCatalogCardMetrics {
+    if (payload !is ModernPayload.Catalog) {
+        return ModernCatalogCardMetrics(
+            width = if (useLandscapePosters) landscapeCardWidth else portraitCardWidth,
+            height = if (useLandscapePosters) landscapeCardHeight else portraitCardHeight
+        )
+    }
+
+    if (useLandscapePosters) {
+        return ModernCatalogCardMetrics(
+            width = landscapeCardWidth,
+            height = landscapeCardHeight
+        )
+    }
+
+    return when (metaPreview?.posterShape ?: PosterShape.POSTER) {
+        PosterShape.LANDSCAPE -> ModernCatalogCardMetrics(
+            width = landscapeCardWidth,
+            height = landscapeCardHeight
+        )
+
+        PosterShape.SQUARE -> ModernCatalogCardMetrics(
+            width = portraitCardHeight,
+            height = portraitCardHeight
+        )
+
+        PosterShape.POSTER -> ModernCatalogCardMetrics(
+            width = portraitCardWidth,
+            height = portraitCardHeight
+        )
+    }
+}
+
 
 internal fun buildContinueWatchingItem(
     item: ContinueWatchingItem,
@@ -163,7 +209,13 @@ internal fun buildContinueWatchingItem(
             )
         }
         is ContinueWatchingItem.NextUp -> {
-            if (!item.info.hasAired) {
+            if (item.info.isReleaseAlert) {
+                if (item.info.isNewSeasonRelease) {
+                    context.getString(R.string.cw_new_season)
+                } else {
+                    context.getString(R.string.cw_new_episode)
+                }
+            } else if (!item.info.hasAired) {
                 item.info.airDateLabel?.let { context.getString(R.string.cw_airs_date, it) }
                     ?: context.getString(R.string.cw_upcoming)
             } else {
@@ -433,13 +485,13 @@ internal fun ContinueWatchingItem.contentType(): String {
 internal fun ContinueWatchingItem.season(): Int? {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.season
-        is ContinueWatchingItem.NextUp -> info.season
+        is ContinueWatchingItem.NextUp -> info.seedSeason
     }
 }
 
 internal fun ContinueWatchingItem.episode(): Int? {
     return when (this) {
         is ContinueWatchingItem.InProgress -> progress.episode
-        is ContinueWatchingItem.NextUp -> info.episode
+        is ContinueWatchingItem.NextUp -> info.seedEpisode
     }
 }

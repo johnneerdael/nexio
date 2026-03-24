@@ -223,6 +223,20 @@ fun LayoutSettingsContent(
                         )
                     }
 
+                    if (uiState.selectedLayout == HomeLayout.MODERN) {
+                        CompactToggleRow(
+                            title = stringResource(R.string.layout_fullscreen_hero_backdrop),
+                            subtitle = stringResource(R.string.layout_fullscreen_hero_backdrop_sub),
+                            checked = uiState.modernHeroFullScreenBackdropEnabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetModernHeroFullScreenBackdropEnabled(!uiState.modernHeroFullScreenBackdropEnabled)
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.HOME_LAYOUT }
+                        )
+                    }
+
                     if (uiState.heroSectionEnabled && uiState.availableCatalogs.isNotEmpty() && uiState.selectedLayout != HomeLayout.MODERN) {
                         Text(
                             text = stringResource(R.string.layout_hero_catalogs),

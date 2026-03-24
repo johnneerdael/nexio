@@ -52,6 +52,7 @@ private data class LayoutUiPrefs(
     val hideUnreleasedContent: Boolean,
     val showFullReleaseDate: Boolean,
     val modernLandscapePostersEnabled: Boolean,
+    val modernHeroFullScreenBackdropEnabled: Boolean,
     val focusedBackdropExpandEnabled: Boolean,
     val focusedBackdropExpandDelaySeconds: Int,
     val focusedBackdropTrailerEnabled: Boolean,
@@ -110,7 +111,12 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
         )
     }
 
-    val modernLayoutPrefsFlow = layoutPreferenceDataStore.modernLandscapePostersEnabled
+    val modernLayoutPrefsFlow = combine(
+        layoutPreferenceDataStore.modernLandscapePostersEnabled,
+        layoutPreferenceDataStore.modernHeroFullScreenBackdropEnabled
+    ) { landscapePosters, fullScreenBackdrop ->
+        landscapePosters to fullScreenBackdrop
+    }
 
     val baseLayoutUiPrefsFlow = combine(
         coreLayoutPrefsFlow,
@@ -129,6 +135,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             hideUnreleasedContent = corePrefs.hideUnreleasedContent,
             showFullReleaseDate = corePrefs.showFullReleaseDate,
             modernLandscapePostersEnabled = false,
+            modernHeroFullScreenBackdropEnabled = false,
             focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
             focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
             focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
@@ -146,7 +153,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             modernLayoutPrefsFlow
         ) { basePrefs, modernPrefs ->
             basePrefs.copy(
-                modernLandscapePostersEnabled = modernPrefs
+                modernLandscapePostersEnabled = modernPrefs.first,
+                modernHeroFullScreenBackdropEnabled = modernPrefs.second
             )
         }
             .distinctUntilChanged()
@@ -176,6 +184,7 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         hideUnreleasedContent = prefs.hideUnreleasedContent,
                         showFullReleaseDate = prefs.showFullReleaseDate,
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
+                        modernHeroFullScreenBackdropEnabled = prefs.modernHeroFullScreenBackdropEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
                         focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
@@ -429,11 +438,13 @@ private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: 
             merged = merged.copy(
                 name = enrichment.localizedTitle ?: merged.name,
                 description = enrichment.description ?: merged.description,
-                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else merged.genres,
+                imdbRating = enrichment.rating?.toFloat() ?: merged.imdbRating
             )
         }
         if (currentTmdbSettings.useArtwork) {
             merged = merged.copy(
+                background = enrichment.backdrop ?: merged.background,
                 logo = enrichment.logo ?: merged.logo
             )
         }
