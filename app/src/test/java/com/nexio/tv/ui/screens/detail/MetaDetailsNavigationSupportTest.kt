@@ -136,7 +136,7 @@ class MetaDetailsNavigationSupportTest {
             metaId = meta.id
         )
 
-        assertEquals("show:s1:2", result.nextVideoId)
+        assertEquals("show:1:2", result.nextVideoId)
         assertEquals(1, result.nextSeason)
         assertEquals(2, result.nextEpisode)
     }
