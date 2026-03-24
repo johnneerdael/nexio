@@ -85,8 +85,8 @@ class CustomImdbEpisodeRatingsRepository @Inject constructor(
             customImdbClient.fetchEpisodeRatings(
                 baseUrl = baseUrl,
                 apiKey = apiKey,
-                identifiers = listOf(seriesImdbId)
-            )[seriesImdbId].orEmpty().filterKeys { (season, episode) ->
+                tconst = seriesImdbId
+            ).filterKeys { (season, episode) ->
                 requestedEpisodes[season]?.contains(episode) == true
             }
         }.getOrElse { error ->

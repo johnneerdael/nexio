@@ -59,3 +59,18 @@ When the custom IMDb integration is enabled and configured, the system SHALL tre
 - **WHEN** `integrations.imdb.enabled` is true and `integrations.imdb.baseUrl` is configured
 - **THEN** custom IMDb is the primary episode-ratings source
 - **AND** OMDb/TMDB fallback is not used while the custom IMDb integration remains active
+
+### Requirement: Custom IMDb ratings-only provider contract
+The system SHALL validate and consume the configured IMDb provider using the ratings-only API contract.
+
+#### Scenario: Provider validation uses dataset stats
+- **WHEN** Nexio validates the configured IMDb provider
+- **THEN** it sends `GET /v1/meta/stats`
+- **AND** it authenticates with the configured `imdb_api_key`
+
+#### Scenario: Episode ratings use the single-title wrapper endpoint
+- **WHEN** Nexio fetches episode ratings for a show from the configured IMDb provider
+- **THEN** it sends `GET /v1/ratings/{tconst}?episodes=true`
+- **AND** it uses the resolved series IMDb id as `tconst`
+- **AND** it maps the `RatingWithEpisodes.episodes` collection into the existing episode-rating model
+- **AND** it does not require the deprecated series bulk endpoint contract
