@@ -25,6 +25,9 @@ import androidx.compose.ui.test.pressKey
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.theme.NexioTheme
 import org.junit.Rule
@@ -39,7 +42,7 @@ class SeasonTabsNavigationTest {
 
     @OptIn(ExperimentalTestApi::class)
     @Test
-    fun long_running_show_keeps_target_season_and_episode_when_focus_moves_down() {
+    fun auto_targeted_season_enters_the_cta_episode() {
         composeRule.setContent {
             NexioTheme {
                 SeasonNavigationHarness(
@@ -62,6 +65,62 @@ class SeasonTabsNavigationTest {
 
         composeRule.onNodeWithText("Selected season: 50").assertIsDisplayed()
         composeRule.onNodeWithText("Focused episode: S50E5").assertIsDisplayed()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun manual_override_enters_the_selected_season_instead_of_the_cta_season() {
+        composeRule.setContent {
+            NexioTheme {
+                SeasonNavigationHarness(
+                    totalSeasons = 50,
+                    initialSelectedSeason = 50,
+                    initialTargetEpisode = 5
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+
+        composeRule.onRoot().performKeyInput {
+            pressKey(Key.DirectionDown)
+            pressKey(Key.DirectionLeft)
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onRoot().performKeyInput {
+            pressKey(Key.DirectionDown)
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Selected season: 49").assertIsDisplayed()
+        composeRule.onNodeWithText("Focused episode: S49E1").assertIsDisplayed()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun stored_per_season_focus_still_wins() {
+        composeRule.setContent {
+            NexioTheme {
+                SeasonNavigationHarness(
+                    totalSeasons = 50,
+                    initialSelectedSeason = 50,
+                    initialTargetEpisode = 5,
+                    seededLastFocusedEpisodeIdBySeason = mapOf(50 to "show:50:2")
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+
+        composeRule.onRoot().performKeyInput {
+            pressKey(Key.DirectionDown)
+            pressKey(Key.DirectionDown)
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Selected season: 50").assertIsDisplayed()
+        composeRule.onNodeWithText("Focused episode: S50E2").assertIsDisplayed()
     }
 
     @OptIn(ExperimentalTestApi::class)
@@ -90,51 +149,26 @@ class SeasonTabsNavigationTest {
         composeRule.onNodeWithText("Selected season: 2").assertIsDisplayed()
         composeRule.onNodeWithText("Focused episode: S2E3").assertIsDisplayed()
     }
-
-    @OptIn(ExperimentalTestApi::class)
-    @Test
-    fun manual_season_override_is_not_forced_back_to_resume_target() {
-        composeRule.setContent {
-            NexioTheme {
-                SeasonNavigationHarness(
-                    totalSeasons = 50,
-                    initialSelectedSeason = 50,
-                    initialTargetEpisode = 5
-                )
-            }
-        }
-
-        composeRule.waitForIdle()
-
-        composeRule.onRoot().performKeyInput {
-            pressKey(Key.DirectionDown)
-            pressKey(Key.DirectionLeft)
-        }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithText("Selected season: 49").assertIsDisplayed()
-
-        composeRule.onRoot().performKeyInput {
-            pressKey(Key.DirectionDown)
-        }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithText("Focused episode: S49E1").assertIsDisplayed()
-    }
 }
 
 @Composable
 private fun SeasonNavigationHarness(
     totalSeasons: Int,
     initialSelectedSeason: Int,
-    initialTargetEpisode: Int
+    initialTargetEpisode: Int,
+    seededLastFocusedEpisodeIdBySeason: Map<Int, String> = emptyMap()
 ) {
     var selectedSeason by rememberSaveable { mutableIntStateOf(initialSelectedSeason) }
+    var manualSeasonOverrideActive by rememberSaveable { mutableStateOf(false) }
     var focusedEpisodeLabel by rememberSaveable { mutableStateOf("none") }
 
     val heroFocusRequester = remember { FocusRequester() }
     val selectedTabFocusRequester = remember { FocusRequester() }
-    val lastFocusedEpisodeIdBySeason = remember { mutableStateMapOf<Int, String>() }
+    val lastFocusedEpisodeIdBySeason = remember {
+        mutableStateMapOf<Int, String>().apply {
+            putAll(seededLastFocusedEpisodeIdBySeason)
+        }
+    }
     val episodeFocusRequestersBySeason = remember { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
 
     val seasons = remember(totalSeasons) { (1..totalSeasons).toList() }
@@ -158,6 +192,30 @@ private fun SeasonNavigationHarness(
             }
         }
     }
+    val meta = remember(totalSeasons, allEpisodes) {
+        Meta(
+            id = "show",
+            type = ContentType.SERIES,
+            rawType = "series",
+            name = "Test show",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            runtime = null,
+            director = emptyList(),
+            cast = emptyList(),
+            videos = allEpisodes,
+            country = null,
+            awards = null,
+            language = null,
+            links = emptyList()
+        )
+    }
     val episodesForSeason = remember(selectedSeason, allEpisodes) {
         allEpisodes.filter { it.season == selectedSeason }
     }
@@ -169,21 +227,37 @@ private fun SeasonNavigationHarness(
         byEpisodeId.keys.retainAll(episodesForSeason.map { it.id }.toSet())
         byEpisodeId
     }
-    val targetEpisodeId = remember(initialSelectedSeason, initialTargetEpisode) {
-        "show:$initialSelectedSeason:$initialTargetEpisode"
+    val ctaNextToWatch = remember(initialSelectedSeason, initialTargetEpisode) {
+        SeriesNextToWatchCandidate(
+            watchProgress = null,
+            isResume = false,
+            nextVideoId = "show:$initialSelectedSeason:$initialTargetEpisode",
+            nextSeason = initialSelectedSeason,
+            nextEpisode = initialTargetEpisode
+        )
+    }
+    val seasonEntryEpisodeId = remember(
+        meta,
+        selectedSeason,
+        manualSeasonOverrideActive,
+        ctaNextToWatch,
+        lastFocusedEpisodeIdBySeason[selectedSeason]
+    ) {
+        resolveSeasonEntryEpisodeId(
+            meta = meta,
+            selectedSeason = selectedSeason,
+            nextToWatch = ctaNextToWatch,
+            lastFocusedEpisodeIdBySeason = lastFocusedEpisodeIdBySeason,
+            manualSeasonOverride = manualSeasonOverrideActive
+        )
     }
     val seasonDownFocusRequester = remember(
         selectedSeason,
         episodesForSeason,
         seasonEpisodeFocusRequesters,
-        lastFocusedEpisodeIdBySeason[selectedSeason],
-        targetEpisodeId
+        seasonEntryEpisodeId
     ) {
-        val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
-            ?: targetEpisodeId.takeIf {
-                selectedSeason == initialSelectedSeason && episodesForSeason.any { episode -> episode.id == it }
-            }
-        preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] }
+        seasonEntryEpisodeId?.let { seasonEpisodeFocusRequesters[it] }
             ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
     }
 
@@ -207,7 +281,10 @@ private fun SeasonNavigationHarness(
         SeasonTabs(
             seasons = seasons,
             selectedSeason = selectedSeason,
-            onSeasonSelected = { selectedSeason = it },
+            onSeasonSelected = {
+                selectedSeason = it
+                manualSeasonOverrideActive = true
+            },
             selectedTabFocusRequester = selectedTabFocusRequester,
             downFocusRequester = seasonDownFocusRequester
         )
@@ -229,9 +306,7 @@ private fun SeasonNavigationHarness(
                 }
             },
             scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
-                targetEpisodeId.takeIf {
-                    selectedSeason == initialSelectedSeason && episodesForSeason.any { episode -> episode.id == it }
-                } ?: episodesForSeason.firstOrNull()?.id
+                seasonEntryEpisodeId
             } else {
                 null
             }
