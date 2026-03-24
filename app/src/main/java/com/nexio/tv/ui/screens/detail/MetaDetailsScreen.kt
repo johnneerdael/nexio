@@ -107,6 +107,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 private enum class RestoreTarget {
     HERO,
     EPISODE,
+    SEASON_ENTRY,
     CAST_MEMBER,
     MORE_LIKE_THIS,
     COLLECTION
@@ -340,6 +341,7 @@ fun MetaDetailsScreen(
                     ),
                     seasons = uiState.seasons,
                     selectedSeason = uiState.selectedSeason,
+                    manualSeasonOverrideActive = uiState.manualSeasonOverrideActive,
                     episodesForSeason = uiState.episodesForSeason,
                     isInLibrary = uiState.isInLibrary,
                     librarySourceMode = uiState.librarySourceMode,
@@ -362,6 +364,7 @@ fun MetaDetailsScreen(
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
+                    onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
                     onEpisodeClick = { video ->
                         onPlayClick(
                             video.id,
@@ -551,6 +554,7 @@ private fun MetaDetailsContent(
     detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
     seasons: List<Int>,
     selectedSeason: Int,
+    manualSeasonOverrideActive: Boolean,
     episodesForSeason: List<Video>,
     isInLibrary: Boolean,
     librarySourceMode: LibrarySourceMode,
@@ -573,6 +577,7 @@ private fun MetaDetailsContent(
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
+    onProgrammaticSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
     onPlayButtonFocused: () -> Unit,
@@ -667,6 +672,25 @@ private fun MetaDetailsContent(
         pendingRestoreMoreLikeItemId = null
     }
 
+    fun markSeasonEntryRestore(episodeId: String) {
+        pendingRestoreType = RestoreTarget.SEASON_ENTRY
+        pendingRestoreEpisodeId = episodeId
+        pendingRestoreCastPersonId = null
+        pendingRestoreMoreLikeItemId = null
+    }
+
+    fun requestSeasonEntryRestore(episodeId: String) {
+        markSeasonEntryRestore(episodeId)
+        coroutineScope.launch {
+            if (seasons.isNotEmpty()) {
+                // Keep the episodes row composed before the target item restores focus.
+                listState.scrollToItem(2)
+                delay(32)
+            }
+            restoreFocusToken += 1
+        }
+    }
+
     fun markCastMemberRestore(personId: Int) {
         pendingRestoreType = RestoreTarget.CAST_MEMBER
         pendingRestoreEpisodeId = null
@@ -740,7 +764,7 @@ private fun MetaDetailsContent(
 
         val targetSeason = targetEpisode.season
         if (targetSeason != null && selectedSeason != targetSeason) {
-            onSeasonSelected(targetSeason)
+            onProgrammaticSeasonSelected(targetSeason)
         }
         // Prevent the default hero autofocus from stealing focus after the episode restore completes.
         initialHeroFocusRequested = true
@@ -914,12 +938,32 @@ private fun MetaDetailsContent(
         byEpisodeId.keys.retainAll(episodesForSeason.map { it.id }.toSet())
         byEpisodeId
     }
-    val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, lastFocusedEpisodeIdBySeason[selectedSeason], nextToWatch) {
-        val nextEpisodeId = nextToWatch?.nextVideoId
-            ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
-        val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
-            ?: nextEpisodeId?.takeIf { episodesForSeason.any { ep -> ep.id == it } }
-        (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
+    val seasonNextToWatchCandidate = remember(nextToWatch) {
+        SeriesNextToWatchCandidate(
+            watchProgress = nextToWatch?.watchProgress,
+            isResume = nextToWatch?.isResume == true,
+            nextVideoId = nextToWatch?.nextVideoId,
+            nextSeason = nextToWatch?.nextSeason,
+            nextEpisode = nextToWatch?.nextEpisode
+        )
+    }
+    val seasonEntryEpisodeId = remember(
+        meta,
+        selectedSeason,
+        manualSeasonOverrideActive,
+        nextToWatch,
+        lastFocusedEpisodeIdBySeason[selectedSeason]
+    ) {
+        resolveSeasonEntryEpisodeId(
+            meta = meta,
+            selectedSeason = selectedSeason,
+            nextToWatch = seasonNextToWatchCandidate,
+            lastFocusedEpisodeIdBySeason = lastFocusedEpisodeIdBySeason,
+            manualSeasonOverride = manualSeasonOverrideActive
+        )
+    }
+    val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, seasonEntryEpisodeId) {
+        seasonEntryEpisodeId?.let { seasonEpisodeFocusRequesters[it] }
             ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
     }
 
@@ -1185,10 +1229,15 @@ private fun MetaDetailsContent(
                         onSeasonSelected = onSeasonSelected,
                         onSeasonLongPress = { seasonOptionsDialogSeason = it },
                         selectedTabFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = seasonDownFocusRequester
+                        downFocusRequester = seasonDownFocusRequester,
+                        onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
+                            { requestSeasonEntryRestore(episodeId) }
+                        }
                     )
                 }
                 item(key = "episodes_$selectedSeason", contentType = "episodes") {
+                    val isEpisodeRestoreActive = pendingRestoreType == RestoreTarget.EPISODE ||
+                        pendingRestoreType == RestoreTarget.SEASON_ENTRY
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
@@ -1208,8 +1257,8 @@ private fun MetaDetailsContent(
                         upFocusRequester = selectedSeasonFocusRequester,
                         downFocusRequester = episodesDownFocusRequester,
                         episodeFocusRequesters = seasonEpisodeFocusRequesters,
-                        restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
-                        restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
+                        restoreEpisodeId = if (isEpisodeRestoreActive) pendingRestoreEpisodeId else null,
+                        restoreFocusToken = if (isEpisodeRestoreActive) restoreFocusToken else 0,
                         onRestoreFocusHandled = {
                             clearPendingRestore()
                         },
@@ -1217,8 +1266,7 @@ private fun MetaDetailsContent(
                             lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                         },
                         scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
-                            nextToWatch?.nextVideoId
-                                ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
+                            seasonEntryEpisodeId
                         } else null
                     )
                 }

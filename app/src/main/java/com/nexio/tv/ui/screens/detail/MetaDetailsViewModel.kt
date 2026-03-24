@@ -143,21 +143,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun updateNextToWatch(nextToWatch: NextToWatch) {
         _uiState.update { state ->
             if (state.nextToWatch == nextToWatch) return@update state
-            val nextSeason = nextToWatch.nextSeason
-            val meta = state.meta
-            val shouldSwitchSeason = nextSeason != null &&
-                nextSeason != state.selectedSeason &&
-                meta != null &&
-                state.seasons.contains(nextSeason)
-            if (shouldSwitchSeason) {
-                state.copy(
-                    nextToWatch = nextToWatch,
-                    selectedSeason = nextSeason,
-                    episodesForSeason = getEpisodesForSeason(meta.videos, nextSeason)
-                )
-            } else {
-                state.copy(nextToWatch = nextToWatch)
-            }
+            state.withNextToWatch(nextToWatch)
         }
     }
 
@@ -516,26 +502,8 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun applyMeta(meta: Meta) {
-        val seasons = meta.videos
-            .mapNotNull { it.season }
-            .distinct()
-            .sorted()
+        _uiState.update { state -> state.withRefreshedMeta(meta) }
 
-        // Prefer first regular season (> 0), fallback to season 0 (specials)
-        val selectedSeason = seasons.firstOrNull { it > 0 } ?: seasons.firstOrNull() ?: 1
-        val episodesForSeason = getEpisodesForSeason(meta.videos, selectedSeason)
-
-        _uiState.update {
-            it.copy(
-                isLoading = false,
-                meta = meta,
-                seasons = seasons,
-                selectedSeason = selectedSeason,
-                episodesForSeason = episodesForSeason,
-                error = null
-            )
-        }
-        
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
     }
@@ -1228,19 +1196,11 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun selectSeason(season: Int) {
-        val episodes = _uiState.value.meta?.videos?.let { getEpisodesForSeason(it, season) } ?: emptyList()
-        _uiState.update {
-            it.copy(
-                selectedSeason = season,
-                episodesForSeason = episodes
-            )
-        }
+        _uiState.update { it.withManualSeasonSelection(season) }
     }
 
-    private fun getEpisodesForSeason(videos: List<Video>, season: Int): List<Video> {
-        return videos
-            .filter { it.season == season }
-            .sortedBy { it.episode }
+    internal fun setSelectedSeasonProgrammatically(season: Int) {
+        _uiState.update { it.withProgrammaticSeasonSelection(season) }
     }
 
     private fun calculateNextToWatch() {
@@ -1276,159 +1236,50 @@ class MetaDetailsViewModel @Inject constructor(
                 return@launch
             }
 
-            val allEpisodes = meta.videos
-                .filter { it.season != null && it.episode != null }
-                .sortedWith(compareBy({ it.season }, { it.episode }))
-
-            if (allEpisodes.isEmpty()) {
-                updateNextToWatch(
-                    NextToWatch(
-                        watchProgress = null,
-                        isResume = false,
-                        nextVideoId = meta.id,
-                        nextSeason = null,
-                        nextEpisode = null,
-                        displayText = context.getString(R.string.detail_btn_play)
-                    )
-                )
-                return@launch
-            }
-
-            val nonSpecialEpisodes = allEpisodes.filter { (it.season ?: 0) > 0 }
-            val episodePool = if (nonSpecialEpisodes.isNotEmpty()) nonSpecialEpisodes else allEpisodes
-            val latestSeriesProgress = progressMap.values.maxByOrNull { it.lastWatched }
-
-            val nextToWatch = buildNextToWatchFromLatestProgress(
-                latestProgress = latestSeriesProgress,
-                episodes = episodePool,
-                fallbackProgressMap = progressMap,
+            val nextToWatch = buildSeriesNextToWatchCandidate(
+                episodes = meta.videos,
+                progressMap = progressMap,
                 metaId = meta.id
+            ).toNextToWatch(
+                hasWatchedSomething = progressMap.isNotEmpty()
             )
 
             updateNextToWatch(nextToWatch)
         }
     }
 
-    private fun buildNextToWatchFromLatestProgress(
-        latestProgress: WatchProgress?,
-        episodes: List<Video>,
-        fallbackProgressMap: Map<Pair<Int, Int>, WatchProgress>,
-        metaId: String
+    private fun SeriesNextToWatchCandidate.toNextToWatch(
+        hasWatchedSomething: Boolean
     ): NextToWatch {
-        if (episodes.isEmpty()) {
-            return NextToWatch(
-                watchProgress = null,
-                isResume = false,
-                nextVideoId = metaId,
-                nextSeason = null,
-                nextEpisode = null,
-                displayText = context.getString(R.string.detail_btn_play)
-            )
-        }
-
-        if (latestProgress?.season != null && latestProgress.episode != null) {
-            val season = latestProgress.season
-            val episode = latestProgress.episode
-            val matchedIndex = episodes.indexOfFirst { it.season == season && it.episode == episode }
-
-            if (shouldResumeProgress(latestProgress)) {
-                val matchedEpisode = if (matchedIndex >= 0) episodes[matchedIndex] else null
-                return NextToWatch(
-                    watchProgress = latestProgress,
-                    isResume = true,
-                    nextVideoId = matchedEpisode?.id ?: latestProgress.videoId,
-                    nextSeason = season,
-                    nextEpisode = episode,
-                    displayText = context.getString(R.string.detail_btn_resume_episode, season, episode)
-                )
+        val displayText = when {
+            watchProgress != null && isResume && nextSeason != null && nextEpisode != null -> {
+                context.getString(R.string.detail_btn_resume_episode, nextSeason, nextEpisode)
             }
-
-            if (latestProgress.isCompleted() && matchedIndex >= 0) {
-                val next = episodes.getOrNull(matchedIndex + 1)
-                if (next != null) {
-                    return NextToWatch(
-                        watchProgress = null,
-                        isResume = false,
-                        nextVideoId = next.id,
-                        nextSeason = next.season,
-                        nextEpisode = next.episode,
-                        displayText = context.getString(R.string.detail_btn_next_episode, next.season, next.episode)
-                    )
-                }
+            watchProgress != null && isResume -> {
+                context.getString(R.string.detail_btn_resume)
             }
-        }
-
-        var resumeEpisode: Video? = null
-        var resumeProgress: WatchProgress? = null
-        var nextUnwatchedEpisode: Video? = null
-
-        for (episode in episodes) {
-            val season = episode.season ?: continue
-            val ep = episode.episode ?: continue
-            val progress = fallbackProgressMap[season to ep]
-
-            if (progress != null) {
-                if (shouldResumeProgress(progress)) {
-                    resumeEpisode = episode
-                    resumeProgress = progress
-                    break
-                } else if (progress.isCompleted()) {
-                    continue
-                }
-            } else {
-                if (nextUnwatchedEpisode == null) {
-                    nextUnwatchedEpisode = episode
-                }
-                if (resumeEpisode == null) {
-                    break
-                }
+            nextSeason != null && nextEpisode != null && hasWatchedSomething -> {
+                context.getString(R.string.detail_btn_next_episode, nextSeason, nextEpisode)
             }
-        }
-
-        return when {
-            resumeEpisode != null && resumeProgress != null -> {
-                NextToWatch(
-                    watchProgress = resumeProgress,
-                    isResume = true,
-                    nextVideoId = resumeEpisode.id,
-                    nextSeason = resumeEpisode.season,
-                    nextEpisode = resumeEpisode.episode,
-                    displayText = context.getString(R.string.detail_btn_resume_episode, resumeEpisode.season, resumeEpisode.episode)
-                )
+            nextSeason != null && nextEpisode != null -> {
+                context.getString(R.string.detail_btn_play_episode, nextSeason, nextEpisode)
             }
-            nextUnwatchedEpisode != null -> {
-                val hasWatchedSomething = fallbackProgressMap.isNotEmpty()
-                val s = nextUnwatchedEpisode.season
-                val e = nextUnwatchedEpisode.episode
-                NextToWatch(
-                    watchProgress = null,
-                    isResume = false,
-                    nextVideoId = nextUnwatchedEpisode.id,
-                    nextSeason = s,
-                    nextEpisode = e,
-                    displayText = if (hasWatchedSomething) {
-                        context.getString(R.string.detail_btn_next_episode, s, e)
-                    } else {
-                        context.getString(R.string.detail_btn_play_episode, s, e)
-                    }
-                )
+            watchProgress != null -> {
+                context.getString(R.string.detail_btn_resume)
             }
             else -> {
-                val firstEpisode = episodes.firstOrNull()
-                NextToWatch(
-                    watchProgress = null,
-                    isResume = false,
-                    nextVideoId = firstEpisode?.id ?: metaId,
-                    nextSeason = firstEpisode?.season,
-                    nextEpisode = firstEpisode?.episode,
-                    displayText = if (firstEpisode != null) {
-                        context.getString(R.string.detail_btn_play_episode, firstEpisode.season, firstEpisode.episode)
-                    } else {
-                        context.getString(R.string.detail_btn_play)
-                    }
-                )
+                context.getString(R.string.detail_btn_play)
             }
         }
+
+        return NextToWatch(
+            watchProgress = watchProgress,
+            isResume = isResume,
+            nextVideoId = nextVideoId,
+            nextSeason = nextSeason,
+            nextEpisode = nextEpisode,
+            displayText = displayText
+        )
     }
 
     private fun shouldResumeProgress(progress: WatchProgress): Boolean {
