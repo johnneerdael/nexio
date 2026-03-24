@@ -6,3 +6,7 @@
 	path = dovi_tool
 	url = https://github.com/johnneerdael/dovi_tool.git
 	branch = nuvio-capi-preserve-mapping-mode
+[submodule "nexio-web"]
+	path = nexio-web
+	url = https://github.com/johnneerdael/nexio-web.git
+	branch = main

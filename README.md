@@ -19,10 +19,22 @@ Nexio is an Android TV media player built around the Stremio addon ecosystem, a 
 ## Project Structure
 
 - `app/`: Android TV application
-- `nexio-web/`: web portal and landing site
+- `nexio-web/`: private git submodule for the web portal and landing site
 - `supabase/`: schema, functions, and setup SQL
 - `docs/`: setup guides and integration notes
 - `media/`: local Media3 fork and playback libraries
+
+## Clone
+
+Clone with submodules enabled:
+
+```bash
+git clone --recurse-submodules https://github.com/johnneerdael/nexio.git
+cd nexio
+git submodule update --init --recursive
+```
+
+`nexio-web/` is a private submodule, so GitHub access to `https://github.com/johnneerdael/nexio-web` is required when initializing submodules.
 
 ## Android Development
 
@@ -46,7 +58,7 @@ Install on a connected device:
 
 ## Web Portal
 
-The web portal lives in `nexio-web/` and is a Nuxt server app, not a static site.
+The web portal lives in the private `nexio-web/` submodule and is a Nuxt server app, not a static site.
 
 Build:
 
