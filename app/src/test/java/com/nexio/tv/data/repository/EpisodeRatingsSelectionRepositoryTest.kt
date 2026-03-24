@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.domain.model.ContentType
@@ -102,7 +103,7 @@ class EpisodeRatingsSelectionRepositoryTest {
         val tmdbMetadataService = mockk<TmdbMetadataService>()
         val omdbRepository = mockk<OmdbEpisodeRatingsRepository>()
         every { settingsStore.settings } returns flowOf(ImdbSettings())
-        coEvery { tmdbService.ensureTmdbId("tt27444205", "tv") } returns "100"
+        coEvery { tmdbService.ensureTmdbId("tt27444205", "series") } returns "100"
         coEvery { tmdbMetadataService.fetchEpisodeEnrichment("100", listOf(1)) } returns mapOf(
             (1 to 1) to stubEpisodeEnrichment(7.2),
             (1 to 2) to stubEpisodeEnrichment(6.1)
@@ -166,14 +167,15 @@ class EpisodeRatingsSelectionRepositoryTest {
         )
     }
 
-    private fun stubEpisodeEnrichment(voteAverage: Double): com.nexio.tv.core.tmdb.EpisodeEnrichment {
-        return com.nexio.tv.core.tmdb.EpisodeEnrichment(
-            name = null,
+    private fun stubEpisodeEnrichment(voteAverage: Double): TmdbEpisodeEnrichment {
+        return TmdbEpisodeEnrichment(
+            tmdbEpisodeId = null,
+            voteAverage = voteAverage,
+            title = null,
             overview = null,
-            stillPath = null,
+            thumbnail = null,
             airDate = null,
-            runtime = null,
-            voteAverage = voteAverage
+            runtimeMinutes = null
         )
     }
 }

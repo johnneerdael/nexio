@@ -66,6 +66,9 @@
             :mdblist-search-results="state.mdblistDiscovery.searchResults"
             :mdblist-validating="state.mdblistDiscovery.validating"
             :mdblist-error="state.mdblistDiscovery.error"
+            :imdb-validating="state.imdbValidation.validating"
+            :imdb-valid="state.imdbValidation.valid"
+            :imdb-error="state.imdbValidation.error"
             :busy="state.saving"
             show-trakt
             show-integrations

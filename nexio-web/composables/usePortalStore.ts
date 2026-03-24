@@ -41,6 +41,13 @@ type MDBListDiscoveryState = {
   searchResults: MDBListListOption[]
 }
 
+type ImdbValidationState = {
+  validating: boolean
+  valid: boolean
+  error: string | null
+  baseUrl: string | null
+}
+
 type TraktDiscoveryState = {
   loading: boolean
   error: string | null
@@ -85,6 +92,7 @@ type StoreState = {
   traktFlow: TraktDeviceFlow | null
   addonInspections: Record<string, AddonManifestInspection>
   mdblistDiscovery: MDBListDiscoveryState
+  imdbValidation: ImdbValidationState
   traktDiscovery: TraktDiscoveryState
   migration: MigrationState
 }
@@ -353,6 +361,12 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
       personalLists: [],
       topLists: [],
       searchResults: []
+    }),
+    imdbValidation: clone(source.imdbValidation ?? {
+      validating: false,
+      valid: false,
+      error: null,
+      baseUrl: null
     }),
     traktDiscovery: clone(source.traktDiscovery ?? {
       loading: false,
@@ -1454,7 +1468,10 @@ export function usePortalStore() {
       throw new Error('Sign in before validating IMDb.')
     }
 
+    const previous = clone(state.value.imdbValidation)
     state.value.error = null
+    state.value.imdbValidation.validating = true
+    state.value.imdbValidation.error = null
 
     try {
       const apiKey = state.value.secretDrafts[secretRefs.imdb]?.trim() || undefined
@@ -1469,8 +1486,22 @@ export function usePortalStore() {
       if (response.baseUrl) {
         state.value.settings.integrations.imdb.baseUrl = response.baseUrl
       }
+
+      state.value.imdbValidation = {
+        validating: false,
+        valid: response.valid,
+        error: null,
+        baseUrl: response.baseUrl
+      }
     } catch (error) {
-      state.value.error = cleanErrorMessage(error, 'IMDb validation failed.')
+      const message = cleanErrorMessage(error, 'IMDb validation failed.')
+      state.value.error = message
+      state.value.imdbValidation = {
+        validating: false,
+        valid: previous.valid,
+        error: message,
+        baseUrl: previous.baseUrl
+      }
       throw error
     }
   }

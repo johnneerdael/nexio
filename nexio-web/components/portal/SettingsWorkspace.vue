@@ -638,9 +638,13 @@
                     <div class="flex gap-2 flex-wrap">
                       <button class="px-4 py-1.5 bg-surface-bright hover:bg-surface-container-highest rounded border border-outline-variant/10 text-xs font-semibold active:scale-95 transition-all" @click="emit('save-secret', 'imdb_api_key', 'integration:imdb')">Save key</button>
                       <button v-if="secretStatuses['integration:imdb']" class="px-4 py-1.5 bg-surface-bright hover:bg-surface-container-highest rounded border border-outline-variant/10 text-xs font-semibold active:scale-95 transition-all text-error" @click="emit('delete-secret', 'imdb_api_key', 'integration:imdb')">Delete key</button>
-                      <button class="px-4 py-1.5 bg-primary/10 hover:bg-primary/20 rounded border border-primary/20 text-xs font-semibold active:scale-95 transition-all text-primary" @click="emit('validate-imdb')">Validate provider</button>
+                      <button class="px-4 py-1.5 bg-primary/10 hover:bg-primary/20 rounded border border-primary/20 text-xs font-semibold active:scale-95 transition-all text-primary disabled:opacity-60 disabled:cursor-wait" :disabled="imdbValidating" @click="emit('validate-imdb')">
+                        {{ imdbValidating ? 'Validating...' : 'Validate provider' }}
+                      </button>
                     </div>
                     <p v-if="secretStatuses['integration:imdb']?.maskedPreview" class="text-[10px] text-primary/70 mt-1">Stored: {{ secretStatuses['integration:imdb']?.maskedPreview }}</p>
+                    <p v-if="imdbError" class="text-[10px] text-error mt-1">{{ imdbError }}</p>
+                    <p v-else-if="imdbValid" class="text-[10px] text-emerald-400 mt-1">Provider validated successfully.</p>
                   </div>
                 </div>
 
@@ -708,6 +712,9 @@ const props = withDefaults(defineProps<{
   secretDrafts?: Record<string, string>
   mdblistValidating?: boolean
   mdblistError?: string | null
+  imdbValidating?: boolean
+  imdbValid?: boolean
+  imdbError?: string | null
   showTrakt?: boolean
   showIntegrations?: boolean
   busy?: boolean

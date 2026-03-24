@@ -50,6 +50,26 @@ class CustomImdbClientTest {
     }
 
     @Test
+    fun `validate reuses version path when base url already ends in v1`() = runTest {
+        var capturedPath = ""
+        val client = OkHttpCustomImdbClient(
+            okHttpClient = okHttpClient { chain ->
+                capturedPath = chain.request().url.encodedPath
+                jsonResponse(chain, """{"status":"ok"}""")
+            },
+            moshi = Moshi.Builder().build()
+        )
+
+        val result = client.validate(
+            baseUrl = "https://ratings.example.com/custom/v1/",
+            apiKey = "secret-key"
+        )
+
+        assertTrue(result)
+        assertEquals("/custom/v1/meta/stats", capturedPath)
+    }
+
+    @Test
     fun `fetchEpisodeRatings posts identifiers and maps nested episode payload`() = runTest {
         var capturedPath = ""
         var capturedBody = ""
@@ -95,6 +115,41 @@ class CustomImdbClientTest {
             ),
             result
         )
+    }
+
+    @Test
+    fun `fetchEpisodeRatings reuses version path when base url already ends in v1`() = runTest {
+        var capturedPath = ""
+        val client = OkHttpCustomImdbClient(
+            okHttpClient = okHttpClient { chain ->
+                capturedPath = chain.request().url.encodedPath
+                jsonResponse(
+                    chain,
+                    """
+                    {
+                      "items": [
+                        {
+                          "identifier": "tt27444205",
+                          "episodes": [
+                            { "seasonNumber": 1, "episodeNumber": 1, "averageRating": 8.3 }
+                          ]
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+            },
+            moshi = Moshi.Builder().build()
+        )
+
+        val result = client.fetchEpisodeRatings(
+            baseUrl = "https://ratings.example.com/custom/v1/",
+            apiKey = "secret-key",
+            identifiers = listOf("tt27444205")
+        )
+
+        assertEquals("/custom/v1/series/bulk/episode-ratings", capturedPath)
+        assertEquals(mapOf("tt27444205" to mapOf((1 to 1) to 8.3)), result)
     }
 
     @Test
