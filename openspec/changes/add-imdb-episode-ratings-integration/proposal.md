@@ -10,7 +10,8 @@ Nexio needs a dedicated, account-scoped IMDb integration for episode ratings so 
 - Add a new `imdb_api_key` secret type scoped to `integration:imdb`.
 - Update the Supabase contract so v2 responses remain unchanged, v3 responses include IMDb settings, and the new secret type is allowed.
 - Preserve custom IMDb as the primary episode-ratings source while active, with no OMDb/TMDB fallback in that mode.
+- Use `GET /v1/meta/stats` for provider validation and `GET /v1/ratings/{tconst}?episodes=true` for episode ratings against the ratings-only IMDb API.
 
 ## Impact
 - Affected specs: `account-config-sync`
-- Affected code: Android sync models/service, Android sync tests, Supabase settings SQL, web portal contract types/defaults
+- Affected code: Android sync models/service, Android IMDb runtime client/repository, Android tests, Supabase settings SQL, web validation helpers/tests
