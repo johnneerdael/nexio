@@ -854,6 +854,7 @@ fun ModernHomeContent(
                         landscapeCatalogCardHeight = landscapeCatalogCardHeight,
                         continueWatchingCardWidth = continueWatchingCardWidth,
                         continueWatchingCardHeight = continueWatchingCardHeight,
+                        blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
                         onContinueWatchingClick = onContinueWatchingClick,
                         onContinueWatchingOptions = stableOnContinueWatchingOptions,
                         isCatalogItemWatched = isCatalogItemWatched,

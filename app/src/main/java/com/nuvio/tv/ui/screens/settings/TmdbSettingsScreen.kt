@@ -95,6 +95,20 @@ fun TmdbSettingsContent(
                     )
                 }
 
+                item(key = "tmdb_enrich_continue_watching") {
+                    SettingsToggleRow(
+                        title = stringResource(R.string.tmdb_enrich_continue_watching_title),
+                        subtitle = stringResource(R.string.tmdb_enrich_continue_watching_subtitle),
+                        checked = uiState.enrichContinueWatching,
+                        enabled = uiState.enabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                TmdbSettingsEvent.ToggleEnrichContinueWatching(!uiState.enrichContinueWatching)
+                            )
+                        }
+                    )
+                }
+
                 item(key = "tmdb_language") {
                     val languageName = AVAILABLE_SUBTITLE_LANGUAGES
                         .find { it.code == uiState.language }

@@ -271,7 +271,8 @@ fun GridHomeContent(
                                         }
                                         val isNextUp = item is ContinueWatchingItem.NextUp
                                         onRemoveContinueWatching(contentId, season, episode, isNextUp)
-                                    }
+                                    },
+                                    blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes
                                 )
                             }
                         }
@@ -418,7 +419,8 @@ fun GridHomeContent(
                             }
                             val isNextUp = item is ContinueWatchingItem.NextUp
                             onRemoveContinueWatching(contentId, season, episode, isNextUp)
-                        }
+                        },
+                        blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes
                     )
                 }
             }

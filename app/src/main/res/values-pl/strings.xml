@@ -1033,6 +1033,8 @@
 
     <string name="tmdb_modern_home_title">Włącz w Modern Home</string>
     <string name="tmdb_modern_home_subtitle">Stosuj wzbogacanie TMDB również w Modern Home hero i zaznaczonych kartach</string>
+    <string name="tmdb_enrich_continue_watching_title">Wzbogacaj Kontynuuj oglądanie</string>
+    <string name="tmdb_enrich_continue_watching_subtitle">Stosuj wzbogacanie TMDB dla elementów Kontynuuj oglądanie</string>
     <string name="tmdb_entity_kind_company">Firma produkcyjna</string>
     <string name="tmdb_entity_kind_network">Stacja</string>
     <string name="tmdb_entity_rail_popular">Popularne</string>
