@@ -120,7 +120,7 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
-    fun specialsDoNotInfluenceRecentWatchAnchorsWhenRegularEpisodesExist() {
+    fun specialsCanAnchorRecentWatchContextWhenRegularEpisodesExist() {
         val meta = buildSeriesMeta(
             *episodesForSeasons(1..2, episodeCount = 2).toTypedArray(),
             episode(0, 1, id = "show-s0e1"),
@@ -136,9 +136,9 @@ class MetaDetailsNavigationSupportTest {
             metaId = meta.id
         )
 
-        assertEquals("show:1:2", result.nextVideoId)
+        assertEquals("show:1:1", result.nextVideoId)
         assertEquals(1, result.nextSeason)
-        assertEquals(2, result.nextEpisode)
+        assertEquals(1, result.nextEpisode)
     }
 
     @Test
