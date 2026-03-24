@@ -697,7 +697,7 @@ private suspend fun HomeViewModel.enrichInProgressItem(
     val genres = meta.genres.take(3)
     val releaseInfo = meta.releaseInfo?.takeIf { it.isNotBlank() }
     val tmdbData = if (currentTmdbSettings.enabled && currentTmdbSettings.enrichContinueWatching) {
-        resolveNextUpTmdbData(
+        resolveContinueWatchingTmdbData(
             progress = item.progress,
             meta = meta,
             season = item.progress.season ?: 1,
@@ -735,7 +735,7 @@ private suspend fun HomeViewModel.enrichNextUpItem(
     val meta = resolveMetaForProgress(progressSeed, metaCache, debug) ?: return item
     val video = resolveNextUpVideoFromMeta(progressSeed, meta)
     val tmdbData = if (currentTmdbSettings.enabled && currentTmdbSettings.enrichContinueWatching) {
-        resolveNextUpTmdbData(
+        resolveContinueWatchingTmdbData(
             progress = progressSeed,
             meta = meta,
             season = video?.season ?: item.info.season,
@@ -1160,7 +1160,7 @@ private fun parseEpisodeReleaseInstant(raw: String?): Instant? {
     }.getOrNull()
 }
 
-private suspend fun HomeViewModel.resolveNextUpTmdbData(
+private suspend fun HomeViewModel.resolveContinueWatchingTmdbData(
     progress: WatchProgress,
     meta: Meta,
     season: Int,
@@ -1170,6 +1170,36 @@ private suspend fun HomeViewModel.resolveNextUpTmdbData(
     if (!currentTmdbSettings.enabled) return null
     val tmdbId = resolveTmdbIdForNextUp(progress, meta, debug) ?: return null
     val language = currentTmdbSettings.language
+
+    if (!isSeriesTypeCW(progress.contentType)) {
+        val startedAtMs = SystemClock.elapsedRealtime()
+        val movieMeta = runCatching {
+            tmdbMetadataService.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = ContentType.MOVIE,
+                language = language
+            )
+        }.getOrNull()
+        debug?.recordTmdbCall(
+            kind = "in-progress-movie-enrichment",
+            elapsedMs = SystemClock.elapsedRealtime() - startedAtMs,
+            success = movieMeta != null
+        )
+        return movieMeta?.let {
+            NextUpTmdbData(
+                thumbnail = null,
+                backdrop = it.backdrop.normalizeImageUrl(),
+                poster = it.poster.normalizeImageUrl(),
+                logo = it.logo.normalizeImageUrl(),
+                name = it.localizedTitle?.trim()?.takeIf { t -> t.isNotEmpty() },
+                episodeTitle = null,
+                airDate = null,
+                overview = it.description?.trim()?.takeIf { t -> t.isNotEmpty() },
+                showDescription = null,
+                rating = it.rating
+            )
+        }
+    }
 
     val episodeStartedAtMs = SystemClock.elapsedRealtime()
     val episodeMeta = runCatching {
