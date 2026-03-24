@@ -364,6 +364,7 @@ fun MetaDetailsScreen(
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
+                    onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
                     onEpisodeClick = { video ->
                         onPlayClick(
                             video.id,
@@ -576,6 +577,7 @@ private fun MetaDetailsContent(
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
+    onProgrammaticSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
     onPlayButtonFocused: () -> Unit,
@@ -762,7 +764,7 @@ private fun MetaDetailsContent(
 
         val targetSeason = targetEpisode.season
         if (targetSeason != null && selectedSeason != targetSeason) {
-            onSeasonSelected(targetSeason)
+            onProgrammaticSeasonSelected(targetSeason)
         }
         // Prevent the default hero autofocus from stealing focus after the episode restore completes.
         initialHeroFocusRequested = true

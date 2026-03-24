@@ -38,19 +38,14 @@ internal fun buildSeriesNextToWatchCandidate(
         .filter { it.isInProgress() }
         .maxByOrNull { it.lastWatched }
 
-    if (latestInProgress != null) {
-        return buildResumeCandidate(
-            progress = latestInProgress,
-            episodes = orderedEpisodes,
-            fallbackVideoId = latestInProgress.videoId
-        )
-    }
-
     val latestCompleted = progressMap.values
         .filter { it.isCompleted() }
         .maxByOrNull { it.lastWatched }
 
-    if (latestCompleted != null) {
+    val preferCompletedContext = latestCompleted != null &&
+        (latestInProgress == null || latestCompleted.lastWatched >= latestInProgress.lastWatched)
+
+    if (preferCompletedContext) {
         val nextEpisode = nextEpisodeAfter(
             episodes = orderedEpisodes,
             season = latestCompleted.season,
@@ -65,6 +60,12 @@ internal fun buildSeriesNextToWatchCandidate(
                 nextEpisode = nextEpisode.episode
             )
         }
+    } else if (latestInProgress != null) {
+        return buildResumeCandidate(
+            progress = latestInProgress,
+            episodes = orderedEpisodes,
+            fallbackVideoId = latestInProgress.videoId
+        )
     }
 
     val nextUnwatchedEpisode = episodePool.firstOrNull { episode ->
