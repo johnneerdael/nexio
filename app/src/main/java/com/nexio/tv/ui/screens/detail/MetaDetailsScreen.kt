@@ -107,6 +107,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 private enum class RestoreTarget {
     HERO,
     EPISODE,
+    SEASON_ENTRY,
     CAST_MEMBER,
     MORE_LIKE_THIS,
     COLLECTION
@@ -669,6 +670,13 @@ private fun MetaDetailsContent(
         pendingRestoreMoreLikeItemId = null
     }
 
+    fun markSeasonEntryRestore(episodeId: String) {
+        pendingRestoreType = RestoreTarget.SEASON_ENTRY
+        pendingRestoreEpisodeId = episodeId
+        pendingRestoreCastPersonId = null
+        pendingRestoreMoreLikeItemId = null
+    }
+
     fun markCastMemberRestore(personId: Int) {
         pendingRestoreType = RestoreTarget.CAST_MEMBER
         pendingRestoreEpisodeId = null
@@ -1207,10 +1215,15 @@ private fun MetaDetailsContent(
                         onSeasonSelected = onSeasonSelected,
                         onSeasonLongPress = { seasonOptionsDialogSeason = it },
                         selectedTabFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = seasonDownFocusRequester
+                        downFocusRequester = seasonDownFocusRequester,
+                        onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
+                            { markSeasonEntryRestore(episodeId) }
+                        }
                     )
                 }
                 item(key = "episodes_$selectedSeason", contentType = "episodes") {
+                    val isEpisodeRestoreActive = pendingRestoreType == RestoreTarget.EPISODE ||
+                        pendingRestoreType == RestoreTarget.SEASON_ENTRY
                     EpisodesRow(
                         episodes = episodesForSeason,
                         episodeProgressMap = episodeProgressMap,
@@ -1230,8 +1243,8 @@ private fun MetaDetailsContent(
                         upFocusRequester = selectedSeasonFocusRequester,
                         downFocusRequester = episodesDownFocusRequester,
                         episodeFocusRequesters = seasonEpisodeFocusRequesters,
-                        restoreEpisodeId = if (pendingRestoreType == RestoreTarget.EPISODE) pendingRestoreEpisodeId else null,
-                        restoreFocusToken = if (pendingRestoreType == RestoreTarget.EPISODE) restoreFocusToken else 0,
+                        restoreEpisodeId = if (isEpisodeRestoreActive) pendingRestoreEpisodeId else null,
+                        restoreFocusToken = if (isEpisodeRestoreActive) restoreFocusToken else 0,
                         onRestoreFocusHandled = {
                             clearPendingRestore()
                         },
