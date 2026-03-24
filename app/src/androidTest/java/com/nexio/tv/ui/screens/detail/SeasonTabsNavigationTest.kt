@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
@@ -30,6 +31,8 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.theme.NexioTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -163,6 +166,7 @@ private fun SeasonNavigationHarness(
     var focusedEpisodeLabel by rememberSaveable { mutableStateOf("none") }
     var seasonEntryRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var seasonEntryRestoreToken by rememberSaveable { mutableIntStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
 
     val heroFocusRequester = remember { FocusRequester() }
     val selectedTabFocusRequester = remember { FocusRequester() }
@@ -292,7 +296,10 @@ private fun SeasonNavigationHarness(
             onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
                 {
                     seasonEntryRestoreEpisodeId = episodeId
-                    seasonEntryRestoreToken += 1
+                    coroutineScope.launch {
+                        delay(32)
+                        seasonEntryRestoreToken += 1
+                    }
                 }
             }
         )
