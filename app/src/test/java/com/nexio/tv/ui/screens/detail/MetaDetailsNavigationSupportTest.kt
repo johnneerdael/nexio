@@ -19,7 +19,8 @@ class MetaDetailsNavigationSupportTest {
         val state = MetaDetailsUiState(
             meta = meta,
             seasons = listOf(1, 2, 3),
-            selectedSeason = 1
+            selectedSeason = 1,
+            episodesForSeason = buildEpisodesForSeason(meta.videos, 1)
         )
 
         val updated = state.withManualSeasonSelection(3)
@@ -37,7 +38,8 @@ class MetaDetailsNavigationSupportTest {
         val state = MetaDetailsUiState(
             meta = meta,
             seasons = listOf(1, 2, 3),
-            selectedSeason = 1
+            selectedSeason = 1,
+            episodesForSeason = buildEpisodesForSeason(meta.videos, 1)
         )
 
         val updated = state.withNextToWatch(
@@ -58,6 +60,7 @@ class MetaDetailsNavigationSupportTest {
             meta = meta,
             seasons = listOf(1, 2, 3),
             selectedSeason = 1,
+            episodesForSeason = buildEpisodesForSeason(meta.videos, 1),
             manualSeasonOverrideActive = true
         )
 
