@@ -52,6 +52,26 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
+    fun programmaticSeasonSelectionKeepsManualOverrideInactive() {
+        val meta = buildSeriesMeta(
+            *episodesForSeasons(1..3, episodeCount = 3).toTypedArray()
+        )
+        val state = MetaDetailsUiState(
+            meta = meta,
+            seasons = listOf(1, 2, 3),
+            selectedSeason = 1,
+            episodesForSeason = buildEpisodesForSeason(meta.videos, 1),
+            manualSeasonOverrideActive = false
+        )
+
+        val updated = state.withProgrammaticSeasonSelection(3)
+
+        assertEquals(3, updated.selectedSeason)
+        assertEquals(3, updated.episodesForSeason.first().season)
+        assertEquals(false, updated.manualSeasonOverrideActive)
+    }
+
+    @Test
     fun ctaKeepsTheUserSelectedSeasonWhenManualOverrideIsActive() {
         val meta = buildSeriesMeta(
             *episodesForSeasons(1..3, episodeCount = 3).toTypedArray()
@@ -146,6 +166,22 @@ class MetaDetailsNavigationSupportTest {
         assertEquals("show:3:10", result.nextVideoId)
         assertEquals(3, result.nextSeason)
         assertEquals(10, result.nextEpisode)
+    }
+
+    @Test
+    fun newerCompletedEpisodeBeatsAnOlderInProgressResumeTarget() {
+        val result = buildSeriesNextToWatchCandidate(
+            episodes = episodesForSeasons(1..1, episodeCount = 3),
+            progressMap = mapOf(
+                1 to 1 to inProgressProgress("show:1:1", 1, 1, 1_000L),
+                1 to 2 to completedProgress("show:1:2", 1, 2, 2_000L)
+            ),
+            metaId = "show"
+        )
+
+        assertEquals("show:1:3", result.nextVideoId)
+        assertEquals(1, result.nextSeason)
+        assertEquals(3, result.nextEpisode)
     }
 
     @Test
@@ -380,6 +416,30 @@ class MetaDetailsNavigationSupportTest {
             duration = 1L,
             lastWatched = lastWatched,
             progressPercent = 100f
+        )
+    }
+
+    private fun inProgressProgress(
+        videoId: String,
+        season: Int,
+        episode: Int,
+        lastWatched: Long
+    ): WatchProgress {
+        return WatchProgress(
+            contentId = "show",
+            contentType = "series",
+            name = "Shrinking",
+            poster = null,
+            backdrop = null,
+            logo = null,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            episodeTitle = null,
+            position = 30L,
+            duration = 100L,
+            lastWatched = lastWatched,
+            progressPercent = 30f
         )
     }
 

@@ -1199,6 +1199,10 @@ class MetaDetailsViewModel @Inject constructor(
         _uiState.update { it.withManualSeasonSelection(season) }
     }
 
+    internal fun setSelectedSeasonProgrammatically(season: Int) {
+        _uiState.update { it.withProgrammaticSeasonSelection(season) }
+    }
+
     private fun calculateNextToWatch() {
         val meta = _uiState.value.meta ?: return
         val progressMap = _uiState.value.episodeProgressMap

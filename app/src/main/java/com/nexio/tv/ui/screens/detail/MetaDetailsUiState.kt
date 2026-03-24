@@ -89,6 +89,13 @@ internal fun MetaDetailsUiState.withManualSeasonSelection(season: Int): MetaDeta
     )
 }
 
+internal fun MetaDetailsUiState.withProgrammaticSeasonSelection(season: Int): MetaDetailsUiState {
+    return copy(
+        selectedSeason = season,
+        episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season)
+    )
+}
+
 internal fun MetaDetailsUiState.withNextToWatch(nextToWatch: NextToWatch): MetaDetailsUiState {
     val targetSeason = nextToWatch.nextSeason
     val shouldSwitchSeason = shouldAutoSwitchToTargetSeason(
