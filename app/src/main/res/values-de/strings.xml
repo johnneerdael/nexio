@@ -785,7 +785,7 @@
     <string name="skip_ending">Ende überspringen</string>
     <string name="skip_recap">Zusammenfassung überspringen</string>
     <string name="skip_generic">Überspringen</string>
-    <string name="display_mode_refresh">Aktualisieren</string>
+    <string name="display_mode_refresh">Bildwiederholrate</string>
     <string name="display_mode_resolution">Auflösung</string>
 
 
