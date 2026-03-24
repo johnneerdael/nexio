@@ -677,6 +677,18 @@ private fun MetaDetailsContent(
         pendingRestoreMoreLikeItemId = null
     }
 
+    fun requestSeasonEntryRestore(episodeId: String) {
+        markSeasonEntryRestore(episodeId)
+        coroutineScope.launch {
+            if (seasons.isNotEmpty()) {
+                // Keep the episodes row composed before the target item restores focus.
+                listState.scrollToItem(2)
+                delay(32)
+            }
+            restoreFocusToken += 1
+        }
+    }
+
     fun markCastMemberRestore(personId: Int) {
         pendingRestoreType = RestoreTarget.CAST_MEMBER
         pendingRestoreEpisodeId = null
@@ -1217,7 +1229,7 @@ private fun MetaDetailsContent(
                         selectedTabFocusRequester = selectedSeasonFocusRequester,
                         downFocusRequester = seasonDownFocusRequester,
                         onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
-                            { markSeasonEntryRestore(episodeId) }
+                            { requestSeasonEntryRestore(episodeId) }
                         }
                     )
                 }
