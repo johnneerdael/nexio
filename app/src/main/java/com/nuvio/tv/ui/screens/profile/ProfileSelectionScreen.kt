@@ -2058,6 +2058,15 @@ private fun OverlayButton(
             .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
             .onFocusChanged { isFocused = it.isFocused }
             .focusable(enabled = enabled, interactionSource = interactionSource)
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (enabled && native.action == AndroidKeyEvent.ACTION_UP && isProfileSelectKey(native.keyCode)) {
+                    onClick()
+                    true
+                } else {
+                    false
+                }
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
