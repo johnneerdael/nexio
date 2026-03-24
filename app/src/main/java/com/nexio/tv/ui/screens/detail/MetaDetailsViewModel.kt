@@ -502,26 +502,8 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun applyMeta(meta: Meta) {
-        val seasons = meta.videos
-            .mapNotNull { it.season }
-            .distinct()
-            .sorted()
+        _uiState.update { state -> state.withRefreshedMeta(meta) }
 
-        // Prefer first regular season (> 0), fallback to season 0 (specials)
-        val selectedSeason = seasons.firstOrNull { it > 0 } ?: seasons.firstOrNull() ?: 1
-        val episodesForSeason = buildEpisodesForSeason(meta.videos, selectedSeason)
-
-        _uiState.update {
-            it.copy(
-                isLoading = false,
-                meta = meta,
-                seasons = seasons,
-                selectedSeason = selectedSeason,
-                episodesForSeason = episodesForSeason,
-                error = null
-            )
-        }
-        
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
     }

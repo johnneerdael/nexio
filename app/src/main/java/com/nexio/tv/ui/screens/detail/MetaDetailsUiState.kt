@@ -109,6 +109,35 @@ internal fun MetaDetailsUiState.withNextToWatch(nextToWatch: NextToWatch): MetaD
     )
 }
 
+internal fun MetaDetailsUiState.withRefreshedMeta(meta: Meta): MetaDetailsUiState {
+    val seasons = meta.videos
+        .mapNotNull { it.season }
+        .distinct()
+        .sorted()
+    val selectedSeason = resolveSeasonAfterMetaRefresh(seasons)
+
+    return copy(
+        isLoading = false,
+        meta = meta,
+        seasons = seasons,
+        selectedSeason = selectedSeason,
+        episodesForSeason = buildEpisodesForSeason(meta.videos, selectedSeason),
+        error = null
+    )
+}
+
+internal fun MetaDetailsUiState.resolveSeasonAfterMetaRefresh(refreshedSeasons: List<Int>): Int {
+    val defaultSeason = refreshedSeasons.firstOrNull { it > 0 } ?: refreshedSeasons.firstOrNull() ?: 1
+    val preservedSeason = selectedSeason.takeIf { it in refreshedSeasons }
+    val ctaTargetSeason = nextToWatch?.nextSeason?.takeIf { it in refreshedSeasons }
+
+    return when {
+        manualSeasonOverrideActive && preservedSeason != null -> preservedSeason
+        !manualSeasonOverrideActive && ctaTargetSeason != null -> ctaTargetSeason
+        else -> defaultSeason
+    }
+}
+
 internal fun buildEpisodesForSeason(videos: List<Video>, season: Int): List<Video> {
     return videos
         .filter { it.season == season }
