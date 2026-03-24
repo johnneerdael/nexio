@@ -120,6 +120,28 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
+    fun specialsDoNotInfluenceRecentWatchAnchorsWhenRegularEpisodesExist() {
+        val meta = buildSeriesMeta(
+            *episodesForSeasons(1..2, episodeCount = 2).toTypedArray(),
+            episode(0, 1, id = "show-s0e1"),
+            episode(0, 2, id = "show-s0e2")
+        )
+
+        val result = buildSeriesNextToWatchCandidate(
+            episodes = meta.videos,
+            progressMap = mapOf(
+                1 to 1 to completedProgress("show-s1e1", 1, 1, 1_000L),
+                0 to 2 to completedProgress("show-s0e2", 0, 2, 2_000L)
+            ),
+            metaId = meta.id
+        )
+
+        assertEquals("show:s1:2", result.nextVideoId)
+        assertEquals(1, result.nextSeason)
+        assertEquals(2, result.nextEpisode)
+    }
+
+    @Test
     fun manualOverrideBlocksAutoSwitchingToTheTargetSeason() {
         assertEquals(
             false,
@@ -133,9 +155,22 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
-    fun autoSwitchesWhenTheSelectedSeasonStillMatchesTheTargetAndNoManualOverrideIsActive() {
+    fun autoSwitchesWhenTargetSeasonDiffersAndIsAvailable() {
         assertEquals(
             true,
+            shouldAutoSwitchToTargetSeason(
+                selectedSeason = 1,
+                targetSeason = 3,
+                manualOverrideActive = false,
+                availableSeasons = listOf(1, 2, 3)
+            )
+        )
+    }
+
+    @Test
+    fun doesNotAutoSwitchWhenAlreadyOnTheTargetSeason() {
+        assertEquals(
+            false,
             shouldAutoSwitchToTargetSeason(
                 selectedSeason = 3,
                 targetSeason = 3,
