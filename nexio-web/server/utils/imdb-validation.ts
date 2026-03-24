@@ -4,6 +4,17 @@ export function normalizeImdbBaseUrl(rawBaseUrl: string): string {
   return rawBaseUrl.trim().replace(/\/$/, '')
 }
 
+function buildImdbEndpointUrl(parsedBaseUrl: URL, pathAfterVersion: string): string {
+  const normalizedBaseUrl = parsedBaseUrl.toString().replace(/\/$/, '')
+  const normalizedPath = pathAfterVersion.replace(/^\/+/, '')
+  const normalizedBasePath = parsedBaseUrl.pathname.replace(/\/+$/, '')
+  const hasVersionPath = normalizedBasePath === '/v1' || normalizedBasePath.endsWith('/v1')
+
+  return hasVersionPath
+    ? `${normalizedBaseUrl}/${normalizedPath}`
+    : `${normalizedBaseUrl}/v1/${normalizedPath}`
+}
+
 type ImdbSecretResolution = {
   apiKey?: string | null
 }
@@ -67,7 +78,7 @@ export async function validateImdbConfig(input: ValidateImdbConfigInput): Promis
 
   let response: Response
   try {
-    response = await (input.fetchImpl ?? fetch)(`${parsedBaseUrl.toString().replace(/\/$/, '')}/v1/meta/stats`, {
+    response = await (input.fetchImpl ?? fetch)(buildImdbEndpointUrl(parsedBaseUrl, 'meta/stats'), {
       method: 'GET',
       headers: new Headers({
         'X-API-Key': apiKey

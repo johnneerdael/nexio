@@ -16,6 +16,18 @@ fun normalizeCustomImdbBaseUrl(rawBaseUrl: String): String {
     return rawBaseUrl.trim().trimEnd('/')
 }
 
+private fun buildCustomImdbUrl(baseUrl: String, pathAfterVersion: String): String {
+    val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
+    val normalizedPath = pathAfterVersion.trimStart('/')
+    val hasVersionPath = normalizedBaseUrl.lowercase().endsWith("/v1")
+
+    return if (hasVersionPath) {
+        "$normalizedBaseUrl/$normalizedPath"
+    } else {
+        "$normalizedBaseUrl/v1/$normalizedPath"
+    }
+}
+
 interface CustomImdbClient {
     suspend fun validate(baseUrl: String, apiKey: String): Boolean
 
@@ -40,7 +52,7 @@ class OkHttpCustomImdbClient @Inject constructor(
 
         return runCatching {
             val request = Request.Builder()
-                .url("$normalizedBaseUrl/v1/meta/stats")
+                .url(buildCustomImdbUrl(normalizedBaseUrl, "meta/stats"))
                 .header("X-API-Key", apiKey.trim())
                 .get()
                 .build()
@@ -63,7 +75,7 @@ class OkHttpCustomImdbClient @Inject constructor(
             .toRequestBody(JSON_MEDIA_TYPE)
 
         val request = Request.Builder()
-            .url("$normalizedBaseUrl/v1/series/bulk/episode-ratings")
+            .url(buildCustomImdbUrl(normalizedBaseUrl, "series/bulk/episode-ratings"))
             .header("X-API-Key", apiKey.trim())
             .post(body)
             .build()

@@ -29,6 +29,20 @@ test('validateImdbConfig falls back to the saved secret when apiKey is omitted',
   assert.deepEqual(result, { valid: true, baseUrl: 'https://ratings.example.com' })
 })
 
+test('validateImdbConfig avoids doubling the version path when baseUrl already ends in v1', async () => {
+  const result = await validateImdbConfig({
+    baseUrl: 'https://ratings.example.com/custom/v1/',
+    apiKey: 'saved-key',
+    fetchImpl: async (input, init) => {
+      assert.equal(input, 'https://ratings.example.com/custom/v1/meta/stats')
+      assert.equal((init?.headers as Headers).get('X-API-Key'), 'saved-key')
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+  })
+
+  assert.deepEqual(result, { valid: true, baseUrl: 'https://ratings.example.com/custom/v1' })
+})
+
 test('validateImdbConfig rejects malformed base URLs', async () => {
   await assert.rejects(
     () => validateImdbConfig({
@@ -91,4 +105,3 @@ test('validateImdbConfig reports request failures', async () => {
     }
   )
 })
-
