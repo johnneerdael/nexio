@@ -34,13 +34,11 @@ class CustomImdbEpisodeRatingsRepositoryTest {
             client.fetchEpisodeRatings(
                 baseUrl = "https://ratings.example.com",
                 apiKey = "secret-key",
-                identifiers = listOf("tt27444205")
+                tconst = "tt27444205"
             )
         } returns mapOf(
-            "tt27444205" to mapOf(
-                (1 to 1) to 8.3,
-                (1 to 2) to 7.1
-            )
+            (1 to 1) to 8.3,
+            (1 to 2) to 7.1
         )
 
         val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
@@ -66,7 +64,7 @@ class CustomImdbEpisodeRatingsRepositoryTest {
             client.fetchEpisodeRatings(
                 baseUrl = "https://ratings.example.com",
                 apiKey = "secret-key",
-                identifiers = listOf("tt27444205")
+                tconst = "tt27444205"
             )
         }
     }
@@ -83,8 +81,8 @@ class CustomImdbEpisodeRatingsRepositoryTest {
         coEvery {
             client.fetchEpisodeRatings(any(), any(), any())
         } returnsMany listOf(
-            mapOf("tt27444205" to mapOf((1 to 1) to 8.3)),
-            mapOf("tt27444205" to mapOf((1 to 1) to 8.3, (1 to 2) to 7.1))
+            mapOf((1 to 1) to 8.3),
+            mapOf((1 to 1) to 8.3, (1 to 2) to 7.1)
         )
 
         val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
@@ -131,7 +129,7 @@ class CustomImdbEpisodeRatingsRepositoryTest {
             flowOf(ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com/custom", apiKey = "secret-key"))
         )
         coEvery { client.fetchEpisodeRatings(any(), any(), any()) } returns mapOf(
-            "tt27444205" to mapOf((1 to 1) to 8.3)
+            (1 to 1) to 8.3
         )
 
         val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {
@@ -164,8 +162,8 @@ class CustomImdbEpisodeRatingsRepositoryTest {
             ImdbSettings(enabled = true, baseUrl = "https://ratings.example.com", apiKey = "secret-key")
         )
         coEvery { client.fetchEpisodeRatings(any(), any(), any()) } returnsMany listOf(
-            mapOf("tt27444205" to mapOf((1 to 1) to 8.3)),
-            mapOf("tt27444205" to mapOf((1 to 1) to 8.3, (1 to 2) to 7.1))
+            mapOf((1 to 1) to 8.3),
+            mapOf((1 to 1) to 8.3, (1 to 2) to 7.1)
         )
 
         val repository = CustomImdbEpisodeRatingsRepository(client, settingsStore, tmdbService).also {

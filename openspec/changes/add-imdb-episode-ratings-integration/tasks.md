@@ -8,3 +8,5 @@
 - [x] 1.6 Align the web portal contract constants and defaults with the v3 payload shape if compilation requires it. No web change was required in this worktree.
 - [x] 1.7 Add/update focused Android contract tests for serialization and routing behavior with `integrations.imdb`.
 - [x] 1.8 Run focused verification for the owned sync/tests and OpenSpec validation.
+- [x] 1.9 Migrate the Android custom IMDb runtime client from the old series bulk endpoint to `GET /v1/ratings/{tconst}?episodes=true`.
+- [x] 1.10 Update the existing IMDb validation/test coverage so the recorded provider contract stays aligned with the ratings-only API spec.
