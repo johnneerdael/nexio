@@ -36,7 +36,37 @@ type ValidateImdbConfigInput = {
 type ImdbValidationResponse = {
   status?: string
   message?: string
-  error?: string
+  error?: string | {
+    code?: string
+    message?: string
+  }
+}
+
+function readImdbValidationMessage(payload: ImdbValidationResponse | null): string {
+  if (!payload) return ''
+
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message.trim()
+  }
+
+  if (typeof payload.error === 'string' && payload.error.trim()) {
+    return payload.error.trim()
+  }
+
+  if (payload.error && typeof payload.error === 'object') {
+    if (typeof payload.error.message === 'string' && payload.error.message.trim()) {
+      return payload.error.message.trim()
+    }
+    if (typeof payload.error.code === 'string' && payload.error.code.trim()) {
+      return payload.error.code.trim()
+    }
+  }
+
+  if (typeof payload.status === 'string' && payload.status.trim()) {
+    return payload.status.trim()
+  }
+
+  return ''
 }
 
 export async function validateImdbConfig(input: ValidateImdbConfigInput): Promise<{ valid: true; baseUrl: string }> {
@@ -96,14 +126,9 @@ export async function validateImdbConfig(input: ValidateImdbConfigInput): Promis
       payload = null
     }
 
-    const message = String(
-      payload?.message ||
-      payload?.error ||
-      payload?.status ||
-      'IMDb validation failed.'
-    ).trim()
+    const message = readImdbValidationMessage(payload) || 'IMDb validation failed.'
 
-    if (response.status === 401 || response.status === 403) {
+    if (response.status >= 400 && response.status < 500) {
       throw createError({ statusCode: response.status, statusMessage: message || 'IMDb provider rejected the API key.' })
     }
 
