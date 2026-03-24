@@ -1,5 +1,6 @@
 import { createError } from 'h3'
 import { secretRefs } from '~/server/utils/account-secrets'
+import { describeImdbValidationFailure } from '~/utils/imdb-validation-feedback'
 export function normalizeImdbBaseUrl(rawBaseUrl: string): string {
   return rawBaseUrl.trim().replace(/\/$/, '')
 }
@@ -69,6 +70,16 @@ function readImdbValidationMessage(payload: ImdbValidationResponse | null): stri
   return ''
 }
 
+function readImdbValidationCode(payload: ImdbValidationResponse | null): string {
+  if (!payload) return ''
+
+  if (payload.error && typeof payload.error === 'object' && typeof payload.error.code === 'string') {
+    return payload.error.code.trim()
+  }
+
+  return ''
+}
+
 export async function validateImdbConfig(input: ValidateImdbConfigInput): Promise<{ valid: true; baseUrl: string }> {
   const normalizedBaseUrl = normalizeImdbBaseUrl(String(input.baseUrl || ''))
 
@@ -126,13 +137,33 @@ export async function validateImdbConfig(input: ValidateImdbConfigInput): Promis
       payload = null
     }
 
-    const message = readImdbValidationMessage(payload) || 'IMDb validation failed.'
+    const providerCode = readImdbValidationCode(payload) || null
+    const providerMessage = readImdbValidationMessage(payload) || 'IMDb validation failed.'
+    const feedback = describeImdbValidationFailure({
+      status: response.status,
+      providerCode,
+      providerMessage
+    })
 
     if (response.status >= 400 && response.status < 500) {
-      throw createError({ statusCode: response.status, statusMessage: message || 'IMDb provider rejected the API key.' })
+      throw createError({
+        statusCode: response.status,
+        statusMessage: feedback.message,
+        data: {
+          providerCode,
+          providerMessage
+        }
+      })
     }
 
-    throw createError({ statusCode: 502, statusMessage: message || 'IMDb validation request failed.' })
+    throw createError({
+      statusCode: 502,
+      statusMessage: feedback.message || 'IMDb validation request failed.',
+      data: {
+        providerCode,
+        providerMessage
+      }
+    })
   }
 
   return {

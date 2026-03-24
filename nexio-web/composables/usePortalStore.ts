@@ -2,6 +2,11 @@ import { createClient, type RealtimeChannel, type SupabaseClient } from '@supaba
 import { computed, watch } from 'vue'
 import { normalizeAddonManifestUrl, normalizeAddonUrl, parseAddonInstallUrl, recommendParserPresetForAddonUrl, secretRefs } from '~/utils/account-secrets'
 import {
+  describeImdbValidationFailure,
+  describeImdbValidationSuccess,
+  type ImdbValidationFeedback
+} from '~/utils/imdb-validation-feedback'
+import {
   defaultAccountAddons,
   defaultSettings
 } from '~/utils/portal-defaults'
@@ -39,6 +44,13 @@ type MDBListDiscoveryState = {
   personalLists: MDBListListOption[]
   topLists: MDBListListOption[]
   searchResults: MDBListListOption[]
+}
+
+type PortalToastTone = 'success' | 'error'
+
+type PortalToast = ImdbValidationFeedback & {
+  id: string
+  tone: PortalToastTone
 }
 
 type ImdbValidationState = {
@@ -93,6 +105,7 @@ type StoreState = {
   addonInspections: Record<string, AddonManifestInspection>
   mdblistDiscovery: MDBListDiscoveryState
   imdbValidation: ImdbValidationState
+  toasts: PortalToast[]
   traktDiscovery: TraktDiscoveryState
   migration: MigrationState
 }
@@ -107,6 +120,8 @@ let traktPollTimer: ReturnType<typeof setTimeout> | null = null
 let traktPollInFlight = false
 let realDebridPollTimer: ReturnType<typeof setTimeout> | null = null
 let realDebridPollInFlight = false
+let toastCounter = 0
+const toastTimers = new Map<string, ReturnType<typeof setTimeout>>()
 let realtimeClient: SupabaseClient | null = null
 let realtimeChannel: RealtimeChannel | null = null
 let realtimeUserId = ''
@@ -125,6 +140,18 @@ function cleanErrorMessage(error: unknown, fallback: string): string {
   if (lower.includes('user not found')) return 'User not found.'
   if (lower.includes('rate limit')) return 'Too many attempts. Please try again later.'
   return msg
+}
+
+class ApiFetchError extends Error {
+  status: number
+  payload: Record<string, unknown> | null
+
+  constructor(message: string, status: number, payload: Record<string, unknown> | null = null) {
+    super(message)
+    this.name = 'ApiFetchError'
+    this.status = status
+    this.payload = payload
+  }
 }
 
 function readLocalState(): Partial<StoreState> {
@@ -368,6 +395,7 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
       error: null,
       baseUrl: null
     }),
+    toasts: [],
     traktDiscovery: clone(source.traktDiscovery ?? {
       loading: false,
       error: null,
@@ -382,6 +410,11 @@ function normalizeSnapshot(source: Partial<StoreState>): StoreState {
       lastPulledAt: null
     })
   }
+}
+
+function nextToastId(): string {
+  toastCounter += 1
+  return `portal-toast-${Date.now()}-${toastCounter}`
 }
 
 function useInternalStore() {
@@ -425,9 +458,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
   if (!response.ok) {
     const rawBody = await response.text()
     let message = rawBody || `${response.status} ${response.statusText}`
+    let payload: Record<string, unknown> | null = null
 
     try {
-      const payload = JSON.parse(rawBody) as Record<string, unknown>
+      payload = JSON.parse(rawBody) as Record<string, unknown>
       const candidates = [
         payload.message,
         payload.statusMessage,
@@ -445,7 +479,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, token?: stri
       // Keep plain text responses intact.
     }
 
-    throw new Error(message)
+    throw new ApiFetchError(message, response.status, payload)
   }
 
   if (response.status === 204) {
@@ -551,6 +585,31 @@ function buildMDBListCatalogs(state: StoreState): AddonCatalogRecord[] {
 
 export function usePortalStore() {
   const state = useInternalStore()
+
+  function dismissToast(toastId: string) {
+    const timer = toastTimers.get(toastId)
+    if (timer) {
+      clearTimeout(timer)
+      toastTimers.delete(toastId)
+    }
+    state.value.toasts = state.value.toasts.filter((toast) => toast.id !== toastId)
+  }
+
+  function pushToast(input: Omit<PortalToast, 'id'>, durationMs = 4500) {
+    const toast: PortalToast = {
+      id: nextToastId(),
+      ...input
+    }
+
+    state.value.toasts = [...state.value.toasts, toast]
+
+    if (process.client && durationMs > 0) {
+      const timer = setTimeout(() => {
+        dismissToast(toast.id)
+      }, durationMs)
+      toastTimers.set(toast.id, timer)
+    }
+  }
   const runtimeConfig = useRuntimeConfig()
 
   function clearRemoteBootstrapTimer() {
@@ -1462,12 +1521,13 @@ export function usePortalStore() {
     }, token)
   }
 
-  async function validateIMDb() {
+  async function validateIMDb(options: { toast?: boolean } = {}) {
     const token = accessToken(state.value.session)
     if (!token) {
       throw new Error('Sign in before validating IMDb.')
     }
 
+    const showToast = options.toast ?? true
     const previous = clone(state.value.imdbValidation)
     state.value.error = null
     state.value.imdbValidation.validating = true
@@ -1487,20 +1547,43 @@ export function usePortalStore() {
         state.value.settings.integrations.imdb.baseUrl = response.baseUrl
       }
 
+      const feedback = describeImdbValidationSuccess(response.baseUrl)
       state.value.imdbValidation = {
         validating: false,
         valid: response.valid,
         error: null,
         baseUrl: response.baseUrl
       }
+
+      if (showToast) {
+        pushToast({
+          tone: 'success',
+          ...feedback
+        })
+      }
     } catch (error) {
-      const message = cleanErrorMessage(error, 'IMDb validation failed.')
+      const payload = error instanceof ApiFetchError ? error.payload : null
+      const data = payload && typeof payload.data === 'object' && payload.data
+        ? payload.data as Record<string, unknown>
+        : null
+      const feedback = describeImdbValidationFailure({
+        status: error instanceof ApiFetchError ? error.status : undefined,
+        providerCode: typeof data?.providerCode === 'string' ? data.providerCode : null,
+        providerMessage: cleanErrorMessage(error, 'IMDb validation failed.')
+      })
+      const message = feedback.message
       state.value.error = message
       state.value.imdbValidation = {
         validating: false,
         valid: previous.valid,
         error: message,
         baseUrl: previous.baseUrl
+      }
+      if (showToast) {
+        pushToast({
+          tone: 'error',
+          ...feedback
+        })
       }
       throw error
     }
@@ -1567,7 +1650,9 @@ export function usePortalStore() {
     }
 
     if (secretType === 'imdb_api_key') {
-      await validateIMDb().catch(() => undefined)
+      if (state.value.settings.integrations.imdb.baseUrl.trim()) {
+        await validateIMDb({ toast: false }).catch(() => undefined)
+      }
     }
   }
 
@@ -2032,6 +2117,7 @@ export function usePortalStore() {
     signedIn,
     secretStatusMap,
     catalogInventory,
+    dismissToast,
     bootstrap,
     signIn,
     signUp,

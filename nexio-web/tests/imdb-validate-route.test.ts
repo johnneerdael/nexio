@@ -79,11 +79,16 @@ test('validateImdbConfig reports upstream auth failures', async () => {
     () => validateImdbConfig({
       baseUrl: 'https://ratings.example.com',
       apiKey: 'bad-key',
-      fetchImpl: async () => new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+      fetchImpl: async () => new Response(JSON.stringify({
+        error: {
+          code: 'invalid_api_key',
+          message: 'api key invalid'
+        }
+      }), { status: 401 })
     }),
     (error: unknown) => {
       assert.equal((error as { statusCode?: number }).statusCode, 401)
-      assert.match(String((error as Error).message), /unauthorized/i)
+      assert.match(String((error as Error).message), /rejected the configured api key/i)
       return true
     }
   )
@@ -103,7 +108,7 @@ test('validateImdbConfig preserves non-auth upstream client errors', async () =>
     }),
     (error: unknown) => {
       assert.equal((error as { statusCode?: number }).statusCode, 400)
-      assert.match(String((error as Error).message), /api key required/i)
+      assert.match(String((error as Error).message), /did not receive an api key/i)
       return true
     }
   )

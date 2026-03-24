@@ -11,6 +11,8 @@
     </template>
 
     <template v-else>
+      <PortalToastStack :toasts="state.toasts" @dismiss="dismissToast" />
+
       <div class="account-portal-view w-full">
         <section
           v-if="state.error"
@@ -118,6 +120,7 @@ import AuthPanel from '~/components/portal/AuthPanel.vue'
 import CatalogInventory from '~/components/portal/CatalogInventory.vue'
 import PortalShell from '~/components/portal/PortalShell.vue'
 import SettingsWorkspace from '~/components/portal/SettingsWorkspace.vue'
+import PortalToastStack from '~/components/portal/PortalToastStack.vue'
 import FormatterWorkspace from '~/components/portal/FormatterWorkspace.vue'
 import { usePortalStore } from '~/composables/usePortalStore'
 import { accountGroups } from '~/utils/portal-metadata'
@@ -127,6 +130,7 @@ const router = useRouter()
 const {
   state,
   bootstrap,
+  dismissToast,
   signIn,
   signUp,
   startGoogleSignIn,
