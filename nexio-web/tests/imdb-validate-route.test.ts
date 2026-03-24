@@ -89,6 +89,26 @@ test('validateImdbConfig reports upstream auth failures', async () => {
   )
 })
 
+test('validateImdbConfig preserves non-auth upstream client errors', async () => {
+  await assert.rejects(
+    () => validateImdbConfig({
+      baseUrl: 'https://ratings.example.com',
+      apiKey: 'key',
+      fetchImpl: async () => new Response(JSON.stringify({
+        error: {
+          code: 'missing_api_key',
+          message: 'api key required'
+        }
+      }), { status: 400 })
+    }),
+    (error: unknown) => {
+      assert.equal((error as { statusCode?: number }).statusCode, 400)
+      assert.match(String((error as Error).message), /api key required/i)
+      return true
+    }
+  )
+})
+
 test('validateImdbConfig reports request failures', async () => {
   await assert.rejects(
     () => validateImdbConfig({
