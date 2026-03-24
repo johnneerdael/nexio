@@ -15,6 +15,7 @@ data class MetaDetailsUiState(
     val meta: Meta? = null,
     val error: String? = null,
     val selectedSeason: Int = 1,
+    val manualSeasonOverrideActive: Boolean = false,
     val seasons: List<Int> = emptyList(),
     val episodesForSeason: List<Video> = emptyList(),
     val isInLibrary: Boolean = false,
@@ -78,4 +79,38 @@ sealed class MetaDetailsEvent {
     data object OnPickerDismiss : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
     data class OnReviewItemFocused(val index: Int) : MetaDetailsEvent()
+}
+
+internal fun MetaDetailsUiState.withManualSeasonSelection(season: Int): MetaDetailsUiState {
+    return copy(
+        selectedSeason = season,
+        episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season),
+        manualSeasonOverrideActive = true
+    )
+}
+
+internal fun MetaDetailsUiState.withNextToWatch(nextToWatch: NextToWatch): MetaDetailsUiState {
+    val targetSeason = nextToWatch.nextSeason
+    val shouldSwitchSeason = shouldAutoSwitchToTargetSeason(
+        selectedSeason = selectedSeason,
+        targetSeason = targetSeason,
+        manualOverrideActive = manualSeasonOverrideActive,
+        availableSeasons = seasons
+    )
+
+    if (!shouldSwitchSeason || targetSeason == null || meta == null) {
+        return copy(nextToWatch = nextToWatch)
+    }
+
+    return copy(
+        nextToWatch = nextToWatch,
+        selectedSeason = targetSeason,
+        episodesForSeason = buildEpisodesForSeason(meta.videos, targetSeason)
+    )
+}
+
+internal fun buildEpisodesForSeason(videos: List<Video>, season: Int): List<Video> {
+    return videos
+        .filter { it.season == season }
+        .sortedBy { it.episode }
 }
