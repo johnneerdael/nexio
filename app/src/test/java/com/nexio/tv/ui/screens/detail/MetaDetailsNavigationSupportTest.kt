@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.detail
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
-import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import org.junit.Assert.assertEquals
@@ -13,37 +12,37 @@ class MetaDetailsNavigationSupportTest {
 
     @Test
     fun recentCompletedEpisodeBeatsEarlierGapFallback() {
-        val meta = buildSeriesMeta(
-            episode(1, 1),
-            episode(1, 2),
-            episode(3, 9),
-            episode(3, 10)
-        )
-        val episodeProgressMap = mapOf(
-            1 to 1 to completedProgress("show-s1e1", 1, 1, 1_000L),
-            3 to 9 to completedProgress("show-s3e9", 3, 9, 2_000L)
+        val result = buildSeriesNextToWatchCandidate(
+            episodes = episodesForSeasons(1..3, episodeCount = 10),
+            progressMap = mapOf(
+                1 to 1 to completedProgress("show-s1e1", 1, 1, 1_000L),
+                3 to 9 to completedProgress("show-s3e9", 3, 9, 2_000L)
+            ),
+            metaId = "show"
         )
 
-        val resolved = resolveSeriesCtaEpisodeId(
-            meta = meta,
-            episodeProgressMap = episodeProgressMap
-        )
-
-        assertEquals("show-s3e10", resolved)
+        assertEquals("show:3:10", result.nextVideoId)
+        assertEquals(3, result.nextSeason)
+        assertEquals(10, result.nextEpisode)
     }
 
     @Test
     fun autoTargetedSeasonUsesTheCtaEpisodeWhenThereIsNoStoredPerSeasonFocus() {
         val meta = buildSeriesMeta(
-            episode(3, 9),
-            episode(3, 10),
-            episode(3, 11)
+            *episodesForSeasons(1..3, episodeCount = 10).toTypedArray()
+        )
+        val nextToWatch = buildSeriesNextToWatchCandidate(
+            episodes = meta.videos,
+            progressMap = mapOf(
+                3 to 9 to completedProgress("show-s3e9", 3, 9, 2_000L)
+            ),
+            metaId = meta.id
         )
 
         val resolved = resolveSeasonEntryEpisodeId(
             meta = meta,
             selectedSeason = 3,
-            nextToWatch = nextToWatch("show-s3e10", 3, 10),
+            nextToWatch = nextToWatch,
             lastFocusedEpisodeIdBySeason = emptyMap(),
             manualSeasonOverride = false
         )
@@ -54,16 +53,20 @@ class MetaDetailsNavigationSupportTest {
     @Test
     fun manualOverrideReturnsTheSelectedSeasonsFirstEpisodeInsteadOfTheCtaTarget() {
         val meta = buildSeriesMeta(
-            episode(1, 1),
-            episode(1, 2),
-            episode(3, 9),
-            episode(3, 10)
+            *episodesForSeasons(1..3, episodeCount = 10).toTypedArray()
+        )
+        val nextToWatch = buildSeriesNextToWatchCandidate(
+            episodes = meta.videos,
+            progressMap = mapOf(
+                3 to 9 to completedProgress("show-s3e9", 3, 9, 2_000L)
+            ),
+            metaId = meta.id
         )
 
         val resolved = resolveSeasonEntryEpisodeId(
             meta = meta,
             selectedSeason = 1,
-            nextToWatch = nextToWatch("show-s3e10", 3, 10),
+            nextToWatch = nextToWatch,
             lastFocusedEpisodeIdBySeason = emptyMap(),
             manualSeasonOverride = true
         )
@@ -74,15 +77,20 @@ class MetaDetailsNavigationSupportTest {
     @Test
     fun storedPerSeasonFocusBeatsCtaTargeting() {
         val meta = buildSeriesMeta(
-            episode(3, 9),
-            episode(3, 10),
-            episode(3, 11)
+            *episodesForSeasons(1..3, episodeCount = 10).toTypedArray()
+        )
+        val nextToWatch = buildSeriesNextToWatchCandidate(
+            episodes = meta.videos,
+            progressMap = mapOf(
+                3 to 9 to completedProgress("show-s3e9", 3, 9, 2_000L)
+            ),
+            metaId = meta.id
         )
 
         val resolved = resolveSeasonEntryEpisodeId(
             meta = meta,
             selectedSeason = 3,
-            nextToWatch = nextToWatch("show-s3e10", 3, 10),
+            nextToWatch = nextToWatch,
             lastFocusedEpisodeIdBySeason = mapOf(3 to "show-s3e11"),
             manualSeasonOverride = false
         )
@@ -100,12 +108,41 @@ class MetaDetailsNavigationSupportTest {
             0 to 1 to completedProgress("show-s0e1", 0, 1, 1_000L)
         )
 
-        val resolved = resolveSeriesCtaEpisodeId(
-            meta = meta,
-            episodeProgressMap = episodeProgressMap
+        val result = buildSeriesNextToWatchCandidate(
+            episodes = meta.videos,
+            progressMap = episodeProgressMap,
+            metaId = meta.id
         )
 
-        assertEquals("show-s0e2", resolved)
+        assertEquals("show-s0e2", result.nextVideoId)
+        assertEquals(0, result.nextSeason)
+        assertEquals(2, result.nextEpisode)
+    }
+
+    @Test
+    fun manualOverrideBlocksAutoSwitchingToTheTargetSeason() {
+        assertEquals(
+            false,
+            shouldAutoSwitchToTargetSeason(
+                selectedSeason = 1,
+                targetSeason = 3,
+                manualOverrideActive = true,
+                availableSeasons = listOf(1, 2, 3)
+            )
+        )
+    }
+
+    @Test
+    fun autoSwitchesWhenTheSelectedSeasonStillMatchesTheTargetAndNoManualOverrideIsActive() {
+        assertEquals(
+            true,
+            shouldAutoSwitchToTargetSeason(
+                selectedSeason = 3,
+                targetSeason = 3,
+                manualOverrideActive = false,
+                availableSeasons = listOf(1, 2, 3)
+            )
+        )
     }
 
     private fun buildSeriesMeta(vararg videos: Video): Meta {
@@ -135,6 +172,17 @@ class MetaDetailsNavigationSupportTest {
             links = emptyList(),
             trailerYtIds = emptyList()
         )
+    }
+
+    private fun episodesForSeasons(
+        seasons: IntRange,
+        episodeCount: Int
+    ): List<Video> {
+        return seasons.flatMap { season ->
+            (1..episodeCount).map { episode ->
+                episode(season, episode, id = "show:${season}:${episode}")
+            }
+        }
     }
 
     private fun episode(
@@ -177,20 +225,4 @@ class MetaDetailsNavigationSupportTest {
             progressPercent = 100f
         )
     }
-
-    private fun nextToWatch(
-        videoId: String,
-        season: Int,
-        episode: Int
-    ): NextToWatch {
-        return NextToWatch(
-            watchProgress = null,
-            isResume = false,
-            nextVideoId = videoId,
-            nextSeason = season,
-            nextEpisode = episode,
-            displayText = "Next"
-        )
-    }
-
 }
