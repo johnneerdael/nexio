@@ -199,13 +199,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 debug.markPhase("render-in-progress")
                 if (inProgressOnly.isNotEmpty()) {
                     val initialItems = inProgressOnly.map { it as ContinueWatchingItem }
-                    // Only do intermediate renders after the first full cycle has completed
-                    // (cwIsLoading=false). During initial load, hold off until normalItems
-                    // so focus lands on the correct first item.
-                    if (!_uiState.value.cwIsLoading) {
-                        _uiState.update { state ->
-                            if (state.continueWatchingItems == initialItems) state
-                            else state.copy(continueWatchingItems = initialItems)
+                    _uiState.update { state ->
+                        if (state.continueWatchingItems == initialItems) {
+                            state
+                        } else {
+                            state.copy(continueWatchingItems = initialItems)
                         }
                     }
                     debug.recordInitialRendered(
@@ -234,11 +232,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     inProgressItems = inProgressOnly,
                                     nextUpItems = partialNextUpItems
                                 )
-                                // Same as above: skip partial renders during initial load
-                                if (!_uiState.value.cwIsLoading) {
-                                    _uiState.update { state ->
-                                        if (state.continueWatchingItems == partialItems) state
-                                        else state.copy(continueWatchingItems = partialItems)
+                                _uiState.update { state ->
+                                    if (state.continueWatchingItems == partialItems) {
+                                        state
+                                    } else {
+                                        state.copy(continueWatchingItems = partialItems)
                                     }
                                 }
                                 debug.recordPartialRendered(
@@ -260,13 +258,12 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     nextUpItems = nextUpItems
                 )
 
-                // Atomically publish normalItems and clear cwIsLoading in one update
-                // so focus always lands on the correct first item.
                 _uiState.update { state ->
-                    val itemsChanged = state.continueWatchingItems != normalItems
-                    val loadingChanged = state.cwIsLoading
-                    if (!itemsChanged && !loadingChanged) state
-                    else state.copy(continueWatchingItems = normalItems, cwIsLoading = false)
+                    if (state.continueWatchingItems == normalItems) {
+                        state
+                    } else {
+                        state.copy(continueWatchingItems = normalItems)
+                    }
                 }
                 debug.recordLightweightRendered(
                     count = normalItems.size,
@@ -292,10 +289,6 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     changed = changed
                 )
                 debug.markPhase("completed")
-                // Safety net: if normalItems was empty, cwIsLoading was never cleared above
-                if (_uiState.value.cwIsLoading) {
-                    _uiState.update { it.copy(cwIsLoading = false) }
-                }
                 debug.logSummary()
             } catch (cancelled: CancellationException) {
                 debug.logSummary(cancelled = true)
