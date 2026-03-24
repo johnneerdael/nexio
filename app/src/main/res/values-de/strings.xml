@@ -119,7 +119,7 @@
     <string name="detail_section_network">Netzwerk</string>
     <string name="detail_section_production">Produktion</string>
     <string name="episodes_unavailable">Nicht verfügbar</string>
-    <string name="series_status_ended">Beendet</string>
+    <string name="series_status_ended">Abgeschlossen</string>
     <string name="series_status_continuing">Fortlaufend</string>
     <string name="series_status_current">Aktuell</string>
     <string name="series_status_cancelled">Abgesetzt</string>
@@ -645,10 +645,10 @@
     <string name="addon_empty">Keine Add-ons installiert. Fügen Sie eines hinzu, um zu beginnen. </string>
     <string name="addon_remove">Entfernen</string>
     <string name="addon_manage_from_phone_title">Mit Smartphone verwalten</string>
-    <string name="addon_manage_from_phone_subtitle">Scannen Sie einen QR-Code, um Add-ons und Home-Kataloge von Ihrem Telefon aus zu verwalten</string>
+    <string name="addon_manage_from_phone_subtitle">Scannen Sie einen QR-Code, um Add-ons und Home-Kataloge von Ihrem Smartphone aus zu verwalten</string>
     <string name="addon_reorder_title">Home-Kataloge neu anordnen</string>
     <string name="addon_reorder_subtitle">Steuert die Reihenfolge der Katalogzeilen auf der Startseite (klassisch + modern + Raster)</string>
-    <string name="addon_qr_scan_instruction">Mit Ihrem Telefon scannen, um Add-ons und Kataloge zu verwalten</string>
+    <string name="addon_qr_scan_instruction">Mit Ihrem Smartphone scannen, um Add-ons und Kataloge zu verwalten</string>
     <string name="addon_qr_close">Schließen</string>
     <string name="addon_confirm_title">Änderungen an Add-ons und Katalogen bestätigen</string>
     <string name="addon_confirm_subtitle">Die folgenden Änderungen wurden von Ihrem Smartphone aus vorgenommen:</string>
@@ -694,7 +694,7 @@
     <string name="parental_severity_severe">Schwerwiegend</string>
     <string name="parental_severity_moderate">Mäßig</string>
     <string name="parental_severity_mild">Mild</string>
-    <string name="player_ends_at">Endet bei %1$s</string>
+    <string name="player_ends_at">Endet um %1$s</string>
     <string name="player_via">über %1$s</string>
     <string name="player_subtitle_delay">Untertitelverzögerung</string>
     <string name="player_error_title">Wiedergabefehler</string>
@@ -896,12 +896,12 @@
     <string name="plugin_subtitle">Lokale Scraper und Anbieter verwalten</string>
     <string name="plugin_add_repository">Repository hinzufügen</string>
     <string name="plugin_add_btn">Hinzufügen</string>
-    <string name="plugin_manage_from_phone_title">Über das Telefon verwalten</string>
-    <string name="plugin_manage_from_phone_subtitle">QR-Code scannen, um Repositorys über Ihr Telefon hinzuzufügen oder zu entfernen</string>
-    <string name="plugin_qr_instruction">Mit Ihrem Telefon scannen, um Repositorys zu verwalten</string>
+    <string name="plugin_manage_from_phone_title">Über das Smartphone verwalten</string>
+    <string name="plugin_manage_from_phone_subtitle">QR-Code scannen, um Repositorys über Ihr Smartphone hinzuzufügen oder zu entfernen</string>
+    <string name="plugin_qr_instruction">Mit Ihrem Smartphone scannen, um Repositorys zu verwalten</string>
     <string name="plugin_qr_close">Schließen</string>
     <string name="plugin_confirm_title">Änderungen am Repository bestätigen</string>
-    <string name="plugin_confirm_subtitle">Die folgenden Änderungen wurden von Ihrem Telefon aus vorgenommen:</string>
+    <string name="plugin_confirm_subtitle">Die folgenden Änderungen wurden von Ihrem Smartphone aus vorgenommen:</string>
     <string name="plugin_confirm_added">Hinzugefügt:</string>
     <string name="plugin_confirm_removed">Entfernt:</string>
     <string name="plugin_confirm_no_changes">Keine Änderungen festgestellt</string>
