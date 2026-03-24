@@ -106,7 +106,7 @@ class SeasonTabsNavigationTest {
                     totalSeasons = 50,
                     initialSelectedSeason = 50,
                     initialTargetEpisode = 5,
-                    seededLastFocusedEpisodeIdBySeason = mapOf(50 to "show:50:2")
+                    seededLastFocusedEpisodeIdBySeason = mapOf(50 to "show:50:6")
                 )
             }
         }
@@ -120,7 +120,7 @@ class SeasonTabsNavigationTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Selected season: 50").assertIsDisplayed()
-        composeRule.onNodeWithText("Focused episode: S50E2").assertIsDisplayed()
+        composeRule.onNodeWithText("Focused episode: S50E6").assertIsDisplayed()
     }
 
     @OptIn(ExperimentalTestApi::class)
@@ -161,6 +161,8 @@ private fun SeasonNavigationHarness(
     var selectedSeason by rememberSaveable { mutableIntStateOf(initialSelectedSeason) }
     var manualSeasonOverrideActive by rememberSaveable { mutableStateOf(false) }
     var focusedEpisodeLabel by rememberSaveable { mutableStateOf("none") }
+    var seasonEntryRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    var seasonEntryRestoreToken by rememberSaveable { mutableIntStateOf(0) }
 
     val heroFocusRequester = remember { FocusRequester() }
     val selectedTabFocusRequester = remember { FocusRequester() }
@@ -286,7 +288,13 @@ private fun SeasonNavigationHarness(
                 manualSeasonOverrideActive = true
             },
             selectedTabFocusRequester = selectedTabFocusRequester,
-            downFocusRequester = seasonDownFocusRequester
+            downFocusRequester = seasonDownFocusRequester,
+            onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
+                {
+                    seasonEntryRestoreEpisodeId = episodeId
+                    seasonEntryRestoreToken += 1
+                }
+            }
         )
 
         EpisodesRow(
@@ -296,6 +304,11 @@ private fun SeasonNavigationHarness(
             selectedSeason = selectedSeason,
             upFocusRequester = selectedTabFocusRequester,
             episodeFocusRequesters = seasonEpisodeFocusRequesters,
+            restoreEpisodeId = seasonEntryRestoreEpisodeId,
+            restoreFocusToken = seasonEntryRestoreToken,
+            onRestoreFocusHandled = {
+                seasonEntryRestoreEpisodeId = null
+            },
             onEpisodeFocused = { episodeId ->
                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                 val episode = episodesForSeason.firstOrNull { it.id == episodeId }
