@@ -2,6 +2,11 @@ import { createClient, type RealtimeChannel, type SupabaseClient } from '@supaba
 import { computed, watch } from 'vue'
 import { normalizeAddonManifestUrl, normalizeAddonUrl, parseAddonInstallUrl, recommendParserPresetForAddonUrl, secretRefs } from '~/utils/account-secrets'
 import {
+  integrationSecretDeletions,
+  resetIntegrationSettings,
+  type DeletableIntegrationId
+} from '~/utils/integration-delete'
+import {
   describeImdbValidationFailure,
   describeImdbValidationSuccess,
   type ImdbValidationFeedback
@@ -1454,6 +1459,48 @@ export function usePortalStore() {
     setSecretDraft(secretRef, '')
   }
 
+  async function deleteIntegration(id: DeletableIntegrationId) {
+    state.value.error = null
+    state.value.settings = resetIntegrationSettings(state.value.settings, id)
+
+    if (id === 'imdb') {
+      state.value.imdbValidation = {
+        validating: false,
+        valid: false,
+        error: null,
+        baseUrl: null
+      }
+    }
+
+    if (id === 'mdblist') {
+      state.value.mdblistDiscovery = {
+        validating: false,
+        valid: false,
+        error: null,
+        personalLists: [],
+        topLists: [],
+        searchResults: []
+      }
+    }
+
+    const configuredDeletions = integrationSecretDeletions(id)
+      .filter((deletion, index, list) =>
+        list.findIndex((entry) =>
+          entry.secretType === deletion.secretType && entry.secretRef === deletion.secretRef
+        ) === index
+      )
+      .filter((deletion) => Boolean(secretStatus(deletion.secretRef, deletion.secretType)))
+
+    if (configuredDeletions.length === 0) {
+      await persistSnapshot()
+      return
+    }
+
+    for (const deletion of configuredDeletions) {
+      await deleteSecret(deletion.secretType, deletion.secretRef)
+    }
+  }
+
   async function approveTvLogin(code: string, nonce: string) {
     const token = accessToken(state.value.session)
     if (!token) {
@@ -2145,6 +2192,7 @@ export function usePortalStore() {
     setSecretDraft,
     saveDraftSecret,
     deleteSecret,
+    deleteIntegration,
     approveTvLogin,
     validateMDBList,
     validateIMDb,
