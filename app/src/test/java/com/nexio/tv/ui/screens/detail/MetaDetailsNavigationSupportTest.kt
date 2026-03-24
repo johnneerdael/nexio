@@ -3,12 +3,72 @@ package com.nexio.tv.ui.screens.detail
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class MetaDetailsNavigationSupportTest {
+
+    @Test
+    fun userSeasonSelectionMarksManualOverrideAndUpdatesTheSeasonEpisodes() {
+        val meta = buildSeriesMeta(
+            *episodesForSeasons(1..3, episodeCount = 3).toTypedArray()
+        )
+        val state = MetaDetailsUiState(
+            meta = meta,
+            seasons = listOf(1, 2, 3),
+            selectedSeason = 1
+        )
+
+        val updated = state.withManualSeasonSelection(3)
+
+        assertEquals(3, updated.selectedSeason)
+        assertEquals(true, updated.manualSeasonOverrideActive)
+        assertEquals(3, updated.episodesForSeason.first().season)
+    }
+
+    @Test
+    fun ctaAutoSwitchesToTheTargetSeasonWhenManualOverrideIsInactive() {
+        val meta = buildSeriesMeta(
+            *episodesForSeasons(1..3, episodeCount = 3).toTypedArray()
+        )
+        val state = MetaDetailsUiState(
+            meta = meta,
+            seasons = listOf(1, 2, 3),
+            selectedSeason = 1
+        )
+
+        val updated = state.withNextToWatch(
+            nextToWatch = targetSeasonNextToWatch(season = 3, episode = 3)
+        )
+
+        assertEquals(3, updated.selectedSeason)
+        assertEquals(3, updated.episodesForSeason.first().season)
+        assertEquals(false, updated.manualSeasonOverrideActive)
+    }
+
+    @Test
+    fun ctaKeepsTheUserSelectedSeasonWhenManualOverrideIsActive() {
+        val meta = buildSeriesMeta(
+            *episodesForSeasons(1..3, episodeCount = 3).toTypedArray()
+        )
+        val state = MetaDetailsUiState(
+            meta = meta,
+            seasons = listOf(1, 2, 3),
+            selectedSeason = 1,
+            manualSeasonOverrideActive = true
+        )
+
+        val updated = state.withNextToWatch(
+            nextToWatch = targetSeasonNextToWatch(season = 3, episode = 3)
+        )
+
+        assertEquals(1, updated.selectedSeason)
+        assertEquals(1, updated.episodesForSeason.first().season)
+        assertEquals(true, updated.manualSeasonOverrideActive)
+    }
 
     @Test
     fun recentCompletedEpisodeBeatsEarlierGapFallback() {
@@ -258,6 +318,20 @@ class MetaDetailsNavigationSupportTest {
             duration = 1L,
             lastWatched = lastWatched,
             progressPercent = 100f
+        )
+    }
+
+    private fun targetSeasonNextToWatch(
+        season: Int,
+        episode: Int
+    ): NextToWatch {
+        return NextToWatch(
+            watchProgress = null,
+            isResume = false,
+            nextVideoId = "show-s${season}e${episode}",
+            nextSeason = season,
+            nextEpisode = episode,
+            displayText = "Next S${season}E${episode}"
         )
     }
 }
