@@ -15,6 +15,7 @@ data class MetaDetailsUiState(
     val meta: Meta? = null,
     val error: String? = null,
     val selectedSeason: Int = 1,
+    val manualSeasonOverrideActive: Boolean = false,
     val seasons: List<Int> = emptyList(),
     val episodesForSeason: List<Video> = emptyList(),
     val isInLibrary: Boolean = false,
@@ -78,4 +79,74 @@ sealed class MetaDetailsEvent {
     data object OnPickerDismiss : MetaDetailsEvent()
     data object OnClearMessage : MetaDetailsEvent()
     data class OnReviewItemFocused(val index: Int) : MetaDetailsEvent()
+}
+
+internal fun MetaDetailsUiState.withManualSeasonSelection(season: Int): MetaDetailsUiState {
+    return copy(
+        selectedSeason = season,
+        episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season),
+        manualSeasonOverrideActive = true
+    )
+}
+
+internal fun MetaDetailsUiState.withProgrammaticSeasonSelection(season: Int): MetaDetailsUiState {
+    return copy(
+        selectedSeason = season,
+        episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season)
+    )
+}
+
+internal fun MetaDetailsUiState.withNextToWatch(nextToWatch: NextToWatch): MetaDetailsUiState {
+    val targetSeason = nextToWatch.nextSeason
+    val shouldSwitchSeason = shouldAutoSwitchToTargetSeason(
+        selectedSeason = selectedSeason,
+        targetSeason = targetSeason,
+        manualOverrideActive = manualSeasonOverrideActive,
+        availableSeasons = seasons
+    )
+
+    if (!shouldSwitchSeason || targetSeason == null || meta == null) {
+        return copy(nextToWatch = nextToWatch)
+    }
+
+    return copy(
+        nextToWatch = nextToWatch,
+        selectedSeason = targetSeason,
+        episodesForSeason = buildEpisodesForSeason(meta.videos, targetSeason)
+    )
+}
+
+internal fun MetaDetailsUiState.withRefreshedMeta(meta: Meta): MetaDetailsUiState {
+    val seasons = meta.videos
+        .mapNotNull { it.season }
+        .distinct()
+        .sorted()
+    val selectedSeason = resolveSeasonAfterMetaRefresh(seasons)
+
+    return copy(
+        isLoading = false,
+        meta = meta,
+        seasons = seasons,
+        selectedSeason = selectedSeason,
+        episodesForSeason = buildEpisodesForSeason(meta.videos, selectedSeason),
+        error = null
+    )
+}
+
+internal fun MetaDetailsUiState.resolveSeasonAfterMetaRefresh(refreshedSeasons: List<Int>): Int {
+    val defaultSeason = refreshedSeasons.firstOrNull { it > 0 } ?: refreshedSeasons.firstOrNull() ?: 1
+    val preservedSeason = selectedSeason.takeIf { it in refreshedSeasons }
+    val ctaTargetSeason = nextToWatch?.nextSeason?.takeIf { it in refreshedSeasons }
+
+    return when {
+        manualSeasonOverrideActive && preservedSeason != null -> preservedSeason
+        !manualSeasonOverrideActive && ctaTargetSeason != null -> ctaTargetSeason
+        else -> defaultSeason
+    }
+}
+
+internal fun buildEpisodesForSeason(videos: List<Video>, season: Int): List<Video> {
+    return videos
+        .filter { it.season == season }
+        .sortedBy { it.episode }
 }
