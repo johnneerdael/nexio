@@ -60,7 +60,9 @@ internal fun buildSeriesNextToWatchCandidate(
                 nextEpisode = nextEpisode.episode
             )
         }
-    } else if (latestInProgress != null) {
+    }
+
+    if (latestInProgress != null) {
         return buildResumeCandidate(
             progress = latestInProgress,
             episodes = orderedEpisodes,
