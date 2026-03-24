@@ -33,8 +33,10 @@ internal fun buildSeriesNextToWatchCandidate(
 
     val regularEpisodes = orderedEpisodes.filter { (it.season ?: 0) > 0 }
     val episodePool = if (regularEpisodes.isNotEmpty()) regularEpisodes else orderedEpisodes
+    val episodePoolKeys = episodePool.mapTo(mutableSetOf()) { it.season to it.episode }
+    val progressPool = progressMap.filterKeys { it in episodePoolKeys }.values
 
-    val latestInProgress = progressMap.values
+    val latestInProgress = progressPool
         .filter { it.isInProgress() }
         .maxByOrNull { it.lastWatched }
 
@@ -46,7 +48,7 @@ internal fun buildSeriesNextToWatchCandidate(
         )
     }
 
-    val latestCompleted = progressMap.values
+    val latestCompleted = progressPool
         .filter { it.isCompleted() }
         .maxByOrNull { it.lastWatched }
 
@@ -89,7 +91,7 @@ internal fun shouldAutoSwitchToTargetSeason(
     if (manualOverrideActive) return false
     if (targetSeason == null) return false
     if (targetSeason !in availableSeasons) return false
-    return selectedSeason == targetSeason
+    return selectedSeason != targetSeason
 }
 
 internal fun resolveSeasonEntryEpisodeId(
