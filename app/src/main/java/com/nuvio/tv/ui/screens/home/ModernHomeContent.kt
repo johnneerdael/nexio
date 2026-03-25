@@ -268,7 +268,8 @@ fun ModernHomeContent(
                                     occurrence = occurrence,
                                     strTypeMovie = strTypeMovie,
                                     strTypeSeries = strTypeSeries,
-                                    showFullReleaseDate = showFullReleaseDate
+                                    showFullReleaseDate = showFullReleaseDate,
+                                    previousCachedItem = cachedItem?.carouselItem
                                 )
                                 rowItemCache[cacheKey] = CachedCarouselItem(
                                     source = item,
