@@ -9,7 +9,7 @@
     <string name="home_no_catalog_addons">Ingen katalogtillegg installert. Installer et katalogtillegg for å se innhold.</string>
     <string name="auth_notice_nuvio_logged_out">Du har blitt logget ut av Nuvio. Logg inn igjen.</string>
     <string name="auth_notice_trakt_logged_out">Du har blitt logget ut av Trakt. Koble til igjen.</string>
-    <string name="error_generic">En feil oppstod</string>
+    <string name="error_generic">En feil har oppstått</string>
 
     <!-- ErrorState -->
     <string name="action_retry">Prøv igjen</string>
@@ -18,33 +18,33 @@
     <string name="error_state_fix_retry_soon">Prøv igjen om en stund.</string>
     <string name="error_state_issue_no_metadata_any_addon">Denne IDen kunne ikke laste detaljer fordi ingen av de installerte tilleggene returnerte metadata.</string>
     <string name="error_state_fix_no_metadata_any_addon">Prøv et annet tillegg, deaktiver \"Foretrekk ekstern metatillegg\" i Oppsettinnstillinger, eller bekreft at et installert tillegg støtter denne IDen.</string>
-    <string name="error_state_prefix_no_supported_metadata">Ingen installert tillegg støtter metadata for </string>
-    <string name="error_state_prefix_no_addon_for_id">Ingen installert tillegg kunne gi metadata for id=</string>
+    <string name="error_state_prefix_no_supported_metadata">Ingen installerte tillegg støtter metadata for </string>
+    <string name="error_state_prefix_no_addon_for_id">Ingen installerte tillegg kunne gi metadata for id=</string>
     <string name="error_state_fix_no_supported_metadata">Installer eller oppdater et tillegg som støtter denne innholdstypen, og prøv igjen.</string>
     <string name="error_state_prefix_tried_meta_addons">Prøvde metatillegg:</string>
     <string name="error_state_fix_tried_meta_addons">Installer et tillegg som støtter denne IDen, eller konfigurer/oppdater tillegget og prøv igjen.</string>
     <string name="error_state_issue_missing_metadata_for_id">har ikke metadata for denne IDen</string>
     <string name="error_state_fix_missing_metadata_for_id">Åpne denne IDen fra et annet tillegg, deaktiver \"Foretrekk ekstern metatillegg\", eller kontroller at tillegget støtter denne IDen.</string>
-    <string name="error_state_issue_addon_unreachable">kunne ikke nås</string>
+    <string name="error_state_issue_addon_unreachable">kunne ikke nåes</string>
     <string name="error_state_fix_addon_unreachable">Kontroller internettilkoblingen din, bekreft at tilleggs-URL-en fortsatt fungerer, og prøv igjen.</string>
-    <string name="error_state_issue_addon_connection_failed">avslått tilkoblingen</string>
-    <string name="error_state_fix_addon_connection_failed">Kontroller at tilleggserveren er online og tilgjengelig, og prøv igjen.</string>
+    <string name="error_state_issue_addon_connection_failed">Tilkoblingen ble avslått</string>
+    <string name="error_state_fix_addon_connection_failed">Kontroller at tilleggsserveren er online og tilgjengelig, og prøv igjen.</string>
     <string name="error_state_issue_addon_timeout">tok for lang tid å svare</string>
     <string name="error_state_fix_addon_timeout">Prøv igjen om en stund, eller prøv et annet tillegg hvis dette fortsetter å skje.</string>
     <string name="error_state_issue_addon_cleartext">bruker en usikker HTTP-tilkobling som Android blokkerte</string>
     <string name="error_state_fix_addon_cleartext">Bytt tilleggs-URLen til HTTPS eller oppdater tilleggskonfigurasjonen.</string>
     <string name="error_state_fix_addon_generic">Prøv igjen, oppdater eller reinstaller tillegget, eller prøv et annet tillegg.</string>
     <string name="error_state_addon_issue_template">%1$s: %2$s.</string>
-    <string name="error_meta_not_found">Meta ikke funnet</string>
-    <string name="error_meta_no_supported_addon">Ingen installert tillegg støtter metadata for \"%1$s\".</string>
-    <string name="error_meta_no_addon_for_id">Ingen installert tillegg kunne gi metadata for id=%1$s (type=%2$s).</string>
+    <string name="error_meta_not_found">Metadata ikke funnet</string>
+    <string name="error_meta_no_supported_addon">Ingen installerte tillegg støtter metadata for \"%1$s\".</string>
+    <string name="error_meta_no_addon_for_id">Ingen installerte tillegg kunne gi metadata for id=%1$s (type=%2$s).</string>
     <string name="error_meta_tried_none">Prøvde metatillegg: %1$s. Ingen av dem ga metadata for id=%2$s (type=%3$s).</string>
     <string name="error_meta_tried_generic">Prøvde metatillegg: %1$s. Metadata kunne ikke lastes for id=%2$s (type=%3$s).</string>
     <string name="error_meta_tried_issues">Prøvde metatillegg: %1$s. Metadata kunne ikke lastes for id=%2$s (type=%3$s). Problemer: %4$s.</string>
-    <string name="error_stream_no_supported_addon">Ingen installert tillegg støtter strømmer for \"%1$s\".</string>
-    <string name="error_stream_tried_none">Prøvde strømtillegg: %1$s. Ingen av dem returnerte strømmer for id=%2$s (type=%3$s).</string>
-    <string name="error_stream_tried_generic">Prøvde strømtillegg: %1$s. Strømmer kunne ikke lastes for id=%2$s (type=%3$s).</string>
-    <string name="error_stream_tried_issues">Prøvde strømtillegg: %1$s. Strømmer kunne ikke lastes for id=%2$s (type=%3$s). Problemer: %4$s.</string>
+    <string name="error_stream_no_supported_addon">Ingen installerte tillegg støtter strømmer for \"%1$s\".</string>
+    <string name="error_stream_tried_none">Prøvde strømmetillegg: %1$s. Ingen av dem returnerte strømmer for id=%2$s (type=%3$s).</string>
+    <string name="error_stream_tried_generic">Prøvde strømmetillegg: %1$s. Strømmer kunne ikke lastes for id=%2$s (type=%3$s).</string>
+    <string name="error_stream_tried_issues">Prøvde strømmetillegg: %1$s. Strømmer kunne ikke lastes for id=%2$s (type=%3$s). Problemer: %4$s.</string>
 
     <!-- ContinueWatchingSection -->
     <string name="continue_watching">Fortsett å se</string>
